@@ -10,6 +10,11 @@ events, and product decision logic.
 > development. Interfaces and storage contracts may change. Back up important
 > vaults and begin with a low-risk test note.
 
+Please support me to remain unemployed so I can keep working on Chatobby. It's
+actually so exciting to see its capabilities now and I love doing this <3
+
+[![Support Chatobby on Patreon](https://img.shields.io/badge/Support%20Chatobby-Patreon-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/cw/MadelynCruzTan/membership)
+
 ## Install
 
 1. Install and enable Chatobby from Obsidian's Community plugin directory.
