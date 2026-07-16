@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "reviewableSourceFiles": [
+    "main.ts",
+    "publication.ts",
+    "settings.ts",
+    "transitions.ts",
+    "types.ts",
+    "uri-handler.ts",
+    "utils.ts",
+    "vault-runtime.ts",
+    "view-type.ts"
+  ],
+  "reviewableSourceRoots": [
+    { "path": "attachments", "authority": ["vault", "filesystem"] },
+    { "path": "backend", "authority": ["process"] },
+    { "path": "commands", "authority": ["obsidian", "vault"] },
+    { "path": "features", "authority": ["obsidian", "vault", "network"] },
+    { "path": "frontend", "authority": ["network"] },
+    { "path": "obsidian-bridge", "authority": ["obsidian", "vault", "filesystem", "process", "network"] },
+    { "path": "prompt", "authority": ["vault"] },
+    { "path": "runtime", "authority": ["filesystem", "process", "network"] },
+    { "path": "state", "authority": ["obsidian"] },
+    { "path": "transport", "authority": ["network"] },
+    { "path": "ui", "authority": ["obsidian", "vault"] },
+    { "path": "utils", "authority": [] },
+    { "path": "vendor", "authority": ["network"], "generated": true }
+  ],
+  "reviewableExportFiles": [
+    ".gitignore",
+    "CHANGELOG.md",
+    "README.md",
+    "boundary-manifest.json",
+    "esbuild.config.mjs",
+    "manifest.json",
+    "package-lock.json",
+    "package.json",
+    "tsconfig.json",
+    "versions.json",
+    "vitest.config.ts",
+    "docs/api/feed.md",
+    "docs/architecture/frontend-modules.md",
+    "docs/architecture/managed-runtime-lifecycle.md",
+    "docs/installation.md",
+    "docs/alpha-guide.md",
+    "docs/troubleshooting.md",
+    "docs/release-boundary.md",
+    "docs/responsibility-boundaries.md",
+    "docs/wire-protocol.md"
+  ],
+  "reviewableExportRoots": [
+    "scripts",
+    "src",
+    "tests"
+  ],
+  "requiredPublicationFiles": [
+    "LICENSE",
+    "PRIVACY.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "THIRD_PARTY_NOTICES.txt"
+  ],
+  "forbiddenRuntimeImports": [
+    "@chatobby/chatobby",
+    "@chatobby/memory-service",
+    "@chatobby/mcp-server-chatobby",
+    "@chatobby/mcp-server-obsidian",
+    "@chatobby/pi-obsidian-agent",
+    "@chatobby/pi-subagents",
+    "@earendil-works/pi-agent-core",
+    "@earendil-works/pi-ai",
+    "@earendil-works/pi-coding-agent",
+    "@earendil-works/pi-tui",
+    "@gotgenes/pi-permission-system",
+    "pi-mcp-adapter"
+  ],
+  "excludedExportPaths": [
+    ".chatobby-mcp-replies",
+    ".git",
+    "data.json",
+    "main.js",
+    "node_modules",
+    "release",
+    "styles.css"
+  ],
+  "officialReleaseAssets": [
+    "main.js",
+    "manifest.json",
+    "styles.css"
+  ]
+}

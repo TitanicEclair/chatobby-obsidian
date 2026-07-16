@@ -1,0 +1,82 @@
+/* Chatobby semantic theme contract + cross-cutting responsive behavior. */
+
+.workspace-leaf-content[data-type="chatobby-view"],
+.chatobby-view {
+  --chatobby-canvas: var(--background-primary);
+  --chatobby-surface-raised: color-mix(in srgb, var(--background-primary-alt) 88%, var(--background-primary));
+  --chatobby-surface-muted: color-mix(in srgb, var(--background-secondary) 78%, var(--background-primary));
+  --chatobby-surface-hover: var(--background-modifier-hover);
+  --chatobby-surface-input: var(--background-modifier-form-field);
+  --chatobby-border: var(--background-modifier-border);
+  --chatobby-border-strong: color-mix(in srgb, var(--text-muted) 42%, var(--background-modifier-border));
+  --chatobby-accent: var(--interactive-accent);
+  --chatobby-accent-hover: var(--interactive-accent-hover);
+  --chatobby-focus-ring: color-mix(in srgb, var(--interactive-accent) 72%, transparent);
+  --chatobby-warning: var(--text-warning);
+  --chatobby-danger: var(--text-error);
+  --chatobby-success: var(--color-green, var(--interactive-accent));
+  --chatobby-shadow-color: var(--background-modifier-box-shadow);
+  --chatobby-shadow-raised: 0 12px 34px color-mix(in srgb, var(--background-modifier-box-shadow) 28%, transparent);
+  --chatobby-line: var(--chatobby-border);
+  --chatobby-body-size: var(--font-ui-small);
+  --chatobby-meta-size: var(--font-ui-smaller);
+  --chatobby-edge-padding: clamp(var(--size-4-3), 3cqi, var(--size-4-8));
+  --chatobby-content-max-width: min(920px, 100%);
+  --chatobby-surface-soft: var(--chatobby-surface-muted);
+}
+
+.chatobby-tab-bar__tab,
+.chatobby-tab-bar__close,
+.chatobby-tab-bar__new,
+.chatobby-tab-bar__new-directory,
+.chatobby-tab-bar__source-view,
+.chatobby-icon-btn,
+.chatobby-send-btn,
+.chatobby-stop-btn {
+  border: 0;
+  box-shadow: none;
+}
+@container (max-width: 500px) {
+  .chatobby-tab-bar__item {
+    min-width: 104px;
+  }
+
+  /* In narrow layouts the controls row wraps; keep the model picker greedy. */
+  .chatobby-control--provider,
+  .chatobby-control--thinking,
+  .chatobby-control--permission {
+    flex: 1 1 auto;
+  }
+
+  .chatobby-feed__block--user {
+    max-width: 94%;
+  }
+
+  .chatobby-feed__empty-capabilities {
+    display: none;
+  }
+
+  .chatobby-composer-controls {
+    max-height: 64px;
+    overflow-y: auto;
+  }
+}
+
+@container (max-width: 360px) {
+  .chatobby-memory__stats,
+  .chatobby-memory__capacities,
+  .chatobby-memory__tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatobby-view *,
+  .chatobby-view *::before,
+  .chatobby-view *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

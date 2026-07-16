@@ -1,0 +1,58 @@
+import {
+  STREAM_TEXT_DEBOUNCE_MS,
+  STREAM_THINKING_DEBOUNCE_MS,
+  STREAM_TOOLCALL_DEBOUNCE_MS,
+} from "../shared/constants";
+
+export type SegmentType = "thinking" | "text" | "toolcall";
+
+export interface ContentSegment {
+  contentIndex: number;
+  type: SegmentType;
+  element: HTMLElement;
+  isFrozen: boolean;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  debounceMs: number;
+  buffer: unknown;
+}
+
+export function createSegment(contentIndex: number, type: SegmentType): ContentSegment {
+  return {
+    contentIndex,
+    type,
+    element: document.createElement("div"),
+    isFrozen: false,
+    debounceTimer: null,
+    debounceMs: debounceMsForType(type),
+    buffer: null,
+  };
+}
+
+export function updateSegment(segment: ContentSegment, content: unknown): void {
+  if (segment.isFrozen) return;
+  segment.buffer = content;
+  if (segment.debounceTimer) clearTimeout(segment.debounceTimer);
+  segment.debounceTimer = setTimeout(() => {
+    segment.element.textContent = stringifySegmentContent(segment.buffer);
+    segment.debounceTimer = null;
+  }, segment.debounceMs);
+}
+
+export function freezeSegment(segment: ContentSegment): void {
+  if (segment.debounceTimer) clearTimeout(segment.debounceTimer);
+  segment.element.textContent = stringifySegmentContent(segment.buffer);
+  segment.debounceTimer = null;
+  segment.isFrozen = true;
+}
+
+function debounceMsForType(type: SegmentType): number {
+  if (type === "thinking") return STREAM_THINKING_DEBOUNCE_MS;
+  if (type === "toolcall") return STREAM_TOOLCALL_DEBOUNCE_MS;
+  return STREAM_TEXT_DEBOUNCE_MS;
+}
+
+function stringifySegmentContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (content === null || content === undefined) return "";
+  return JSON.stringify(content);
+}

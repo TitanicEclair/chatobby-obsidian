@@ -1,0 +1,62 @@
+.chatobby-channel-message {
+  min-width: 0;
+  max-width: min(72ch, 92%);
+  user-select: text;
+}
+
+.chatobby-channel-message__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-2-2);
+  margin: 0 0 var(--size-2-1) var(--size-2-1);
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-channel-message__meta strong {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-channel-message__meta time {
+  margin-left: auto;
+}
+
+.chatobby-channel-message__route,
+.chatobby-channel-message__kind,
+.chatobby-channel-message__context {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-channel-message__route {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-channel-message__context {
+  margin: 0 0 var(--size-2-1) var(--size-2-1);
+  overflow-wrap: anywhere;
+}
+
+.chatobby-channel-message__bubble {
+  position: relative;
+  padding: var(--size-2-2) calc(var(--size-4-6) + var(--size-2-2)) var(--size-2-2) var(--size-4-3);
+  border: var(--border-width) solid var(--chatobby-border);
+  border-radius: var(--radius-m);
+  background: var(--chatobby-surface-raised);
+  color: var(--text-normal);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.chatobby-channel-message__open {
+  position: absolute;
+  top: var(--size-2-1);
+  right: var(--size-2-1);
+  color: var(--text-muted);
+  background: transparent;
+}

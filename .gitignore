@@ -1,0 +1,6 @@
+node_modules/
+main.js
+/release/
+data.json
+.DS_Store
+*.js.map

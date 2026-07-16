@@ -1,0 +1,54 @@
+/* Command modals: prompt input + actions (rename / bash / export / import / fork) */
+
+/* ── Command modals (rename / bash / export / import / fork) ── */
+.chatobby-prompt-input {
+  width: 100%;
+  margin-top: var(--size-4-2);
+  padding: var(--size-4-2);
+  border: var(--border-width) solid var(--chatobby-line);
+  border-radius: var(--radius-s);
+  background: var(--chatobby-canvas);
+  color: var(--text-normal);
+  font-family: var(--font-interface-theme);
+  font-size: var(--font-ui-small);
+  resize: vertical;
+}
+.chatobby-modal-actions { display: flex; justify-content: flex-end; gap: var(--size-4-2); margin-top: var(--size-4-3); }
+
+.chatobby-auto-compaction-modal__model {
+  margin-bottom: var(--size-2-2);
+  color: var(--text-normal);
+  font-family: var(--font-monospace-theme);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  overflow-wrap: anywhere;
+}
+
+.chatobby-auto-compaction-modal__intro,
+.chatobby-auto-compaction-modal__safety {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: var(--line-height-normal);
+}
+
+.chatobby-auto-compaction-modal__intro { margin-bottom: var(--size-4-3); }
+.chatobby-auto-compaction-modal__safety {
+  margin-top: var(--size-2-2);
+  padding: var(--size-4-2) var(--size-4-3);
+  border-radius: var(--radius-s);
+  background: var(--chatobby-surface-muted);
+}
+
+/* Live readout of the chosen threshold; the slider's value bubble only shows
+   while dragging, so this keeps the exact percentage visible at rest. */
+.chatobby-auto-compaction-modal__threshold-value {
+  flex: 0 0 auto;
+  min-width: 3em;
+  margin-left: var(--size-4-2);
+  color: var(--chatobby-accent);
+  font-family: var(--font-monospace-theme);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

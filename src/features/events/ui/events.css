@@ -1,0 +1,472 @@
+.chatobby-events {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  color: var(--text-normal);
+  background: var(--background-primary);
+}
+
+.chatobby-events__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3) var(--size-4-4);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.chatobby-events__heading {
+  min-width: 0;
+}
+
+.chatobby-events__heading h3,
+.chatobby-events__editor-header h4 {
+  margin: 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+}
+
+.chatobby-events__subtitle {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-events__tabs {
+  display: flex;
+  gap: var(--size-2-1);
+  padding: var(--size-2-2) var(--size-4-4) 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.chatobby-events__tab {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+  margin-block-end: -1px;
+  padding: var(--size-2-3) var(--size-4-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
+}
+
+.chatobby-events__tab:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.chatobby-events__tab.is-active {
+  border-bottom-color: var(--interactive-accent);
+	color: var(--text-accent);
+	background: var(--background-secondary);
+}
+
+.chatobby-events__tab.is-active:hover {
+	color: var(--text-accent-hover);
+	background: var(--background-secondary);
+}
+
+.chatobby-events__tab.is-active .chatobby-events__count {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+}
+
+.chatobby-events__count {
+  min-width: 1.25rem;
+  padding: 0 var(--size-2-1);
+  border-radius: var(--radius-l);
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+}
+
+.chatobby-events__notice {
+  margin: var(--size-4-3) var(--size-4-4) 0;
+  padding: var(--size-2-3) var(--size-4-3);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-events__notice.is-error,
+.chatobby-events__history-error {
+  color: var(--text-error);
+}
+
+.chatobby-events__body {
+  min-width: 0;
+  flex: 1;
+  padding: var(--size-4-4);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.chatobby-events__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--size-4-4);
+  margin-block-end: 0;
+  padding: var(--size-4-4);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+
+.chatobby-events__intro > div > div {
+  margin-block-start: var(--size-2-1);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-events__list,
+.chatobby-events__history {
+  display: grid;
+  gap: var(--size-2-3);
+}
+
+.chatobby-events__card {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary-alt);
+}
+
+.chatobby-events__card.is-disabled {
+  opacity: 0.68;
+}
+
+.chatobby-events__card-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: var(--radius-s);
+  color: var(--text-accent);
+  background: var(--background-modifier-hover);
+}
+
+.chatobby-events__card-copy {
+  min-width: 0;
+}
+
+.chatobby-events__card-title,
+.chatobby-events__history-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--size-2-2);
+}
+
+.chatobby-events__card-title strong,
+.chatobby-events__history-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-events__badge {
+  padding: 1px var(--size-2-2);
+  border-radius: var(--radius-l);
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-events__badge.is-running {
+  color: var(--color-green);
+}
+
+.chatobby-events__trigger,
+.chatobby-events__description,
+.chatobby-events__policy,
+.chatobby-events__history-origin,
+.chatobby-events__history-summary,
+.chatobby-events__history-error {
+  margin-block-start: var(--size-2-1);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+.chatobby-events__policy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-2-2);
+}
+
+.chatobby-events__policy span:not(:last-child)::after {
+  margin-inline-start: var(--size-2-2);
+  color: var(--text-faint);
+  content: "·";
+}
+
+.chatobby-events__card-actions {
+  display: flex;
+  gap: var(--size-2-1);
+}
+
+.chatobby-events__empty {
+  display: grid;
+  min-height: 12rem;
+  place-items: center;
+  align-content: center;
+  gap: var(--size-2-3);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.chatobby-events__empty svg {
+  width: 2rem;
+  height: 2rem;
+  color: var(--text-faint);
+}
+
+.chatobby-events__history-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.chatobby-events__status {
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-block-start: 0.3rem;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.chatobby-events__status.is-completed {
+  background: var(--color-green);
+}
+
+.chatobby-events__status.is-running,
+.chatobby-events__status.is-queued {
+  background: var(--interactive-accent);
+}
+
+.chatobby-events__status.is-awaiting_confirmation {
+  background: var(--color-orange);
+}
+
+.chatobby-events__status.is-failed,
+.chatobby-events__status.is-timed_out {
+  background: var(--color-red);
+}
+
+.chatobby-events__history-title span {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-events__history-summary {
+  display: -webkit-box;
+  max-height: 4.5em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--text-normal);
+}
+
+.chatobby-events__editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-3);
+  margin-block-end: var(--size-4-4);
+}
+
+.chatobby-events__editor {
+  display: grid;
+  max-width: 48rem;
+  gap: var(--size-4-3);
+}
+
+.chatobby-events__field {
+  display: grid;
+  min-width: 0;
+  gap: var(--size-2-2);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-events__field input,
+.chatobby-events__field select,
+.chatobby-events__field textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.chatobby-events__field textarea {
+  resize: vertical;
+}
+
+.chatobby-events__schedule {
+  display: grid;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3) 0;
+  border-block: 1px solid var(--background-modifier-border);
+}
+
+.chatobby-events__schedule-title {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+.chatobby-events__schedule-start,
+.chatobby-events__schedule-every {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: var(--size-4-3);
+}
+
+.chatobby-events__schedule-every {
+  grid-template-columns: minmax(0, 10rem) auto;
+  align-items: center;
+}
+
+.chatobby-events__schedule-unit,
+.chatobby-events__schedule-summary {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-events__schedule-summary {
+  margin-top: calc(var(--size-4-2) * -1);
+}
+
+.chatobby-events__weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-2-2);
+}
+
+.chatobby-events__weekday {
+  display: inline-flex;
+  width: var(--size-4-8);
+  height: var(--size-4-8);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
+}
+
+.chatobby-events__weekday:hover,
+.chatobby-events__weekday.is-selected {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.chatobby-events__weekday.is-selected {
+  border-color: var(--interactive-accent);
+  color: var(--text-accent);
+}
+
+.chatobby-events__dynamic-field {
+  display: grid;
+  gap: var(--size-2-2);
+}
+
+.chatobby-events__help {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-events__form-error {
+  padding: var(--size-2-3) var(--size-4-3);
+  border-inline-start: 2px solid var(--color-red);
+  color: var(--text-error);
+  background: var(--background-secondary);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-events__check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--size-2-3);
+  padding: var(--size-2-3) 0;
+}
+
+.chatobby-events__check.is-hidden {
+  display: none;
+}
+
+.chatobby-events__check > div {
+  display: grid;
+  gap: var(--size-2-1);
+}
+
+.chatobby-events__check small {
+  color: var(--text-muted);
+}
+
+.chatobby-events__editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--size-2-2);
+  padding-block-start: var(--size-4-3);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+@media (max-width: 520px) {
+  .chatobby-events__header,
+  .chatobby-events__body {
+    padding-inline: var(--size-4-3);
+  }
+
+  .chatobby-events__tabs {
+    padding-inline: var(--size-4-3);
+  }
+
+  .chatobby-events__intro,
+  .chatobby-events__card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .chatobby-events__intro {
+    flex-direction: column;
+  }
+
+  .chatobby-events__card-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .chatobby-events__history-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .chatobby-events__history-row > button {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .chatobby-events__schedule-start {
+    grid-template-columns: 1fr;
+  }
+}

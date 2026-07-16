@@ -1,0 +1,85 @@
+.chatobby-runtime-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--size-4-2);
+  width: min(var(--chatobby-content-max-width), calc(100% - (2 * var(--chatobby-edge-padding))));
+  margin: var(--size-4-2) auto 0;
+  padding: var(--size-4-2) var(--size-4-3);
+  border: 1px solid var(--chatobby-border);
+  border-radius: var(--radius-m);
+  background: var(--chatobby-surface-muted);
+  color: var(--text-muted);
+  box-sizing: border-box;
+}
+
+.chatobby-runtime-status.is-hidden {
+  display: none;
+}
+
+.chatobby-runtime-status.is-failure {
+  border-color: color-mix(in srgb, var(--chatobby-danger) 42%, var(--chatobby-border));
+  background: color-mix(in srgb, var(--chatobby-danger) 7%, var(--chatobby-surface-muted));
+}
+
+.chatobby-runtime-status__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.chatobby-runtime-status.is-progress .chatobby-runtime-status__icon {
+  color: var(--chatobby-accent);
+}
+
+.chatobby-runtime-status.is-loading .chatobby-runtime-status__icon svg {
+  animation: chatobby-runtime-spin 1.2s linear infinite;
+}
+
+.chatobby-runtime-status__copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chatobby-runtime-status__title {
+  color: var(--text-normal);
+  font-size: var(--chatobby-body-size);
+  font-weight: var(--font-semibold);
+}
+
+.chatobby-runtime-status__detail {
+  margin-top: 2px;
+  font-size: var(--chatobby-meta-size);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.chatobby-runtime-status__action {
+  flex: 0 0 auto;
+  padding: var(--size-4-1) var(--size-4-3);
+  font-size: var(--chatobby-meta-size);
+}
+
+.chatobby-runtime-status__diagnostics {
+  max-width: 45%;
+  font-size: var(--chatobby-meta-size);
+}
+
+.chatobby-runtime-status__diagnostics pre {
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@keyframes chatobby-runtime-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chatobby-view[data-layout="compact"] .chatobby-runtime-status {
+  flex-wrap: wrap;
+}
+
+.chatobby-view[data-layout="compact"] .chatobby-runtime-status__diagnostics {
+  max-width: 100%;
+  flex-basis: 100%;
+}

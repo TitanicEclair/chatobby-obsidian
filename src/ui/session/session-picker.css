@@ -1,0 +1,326 @@
+.chatobby-session-picker-host {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chatobby-session-picker {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: 100%;
+  padding: var(--size-4-3) var(--chatobby-edge-padding);
+  gap: var(--size-4-3);
+  box-sizing: border-box;
+}
+
+.chatobby-session-picker__header {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-3);
+}
+
+.chatobby-session-picker__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+}
+
+.chatobby-session-picker__directory-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-1);
+}
+
+.chatobby-session-picker__search {
+  width: 100%;
+  height: var(--size-4-9);
+}
+
+.chatobby-session-picker__workspace {
+  display: grid;
+  grid-template-columns: minmax(180px, 30%) minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-top: var(--border-width) solid var(--chatobby-border);
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.chatobby-session-picker__directories {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-1);
+  min-width: 0;
+  padding: var(--size-4-2) var(--size-4-2) var(--size-4-2) 0;
+  overflow-y: auto;
+  border-right: var(--border-width) solid var(--chatobby-border);
+  background: transparent;
+}
+
+.chatobby-session-picker__directory-branch { min-width: 0; }
+.chatobby-session-picker__directory-row {
+  display: grid;
+  grid-template-columns: var(--size-4-5) minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+}
+
+.chatobby-session-picker__disclosure,
+.chatobby-session-picker__disclosure-spacer {
+  width: var(--size-4-5);
+  height: var(--size-4-5);
+}
+
+.chatobby-session-picker__disclosure {
+  padding: 0;
+  color: var(--text-faint);
+}
+
+.chatobby-session-picker__disclosure svg {
+  width: var(--size-4-3);
+  height: var(--size-4-3);
+}
+
+.chatobby-session-picker__directory-children {
+  margin-left: var(--size-4-5);
+  padding-left: var(--size-2-2);
+  border-left: var(--border-width) solid var(--chatobby-border);
+}
+
+.chatobby-session-picker__directory {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--size-2-2);
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  padding: var(--size-2-1) var(--size-2-3);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: left;
+}
+
+.chatobby-session-picker__directory-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-session-picker__directory-icon { display: inline-flex; color: var(--text-faint); }
+.chatobby-session-picker__directory-icon svg { width: var(--size-4-3); height: var(--size-4-3); }
+.chatobby-session-picker__directory.has-sessions { color: var(--text-normal); font-weight: var(--font-medium); }
+.chatobby-session-picker__directory.has-sessions .chatobby-session-picker__directory-icon { color: var(--chatobby-accent); }
+.chatobby-session-picker__directory-count {
+  min-width: var(--size-4-5);
+  padding: 0 var(--size-2-1);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: transparent;
+  text-align: center;
+}
+
+.chatobby-session-picker__directory:hover,
+.chatobby-session-picker__directory.is-active {
+  background: var(--chatobby-surface-hover);
+  color: var(--text-normal);
+}
+
+.chatobby-session-picker__directory.is-active {
+  box-shadow: inset 2px 0 0 var(--chatobby-accent);
+}
+
+.chatobby-session-picker__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  padding: var(--size-4-2);
+  overflow: hidden;
+}
+
+.chatobby-session-picker__directory-heading {
+  flex: 0 0 auto;
+  margin-bottom: var(--size-4-2);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-session-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-1);
+  height: 100%;
+  overflow-y: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@container (max-width: 680px) {
+  .chatobby-session-picker__workspace {
+    grid-template-columns: minmax(148px, 36%) minmax(0, 1fr);
+  }
+
+  .chatobby-session-picker__item-open {
+    grid-template-columns: 1fr;
+    gap: var(--size-2-1);
+  }
+
+  .chatobby-session-picker__item-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--size-2-1) var(--size-4-2);
+    white-space: normal;
+    text-align: left;
+  }
+}
+
+@container (max-width: 480px) {
+  .chatobby-session-picker__workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(104px, 34%) minmax(0, 1fr);
+  }
+
+  .chatobby-session-picker__directories {
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: var(--border-width) solid var(--chatobby-border);
+  }
+
+  .chatobby-session-picker__directory {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.chatobby-session-picker__item {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  border-bottom: var(--border-width) solid color-mix(in srgb, var(--chatobby-border) 72%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-normal);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+button.chatobby-session-picker__item-open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--size-4-3);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: var(--size-2-2) var(--size-4-2);
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.chatobby-session-picker__item.is-active,
+.chatobby-session-picker__item:hover {
+  border-bottom-color: var(--chatobby-border);
+  background: color-mix(in srgb, var(--chatobby-surface-hover) 56%, transparent);
+}
+
+.chatobby-session-picker__item-main {
+  min-width: 0;
+}
+
+.chatobby-session-picker__item-title,
+.chatobby-session-picker__item-directory {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-session-picker__item-title {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+}
+
+.chatobby-session-picker__item-directory {
+  margin-top: var(--size-2-1);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-session-picker__item-meta {
+  color: var(--text-muted);
+  font-family: var(--font-monospace-theme);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.chatobby-session-picker__item-meta > div + div { margin-top: var(--size-2-1); }
+
+@container (max-width: 340px) {
+  .chatobby-session-picker__header { flex-wrap: wrap; }
+  .chatobby-session-picker__directory-actions { margin-left: auto; }
+  .chatobby-session-picker__item-meta > div:last-child { display: none; }
+  .chatobby-session-picker__hint { display: none; }
+}
+
+.chatobby-session-picker__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-4-3);
+  height: 100%;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-session-picker__operation {
+  margin-bottom: var(--size-4-2);
+  color: var(--text-accent);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-session-picker__state.is-error {
+  color: var(--chatobby-danger);
+}
+
+.chatobby-session-picker__hint {
+  color: var(--text-faint);
+  font-family: var(--font-monospace-theme);
+  font-size: var(--font-ui-smaller);
+}

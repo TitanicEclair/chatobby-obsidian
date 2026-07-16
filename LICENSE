@@ -1,0 +1,59 @@
+CHATOBBY CONNECTOR SOURCE-AVAILABLE LICENSE
+Version 1.0, 16 July 2026
+
+Copyright (c) 2026 Madelyn Cruz Tan. All rights reserved.
+
+This license applies only to the Chatobby Obsidian connector source code and
+compiled connector assets. The separately distributed Chatobby runtime,
+installer, services, trademarks, and documentation may be governed by
+different terms.
+
+1. Permission
+
+Subject to this license, you may:
+
+- download, install, and use an official unmodified connector release;
+- make reasonable backup copies for your own use;
+- view and audit the published source for security, compatibility, and
+  Obsidian review purposes;
+- compile or modify the source solely for your own private evaluation; and
+- create a GitHub fork solely to propose changes back to the official project.
+
+2. Restrictions
+
+Except with prior written permission from the copyright holder, you may not:
+
+- redistribute, publish, sublicense, sell, rent, or commercially exploit the
+  source code, a compiled connector, or a modified version;
+- distribute a fork or use the source to operate or create a competing product
+  or service;
+- remove or alter copyright, license, attribution, or product-identity notices;
+- represent an unofficial build as an official Chatobby release; or
+- use the connector to bypass licensing, access control, signature checks, or
+  other protections of the Chatobby runtime.
+
+Nothing in this license restricts rights that cannot lawfully be restricted,
+including any mandatory right to reverse engineer solely for interoperability
+or security research where applicable law provides that right.
+
+3. Contributions
+
+Unless a separate written agreement applies, a submitted contribution grants
+the copyright holder a perpetual, worldwide, royalty-free, sublicensable right
+to use, reproduce, modify, distribute, and relicense that contribution as part
+of Chatobby. You retain copyright in your contribution.
+
+4. Termination
+
+This license terminates automatically if you breach its terms. On termination,
+you must stop using and distributing all copies except where applicable law
+requires otherwise.
+
+5. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, TITLE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW,
+THE COPYRIGHT HOLDER IS NOT LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY
+ARISING FROM THE SOFTWARE OR ITS USE.
+

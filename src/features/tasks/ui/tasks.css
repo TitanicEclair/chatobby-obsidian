@@ -1,0 +1,190 @@
+.chatobby-task-progress-host {
+  flex: 0 0 auto;
+  width: calc(100% - (var(--chatobby-edge-padding) * 2));
+  max-width: calc(var(--chatobby-content-max-width) - (var(--chatobby-edge-padding) * 2));
+  min-width: 0;
+  margin: 0 auto var(--size-2-1);
+  border: 0;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.chatobby-task-progress-host.is-hidden,
+.chatobby-task-progress-host.is-view-hidden {
+  display: none;
+}
+
+.chatobby-task-progress__toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  padding: var(--size-4-1) 0;
+  gap: var(--size-4-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.chatobby-task-progress__toggle:hover,
+.chatobby-task-progress__toggle:focus-visible {
+  background: transparent;
+  color: var(--text-normal);
+}
+
+.chatobby-task-progress__preview {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: var(--size-4-1) var(--size-4-3);
+}
+
+.chatobby-task-progress__preview-item,
+.chatobby-task-progress__item-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--size-4-2);
+}
+
+.chatobby-task-progress__preview-text,
+.chatobby-task-progress__item-text,
+.chatobby-task-progress__note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-task-progress__step {
+  flex: 0 0 auto;
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+}
+
+.chatobby-task-progress__summary,
+.chatobby-task-progress__state,
+.chatobby-task-progress__note {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+.chatobby-task-progress__chevron,
+.chatobby-task-progress__status-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.chatobby-task-progress__chevron svg,
+.chatobby-task-progress__status-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.chatobby-task-progress__spinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: chatobby-task-progress-spin 0.8s linear infinite;
+}
+
+.chatobby-task-progress__list {
+  display: grid;
+  gap: 1px;
+  padding: 0 0 var(--size-4-2);
+}
+
+@container (max-width: 440px) {
+  .chatobby-task-progress__toggle {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--size-2-2);
+  }
+
+  .chatobby-task-progress__summary {
+    display: none;
+  }
+
+  .chatobby-task-progress__preview {
+    flex-wrap: nowrap;
+  }
+
+  .chatobby-task-progress__preview-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chatobby-task-progress__item-line {
+    flex-wrap: wrap;
+  }
+
+  .chatobby-task-progress__state {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+.chatobby-task-progress__item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--size-4-2);
+  padding: var(--size-4-1) 0;
+}
+
+.chatobby-task-progress__item-body {
+  min-width: 0;
+}
+
+.chatobby-task-progress__state {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.chatobby-task-progress__note {
+  margin-top: 2px;
+}
+
+.chatobby-task-progress__status-icon.is-spinning {
+  animation: chatobby-task-progress-spin 1s linear infinite;
+}
+
+.chatobby-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes chatobby-task-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatobby-task-progress__spinner,
+  .chatobby-task-progress__status-icon.is-spinning {
+    animation-duration: 2s;
+  }
+}
+
+.chatobby-view[data-layout="compact"] .chatobby-task-progress__toggle {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.chatobby-view[data-layout="compact"] .chatobby-task-progress__summary {
+  display: none;
+}

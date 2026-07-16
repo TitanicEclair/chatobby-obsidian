@@ -1,0 +1,13 @@
+{
+  "id": "chatobby",
+  "name": "Chatobby",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "Obsidian workspace for the local Chatobby agent runtime.",
+  "author": "Madelyn Cruz Tan",
+  "authorUrl": "https://github.com/TitanicEclair",
+  "fundingUrl": {
+    "Patreon": "https://www.patreon.com/cw/MadelynCruzTan/membership"
+  },
+  "isDesktopOnly": true
+}

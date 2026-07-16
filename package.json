@@ -1,0 +1,26 @@
+{
+  "name": "chatobby-obsidian",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit && node esbuild.config.mjs",
+    "build:release-candidate": "npm run build:release",
+    "build:release": "tsc --noEmit && node esbuild.config.mjs --release && node scripts/verify-release-artifacts.mjs release",
+    "check": "tsc --noEmit && npm run check:architecture",
+    "check:architecture": "node scripts/check-public-api.mjs && npm run check:release-boundary && vitest run tests/architecture",
+    "check:backend-contract": "node scripts/verify-local-backend.mjs",
+    "check:release-boundary": "node scripts/check-reviewable-boundary.mjs",
+    "export:reviewable": "node scripts/export-reviewable-source.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.2",
+    "@types/ws": "8.18.1",
+    "esbuild": "0.25.12",
+    "happy-dom": "20.10.6",
+    "obsidian": "1.13.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9",
+    "ws": "8.21.0"
+  }
+}

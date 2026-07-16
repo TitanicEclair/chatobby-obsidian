@@ -1,0 +1,27 @@
+/* Chatobby plugin styles — bundle source.
+   This barrel is concatenated by esbuild (esbuild.config.mjs) into the root
+   styles.css that Obsidian loads. Each component owns its own .css file
+   co-located next to its source; edit there, not in the generated root file. */
+
+@import "./shared/tokens.css";
+@import "./shell/shell.css";
+@import "./session/session.css";
+@import "./session/session-picker.css";
+@import "./toolbar/toolbar.css";
+@import "./composer/composer.css";
+@import "./settings/settings.css";
+@import "./modals/modals.css";
+@import "./feed/feed.css";
+@import "./feed/compaction.css";
+@import "./feed/subagent-messages.css";
+@import "./feed/channel-messages.css";
+@import "./feed/tools/tools.css";
+@import "./memory/memory-view.css";
+@import "./permissions/permissions-view.css";
+@import "../features/subagents/ui/subagents.css";
+@import "../features/runtime-status/ui/runtime-status.css";
+@import "../features/tasks/ui/tasks.css";
+@import "../features/events/ui/events.css";
+@import "../features/queries/ui/queries.css";
+@import "../features/channels/ui/channels.css";
+@import "./shared/page-shell.css";

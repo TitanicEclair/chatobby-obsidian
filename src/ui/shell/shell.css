@@ -1,0 +1,23 @@
+/* Shell: chatobby view root layout + theme tokens */
+
+.workspace-leaf-content[data-type="chatobby-view"],
+.workspace-leaf-content[data-type="chatobby-view"] .view-content,
+.chatobby-view {
+  background: var(--chatobby-canvas);
+}
+
+.chatobby-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0 !important;
+  color: var(--text-normal);
+  font-family: var(--font-interface-theme);
+  container-type: inline-size;
+  overflow: hidden !important;
+}
+
+.chatobby-view[data-height="shallow"] {
+  --chatobby-edge-padding: var(--size-4-2);
+}

@@ -1,0 +1,60 @@
+.chatobby-settings {
+  max-width: 720px;
+}
+
+.chatobby-settings__heading {
+  margin-block-end: var(--size-4-6);
+}
+
+.chatobby-settings__heading h2 {
+  margin-block-end: var(--size-2-1);
+}
+
+.chatobby-settings__heading > div {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-settings h3 {
+  margin-block: var(--size-4-8) var(--size-4-2);
+  padding-block-end: var(--size-2-2);
+  border-bottom: var(--border-width) solid var(--chatobby-border);
+}
+
+.chatobby-settings-note,
+.chatobby-settings__provider-state,
+.chatobby-provider-modal__intro {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: var(--line-height-normal);
+}
+
+.chatobby-settings__provider-state {
+  padding: var(--size-4-3) 0;
+}
+
+.chatobby-settings__provider .setting-item-name {
+  font-weight: var(--font-medium);
+}
+
+.chatobby-settings__provider.is-connected .setting-item-name::after {
+  margin-inline-start: var(--size-2-2);
+  content: "Connected";
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-normal);
+}
+
+.chatobby-provider-modal__intro {
+  margin-block-end: var(--size-4-3);
+}
+
+.chatobby-provider-modal .setting-item {
+  padding-inline: 0;
+}
+
+@media (max-width: 520px) {
+  .chatobby-settings__provider .setting-item-control {
+    flex-wrap: wrap;
+  }
+}
