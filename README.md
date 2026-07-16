@@ -1,10 +1,10 @@
 # Chatobby for Obsidian
 
-Chatobby is a desktop-only Obsidian connector for a separately installed local
-Chatobby agent runtime. The connector owns Obsidian UI, vault-authority bridge
-operations, local runtime lifecycle, and authenticated loopback transport. The
-runtime owns models, prompts, memory, permissions, tasks, subagents, workflows,
-events, and product decision logic.
+Chatobby brings a full agent workspace into Obsidian. Use it to work across
+notes and attachments, keep useful context between sessions, plan longer work,
+run scheduled actions, and coordinate multiple agents without leaving your
+vault. A separately installed local runtime connects Chatobby to the model
+providers you choose.
 
 > **Public alpha:** Chatobby is free while the product is under active
 > development. Interfaces and storage contracts may change. Back up important
@@ -14,6 +14,26 @@ Please support me to remain unemployed so I can keep working on Chatobby. It's
 actually so exciting to see its capabilities now and I love doing this <3
 
 [![Support Chatobby on Patreon](https://img.shields.io/badge/Support%20Chatobby-Patreon-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/cw/MadelynCruzTan/membership)
+
+## What you can do
+
+- **Work with your vault:** Ask questions about the active note, search for
+  related material, navigate between notes, and make permission-controlled
+  edits.
+- **Bring in other material:** Paste images or attach supported documents so
+  they can be read alongside your notes.
+- **Keep useful context:** Review and manage memory, approve or ignore memory
+  suggestions, and use project context queries to add information when a
+  session starts or before each turn.
+- **Plan and automate:** Track multi-step tasks in the conversation and create
+  scheduled or repeating events with runtime and daily-run limits.
+- **Delegate larger work:** Start subagents, follow each agent's feed, run
+  reusable workflows, and inspect agent-to-agent communication in channels.
+- **Choose how each session runs:** Select a provider, model, reasoning effort,
+  project directory, and permission policy for the current session.
+- **Stay in control:** Use explicit permission policies for files, tools,
+  channels, and automated work. Chatobby shows tool activity and keeps agent
+  actions visible in the conversation.
 
 ## Install
 
@@ -27,6 +47,26 @@ actually so exciting to see its capabilities now and I love doing this <3
 See the complete [installation guide](docs/installation.md),
 [alpha guide](docs/alpha-guide.md), and
 [troubleshooting guide](docs/troubleshooting.md).
+
+The current alpha supports desktop Obsidian on Windows 10 or 11 x64. Chatobby
+is free, but the model provider you select may require an account, API key,
+subscription, or usage payment.
+
+## A good first session
+
+1. Start with a backed-up vault or a copied test folder.
+2. Open a test note, launch Chatobby from the ribbon, and keep the default
+   permission policy selected.
+3. Try a read-only request such as: `Summarize this note and identify its open
+   questions.`
+4. Try vault retrieval: `Find notes related to this topic and explain how they
+   connect.`
+5. Request one small edit and inspect the result before granting broader
+   permissions or scheduling automated work.
+
+Once the basics feel comfortable, open Chatobby's dedicated pages for memory,
+permissions, events, context queries, channels, and subagents. Each page is
+scoped to the current Chatobby project where applicable.
 
 ## Required disclosures
 
@@ -53,6 +93,15 @@ See the complete [installation guide](docs/installation.md),
   runtime is closed source and has separate distribution terms. See
   [LICENSE](LICENSE) and [PRIVACY.md](PRIVACY.md).
 
+## How it works
+
+The Community plugin provides Chatobby's Obsidian interface and performs
+allowlisted vault operations. The separately installed runtime manages model
+requests, sessions, prompts, memory, permissions, tasks, events, workflows,
+subagents, and channels. They communicate over an authenticated local-loopback
+connection. Runtime installation and updates are deliberate; the plugin does
+not silently replace the runtime.
+
 ## Support development
 
 Chatobby is not charging for the alpha. Users who want to support continued
@@ -62,6 +111,8 @@ entirely optional and is not required to install or use the alpha.
 
 For defects, use the
 [public issue tracker](https://github.com/TitanicEclair/chatobby-obsidian/issues).
+For questions, ideas, polls, and general feedback, use
+[GitHub Discussions](https://github.com/TitanicEclair/chatobby-obsidian/discussions).
 For vulnerabilities, follow [SECURITY.md](SECURITY.md).
 
 ## Development
