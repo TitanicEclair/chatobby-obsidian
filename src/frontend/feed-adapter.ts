@@ -90,7 +90,7 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
           name: block.title,
           type: "Agent",
           description: block.detail ?? block.title,
-          source: "runtime",
+          source: "chatobby-supervisor",
           status: block.phase === "created" ? "created" : block.phase,
           compactionCount: 0,
         },

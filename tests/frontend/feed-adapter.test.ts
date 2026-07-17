@@ -85,4 +85,28 @@ describe("frontend feed adapter", () => {
       },
     });
   });
+
+  it("maps runtime agent activity to the navigable supervisor source", () => {
+    const projection = toFeedDocumentProjection({
+      revision: 4,
+      blocks: [{
+        type: "agent-activity",
+        id: "subagent-run:run-1",
+        actorId: "run-1",
+        title: "Explorer",
+        phase: "completed",
+        detail: "Read the requested files.",
+      }],
+    });
+
+    expect(projection.blocks[0]).toMatchObject({
+      type: "subagent",
+      agentId: "run-1",
+      activity: {
+        agentId: "run-1",
+        source: "chatobby-supervisor",
+        status: "completed",
+      },
+    });
+  });
 });
