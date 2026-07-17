@@ -56,10 +56,13 @@ export const OBSIDIAN_BROWSER_TOOL_OPERATION_MAP = {
 	obsidian_browser_list: "browser.list",
 	obsidian_browser_snapshot: "browser.snapshot",
 	obsidian_browser_read: "browser.read",
+	obsidian_browser_dom: "browser.dom",
 	obsidian_browser_click: "browser.click",
 	obsidian_browser_type: "browser.type",
+	obsidian_browser_press: "browser.press",
 	obsidian_browser_wait: "browser.wait",
 	obsidian_browser_evaluate: "browser.evaluate",
+	obsidian_browser_screenshot: "browser.screenshot",
 	obsidian_browser_close: "browser.close",
 } as const satisfies Record<string, ObsidianOperationName>;
 

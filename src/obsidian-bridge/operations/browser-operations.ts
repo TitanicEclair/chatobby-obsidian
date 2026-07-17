@@ -1,21 +1,24 @@
-// Web viewer operations. This is a bounded browser automation surface over
-// Obsidian's Web viewer core plugin: open/navigate/list/snapshot/read plus
-// selector/text-targeted click/type/wait/evaluate helpers.
-
 import type { App, WorkspaceLeaf, ViewState } from "obsidian";
+import {
+  executeBrowserPageOperation,
+  type BrowserPageAction,
+  type BrowserPageInput,
+} from "../browser/page-runtime";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 
 const WEBVIEWER_TYPE = "webviewer";
 const DEFAULT_MAX_CHARS = 12_000;
-const DEFAULT_SNAPSHOT_ELEMENTS = 80;
-const DEFAULT_SNAPSHOT_TEXT_CHARS = 4_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 5_000;
-const MAX_EVALUATE_CHARS = 100_000;
 
 interface WebViewerState {
   url?: string;
   navigate?: boolean;
+}
+
+interface NativeImageLike {
+  toPNG(): Uint8Array;
+  getSize?(): { width: number; height: number };
 }
 
 interface WebViewElement extends HTMLElement {
@@ -23,6 +26,16 @@ interface WebViewElement extends HTMLElement {
   getTitle?: () => string;
   loadURL?: (url: string) => Promise<void> | void;
   executeJavaScript?: (code: string, userGesture?: boolean) => Promise<unknown>;
+  canGoBack?: () => boolean;
+  canGoForward?: () => boolean;
+  goBack?: () => void;
+  goForward?: () => void;
+  reload?: () => void;
+  isLoading?: () => boolean;
+  isCrashed?: () => boolean;
+  isCurrentlyAudible?: () => boolean;
+  sendInputEvent?: (event: Record<string, unknown>) => Promise<void> | void;
+  capturePage?: (rect?: { x: number; y: number; width: number; height: number }) => Promise<NativeImageLike>;
 }
 
 interface BrowserTabInfo {
@@ -31,14 +44,19 @@ interface BrowserTabInfo {
   isActive: boolean;
   url?: string;
   title?: string;
+  loading?: boolean;
+  crashed?: boolean;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  audible?: boolean;
+  page?: Record<string, unknown>;
 }
 
-interface TextPage {
-  text: string;
-  truncated: boolean;
-  totalChars: number;
-  startIndex: number;
-  nextStartIndex?: number;
+interface BrowserCursor {
+  documentId: string;
+  revision: number;
+  blockIndex: number;
+  blockOffset: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -50,9 +68,7 @@ function safeScriptJson(value: Record<string, unknown>): string {
 }
 
 function assertNotAborted(signal: AbortSignal): void {
-  if (signal.aborted) {
-    throw new BridgeError("DEADLINE_EXCEEDED", "Browser operation aborted", true);
-  }
+  if (signal.aborted) throw new BridgeError("DEADLINE_EXCEEDED", "Browser operation aborted", true);
 }
 
 function getLeafId(leaf: WorkspaceLeaf): string {
@@ -74,9 +90,7 @@ function getWebViewElement(leaf: WorkspaceLeaf): WebViewElement | null {
 }
 
 function normalizeHttpUrl(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new BridgeError("INVALID_INPUT", "Browser operation requires a URL");
-  }
+  if (typeof value !== "string" || !value.trim()) throw new BridgeError("INVALID_INPUT", "Browser operation requires a URL");
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -91,25 +105,23 @@ function normalizeHttpUrl(value: unknown): string {
 
 function getWebViewerUrl(leaf: WorkspaceLeaf): string | undefined {
   const webview = getWebViewElement(leaf);
-  let runtimeUrl: string | undefined;
   try {
-    runtimeUrl = webview?.getURL?.();
+    const runtimeUrl = webview?.getURL?.();
+    if (runtimeUrl) return runtimeUrl;
   } catch {
-    runtimeUrl = undefined;
+    // Fall through to persisted view state.
   }
-  if (runtimeUrl) return runtimeUrl;
   const state = asRecord(leaf.getViewState().state) as WebViewerState;
   return typeof state.url === "string" ? state.url : undefined;
 }
 
 function getWebViewerTitle(leaf: WorkspaceLeaf): string | undefined {
-  let title: string | undefined;
   try {
-    title = getWebViewElement(leaf)?.getTitle?.();
+    const title = getWebViewElement(leaf)?.getTitle?.();
+    if (title) return title;
   } catch {
-    title = undefined;
+    // Fall through to the Obsidian view title.
   }
-  if (title) return title;
   const viewTitle = (leaf.view as unknown as { getDisplayText?: () => string }).getDisplayText?.();
   return viewTitle || undefined;
 }
@@ -124,516 +136,454 @@ function listWebViewerLeaves(app: App): WorkspaceLeaf[] {
 
 function findBrowserLeaf(app: App, leafId?: string): WorkspaceLeaf | null {
   const leaves = listWebViewerLeaves(app);
-  if (leafId) {
-    return leaves.find((leaf) => getLeafId(leaf) === leafId) ?? null;
-  }
+  if (leafId) return leaves.find((leaf) => getLeafId(leaf) === leafId) ?? null;
   const active = app.workspace.activeLeaf;
   if (active && isWebViewerLeaf(active)) return active;
   return leaves[0] ?? null;
 }
 
-function browserTabInfo(app: App, leaf: WorkspaceLeaf): BrowserTabInfo {
-  const leafId = getLeafId(leaf);
+async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTabInfo> {
+  const webview = getWebViewElement(leaf);
+  let page: Record<string, unknown> | undefined;
+  if (webview?.executeJavaScript && !webview.isLoading?.()) {
+    try {
+      const result = await runPageOperation(webview, "page", {});
+      page = asRecord(result.page);
+    } catch {
+      page = undefined;
+    }
+  }
   const url = getWebViewerUrl(leaf);
   const title = getWebViewerTitle(leaf);
   return {
-    leafId,
+    leafId: getLeafId(leaf),
     type: getLeafViewType(leaf),
     isActive: leaf === app.workspace.activeLeaf,
     ...(url ? { url } : {}),
     ...(title ? { title } : {}),
+    ...(webview?.isLoading ? { loading: webview.isLoading() } : {}),
+    ...(webview?.isCrashed ? { crashed: webview.isCrashed() } : {}),
+    ...(webview?.canGoBack ? { canGoBack: webview.canGoBack() } : {}),
+    ...(webview?.canGoForward ? { canGoForward: webview.canGoForward() } : {}),
+    ...(webview?.isCurrentlyAudible ? { audible: webview.isCurrentlyAudible() } : {}),
+    ...(page ? { page } : {}),
   };
 }
 
 function resolveBrowserTarget(app: App, target: unknown): WorkspaceLeaf {
   switch (target) {
-    case "current":
-      return app.workspace.getLeaf(false);
-    case "split-right":
-      return app.workspace.getLeaf("split", "vertical");
-    case "split-down":
-      return app.workspace.getLeaf("split", "horizontal");
-    case "new-window":
-      return app.workspace.getLeaf("window");
+    case "current": return app.workspace.getLeaf(false);
+    case "split-right": return app.workspace.getLeaf("split", "vertical");
+    case "split-down": return app.workspace.getLeaf("split", "horizontal");
+    case "new-window": return app.workspace.getLeaf("window");
     case "new-tab":
-    case undefined:
-      return app.workspace.getLeaf("tab");
-    default:
-      throw new BridgeError("INVALID_INPUT", `Unknown browser target: ${String(target)}`);
+    case undefined: return app.workspace.getLeaf("tab");
+    default: throw new BridgeError("INVALID_INPUT", `Unknown browser target: ${String(target)}`);
   }
-}
-
-function sliceText(text: string, startIndex: number, maxChars: number): TextPage {
-  const safeStart = Math.min(startIndex, text.length);
-  const end = Math.min(safeStart + maxChars, text.length);
-  return {
-    text: text.slice(safeStart, end),
-    truncated: end < text.length,
-    totalChars: text.length,
-    startIndex: safeStart,
-    ...(end < text.length ? { nextStartIndex: end } : {}),
-  };
-}
-
-async function waitLocal(ms: number, signal: AbortSignal): Promise<void> {
-  if (ms <= 0) return;
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(resolve, ms);
-    const onAbort = () => {
-      window.clearTimeout(timeout);
-      reject(new BridgeError("DEADLINE_EXCEEDED", "Browser operation aborted", true));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
 }
 
 function requireBrowserLeaf(app: App, leafId: string | undefined): WorkspaceLeaf {
   const leaf = findBrowserLeaf(app, leafId);
   if (!leaf) {
-    throw new BridgeError("OBSIDIAN_OPERATION_FAILED", leafId ? `No Web viewer tab found for leafId ${leafId}` : "No Web viewer tab is open");
+    throw new BridgeError(
+      "OBSIDIAN_OPERATION_FAILED",
+      leafId ? `No Web viewer tab found for leafId ${leafId}` : "No Web viewer tab is open",
+    );
   }
   return leaf;
 }
 
 function requireWebView(leaf: WorkspaceLeaf): WebViewElement {
   const webview = getWebViewElement(leaf);
-  if (!webview) {
-    throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web viewer tab has no accessible webview element");
-  }
-  if (!webview.executeJavaScript) {
-    throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer page scripting is unavailable");
-  }
+  if (!webview) throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web viewer tab has no accessible webview element");
+  if (!webview.executeJavaScript) throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer page scripting is unavailable");
   return webview;
 }
 
-async function runPageScript(webview: WebViewElement, source: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
-  if (!webview.executeJavaScript) {
-    throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer page scripting is unavailable");
-  }
-  const script = `(async () => {
-    const input = ${safeScriptJson(input)};
-    ${source}
-  })()`;
-  return asRecord(await webview.executeJavaScript(script, false));
-}
-
-function ensureScriptOk(result: Record<string, unknown>, operation: string): void {
-  if (result.ok === false) {
-    const message = typeof result.message === "string" ? result.message : `${operation} failed`;
-    throw new BridgeError("INVALID_INPUT", message);
-  }
-}
-
-const SNAPSHOT_SCRIPT = `
-  const maxElements = typeof input.maxElements === "number" ? input.maxElements : ${DEFAULT_SNAPSHOT_ELEMENTS};
-  const maxTextChars = typeof input.maxTextChars === "number" ? input.maxTextChars : ${DEFAULT_SNAPSHOT_TEXT_CHARS};
-  const includeHidden = input.includeHidden === true;
-  const interactiveSelector = [
-    "a[href]",
-    "button",
-    "input",
-    "textarea",
-    "select",
-    "summary",
-    "[role]",
-    "[contenteditable=true]",
-    "[onclick]",
-    "area[href]"
-  ].join(",");
-  function clean(value) {
-    return String(value || "").replace(/\\s+/g, " ").trim();
-  }
-  function visible(el) {
-    const style = getComputedStyle(el);
-    const rect = el.getBoundingClientRect();
-    return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
-  }
-  function cssEscape(value) {
-    return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/[^a-zA-Z0-9_-]/g, "\\\\$&");
-  }
-  function cssPath(el) {
-    if (el.id) return "#" + cssEscape(el.id);
-    const parts = [];
-    let cur = el;
-    while (cur && cur.nodeType === Node.ELEMENT_NODE && cur !== document.body) {
-      let selector = cur.tagName.toLowerCase();
-      const parent = cur.parentElement;
-      if (!parent) break;
-      const sameTag = Array.from(parent.children).filter((child) => child.tagName === cur.tagName);
-      if (sameTag.length > 1) selector += ":nth-of-type(" + (sameTag.indexOf(cur) + 1) + ")";
-      parts.unshift(selector);
-      cur = parent;
-    }
-    return parts.length ? parts.join(" > ") : "body";
-  }
-  const nodes = Array.from(document.querySelectorAll(interactiveSelector));
-  const elements = [];
-  let textBudget = maxTextChars;
-  for (const el of nodes) {
-    const isVisible = visible(el);
-    if (!includeHidden && !isVisible) continue;
-    const text = clean(el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("value") || "");
-    const clippedText = text.slice(0, Math.max(0, Math.min(textBudget, 240)));
-    textBudget -= clippedText.length;
-    elements.push({
-      index: elements.length,
-      selector: cssPath(el),
-      tag: el.tagName.toLowerCase(),
-      role: el.getAttribute("role") || "",
-      text: clippedText,
-      ariaLabel: el.getAttribute("aria-label") || "",
-      href: el.href || el.getAttribute("href") || "",
-      value: typeof el.value === "string" ? el.value.slice(0, 120) : "",
-      checked: typeof el.checked === "boolean" ? el.checked : undefined,
-      disabled: Boolean(el.disabled),
-      visible: isVisible
-    });
-    if (elements.length >= maxElements || textBudget <= 0) break;
-  }
-  return {
-    ok: true,
-    url: location.href,
-    title: document.title || "",
-    totalCandidates: nodes.length,
-    returnedElements: elements.length,
-    truncated: elements.length < nodes.length,
-    elements
-  };
-`;
-
-const READ_SCRIPT = `
-  const includeHtml = input.includeHtml === true;
-  return {
-    ok: true,
-    url: location.href,
-    title: document.title || "",
-    text: document.body ? document.body.innerText || "" : "",
-    html: includeHtml && document.documentElement ? document.documentElement.outerHTML || "" : ""
-  };
-`;
-
-const CLICK_SCRIPT = `
-  function clean(value) {
-    return String(value || "").replace(/\\s+/g, " ").trim();
-  }
-  function candidates() {
-    return Array.from(document.querySelectorAll("a[href],button,input,textarea,select,summary,[role],[contenteditable=true],[onclick],area[href]"));
-  }
-  let matches = [];
-  if (typeof input.cssSelector === "string") {
-    try {
-      matches = Array.from(document.querySelectorAll(input.cssSelector));
-    } catch {
-      return { ok: false, message: "Invalid CSS selector: " + input.cssSelector };
-    }
-  } else if (typeof input.text === "string") {
-    const needle = clean(input.text);
-    matches = candidates().filter((el) => {
-      const haystack = clean(el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("value") || "");
-      return input.exact === true ? haystack === needle : haystack.toLowerCase().includes(needle.toLowerCase());
-    });
-  }
-  const index = typeof input.index === "number" ? input.index : 0;
-  const el = matches[index];
-  if (!el) return { ok: false, message: "No matching element found" };
-  el.scrollIntoView({ block: "center", inline: "center" });
-  if (typeof el.focus === "function") el.focus();
-  if (typeof el.click === "function") {
-    el.click();
-  } else {
-    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-  }
-  return {
-    ok: true,
-    clicked: true,
-    url: location.href,
-    title: document.title || "",
-    tag: el.tagName.toLowerCase(),
-    text: clean(el.innerText || el.textContent || el.getAttribute("aria-label") || "").slice(0, 240),
-    href: el.href || el.getAttribute("href") || ""
-  };
-`;
-
-const TYPE_SCRIPT = `
-  const selector = String(input.cssSelector || "");
-  let el;
+async function runPageOperation(
+  webview: WebViewElement,
+  action: BrowserPageAction,
+  operationInput: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (!webview.executeJavaScript) throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer page scripting is unavailable");
+  const input: BrowserPageInput = { action, ...operationInput };
+  const script = `(${executeBrowserPageOperation.toString()})(${safeScriptJson(input)})`;
   try {
-    el = document.querySelector(selector);
+    const result = asRecord(await webview.executeJavaScript(script, false));
+    if (result.ok === false) throw new BridgeError("INVALID_INPUT", String(result.message || `browser.${action} failed`));
+    return result;
+  } catch (error) {
+    if (error instanceof BridgeError) throw error;
+    throw new BridgeError("OBSIDIAN_OPERATION_FAILED", error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function waitLocal(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) return;
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: BridgeError): void => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      if (error) reject(error);
+      else resolve();
+    };
+    const timeout = window.setTimeout(() => finish(), ms);
+    const onAbort = () => finish(new BridgeError("DEADLINE_EXCEEDED", "Browser operation aborted", true));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function leafIdFrom(args: Record<string, unknown>): string | undefined {
+  return typeof args.leafId === "string" ? args.leafId : undefined;
+}
+
+function targetArguments(args: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ref: args.ref,
+    cssSelector: args.cssSelector,
+    role: args.role,
+    name: args.name,
+    text: args.text,
+    exact: args.exact,
+    index: args.index,
+    strict: args.strict,
+    documentId: args.documentId,
+  };
+}
+
+function encodeCursor(cursor: BrowserCursor): string {
+  return `browser-v1:${encodeURIComponent(JSON.stringify(cursor))}`;
+}
+
+function decodeCursor(value: unknown): BrowserCursor | null {
+  if (typeof value !== "string" || !value.startsWith("browser-v1:")) return null;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value.slice("browser-v1:".length))) as Partial<BrowserCursor>;
+    if (
+      typeof parsed.documentId !== "string"
+      || !Number.isInteger(parsed.revision)
+      || !Number.isInteger(parsed.blockIndex)
+      || !Number.isInteger(parsed.blockOffset)
+    ) return null;
+    return parsed as BrowserCursor;
   } catch {
-    return { ok: false, message: "Invalid CSS selector: " + selector };
+    return null;
   }
-  if (!el) return { ok: false, message: "No matching element found for selector: " + selector };
-  const text = String(input.text || "");
-  const clear = input.clear !== false;
-  el.scrollIntoView({ block: "center", inline: "center" });
-  if (typeof el.focus === "function") el.focus();
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-    const next = clear ? text : el.value + text;
-    el.value = next;
-    el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-  } else if (el instanceof HTMLSelectElement) {
-    el.value = text;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-  } else if (el.isContentEditable) {
-    el.textContent = clear ? text : (el.textContent || "") + text;
-    el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
-  } else {
-    return { ok: false, message: "Element is not typable: " + selector };
-  }
-  if (input.submit === true) {
-    const form = el.closest("form");
-    if (form) {
-      if (typeof form.requestSubmit === "function") form.requestSubmit();
-      else form.submit();
-    } else {
-      el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
+}
+
+function pageBlocks(data: Record<string, unknown>): Array<Record<string, unknown>> {
+  return Array.isArray(data.blocks)
+    ? data.blocks.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+}
+
+function paginateBlocks(
+  blocks: Array<Record<string, unknown>>,
+  format: "markdown" | "text" | "structured",
+  cursor: BrowserCursor,
+  maxChars: number,
+): { text: string; blocks: Array<Record<string, unknown>>; next?: BrowserCursor } {
+  const output: string[] = [];
+  const selected: Array<Record<string, unknown>> = [];
+  let remaining = maxChars;
+  let blockIndex = cursor.blockIndex;
+  let blockOffset = cursor.blockOffset;
+  while (blockIndex < blocks.length && remaining > 0) {
+    const block = blocks[blockIndex] as Record<string, unknown>;
+    const source = format === "text" ? String(block.text ?? "") : String(block.markdown ?? block.text ?? "");
+    const separator = output.length > 0 ? "\n\n" : "";
+    const available = Math.max(0, remaining - separator.length);
+    if (available === 0) break;
+    const fragment = source.slice(blockOffset, blockOffset + available);
+    output.push(`${separator}${fragment}`);
+    selected.push({ ...block, ...(blockOffset > 0 || fragment.length < source.length ? { fragmentOffset: blockOffset } : {}) });
+    remaining -= separator.length + fragment.length;
+    blockOffset += fragment.length;
+    if (blockOffset < source.length) {
+      return { text: output.join(""), blocks: selected, next: { ...cursor, blockIndex, blockOffset } };
     }
+    blockIndex += 1;
+    blockOffset = 0;
   }
   return {
-    ok: true,
-    typed: true,
-    url: location.href,
-    title: document.title || "",
-    tag: el.tagName.toLowerCase(),
-    selector
+    text: output.join(""),
+    blocks: selected,
+    ...(blockIndex < blocks.length ? { next: { ...cursor, blockIndex, blockOffset } } : {}),
   };
-`;
-
-const WAIT_SCRIPT = `
-  function clean(value) {
-    return String(value || "").replace(/\\s+/g, " ").trim();
-  }
-  function readyMatches() {
-    if (input.state === "interactive") return document.readyState === "interactive" || document.readyState === "complete";
-    return document.readyState === "complete";
-  }
-  function matches() {
-    if (!readyMatches()) return false;
-    if (typeof input.urlIncludes === "string" && !location.href.includes(input.urlIncludes)) return false;
-    if (typeof input.cssSelector === "string") {
-      try {
-        if (!document.querySelector(input.cssSelector)) return false;
-      } catch {
-        return false;
-      }
-    }
-    if (typeof input.text === "string") {
-      const bodyText = clean(document.body ? document.body.innerText || "" : "");
-      if (!bodyText.toLowerCase().includes(clean(input.text).toLowerCase())) return false;
-    }
-    return true;
-  }
-  return { ok: true, matched: matches(), readyState: document.readyState, url: location.href, title: document.title || "" };
-`;
-
-const EVALUATE_SCRIPT = `
-  const maxChars = typeof input.maxChars === "number" ? Math.min(input.maxChars, ${MAX_EVALUATE_CHARS}) : ${DEFAULT_MAX_CHARS};
-  async function runUserScript() {
-    const source = String(input.script || "");
-    try {
-      return await (0, eval)(source);
-    } catch (firstError) {
-      try {
-        return await (0, eval)("(async () => {\\n" + source + "\\n})()");
-      } catch (secondError) {
-        return { __chatobbyEvalError: String(secondError && secondError.message ? secondError.message : secondError) };
-      }
-    }
-  }
-  function toText(value) {
-    if (typeof value === "string") return value;
-    if (value === undefined) return "undefined";
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return String(value);
-    }
-  }
-  const value = await runUserScript();
-  if (value && value.__chatobbyEvalError) {
-    return { ok: false, message: value.__chatobbyEvalError };
-  }
-  const text = toText(value);
-  return {
-    ok: true,
-    url: location.href,
-    title: document.title || "",
-    resultType: value === null ? "null" : typeof value,
-    text: text.slice(0, maxChars),
-    totalChars: text.length,
-    truncated: text.length > maxChars
-  };
-`;
+}
 
 export const handleBrowserOpen: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const url = normalizeHttpUrl(args.url);
+  if (args.reuse === true) {
+    const existing = listWebViewerLeaves(app).find((leaf) => getWebViewerUrl(leaf) === url);
+    if (existing) {
+      if (args.focus !== false) app.workspace.setActiveLeaf(existing, { focus: true });
+      return { opened: false, reused: true, ...(await browserTabInfo(app, existing)) };
+    }
+  }
   const leaf = resolveBrowserTarget(app, args.target);
-  const viewState: ViewState = {
-    type: WEBVIEWER_TYPE,
-    state: { url, navigate: true },
-    active: args.focus !== false,
-  };
+  const viewState: ViewState = { type: WEBVIEWER_TYPE, state: { url, navigate: true }, active: args.focus !== false };
   await leaf.setViewState(viewState);
   assertNotAborted(signal);
-  if (args.focus !== false) {
-    app.workspace.setActiveLeaf(leaf, { focus: true });
-  }
-  return { opened: true, ...browserTabInfo(app, leaf) };
+  if (args.focus !== false) app.workspace.setActiveLeaf(leaf, { focus: true });
+  return { opened: true, ...(await browserTabInfo(app, leaf)) };
 };
 
 export const handleBrowserNavigate: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
-  const leaf = requireBrowserLeaf(app, leafId);
-  const url = normalizeHttpUrl(args.url);
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
   const webview = getWebViewElement(leaf);
-  if (webview?.loadURL) {
-    try {
-      await webview.loadURL(url);
-    } catch {
-      await leaf.setViewState({ type: WEBVIEWER_TYPE, state: { url, navigate: true }, active: true });
+  const action = typeof args.action === "string" ? args.action : "url";
+  let requestedUrl: string | undefined;
+  if (action === "url") {
+    requestedUrl = normalizeHttpUrl(args.url);
+    if (webview?.loadURL) {
+      try {
+        await webview.loadURL(requestedUrl);
+      } catch {
+        await leaf.setViewState({ type: WEBVIEWER_TYPE, state: { url: requestedUrl, navigate: true }, active: true });
+      }
+    } else {
+      await leaf.setViewState({ type: WEBVIEWER_TYPE, state: { url: requestedUrl, navigate: true }, active: true });
     }
+  } else if (action === "back") {
+    if (!webview?.goBack || webview.canGoBack?.() === false) throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web viewer cannot go back");
+    webview.goBack();
+  } else if (action === "forward") {
+    if (!webview?.goForward || webview.canGoForward?.() === false) throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web viewer cannot go forward");
+    webview.goForward();
+  } else if (action === "reload") {
+    if (!webview?.reload) throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer reload is unavailable");
+    webview.reload();
   } else {
-    await leaf.setViewState({ type: WEBVIEWER_TYPE, state: { url, navigate: true }, active: true });
+    throw new BridgeError("INVALID_INPUT", `Unknown browser navigation action: ${action}`);
   }
+  if (typeof args.waitAfterMs === "number") await waitLocal(args.waitAfterMs, signal);
   assertNotAborted(signal);
-  return { navigated: true, ...browserTabInfo(app, leaf), url };
+  return { navigated: true, action, ...(requestedUrl ? { requestedUrl } : {}), ...(await browserTabInfo(app, leaf)) };
 };
 
-export const handleBrowserList: OperationHandler = async (_args, _signal, app) => {
-  return {
-    tabs: listWebViewerLeaves(app).map((leaf) => browserTabInfo(app, leaf)),
-  };
+export const handleBrowserList: OperationHandler = async (_args, signal, app) => {
+  assertNotAborted(signal);
+  return { tabs: await Promise.all(listWebViewerLeaves(app).map((leaf) => browserTabInfo(app, leaf))) };
 };
 
 export const handleBrowserSnapshot: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
-  const leaf = requireBrowserLeaf(app, leafId);
-  const webview = requireWebView(leaf);
-  const result = await runPageScript(webview, SNAPSHOT_SCRIPT, {
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const result = await runPageOperation(requireWebView(leaf), "snapshot", {
+    mode: args.mode,
+    scopeSelector: args.scopeSelector,
+    ref: args.ref,
     maxElements: args.maxElements,
     maxTextChars: args.maxTextChars,
     includeHidden: args.includeHidden,
   });
   assertNotAborted(signal);
-  ensureScriptOk(result, "browser.snapshot");
-  return { available: true, ...browserTabInfo(app, leaf), ...result };
+  return { available: true, ...(await browserTabInfo(app, leaf)), ...result };
 };
 
 export const handleBrowserRead: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
   const maxChars = typeof args.maxChars === "number" ? args.maxChars : DEFAULT_MAX_CHARS;
-  const startIndex = typeof args.startIndex === "number" ? args.startIndex : 0;
   if (!Number.isInteger(maxChars) || maxChars <= 0 || maxChars > 100_000) {
     throw new BridgeError("INVALID_INPUT", "browser.read maxChars must be an integer from 1 to 100000");
   }
-  if (!Number.isInteger(startIndex) || startIndex < 0) {
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const webview = requireWebView(leaf);
+  const data = await runPageOperation(webview, "read", {
+    scopeSelector: args.scopeSelector,
+    ref: args.ref,
+  });
+  assertNotAborted(signal);
+  const page = asRecord(data.page);
+  const documentId = typeof page.documentId === "string" ? page.documentId : "unknown";
+  const revision = typeof page.revision === "number" ? page.revision : 0;
+  const format = args.format === "text" || args.format === "structured" ? args.format : "markdown";
+  const legacyStartIndex = typeof args.startIndex === "number" ? args.startIndex : undefined;
+  if (legacyStartIndex !== undefined && (!Number.isInteger(legacyStartIndex) || legacyStartIndex < 0)) {
     throw new BridgeError("INVALID_INPUT", "browser.read startIndex must be a non-negative integer");
   }
-  const leaf = requireBrowserLeaf(app, leafId);
-  const webview = requireWebView(leaf);
-  const data = await runPageScript(webview, READ_SCRIPT, { includeHtml: args.includeHtml === true });
-  assertNotAborted(signal);
-  ensureScriptOk(data, "browser.read");
-  const text = typeof data.text === "string" ? data.text : "";
-  const page = sliceText(text, startIndex, maxChars);
-  const html = args.includeHtml === true && typeof data.html === "string" ? sliceText(data.html, startIndex, maxChars) : undefined;
+  if (legacyStartIndex !== undefined && args.cursor !== undefined) {
+    throw new BridgeError("INVALID_INPUT", "browser.read accepts cursor or startIndex, not both");
+  }
+  const decoded = decodeCursor(args.cursor);
+  if (args.cursor !== undefined && !decoded) throw new BridgeError("INVALID_INPUT", "browser.read cursor is invalid");
+  if (decoded && decoded.documentId !== documentId) throw new BridgeError("REVISION_CONFLICT", "Browser page changed; obtain a fresh read cursor");
+  const initial: BrowserCursor = decoded ?? { documentId, revision, blockIndex: 0, blockOffset: 0 };
+  const blocks = pageBlocks(data);
+  const legacyText = legacyStartIndex === undefined
+    ? undefined
+    : blocks
+      .map((block) => format === "text" ? String(block.text ?? "") : String(block.markdown ?? block.text ?? ""))
+      .join("\n\n");
+  const paged = legacyText === undefined
+    ? paginateBlocks(blocks, format, initial, maxChars)
+    : {
+      text: legacyText.slice(legacyStartIndex ?? 0, (legacyStartIndex ?? 0) + maxChars),
+      blocks: [],
+    };
+  const legacyNextStartIndex = legacyText !== undefined && legacyStartIndex !== undefined
+    && legacyStartIndex + paged.text.length < legacyText.length
+    ? legacyStartIndex + paged.text.length
+    : undefined;
+  const includeHtml = args.includeHtml === true;
+  let htmlResult: Record<string, unknown> | undefined;
+  if (includeHtml) {
+    htmlResult = await runPageOperation(webview, "dom", {
+      operation: "html",
+      cssSelector: args.scopeSelector,
+      ref: args.ref,
+      maxChars,
+    });
+  }
   return {
     available: true,
-    ...browserTabInfo(app, leaf),
-    ...(typeof data.url === "string" ? { url: data.url } : {}),
-    ...(typeof data.title === "string" ? { title: data.title } : {}),
-    ...page,
-    ...(html ? { html: html.text, htmlTruncated: html.truncated, htmlTotalChars: html.totalChars, htmlNextStartIndex: html.nextStartIndex } : {}),
+    ...(await browserTabInfo(app, leaf)),
+    ...data,
+    blocks: paged.blocks,
+    text: paged.text,
+    format,
+    returnedChars: paged.text.length,
+    truncated: Boolean(paged.next) || legacyNextStartIndex !== undefined || data.captureTruncated === true,
+    ...(paged.next ? { nextCursor: encodeCursor(paged.next) } : {}),
+    ...(legacyStartIndex !== undefined ? { startIndex: legacyStartIndex } : {}),
+    ...(legacyNextStartIndex !== undefined ? { nextStartIndex: legacyNextStartIndex } : {}),
+    ...(htmlResult ? {
+      html: htmlResult.html,
+      htmlTruncated: htmlResult.truncated,
+      htmlTotalChars: htmlResult.totalChars,
+      htmlSanitized: true,
+    } : {}),
   };
+};
+
+export const handleBrowserDom: OperationHandler = async (args, signal, app) => {
+  assertNotAborted(signal);
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const result = await runPageOperation(requireWebView(leaf), "dom", {
+    operation: args.action,
+    cssSelector: args.cssSelector,
+    ref: args.ref,
+    limit: args.limit,
+    maxChars: args.maxChars,
+  });
+  assertNotAborted(signal);
+  return { available: true, ...(await browserTabInfo(app, leaf)), ...result };
 };
 
 export const handleBrowserClick: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
-  const leaf = requireBrowserLeaf(app, leafId);
-  const webview = requireWebView(leaf);
-  const result = await runPageScript(webview, CLICK_SCRIPT, {
-    cssSelector: args.cssSelector,
-    text: args.text,
-    index: args.index,
-    exact: args.exact,
-  });
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const result = await runPageOperation(requireWebView(leaf), "click", targetArguments(args));
   assertNotAborted(signal);
-  ensureScriptOk(result, "browser.click");
-  if (typeof args.waitAfterMs === "number") {
-    await waitLocal(args.waitAfterMs, signal);
-  }
-  return { ...browserTabInfo(app, leaf), ...result };
+  if (typeof args.waitAfterMs === "number") await waitLocal(args.waitAfterMs, signal);
+  return { ...(await browserTabInfo(app, leaf)), ...result };
 };
 
 export const handleBrowserType: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
-  const leaf = requireBrowserLeaf(app, leafId);
-  const webview = requireWebView(leaf);
-  const result = await runPageScript(webview, TYPE_SCRIPT, {
-    cssSelector: args.cssSelector,
-    text: args.text,
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const result = await runPageOperation(requireWebView(leaf), "fill", {
+    ...targetArguments(args),
+    value: args.text,
     clear: args.clear,
     submit: args.submit,
   });
   assertNotAborted(signal);
-  ensureScriptOk(result, "browser.type");
-  return { ...browserTabInfo(app, leaf), ...result };
+  return { ...(await browserTabInfo(app, leaf)), ...result };
+};
+
+export const handleBrowserPress: OperationHandler = async (args, signal, app) => {
+  assertNotAborted(signal);
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const webview = requireWebView(leaf);
+  if (args.ref || args.cssSelector || args.role || args.text) {
+    await runPageOperation(webview, "focus", targetArguments(args));
+  }
+  if (!webview.sendInputEvent) throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer keyboard input is unavailable");
+  const key = typeof args.key === "string" ? args.key : "";
+  if (!key) throw new BridgeError("INVALID_INPUT", "browser.press requires key");
+  const modifiers = Array.isArray(args.modifiers) ? args.modifiers : [];
+  await webview.sendInputEvent({ type: "keyDown", keyCode: key, modifiers });
+  await webview.sendInputEvent({ type: "keyUp", keyCode: key, modifiers });
+  assertNotAborted(signal);
+  const page = await runPageOperation(webview, "page", {});
+  return { pressed: true, key, modifiers, ...(await browserTabInfo(app, leaf)), ...page };
 };
 
 export const handleBrowserWait: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
-  const leaf = requireBrowserLeaf(app, leafId);
-  const webview = requireWebView(leaf);
-  const timeoutMs = typeof args.timeoutMs === "number" ? args.timeoutMs : DEFAULT_WAIT_TIMEOUT_MS;
-  const started = Date.now();
-
-  while (Date.now() - started <= timeoutMs) {
-    const result = await runPageScript(webview, WAIT_SCRIPT, {
-      cssSelector: args.cssSelector,
-      text: args.text,
-      urlIncludes: args.urlIncludes,
-      state: args.state,
-    });
-    assertNotAborted(signal);
-    ensureScriptOk(result, "browser.wait");
-    if (result.matched === true) {
-      return { ...browserTabInfo(app, leaf), ...result, elapsedMs: Date.now() - started };
-    }
-    await waitLocal(100, signal);
-  }
-
-  return { ...browserTabInfo(app, leaf), ok: true, matched: false, elapsedMs: Date.now() - started };
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const result = await runPageOperation(requireWebView(leaf), "wait", {
+    cssSelector: args.cssSelector,
+    text: args.text,
+    urlIncludes: args.urlIncludes,
+    state: args.state,
+    visible: args.visible,
+    hidden: args.hidden,
+    stableMs: args.stableMs,
+    timeoutMs: typeof args.timeoutMs === "number" ? args.timeoutMs : DEFAULT_WAIT_TIMEOUT_MS,
+  });
+  assertNotAborted(signal);
+  return { ...(await browserTabInfo(app, leaf)), ...result };
 };
 
 export const handleBrowserEvaluate: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
-  const leaf = requireBrowserLeaf(app, leafId);
-  const webview = requireWebView(leaf);
-  const result = await runPageScript(webview, EVALUATE_SCRIPT, {
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const result = await runPageOperation(requireWebView(leaf), "evaluate", {
     script: args.script,
     maxChars: args.maxChars,
+    timeoutMs: args.timeoutMs,
   });
   assertNotAborted(signal);
-  ensureScriptOk(result, "browser.evaluate");
-  return { ...browserTabInfo(app, leaf), ...result };
+  return { ...(await browserTabInfo(app, leaf)), ...result };
+};
+
+export const handleBrowserScreenshot: OperationHandler = async (args, signal, app) => {
+  assertNotAborted(signal);
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const webview = requireWebView(leaf);
+  if (!webview.capturePage) throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer page capture is unavailable");
+  let rect: { x: number; y: number; width: number; height: number } | undefined;
+  if (args.ref || args.cssSelector || args.role || args.text) {
+    const boundsResult = await runPageOperation(webview, "bounds", targetArguments(args));
+    const element = asRecord(boundsResult.element);
+    const bounds = asRecord(element.bounds);
+    if ([bounds.x, bounds.y, bounds.width, bounds.height].every((value) => typeof value === "number")) {
+      rect = {
+        x: Math.max(0, Math.floor(bounds.x as number)),
+        y: Math.max(0, Math.floor(bounds.y as number)),
+        width: Math.max(1, Math.floor(bounds.width as number)),
+        height: Math.max(1, Math.floor(bounds.height as number)),
+      };
+    }
+  }
+  const image = await webview.capturePage(rect);
+  assertNotAborted(signal);
+  const bytes = image.toPNG();
+  const size = image.getSize?.();
+  return {
+    captured: true,
+    mimeType: "image/png",
+    data: Buffer.from(bytes).toString("base64"),
+    bytes: bytes.byteLength,
+    ...(size ? { width: size.width, height: size.height } : {}),
+    ...(await browserTabInfo(app, leaf)),
+  };
 };
 
 export const handleBrowserClose: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
-  const leaf = requireBrowserLeaf(app, leafId);
-  const tab = browserTabInfo(app, leaf);
+  const leafId = leafIdFrom(args);
+  const leaf = findBrowserLeaf(app, leafId);
+  if (!leaf) return { closed: false, alreadyClosed: true, ...(leafId ? { leafId } : {}) };
+  const tab = await browserTabInfo(app, leaf);
   leaf.detach();
   return { closed: true, tab };
 };

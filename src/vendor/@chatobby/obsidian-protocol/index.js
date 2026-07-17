@@ -106,10 +106,13 @@ var OBSIDIAN_BROWSER_OPERATIONS = [
   "browser.list",
   "browser.snapshot",
   "browser.read",
+  "browser.dom",
   "browser.click",
   "browser.type",
+  "browser.press",
   "browser.wait",
   "browser.evaluate",
+  "browser.screenshot",
   "browser.close"
 ];
 var OBSIDIAN_RETRIEVAL_OPERATIONS = [
@@ -507,10 +510,13 @@ var OBSIDIAN_BROWSER_TOOL_OPERATION_MAP = {
   obsidian_browser_list: "browser.list",
   obsidian_browser_snapshot: "browser.snapshot",
   obsidian_browser_read: "browser.read",
+  obsidian_browser_dom: "browser.dom",
   obsidian_browser_click: "browser.click",
   obsidian_browser_type: "browser.type",
+  obsidian_browser_press: "browser.press",
   obsidian_browser_wait: "browser.wait",
   obsidian_browser_evaluate: "browser.evaluate",
+  obsidian_browser_screenshot: "browser.screenshot",
   obsidian_browser_close: "browser.close"
 };
 var OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP = {
@@ -849,10 +855,13 @@ var TOOL_PLUGIN_REQUIREMENTS = {
   obsidian_browser_list: ["webviewer"],
   obsidian_browser_snapshot: ["webviewer"],
   obsidian_browser_read: ["webviewer"],
+  obsidian_browser_dom: ["webviewer"],
   obsidian_browser_click: ["webviewer"],
   obsidian_browser_type: ["webviewer"],
+  obsidian_browser_press: ["webviewer"],
   obsidian_browser_wait: ["webviewer"],
   obsidian_browser_evaluate: ["webviewer"],
+  obsidian_browser_screenshot: ["webviewer"],
   obsidian_browser_close: ["webviewer"],
   obsidian_daily_note: ["daily-notes"],
   obsidian_base: ["bases"],

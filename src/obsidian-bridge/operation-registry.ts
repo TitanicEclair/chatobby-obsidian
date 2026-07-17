@@ -66,10 +66,13 @@ import {
   handleBrowserList,
   handleBrowserSnapshot,
   handleBrowserRead,
+  handleBrowserDom,
   handleBrowserClick,
   handleBrowserType,
+  handleBrowserPress,
   handleBrowserWait,
   handleBrowserEvaluate,
+  handleBrowserScreenshot,
   handleBrowserClose,
 } from "./operations/browser-operations";
 
@@ -133,10 +136,13 @@ const HANDLERS: Record<string, OperationHandler> = {
   "browser.list": handleBrowserList,
   "browser.snapshot": handleBrowserSnapshot,
   "browser.read": handleBrowserRead,
+  "browser.dom": handleBrowserDom,
   "browser.click": handleBrowserClick,
   "browser.type": handleBrowserType,
+  "browser.press": handleBrowserPress,
   "browser.wait": handleBrowserWait,
   "browser.evaluate": handleBrowserEvaluate,
+  "browser.screenshot": handleBrowserScreenshot,
   "browser.close": handleBrowserClose,
 
   // ── Retrieval (Phase D) ──

@@ -1,5 +1,5 @@
 import type { App, WorkspaceLeaf, ViewState } from "obsidian";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { executeOperation } from "../../src/obsidian-bridge/operation-registry";
 
 interface FakeWebView extends HTMLElement {
@@ -7,6 +7,15 @@ interface FakeWebView extends HTMLElement {
   getTitle: () => string;
   loadURL: (url: string) => Promise<void>;
   executeJavaScript: (code: string, userGesture?: boolean) => Promise<unknown>;
+  canGoBack: () => boolean;
+  canGoForward: () => boolean;
+  goBack: () => void;
+  goForward: () => void;
+  reload: () => void;
+  isLoading: () => boolean;
+  isCrashed: () => boolean;
+  sendInputEvent: (event: Record<string, unknown>) => Promise<void>;
+  capturePage: () => Promise<{ toPNG: () => Uint8Array; getSize: () => { width: number; height: number } }>;
 }
 
 interface FakeLeaf extends WorkspaceLeaf {
@@ -22,38 +31,19 @@ function createFakeWebView(): FakeWebView {
   element.loadURL = async (url: string) => {
     runtimeUrl = url;
   };
-  element.executeJavaScript = async (code: string) => {
-    if (code.includes("totalCandidates")) {
-      return {
-        ok: true,
-        url: runtimeUrl,
-        title: "Example",
-        totalCandidates: 2,
-        returnedElements: 2,
-        truncated: false,
-        elements: [{ index: 0, selector: "button:nth-of-type(1)", tag: "button", text: "Continue", visible: true }],
-      };
-    }
-    if (code.includes("clicked: true")) {
-      return { ok: true, clicked: true, url: runtimeUrl, title: "Example", tag: "button", text: "Continue" };
-    }
-    if (code.includes("typed: true")) {
-      return { ok: true, typed: true, url: runtimeUrl, title: "Example", tag: "input", selector: "input[name=q]" };
-    }
-    if (code.includes("readyMatches()")) {
-      return { ok: true, matched: true, readyState: "complete", url: runtimeUrl, title: "Example" };
-    }
-    if (code.includes("resultType")) {
-      return { ok: true, url: runtimeUrl, title: "Example", resultType: "string", text: "ok", totalChars: 2, truncated: false };
-    }
-    return {
-      ok: true,
-      url: runtimeUrl,
-      title: "Example",
-      text: "abcdef",
-      html: "<html><body>abcdef</body></html>",
-    };
-  };
+  element.executeJavaScript = async (code: string) => await (0, eval)(code) as unknown;
+  element.canGoBack = () => true;
+  element.canGoForward = () => true;
+  element.goBack = vi.fn();
+  element.goForward = vi.fn();
+  element.reload = vi.fn();
+  element.isLoading = () => false;
+  element.isCrashed = () => false;
+  element.sendInputEvent = vi.fn(async () => undefined);
+  element.capturePage = vi.fn(async () => ({
+    toPNG: () => new Uint8Array([137, 80, 78, 71]),
+    getSize: () => ({ width: 800, height: 600 }),
+  }));
   return element;
 }
 
@@ -81,6 +71,12 @@ function createFakeLeaf(id: string): FakeLeaf {
 }
 
 function createBrowserApp(): App & { leaf: FakeLeaf } {
+  const article = document.body.createEl("article");
+  article.createEl("h1", { text: "Example article" });
+  article.createEl("p", { text: "abcdef" });
+  const button = article.createEl("button", { text: "Continue" });
+  const input = article.createEl("input", { attr: { name: "q", "aria-label": "Search" } });
+  for (const element of [article, ...Array.from(article.querySelectorAll<HTMLElement>("*"))]) makeVisible(element);
   const leaf = createFakeLeaf("leaf-1");
   const workspace = {
     activeLeaf: leaf,
@@ -90,6 +86,26 @@ function createBrowserApp(): App & { leaf: FakeLeaf } {
   };
   return { workspace, leaf } as unknown as App & { leaf: FakeLeaf };
 }
+
+function makeVisible(element: HTMLElement): void {
+  element.getBoundingClientRect = () => ({
+    x: 10,
+    y: 20,
+    width: 100,
+    height: 30,
+    top: 20,
+    right: 110,
+    bottom: 50,
+    left: 10,
+    toJSON: () => ({}),
+  });
+  element.scrollIntoView = vi.fn();
+}
+
+afterEach(() => {
+  document.body.empty();
+  delete (globalThis as unknown as Record<string, unknown>).__chatobbyBrowserPageV1_6f5c9f3b;
+});
 
 describe("browser operations", () => {
   const signal = new AbortController().signal;
@@ -115,13 +131,20 @@ describe("browser operations", () => {
     const read = await executeOperation("browser.read", { maxChars: 3, includeHtml: true }, signal, app) as Record<string, unknown>;
     expect(read).toMatchObject({
       available: true,
-      text: "abc",
-      startIndex: 0,
-      totalChars: 6,
+      text: "# E",
       truncated: true,
-      nextStartIndex: 3,
       htmlTruncated: true,
+      htmlSanitized: true,
     });
+    expect(read).toHaveProperty("nextCursor");
+
+    const legacyRead = await executeOperation(
+      "browser.read",
+      { startIndex: 2, maxChars: 3 },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    expect(legacyRead).toMatchObject({ text: "Exa", startIndex: 2, nextStartIndex: 5, truncated: true });
 
     const closed = await executeOperation("browser.close", {}, signal, app) as Record<string, unknown>;
     expect(closed).toMatchObject({ closed: true });
@@ -136,18 +159,55 @@ describe("browser operations", () => {
     expect(navigated).toMatchObject({ navigated: true, url: "https://example.com/next" });
 
     const snapshot = await executeOperation("browser.snapshot", { leafId: "leaf-1", maxElements: 10 }, signal, app) as Record<string, unknown>;
-    expect(snapshot).toMatchObject({ available: true, returnedElements: 2 });
+    expect(snapshot).toMatchObject({ available: true });
+    expect(Number(snapshot.returnedElements)).toBeGreaterThanOrEqual(2);
 
-    const clicked = await executeOperation("browser.click", { leafId: "leaf-1", cssSelector: "button" }, signal, app) as Record<string, unknown>;
-    expect(clicked).toMatchObject({ clicked: true, tag: "button" });
+    const clicked = await executeOperation("browser.click", { leafId: "leaf-1", role: "button", name: "Continue", strict: true }, signal, app) as Record<string, unknown>;
+    expect(clicked).toMatchObject({ clicked: true });
 
-    const typed = await executeOperation("browser.type", { leafId: "leaf-1", cssSelector: "input[name=q]", text: "query" }, signal, app) as Record<string, unknown>;
-    expect(typed).toMatchObject({ typed: true, tag: "input" });
+    const typed = await executeOperation("browser.type", { leafId: "leaf-1", role: "textbox", name: "Search", text: "query", strict: true }, signal, app) as Record<string, unknown>;
+    expect(typed).toMatchObject({ filled: true });
+    expect((document.querySelector("input[name=q]") as HTMLInputElement).value).toBe("query");
 
-    const waited = await executeOperation("browser.wait", { leafId: "leaf-1", text: "Example" }, signal, app) as Record<string, unknown>;
+    const waited = await executeOperation("browser.wait", { leafId: "leaf-1", text: "abcdef" }, signal, app) as Record<string, unknown>;
     expect(waited).toMatchObject({ matched: true });
 
-    const evaluated = await executeOperation("browser.evaluate", { leafId: "leaf-1", script: "document.title" }, signal, app) as Record<string, unknown>;
-    expect(evaluated).toMatchObject({ resultType: "string", text: "ok" });
+    const evaluated = await executeOperation("browser.evaluate", { leafId: "leaf-1", script: "document.querySelector('h1').textContent" }, signal, app) as Record<string, unknown>;
+    expect(evaluated).toMatchObject({ resultType: "string", text: "Example article" });
+  });
+
+  it("supports structured DOM inspection, keyboard input, screenshots, and history", async () => {
+    const app = createBrowserApp();
+    await executeOperation("browser.open", { url: "https://example.com" }, signal, app);
+
+    const dom = await executeOperation("browser.dom", { action: "query", cssSelector: "article button" }, signal, app) as Record<string, unknown>;
+    expect(dom).toMatchObject({ available: true, totalMatches: 1 });
+
+    const press = await executeOperation("browser.press", { cssSelector: "input[name=q]", key: "Enter" }, signal, app) as Record<string, unknown>;
+    expect(press).toMatchObject({ pressed: true, key: "Enter" });
+
+    const screenshot = await executeOperation("browser.screenshot", {}, signal, app) as Record<string, unknown>;
+    expect(screenshot).toMatchObject({ captured: true, mimeType: "image/png", bytes: 4, width: 800, height: 600 });
+    expect(typeof screenshot.data).toBe("string");
+
+    await executeOperation("browser.navigate", { action: "back" }, signal, app);
+    const webview = app.leaf.view.containerEl?.querySelector("webview") as FakeWebView;
+    expect(webview.goBack).toHaveBeenCalledOnce();
+  });
+
+  it("redacts password values and sanitizes page HTML", async () => {
+    const app = createBrowserApp();
+    await executeOperation("browser.open", { url: "https://example.com" }, signal, app);
+    const password = document.body.createEl("input", { attr: { type: "password", value: "secret", name: "password" } });
+    makeVisible(password);
+    document.body.createEl("script", { text: "window.secret = true" });
+
+    const snapshot = await executeOperation("browser.snapshot", { mode: "interactive", includeHidden: true }, signal, app) as { elements: Array<Record<string, unknown>> };
+    const passwordNode = snapshot.elements.find((element) => element.inputType === "password");
+    expect(passwordNode?.value).toBe("[redacted]");
+
+    const dom = await executeOperation("browser.dom", { action: "html", cssSelector: "body", maxChars: 20_000 }, signal, app) as Record<string, unknown>;
+    expect(dom.html).not.toContain("window.secret");
+    expect(dom.html).not.toContain('value="secret"');
   });
 });

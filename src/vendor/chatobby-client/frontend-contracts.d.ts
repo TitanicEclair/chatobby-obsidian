@@ -477,6 +477,12 @@ export interface FrontendSubagentRuntimePolicy {
     skills?: string[];
     contextMode?: FrontendSubagentContextMode;
     maxDepth?: number;
+    maxTurnsPerNode?: number;
+    maxTokens?: number;
+    maxWallTimeMs?: number;
+    maxToolCallsPerNode?: number;
+    toolCallLimits?: Record<string, number>;
+    permissionProfileId?: string;
 }
 export interface FrontendSubagentAgentDefinition {
     id: string;
@@ -487,6 +493,7 @@ export interface FrontendSubagentAgentDefinition {
     systemPrompt: string;
     enabled: boolean;
     policy: FrontendSubagentRuntimePolicy;
+    builtIn?: true;
     revision: number;
     updatedAt: number;
 }
@@ -549,6 +556,7 @@ export interface FrontendSubagentBudgets {
     maxTokens?: number;
     maxCostUsd?: number;
     maxWallTimeMs?: number;
+    maxToolCallsPerNode?: number;
 }
 export interface FrontendSubagentPermissionRequestViewModel {
     id: string;
@@ -645,6 +653,7 @@ export interface FrontendSubagentRunViewModel {
         messageIds?: string[];
         summary?: string;
     };
+    permissionProfileId?: string;
     workspace: {
         cwd: string;
         mode: "shared" | "worktree" | "sandbox";
@@ -1248,6 +1257,7 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly executionMode: "auto" | "in-process" | "worker-process";
         readonly contextMode: "fresh" | "fork" | "selected" | "summary";
         readonly workspaceMode: "shared" | "worktree";
+        readonly permissionProfileId?: string;
         readonly priority: number;
         readonly maxTurns?: number;
         readonly maxTokens?: number;

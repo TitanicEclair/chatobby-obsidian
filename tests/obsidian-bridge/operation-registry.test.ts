@@ -53,7 +53,7 @@ describe("executeOperation", () => {
   it("implements every static operation in the vendored protocol", () => {
     const implemented = new Set(listImplementedOperations());
     // Only operations requiring the live Obsidian process are connector-owned.
-    expect(implemented.size).toBe(50);
+    expect(implemented.size).toBe(53);
     for (const op of [
       "context.get", "note.read", "vault.search", "note.resolve", "attachment.read",
       "vault.list", "note.write", "note.edit", "note.open", "app.open",
@@ -63,8 +63,9 @@ describe("executeOperation", () => {
       "tasks.update", "editor.get", "editor.edit", "editor.focus", "workspace.get",
       "workspace.manage", "commands.list", "commands.execute", "hotkeys.list",
       "browser.open", "browser.navigate", "browser.list", "browser.snapshot",
-      "browser.read", "browser.click", "browser.type", "browser.wait",
-      "browser.evaluate", "browser.close",
+      "browser.read", "browser.dom", "browser.click", "browser.type",
+      "browser.press", "browser.wait", "browser.evaluate", "browser.screenshot",
+      "browser.close",
       "retrieval.explore", "retrieval.trace", "retrieval.related", "retrieval.hubs",
       "retrieval.communities", "retrieval.explain",
     ]) {

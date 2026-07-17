@@ -58,10 +58,13 @@ export const OBSIDIAN_BROWSER_OPERATIONS = [
 	"browser.list",
 	"browser.snapshot",
 	"browser.read",
+	"browser.dom",
 	"browser.click",
 	"browser.type",
+	"browser.press",
 	"browser.wait",
 	"browser.evaluate",
+	"browser.screenshot",
 	"browser.close",
 ] as const;
 
