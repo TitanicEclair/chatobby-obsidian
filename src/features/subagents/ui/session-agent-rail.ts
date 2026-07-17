@@ -55,6 +55,11 @@ export class SessionAgentRail extends ChatobbyComponent {
       attr: { role: "tablist", "aria-label": "Agents in this session" },
     });
     const visibleAgents = this.agents.slice(0, 12);
+    const activeAgent = this.agents.find((agent) => agent.actorId === this.activeActorId);
+    if (activeAgent && !visibleAgents.some((agent) => agent.actorId === activeAgent.actorId)) {
+      visibleAgents[visibleAgents.length - 1] = activeAgent;
+      visibleAgents.sort(compareAgents);
+    }
     for (const agent of visibleAgents) {
       const active = agent.actorId === this.activeActorId;
       const button = list.createEl("button", {
