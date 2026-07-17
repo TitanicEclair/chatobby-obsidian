@@ -39,6 +39,26 @@ async function waitForReady(client: ObsidianBridgeClient, timeoutMs = 5_000): Pr
   });
 }
 
+async function waitForStatus(
+  client: ObsidianBridgeClient,
+  status: "disconnected" | "error",
+  timeoutMs = 5_000,
+): Promise<void> {
+  if (client.connectionState.status === status) return;
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error(`Bridge did not become ${status} within ${timeoutMs}ms`));
+    }, timeoutMs);
+    const unsubscribe = client.onConnectionChange((state) => {
+      if (state.status !== status) return;
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
 describe("ObsidianBridgeClient integration", () => {
   let mockBridge: MockBridgeWs;
   let app: App;
@@ -301,9 +321,7 @@ describe("ObsidianBridgeClient integration", () => {
       client.onConnectionChange((state) => states.push(state.status));
 
       await client.connect();
-
-      // Wait for connection and close
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await waitForStatus(client, "error");
 
       // Should transition to error (terminal), not disconnected (retry-eligible)
       expect(states).toContain("error");
@@ -322,9 +340,7 @@ describe("ObsidianBridgeClient integration", () => {
       client.onConnectionChange((state) => states.push(state.status));
 
       await client.connect();
-
-      // Wait for connection and close
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await waitForStatus(client, "disconnected");
 
       // Should transition to disconnected (retry-eligible)
       expect(states).toContain("disconnected");
