@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-18
+
 ### Fixed — first-run lifecycle and navigation reliability (2026-07-17)
 
 - Kept an active agent turn running when a Chatobby page or observer connection
