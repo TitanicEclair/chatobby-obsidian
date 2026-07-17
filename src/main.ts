@@ -108,10 +108,12 @@ export default class ChatobbyPlugin extends Plugin {
   });
 
   private readonly visibleChatViews = new Set<ChatobbyView>();
+  private unloading = false;
 
   // ── Lifecycle ────────────────────────────────────────────────────
 
   async onload(): Promise<void> {
+    this.unloading = false;
     await this.store.load();
 
     this.registerView(VIEW_TYPE_CHATOBBY, (leaf) => new ChatobbyView(leaf, this));
@@ -145,6 +147,7 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   async onunload(): Promise<void> {
+    this.unloading = true;
     // Plugin reloads must not terminate session-owned work in the backend.
     await this.runtimeManager.detach("plugin-unload").catch(() => {});
     await this.frontendSessions.dispose();
@@ -158,7 +161,7 @@ export default class ChatobbyPlugin extends Plugin {
     if (visible) this.visibleChatViews.add(view);
     else this.visibleChatViews.delete(view);
     void this.frontendSessions.setVisible(view.runtimeChannelId, visible).catch((error) => {
-      console.error("Chatobby: failed to synchronize visible-view state", error);
+      if (!this.unloading) console.error("Chatobby: failed to synchronize visible-view state", error);
     });
   }
 
