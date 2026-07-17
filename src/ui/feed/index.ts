@@ -62,6 +62,7 @@ interface BlockMount {
 
 const TICK_THROTTLE_MS = 250;
 const FIXED_RENDER_INTERVAL_MS = STREAM_TEXT_DEBOUNCE_MS;
+let feedRegionLabelSequence = 0;
 
 /** Commit-driven renderer for one active normalized feed store. */
 export class FeedRenderer extends ChatobbyComponent {
@@ -235,10 +236,12 @@ export class FeedRenderer extends ChatobbyComponent {
   }
 
   protected onRender(container: HTMLElement): void {
+    const regionLabel = container.createSpan({ cls: "chatobby-visually-hidden", text: "Conversation feed" });
+    regionLabel.id = `chatobby-feed-region-${++feedRegionLabelSequence}`;
     this.scrollEl = container.createDiv({ cls: "chatobby-feed__scroll" });
     this.scrollEl.tabIndex = 0;
     this.scrollEl.setAttr("role", "region");
-    this.scrollEl.setAttr("aria-label", "Conversation feed");
+    this.scrollEl.setAttr("aria-labelledby", regionLabel.id);
     this.blocksEl = this.scrollEl.createDiv({ cls: "chatobby-feed__blocks" });
     this.blocksEl.setAttr("role", "document");
     this.blocksEl.setAttr("aria-readonly", "true");

@@ -20,6 +20,11 @@ describe("FeedRenderer", () => {
     expect(el.querySelector(".chatobby-feed__jump-pill")).toBeTruthy();
     expect(el.querySelector(".chatobby-feed__jump-pill")?.classList.contains("is-hidden")).toBe(true);
     expect(el.querySelector(".chatobby-feed__blocks")?.getAttribute("aria-label")).toBeNull();
+    const scroll = el.querySelector(".chatobby-feed__scroll");
+    const labelId = scroll?.getAttribute("aria-labelledby");
+    expect(scroll?.getAttribute("aria-label")).toBeNull();
+    expect(labelId).toBeTruthy();
+    expect(el.querySelector(`#${labelId}`)?.textContent).toBe("Conversation feed");
   });
 
   it("renders clickable empty-state prompts without a decorative emoji", () => {
