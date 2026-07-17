@@ -49,7 +49,7 @@ describe("RuntimeStatusController", () => {
         occurredAt: 1,
       },
     };
-    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart });
+    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart, install: vi.fn() });
     const container = document.body.createDiv();
     controller.bind(container);
     const firstTitle = container.querySelector(".chatobby-runtime-status__title");
@@ -65,8 +65,8 @@ describe("RuntimeStatusController", () => {
     expect(restart).toHaveBeenCalledOnce();
   });
 
-  it("offers the public runtime release when the managed runtime is missing", () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("opens the in-plugin installer when the managed runtime is missing", () => {
+    const install = vi.fn(async () => {});
     const state: RuntimeLifecycleState = {
       status: "error",
       mode: "managed",
@@ -77,7 +77,7 @@ describe("RuntimeStatusController", () => {
         occurredAt: 1,
       },
     };
-    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart: vi.fn() });
+    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart: vi.fn(), install });
     const container = document.body.createDiv();
     controller.bind(container);
 
@@ -85,11 +85,7 @@ describe("RuntimeStatusController", () => {
       .find((candidate) => candidate.textContent === "Install runtime") as HTMLButtonElement;
     button.click();
 
-    expect(open).toHaveBeenCalledWith(
-      "https://github.com/TitanicEclair/chatobby-runtime/releases/latest",
-      "_blank",
-      "noopener,noreferrer",
-    );
+    expect(install).toHaveBeenCalledOnce();
   });
 
   it("does not present installation as the fix for a transient startup failure", () => {
@@ -103,7 +99,7 @@ describe("RuntimeStatusController", () => {
         occurredAt: 1,
       },
     };
-    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart: vi.fn() });
+    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart: vi.fn(), install: vi.fn() });
     const container = document.body.createDiv();
     controller.bind(container);
 
@@ -113,7 +109,7 @@ describe("RuntimeStatusController", () => {
 });
 
 function controllerFor(getState: () => RuntimeLifecycleState): RuntimeStatusController {
-  return new RuntimeStatusController({ getState, start: vi.fn(), restart: vi.fn() });
+  return new RuntimeStatusController({ getState, start: vi.fn(), restart: vi.fn(), install: vi.fn() });
 }
 
 function readyState(): RuntimeLifecycleState {

@@ -35,10 +35,15 @@ import {
   connectorRuntimeMode,
   connectorTrustedRuntimePublicKey,
   ManagedRuntimeResolver,
+  readInstalledRuntimeVersion,
+  RuntimePackageInstaller,
   runtimeInstallRoot,
 } from "./runtime/infrastructure/runtime-installation";
 import { OperationCoordinator, type ActiveOperation, type OperationDescriptor, type OperationKey } from "./features/operations/public";
 import { FrontendSessionRegistry } from "./runtime/application/frontend-session-registry";
+import { RuntimeUpdateClient } from "./runtime/infrastructure/runtime-update-client";
+import { RuntimeUpdateManager, type RuntimeUpdateState } from "./runtime/public";
+import { RuntimeInstallModal } from "./features/runtime-status/public";
 
 export default class ChatobbyPlugin extends Plugin {
   // ── Persisted settings (public; read by SettingTab, mutated via store) ──
@@ -105,6 +110,16 @@ export default class ChatobbyPlugin extends Plugin {
     disconnectRuntime: () => this.closeFrontendSession(),
     pluginVersion: this.manifest.version,
     runtimePublicKey: this.runtimePublicKey,
+  });
+  private readonly runtimeUpdates = new RuntimeUpdateManager({
+    pluginVersion: this.manifest.version,
+    enabled: this.buildMode === "release" && Boolean(this.runtimePublicKey),
+    client: new RuntimeUpdateClient(runtimeInstallRoot(), this.runtimePublicKey ?? ""),
+    installer: new RuntimePackageInstaller(runtimeInstallRoot(), this.runtimePublicKey ?? ""),
+    getInstalledVersion: () => readInstalledRuntimeVersion(),
+    hasActiveWork: () => this.hasActiveRuntimeWork(),
+    stopRuntime: () => this.runtimeManager.stop("user-action"),
+    startRuntime: () => this.runtimeManager.ensureReady({ reason: "manual-restart" }).then(() => undefined),
   });
 
   private readonly visibleChatViews = new Set<ChatobbyView>();
@@ -217,6 +232,7 @@ export default class ChatobbyPlugin extends Plugin {
 
   /** Register one independently routable parent runtime for a Chatobby leaf. */
   async registerChatView(view: ChatobbyView): Promise<void> {
+    void this.runtimeUpdates.checkIfNeeded();
     await this.frontendSessions.register(view.runtimeChannelId).catch((error) => {
       console.error("Chatobby: initial leaf runtime connection failed; reconnect remains scheduled", error);
     });
@@ -345,6 +361,28 @@ export default class ChatobbyPlugin extends Plugin {
 
   onRuntimeStateChange(listener: (state: RuntimeLifecycleState) => void): () => void {
     return this.runtimeManager.onStateChange(listener);
+  }
+
+  getRuntimeUpdateState(): RuntimeUpdateState {
+    return this.runtimeUpdates.state;
+  }
+
+  onRuntimeUpdateStateChange(listener: (state: RuntimeUpdateState) => void): () => void {
+    return this.runtimeUpdates.onStateChange(listener);
+  }
+
+  openRuntimeInstaller(): void {
+    new RuntimeInstallModal(this.app, {
+      getState: () => this.runtimeUpdates.state,
+      onStateChange: (listener) => this.runtimeUpdates.onStateChange(listener),
+      checkForUpdate: () => this.runtimeUpdates.check(true),
+      install: (signal) => this.runtimeUpdates.install(signal),
+      hasActiveWork: () => this.hasActiveRuntimeWork(),
+    }).open();
+  }
+
+  private hasActiveRuntimeWork(): boolean {
+    return [...this.visibleChatViews].some((view) => view.hasActiveWork());
   }
 
   async startBackend(): Promise<void> {

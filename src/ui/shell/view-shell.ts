@@ -38,6 +38,7 @@ export interface ViewShell {
   feedWrapEl: HTMLElement;
   feedEl: HTMLElement;
   taskProgressHostEl: HTMLElement;
+  runtimeUpdateHostEl: HTMLElement;
   // Composer
   composerEl: HTMLElement;
   inputEl: HTMLTextAreaElement;
@@ -131,6 +132,7 @@ export function buildViewShell(container: HTMLElement, handlers: ShellHandlers):
   // ── Composer ─────────────────────────────────────────────────────
 
   const taskProgressHostEl = container.createDiv({ cls: "chatobby-task-progress-host is-hidden" });
+  const runtimeUpdateHostEl = container.createDiv({ cls: "chatobby-runtime-update is-hidden" });
   const composer = buildComposerShell(container, "Message input");
 
   // Bottom bar: inline session controls (left) + status + send/stop actions (right).
@@ -191,6 +193,7 @@ export function buildViewShell(container: HTMLElement, handlers: ShellHandlers):
     feedWrapEl: feedWrap,
     feedEl,
     taskProgressHostEl,
+    runtimeUpdateHostEl,
     composerEl: composer.composerEl,
     inputEl: composer.inputEl,
     inputHighlightEl: composer.inputHighlightEl,

@@ -1,11 +1,11 @@
 import { setIcon } from "obsidian";
-import { CHATOBBY_RUNTIME_RELEASES_URL, openChatobbyUrl } from "../../../publication";
 import type { RuntimeLifecycleState } from "../../../runtime/public";
 
 export interface RuntimeStatusHost {
   getState(): RuntimeLifecycleState;
   start(): Promise<void>;
   restart(): Promise<void>;
+  install(): Promise<void>;
 }
 
 /** Render low-noise lifecycle progress and actionable terminal failures. */
@@ -71,7 +71,7 @@ export class RuntimeStatusController {
       this.actionButton(container, "Start", () => this.host.start());
     } else if (state.status === "error" || state.status === "crash_loop") {
       if (shouldOfferRuntimeDownload(state)) {
-        this.actionButton(container, "Install runtime", async () => openChatobbyUrl(CHATOBBY_RUNTIME_RELEASES_URL));
+        this.actionButton(container, "Install runtime", () => this.host.install());
       }
       this.actionButton(container, state.status === "crash_loop" ? "Try again" : "Retry", () => this.host.restart());
       const details = container.createEl("details", { cls: "chatobby-runtime-status__diagnostics" });

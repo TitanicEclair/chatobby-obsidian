@@ -207,7 +207,7 @@ function resolveInstalledRuntimeDevelopment(root: string): string | null {
   return existsSync(executable) ? executable : null;
 }
 
-function readRuntimePackageManifest(versionDirectory: string): RuntimePackageManifest {
+export function readRuntimePackageManifest(versionDirectory: string): RuntimePackageManifest {
   try {
     const value: unknown = JSON.parse(readFileSync(join(versionDirectory, RUNTIME_PACKAGE_MANIFEST_FILE), "utf8"));
     if (!isRuntimePackageManifest(value)) throw new Error("manifest shape is invalid");
@@ -215,6 +215,11 @@ function readRuntimePackageManifest(versionDirectory: string): RuntimePackageMan
   } catch (error) {
     throw new Error(`Installed Chatobby runtime manifest is invalid: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/** Read the active package pointer for update comparison without launching it. */
+export function readInstalledRuntimeVersion(root = runtimeInstallRoot()): string | null {
+  return readPointer(root)?.version ?? null;
 }
 
 function verifyRuntimePackage(

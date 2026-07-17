@@ -12,6 +12,14 @@ export type {
   RuntimeOwnership,
 } from "./contracts";
 
+export { RuntimeUpdateManager } from "./application/runtime-update-manager";
+export type {
+  RuntimeUpdateInstallPhase,
+  RuntimeUpdateManagerDeps,
+  RuntimeUpdateState,
+} from "./application/runtime-update-manager";
+export type { RuntimeUpdateDescriptor } from "./infrastructure/runtime-update-client";
+
 import type {
   EnsureRuntimeRequest,
   ReadyRuntime,

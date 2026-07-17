@@ -5,7 +5,6 @@ import { formatCommandArgs, splitCommandArgs } from "./backend/command-line";
 import {
   CHATOBBY_CONNECTOR_REPOSITORY_URL,
   CHATOBBY_PATREON_URL,
-  CHATOBBY_RUNTIME_RELEASES_URL,
   CHATOBBY_SUPPORT_URL,
   openChatobbyUrl,
 } from "./publication";
@@ -61,8 +60,12 @@ export class ChatobbySettingTab extends PluginSettingTab {
       .setDesc(runtimeStatusDescription(runtimeState));
     if (this.plugin.isReleaseBuild() && runtimeState.status !== "ready") {
       runtimeSetting.addButton((button) => button
-        .setButtonText("Get runtime")
-        .onClick(() => openChatobbyUrl(CHATOBBY_RUNTIME_RELEASES_URL)));
+        .setButtonText("Install runtime")
+        .onClick(() => this.plugin.openRuntimeInstaller()));
+    } else if (this.plugin.isReleaseBuild()) {
+      runtimeSetting.addButton((button) => button
+        .setButtonText("Check for updates")
+        .onClick(() => this.plugin.openRuntimeInstaller()));
     }
     runtimeSetting
       .addButton((button) => {

@@ -33,7 +33,7 @@ import { ExtensionUiController } from "./controller/extension-ui-controller";
 import { SessionController, type SessionMutationRequest, type WorkingDirectoryScope } from "./controller/session-controller";
 import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRailController, type SubagentScreenController, type SubagentScreenTab } from "../features/subagents/public";
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
-import { RuntimeStatusController, RuntimeStatusMenu } from "../features/runtime-status/public";
+import { RuntimeStatusController, RuntimeStatusMenu, RuntimeUpdateController } from "../features/runtime-status/public";
 import { ViewRuntimeController } from "../runtime/application/view-runtime-controller";
 import { parseLeafSessionState, parseNavigationState, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode } from "./controller/view-navigation-controller";
 import { openSystemPathExternally } from "./controller/system-path-opener";
@@ -75,6 +75,7 @@ export class ChatobbyView extends ItemView {
   private taskProgress!: TaskProgress;
   private runtimeStatus!: RuntimeStatusController;
   private runtimeStatusMenu!: RuntimeStatusMenu;
+  private runtimeUpdate!: RuntimeUpdateController;
   private viewMode: ChatobbyViewMode = "chat";
   private readonly sessionPickerMode: SessionPickerModeController;
   private componentsReady = false;
@@ -454,6 +455,7 @@ export class ChatobbyView extends ItemView {
     this.composerControls.destroy();
     this.runtimeStatus.destroy();
     this.runtimeStatusMenu.destroy();
+    this.runtimeUpdate.destroy();
     this.shell.dispose();
     await this.plugin.unregisterChatView(this);
   }
@@ -670,12 +672,20 @@ export class ChatobbyView extends ItemView {
       getState: () => this.plugin.getRuntimeState(),
       start: () => this.plugin.startBackend(),
       restart: () => this.plugin.restartRuntime(),
+      install: async () => this.plugin.openRuntimeInstaller(),
     });
     this.runtimeStatusMenu = new RuntimeStatusMenu({
       getState: () => this.plugin.getRuntimeState(),
       hasActiveWork: () => this.sessionState.isStreaming || this.sessionState.isCompacting,
       restart: () => this.plugin.restartRuntime(),
       stop: () => this.plugin.stopBackend(),
+      supportsRuntimeUpdates: () => this.plugin.isReleaseBuild(),
+      manageRuntime: () => this.plugin.openRuntimeInstaller(),
+    });
+    this.runtimeUpdate = new RuntimeUpdateController({
+      getState: () => this.plugin.getRuntimeUpdateState(),
+      onStateChange: (listener) => this.plugin.onRuntimeUpdateStateChange(listener),
+      openInstaller: () => this.plugin.openRuntimeInstaller(),
     });
 
     // 3. Bind components to shell elements
@@ -683,6 +693,7 @@ export class ChatobbyView extends ItemView {
     this.sessionAgentRail.render(this.shell.subagentRailHostEl);
     this.runtimeStatus.bind(this.shell.runtimeStatusHostEl);
     this.runtimeStatusMenu.bind(this.shell.connectionEl);
+    this.runtimeUpdate.bind(this.shell.runtimeUpdateHostEl);
     this.toolbar.bind(this.shell.connectionEl, this.shell.statsEl);
     this.feed.bind(this.shell.feedEl);
     this.composer.bind(this.shell.inputEl, this.shell.sendBtn, this.shell.stopBtn, this.shell.inputHighlightEl);
@@ -702,6 +713,8 @@ export class ChatobbyView extends ItemView {
 
   feedAutoScroll(): boolean { return this.plugin.settings.autoScroll; }
   feedThinkingDisplay(): typeof this.plugin.settings.thinkingDisplay { return this.plugin.settings.thinkingDisplay; }
+
+  hasActiveWork(): boolean { return this.sessionState.isStreaming || this.sessionState.isCompacting; }
 
   /** Whether the vault runtime and its session transport are ready. */
   private isBackendAvailable(): boolean {

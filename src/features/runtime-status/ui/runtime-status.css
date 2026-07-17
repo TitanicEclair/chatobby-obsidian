@@ -88,3 +88,135 @@
   max-width: 100%;
   flex-basis: 100%;
 }
+
+.chatobby-runtime-update {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  width: min(var(--chatobby-content-max-width), calc(100% - (2 * var(--chatobby-edge-padding))));
+  min-height: 28px;
+  margin: 0 auto;
+  padding: 0 var(--size-4-2);
+  color: var(--text-muted);
+  font-size: var(--chatobby-meta-size);
+  box-sizing: border-box;
+}
+
+.chatobby-runtime-update.is-hidden {
+  display: none;
+}
+
+.chatobby-runtime-update__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--chatobby-accent);
+}
+
+.chatobby-runtime-update.is-progress .chatobby-runtime-update__icon svg,
+.chatobby-runtime-install__icon.is-spinning svg {
+  animation: chatobby-runtime-spin 1.2s linear infinite;
+}
+
+.chatobby-runtime-update.is-error .chatobby-runtime-update__icon {
+  color: var(--text-error);
+}
+
+.chatobby-runtime-update__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-runtime-update__action {
+  margin-left: auto;
+  padding: 2px var(--size-4-2);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  font-size: inherit;
+}
+
+.chatobby-runtime-update__action:hover,
+.chatobby-runtime-update__action:focus-visible {
+  background: var(--background-modifier-hover);
+}
+
+.chatobby-runtime-install-modal {
+  width: min(520px, calc(100vw - (2 * var(--size-4-4))));
+}
+
+.chatobby-runtime-install-modal .modal-content {
+  padding-top: var(--size-4-2);
+}
+
+.chatobby-runtime-install__icon {
+  display: inline-flex;
+  margin: var(--size-4-2) 0 var(--size-4-3);
+  color: var(--text-accent);
+}
+
+.chatobby-runtime-install__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.chatobby-runtime-install__lead {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  line-height: var(--line-height-normal);
+}
+
+.chatobby-runtime-install__hint,
+.chatobby-runtime-install__notice {
+  margin-top: var(--size-4-3);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: var(--line-height-normal);
+}
+
+.chatobby-runtime-install__notice {
+  color: var(--text-warning);
+}
+
+.chatobby-runtime-install__summary {
+  display: flex;
+  gap: var(--size-4-3);
+  margin-top: var(--size-4-3);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-runtime-install__details {
+  margin-top: var(--size-4-3);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-runtime-install__details p {
+  margin: var(--size-4-2) 0 0;
+  line-height: var(--line-height-normal);
+}
+
+.chatobby-runtime-install__progress {
+  height: 3px;
+  margin-top: var(--size-4-4);
+  overflow: hidden;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-border);
+}
+
+.chatobby-runtime-install__progress-value {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--interactive-accent);
+  transition: width 120ms linear;
+}
+
+.chatobby-runtime-install__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--size-4-2);
+  margin-top: var(--size-4-5);
+}

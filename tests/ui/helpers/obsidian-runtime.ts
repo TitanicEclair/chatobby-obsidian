@@ -120,6 +120,10 @@ export class Modal {
   close(): void {
     this.modalEl.remove();
   }
+  setTitle(title: string): this {
+    this.titleEl.textContent = title;
+    return this;
+  }
 }
 
 export class FuzzySuggestModal<T> {
