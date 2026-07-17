@@ -272,7 +272,7 @@ export class SubagentsView extends ChatobbyComponent {
     priority.type = "number";
     priority.value = "0";
     const maxTurns = numberInput(advancedGrid, "Turn limit", "Inherited");
-    const maxTokens = numberInput(advancedGrid, "Token budget", "Inherited");
+    const maxTokens = numberInput(advancedGrid, "Total token budget", "Inherited");
     const maxWallTime = numberInput(advancedGrid, "Time budget (minutes)", "Inherited");
     const controls = form.createDiv({ cls: "chatobby-subagents__start-actions" });
     const cancel = controls.createEl("button", { text: "Cancel", attr: { type: "button" } });

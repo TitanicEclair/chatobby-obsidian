@@ -39,6 +39,7 @@ describe("SubagentsView", () => {
     const start = element.querySelector<HTMLButtonElement>("button[aria-label='New run']");
 
     start?.click();
+    expect(Array.from(element.querySelectorAll("label")).some((label) => label.textContent === "Total token budget")).toBe(true);
     element.querySelector<HTMLFormElement>(".chatobby-subagents__start")?.dispatchEvent(new Event("submit"));
 
     expect(element.textContent).toContain("Name, task, and role are required.");
