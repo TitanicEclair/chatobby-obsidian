@@ -19,6 +19,7 @@ describe("FeedRenderer", () => {
     expect(el.querySelector(".chatobby-feed__blocks")).toBeTruthy();
     expect(el.querySelector(".chatobby-feed__jump-pill")).toBeTruthy();
     expect(el.querySelector(".chatobby-feed__jump-pill")?.classList.contains("is-hidden")).toBe(true);
+    expect(el.querySelector(".chatobby-feed__blocks")?.getAttribute("aria-label")).toBeNull();
   });
 
   it("renders clickable empty-state prompts without a decorative emoji", () => {
@@ -176,6 +177,80 @@ describe("FeedRenderer", () => {
     expect(el.querySelector(".chatobby-user-block__content")?.textContent).toContain("hello");
     expect(el.querySelector(".chatobby-text-block__content")?.textContent).toContain("**world**");
     expect(host.renderMarkdown).toHaveBeenCalledWith("**world**", expect.any(HTMLElement));
+  });
+
+  it("renders Markdown while the response is still streaming", () => {
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      activeTurnId: "turn-live",
+      blocks: [{
+        type: "text",
+        id: "block-live",
+        turnId: "turn-live",
+        text: "**live**",
+        startIndex: 0,
+        endIndex: 0,
+        status: "streaming",
+      }],
+    };
+    const host = createMockFeedHost(state);
+    host.renderMarkdown = vi.fn((_markdown, container) => {
+      container.innerHTML = "<p><strong>live</strong></p>";
+    });
+
+    const renderer = new FeedRenderer(host);
+    const element = mount(renderer);
+
+    expect(element.querySelector(".chatobby-text-block__content strong")?.textContent).toBe("live");
+    expect(host.renderMarkdown).toHaveBeenCalledWith("**live**", expect.any(HTMLElement));
+  });
+
+  it("keeps the newest async Markdown render when an older render finishes late", async () => {
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      activeTurnId: "turn-race",
+      blocks: [{
+        type: "text",
+        id: "block-race",
+        turnId: "turn-race",
+        text: "old",
+        startIndex: 0,
+        endIndex: 0,
+        status: "streaming",
+      }],
+    };
+    const host = createMockFeedHost(state);
+    const finishes: Array<() => void> = [];
+    host.renderMarkdown = vi.fn((markdown, container) => new Promise<void>((resolve) => {
+      finishes.push(() => {
+        container.textContent = markdown;
+        resolve();
+      });
+    }));
+    const renderer = new FeedRenderer(host);
+    const element = mount(renderer);
+
+    host.getFeedStore().dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: { blocks: [{
+        type: "text",
+        id: "block-race",
+        turnId: "turn-race",
+        text: "new",
+        startIndex: 0,
+        endIndex: 0,
+        status: "complete",
+      }] },
+    });
+    expect(finishes).toHaveLength(2);
+
+    finishes[1]?.();
+    await Promise.resolve();
+    expect(element.querySelector(".chatobby-text-block__content")?.textContent).toBe("new");
+
+    finishes[0]?.();
+    await Promise.resolve();
+    expect(element.querySelector(".chatobby-text-block__content")?.textContent).toBe("new");
   });
 
   it("renders persisted user image attachments in the feed", () => {

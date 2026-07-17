@@ -17,6 +17,11 @@ export const STREAM_THINKING_DEBOUNCE_MS = 300;
  *  entire text block through Obsidian's synchronous MarkdownRenderer. */
 export const STREAM_TEXT_DEBOUNCE_MS = 32;
 
+/** Maximum cadence for parsing and decorating the growing Markdown response.
+ * Feed text can update more frequently, but a full Markdown pass is deliberately
+ * bounded so streaming cannot monopolize Obsidian's UI thread. */
+export const STREAM_MARKDOWN_RENDER_MS = 96;
+
 /** Debounce for tool call renders during streaming (ms). Zero — discrete events, render immediately. */
 export const STREAM_TOOLCALL_DEBOUNCE_MS = 250;
 

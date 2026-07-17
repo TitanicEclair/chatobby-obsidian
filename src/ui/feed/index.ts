@@ -242,7 +242,6 @@ export class FeedRenderer extends ChatobbyComponent {
     this.blocksEl = this.scrollEl.createDiv({ cls: "chatobby-feed__blocks" });
     this.blocksEl.setAttr("role", "document");
     this.blocksEl.setAttr("aria-readonly", "true");
-    this.blocksEl.setAttr("aria-label", "Conversation text");
     this.interactionsEl = this.scrollEl.createDiv({ cls: "chatobby-feed__interactions" });
     this.sourceEl = this.scrollEl.createEl("textarea", {
       cls: "chatobby-feed__source",
