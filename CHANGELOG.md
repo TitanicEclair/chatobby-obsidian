@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-18
+
+- Expanded Obsidian Web Viewer automation with semantic Markdown reading,
+  stable accessible element refs, page identity checks, sanitized DOM
+  inspection, browser history, native key input, event-driven waits, safe form
+  filling, screenshots, and password redaction.
+
 ## [0.1.2] - 2026-07-18
 
 ### Fixed — first-run lifecycle and navigation reliability (2026-07-17)
