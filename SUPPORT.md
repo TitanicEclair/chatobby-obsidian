@@ -1,15 +1,16 @@
 # Support
 
-Support contact: madelyntan0223@gmail.com
+Support contact: thatsmad002@gmail.com
 
 Include the Chatobby connector version, runtime version, Obsidian version,
 Windows version, a concise reproduction, and redacted diagnostics. Do not send
 provider credentials, signing keys, or unredacted vault content.
 
 The initial connector is desktop-only, targets Windows x64, and requires
-Obsidian 1.8.0 or newer plus a separately installed compatible Chatobby
-runtime. Model-provider availability, billing, quotas, and service incidents
-must be handled with the relevant provider.
+Obsidian 1.8.0 or newer plus a compatible Chatobby runtime installed through
+the in-plugin guide or a published runtime installer. Model-provider
+availability, billing, quotas, and service incidents must be handled with the
+relevant provider.
 
 Security reports follow [SECURITY.md](SECURITY.md). Privacy questions follow
 [PRIVACY.md](PRIVACY.md).

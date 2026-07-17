@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Report suspected vulnerabilities privately to madelyntan0223@gmail.com with
+Report suspected vulnerabilities privately to thatsmad002@gmail.com with
 the subject `Chatobby security`. Do not include provider keys, vault contents,
 private signing keys, or other secrets. Include the connector version, runtime
 version, operating system, impact, and minimal reproduction details.
@@ -24,8 +24,8 @@ operating system remain outside Chatobby's security boundary. Users should
 keep Obsidian, Chatobby, and provider credentials current and should back up a
 vault before enabling write-capable agent workflows.
 
-Only connector releases published through Obsidian and runtime installers and
-checksums published at
+Only connector releases published through Obsidian and runtime packages,
+installers, signed update descriptors, and checksums published at
 `https://github.com/TitanicEclair/chatobby-runtime/releases` should be trusted.
 Signing keys and security reports must never be committed to the connector
 repository.

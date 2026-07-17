@@ -1,8 +1,10 @@
 # Install Chatobby
 
-Chatobby is a desktop-only Obsidian connector backed by a separately installed
-local runtime. The official Community plugin installs and updates the
-connector. The Chatobby runtime is downloaded separately from GitHub Releases.
+Chatobby is a desktop-only Obsidian connector backed by an independently
+installed local runtime. The official Community plugin installs and updates
+the connector. The normal runtime setup path is the signed in-plugin
+installation guide, which downloads from GitHub Releases; a standalone Windows
+installer is also available for manual installation.
 
 ## Requirements
 
@@ -19,26 +21,30 @@ under their own terms.
 1. In Obsidian, open **Settings → Community plugins → Browse**.
 2. Find **Chatobby**, select **Install**, and then select **Enable**.
 3. Open Chatobby from the ribbon. If the runtime is not installed, select
-   **Get runtime**.
-4. On the [latest runtime release](https://github.com/TitanicEclair/chatobby-runtime/releases/latest),
-   download `Chatobby-Setup.exe` and its SHA-256 checksum file.
-5. Verify the checksum shown on the release page, then run the installer. The
-   runtime installer does not install or update the Obsidian connector.
-6. Return to Obsidian and select **Check again**. Chatobby verifies the signed
-   runtime package before starting it.
-7. Open **Settings → Chatobby**, connect a model provider, and begin with a
+   **Install runtime**.
+4. Review the version, download size, source, and verification explanation,
+   then select **Install**. Chatobby downloads the package from the official
+   GitHub release, verifies its signed update descriptor, verifies the signed
+   runtime manifest and every packaged file, installs it atomically for the
+   current Windows account, and reconnects the vault.
+5. Open **Settings → Chatobby**, connect a model provider, and begin with a
    copied test note and a low-risk read-only request.
 
-The initial public alpha may show a Windows unknown-publisher warning until an
-Authenticode certificate is available. Continue only when the installer came
-from the official GitHub release and its checksum matches. Do not disable
+The plugin installation path does not run a downloaded Windows installer and
+does not request administrator access. If you instead use the standalone
+installer, the initial public alpha may show a Windows unknown-publisher
+warning until an Authenticode certificate is available. Continue only when it
+came from the official GitHub release and its checksum matches. Do not disable
 SmartScreen or antivirus globally.
 
 ## Update
 
 Obsidian updates the connector through the Community plugin directory. Runtime
-updates are deliberate: open the latest runtime release, download the new
-installer, and run it. Chatobby does not silently download or execute updates.
+updates are deliberate: Chatobby checks a small signed GitHub descriptor and
+shows a compact **Update Chatobby** action when a compatible runtime is newer.
+The package is downloaded and installed only after you open the guide and
+confirm the update. The previous runtime remains available for rollback if an
+installation fails. The standalone installer remains an alternative.
 
 Connector and runtime versions must be compatible. If Chatobby reports a
 version mismatch, update both components before retrying.
@@ -51,4 +57,3 @@ version mismatch, update both components before retrying.
 Uninstalling program files intentionally preserves vault content, sessions,
 memory, event definitions, provider credentials, and other user-owned data.
 See [Privacy](../PRIVACY.md) before deleting retained data manually.
-

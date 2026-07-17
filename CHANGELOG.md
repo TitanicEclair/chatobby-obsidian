@@ -26,6 +26,10 @@
 - Added official runtime-download recovery actions, public installation and
   troubleshooting guidance, Community-directory disclosures, and optional
   Patreon funding metadata without feature gating.
+- Added a theme-native in-plugin runtime installation and update guide with
+  explicit confirmation, signed release metadata, bounded streaming downloads,
+  path-safe extraction, complete package verification, atomic activation,
+  rollback-safe failure recovery, and a compact composer update action.
 
 ### Added — document attachments (2026-07-17)
 

@@ -4,7 +4,8 @@ Chatobby brings a full agent workspace into Obsidian. Use it to work across
 notes and attachments, keep useful context between sessions, plan longer work,
 run scheduled actions, and coordinate multiple agents without leaving your
 vault. A separately installed local runtime connects Chatobby to the model
-providers you choose.
+providers you choose. The plugin can install that runtime through a signed,
+user-confirmed setup guide.
 
 > **Public alpha:** Chatobby is free while the product is under active
 > development. Interfaces and storage contracts may change. Back up important
@@ -38,11 +39,15 @@ actually so exciting to see its capabilities now and I love doing this <3
 ## Install
 
 1. Install and enable Chatobby from Obsidian's Community plugin directory.
-2. Open Chatobby and select **Get runtime**.
-3. Download `Chatobby-Setup.exe` from the
-   [latest runtime release](https://github.com/TitanicEclair/chatobby-runtime/releases/latest).
-4. Run the installer, return to Obsidian, and select **Check again**.
-5. Connect a model provider in **Settings → Chatobby**.
+2. Open Chatobby and select **Install runtime**.
+3. Review the source, version, download size, and verification details, then
+   select **Install**. Chatobby downloads the signed runtime package, verifies
+   every file, installs it for the current Windows account, and reconnects.
+4. Connect a model provider in **Settings → Chatobby**.
+
+The standalone Windows installer remains available from the
+[latest runtime release](https://github.com/TitanicEclair/chatobby-runtime/releases/latest)
+for manual or offline-style installation.
 
 See the complete [installation guide](docs/installation.md),
 [alpha guide](docs/alpha-guide.md), and
@@ -71,12 +76,15 @@ scoped to the current Chatobby project where applicable.
 ## Required disclosures
 
 - **Separate runtime:** The connector requires a compatible Chatobby runtime
-  installed on the same computer. It verifies and starts that signed runtime;
-  it does not download or silently update plugin code.
+  installed on the same computer. It verifies and starts that signed runtime.
+  Runtime installation and updates require an explicit click; the connector
+  does not download or silently update plugin code.
 - **Network use:** The connector talks to the runtime over authenticated local
   loopback connections. The runtime contacts the model provider selected by
   the user and may contact websites or integrations when the user requests or
-  authorizes a corresponding tool operation.
+  authorizes a corresponding tool operation. The connector also requests a
+  small signed update descriptor from GitHub when the first Chatobby view
+  opens; no vault or session content is included.
 - **Accounts and payment:** Chatobby does not currently require a Chatobby
   account or payment for the free alpha. Optional Patreon support does not
   unlock product features. A selected model provider may require an account,

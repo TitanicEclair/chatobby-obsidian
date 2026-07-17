@@ -44,14 +44,19 @@ operate product analytics or server-side telemetry. Local diagnostics are
 redacted by default; users decide whether to share diagnostic material with
 support.
 
-## Public links
+## Public links and update checks
 
-The connector opens GitHub only when you choose a documentation, support, or
-runtime-download action. GitHub then receives normal web request information
-under its own privacy terms. The Patreon link is opened only when you choose
-to support development; Chatobby does not send Patreon vault content, prompts,
-session data, or product analytics.
+When the first Chatobby view opens, the connector requests a small signed
+runtime-update descriptor from GitHub so it can show when a compatible runtime
+is available. The request does not include vault content, prompts, session
+data, credentials, or a Chatobby account identifier. Runtime packages are
+downloaded and installed only after you explicitly choose Install or Update.
+GitHub receives normal web request information under its own privacy terms.
+
+Documentation and support links open only when selected. The Patreon link is
+opened only when you choose to support development; Chatobby does not send
+Patreon vault content, prompts, session data, or product analytics.
 
 ## Contact
 
-Privacy questions can be sent to madelyntan0223@gmail.com.
+Privacy questions can be sent to thatsmad002@gmail.com.
