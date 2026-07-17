@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-18
+
+- Removed arbitrary Web Viewer page-script evaluation while retaining bounded
+  semantic reading, sanitized DOM inspection, stable element references,
+  native interaction, event-driven waits, and screenshots.
+- Added a release-boundary check that rejects arbitrary code evaluation in the
+  public Obsidian connector source.
+
 ## [0.1.3] - 2026-07-18
 
 - Expanded Obsidian Web Viewer automation with semantic Markdown reading,
