@@ -7,6 +7,18 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const sourceRoot = join(repositoryRoot, "src");
 
 describe("frontend feature boundaries", () => {
+  it("keeps the manifest and settings headings compatible with community review", () => {
+    const manifest = JSON.parse(readFileSync(join(repositoryRoot, "manifest.json"), "utf8")) as {
+      description?: unknown;
+    };
+    expect(typeof manifest.description).toBe("string");
+    expect(manifest.description).not.toMatch(/\bobsidian\b/i);
+
+    const settings = readFileSync(join(sourceRoot, "settings.ts"), "utf8");
+    expect(settings).not.toMatch(/\.createEl\(["']h[1-6]["']/);
+    expect(settings.match(/\.setHeading\(\)/g)).toHaveLength(5);
+  });
+
   it("prevents source outside the feed feature from deep-importing feed internals", () => {
     const violations: string[] = [];
     for (const path of typescriptFiles(sourceRoot)) {

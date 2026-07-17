@@ -6,16 +6,16 @@
   margin-block-end: var(--size-4-6);
 }
 
-.chatobby-settings__heading h2 {
-  margin-block-end: var(--size-2-1);
+.chatobby-settings__heading .setting-item-name {
+  font-size: var(--h2-size);
+  line-height: var(--h2-line-height);
 }
 
-.chatobby-settings__heading > div {
-  color: var(--text-muted);
+.chatobby-settings__heading .setting-item-description {
   font-size: var(--font-ui-small);
 }
 
-.chatobby-settings h3 {
+.chatobby-settings > .setting-item-heading:not(.chatobby-settings__heading) {
   margin-block: var(--size-4-8) var(--size-4-2);
   padding-block-end: var(--size-2-2);
   border-bottom: var(--border-width) solid var(--chatobby-border);

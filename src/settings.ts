@@ -28,9 +28,11 @@ export class ChatobbySettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("chatobby-settings");
 
-    const heading = containerEl.createDiv({ cls: "chatobby-settings__heading" });
-    heading.createEl("h2", { text: "Chatobby" });
-    heading.createDiv({ text: "Local AI sessions, tools, and automations for this vault." });
+    const heading = new Setting(containerEl)
+      .setName("Chatobby")
+      .setDesc("Local AI sessions, tools, and automations for this vault.")
+      .setHeading();
+    heading.settingEl.addClass("chatobby-settings__heading");
 
     this.renderConnectionSection(containerEl);
     this.renderDisplaySection(containerEl);
@@ -39,7 +41,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   private renderConnectionSection(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: "Runtime" });
+    new Setting(containerEl).setName("Runtime").setHeading();
     const runtimeMode = this.plugin.getRuntimeMode();
 
     const runtimeState = this.plugin.getRuntimeState();
@@ -226,7 +228,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   private renderDisplaySection(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: "Conversation" });
+    new Setting(containerEl).setName("Conversation").setHeading();
 
     new Setting(containerEl)
       .setName("Thinking blocks")
@@ -278,7 +280,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   private renderCredentialsSection(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: "Model providers" });
+    new Setting(containerEl).setName("Model providers").setHeading();
     containerEl.createDiv({
       cls: "chatobby-settings-note",
       text: "Connect the providers you want to use. Keys stay in Chatobby's local runtime credential store and are never saved in the Obsidian plugin folder.",
@@ -320,7 +322,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   private renderHelpSection(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: "Help and development" });
+    new Setting(containerEl).setName("Help and development").setHeading();
 
     new Setting(containerEl)
       .setName("Documentation")
