@@ -64,6 +64,63 @@ describe("PermissionsView", () => {
       payload: { profileId: "custom", channelId: "session-1" },
     }));
   });
+
+  it("preserves the page scroll position while a permission change rerenders", async () => {
+    let model = permissionModel();
+    const listeners = new Set<(value: FrontendPermissionScreenViewModel | null) => void>();
+    const view = new PermissionsView({
+      getModel: () => model,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      onRefresh: vi.fn(async () => {}),
+      onIntent: vi.fn(async () => {
+        model = { ...model, statusMessage: "Saved." };
+        for (const listener of listeners) listener(model);
+      }),
+      onBack: vi.fn(),
+    });
+    const root = mount(view);
+    const body = root.querySelector<HTMLElement>(".chatobby-permissions__body");
+    if (!body) throw new Error("permission body missing");
+    body.scrollTop = 420;
+
+    root.querySelector<HTMLButtonElement>("[data-decision='deny']")?.click();
+
+    await vi.waitFor(() => expect(root.textContent).toContain("Saved."));
+    expect(root.querySelector<HTMLElement>(".chatobby-permissions__body")?.scrollTop).toBe(420);
+  });
+
+	it("deletes an active custom policy only after choosing its replacement", async () => {
+		const model = permissionModel();
+		const onIntent = vi.fn(async () => {});
+		const view = new PermissionsView({
+			getModel: () => model,
+			subscribe: () => () => {},
+			onRefresh: vi.fn(async () => {}),
+			onIntent,
+			onBack: vi.fn(),
+		});
+		const root = mount(view);
+		root.querySelector<HTMLButtonElement>('button[aria-label="Delete profile"]')?.click();
+		const replacement = root.querySelector<HTMLSelectElement>('select[aria-label="Replacement permission policy"]');
+		const remove = [...root.querySelectorAll<HTMLButtonElement>("button")]
+			.find((button) => button.textContent === "Delete policy");
+		expect(replacement).not.toBeNull();
+		expect(remove?.disabled).toBe(true);
+		if (!replacement || !remove) return;
+		replacement.value = "standard";
+		replacement.dispatchEvent(new Event("change"));
+		expect(replacement.value).toBe("standard");
+		expect(remove.disabled).toBe(false);
+		remove.click();
+
+		await vi.waitFor(() => expect(onIntent).toHaveBeenCalledWith({
+			type: "permissions.delete-profile",
+			payload: { profileId: "custom", replacementProfileId: "standard" },
+		}));
+	});
 });
 
 function permissionModel(): FrontendPermissionScreenViewModel {
@@ -76,15 +133,33 @@ function permissionModel(): FrontendPermissionScreenViewModel {
     activeForMain: true,
     canActivate: false,
     canEdit: true,
-    canDelete: false,
+	canDelete: true,
+	deleteReplacementRequired: true,
+	deleteImpactLabel: "Currently used by Main agent. Choose a replacement.",
     duplicateLabel: "Duplicate",
   };
+	const standard = {
+		...profile,
+		id: "standard",
+		name: "Standard",
+		description: "Built-in safeguards",
+		builtIn: true,
+		selected: false,
+		activeForMain: false,
+		canActivate: true,
+		canEdit: false,
+		canDelete: false,
+		deleteReplacementRequired: false,
+		deleteImpactLabel: undefined,
+		duplicateLabel: "Customize",
+	};
   return {
     screenId: "permissions",
     revision: 1,
+	profileRevision: 1,
     loading: false,
     selectedProfileId: "custom",
-    profiles: [profile],
+	profiles: [profile, standard],
     selectedProfile: profile,
     capabilityDescription: "Capability groups",
     capabilities: [{

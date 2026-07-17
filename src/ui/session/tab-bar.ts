@@ -80,6 +80,9 @@ export class TabBar extends ChatobbyComponent {
 		});
 		button.dataset.mode = mode;
 		setIcon(button, icon);
-		button.addEventListener("click", () => this.host.onNavigate(mode));
+		button.addEventListener("click", () => {
+			if (this.host.activeMode() === mode) return;
+			this.host.onNavigate(mode);
+		});
 	}
 }

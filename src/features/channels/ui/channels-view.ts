@@ -88,7 +88,10 @@ export class ChannelsView extends ChatobbyComponent {
   private renderSidebar(layout: HTMLElement, model: FrontendChannelScreenViewModel | null): void {
     const sidebar = layout.createEl("aside", { cls: "chatobby-channels__sidebar", attr: { "aria-label": "Channel list" } });
     if (!model || model.groups.length === 0) {
-      sidebar.createDiv({ cls: "chatobby-channels__empty", text: model?.loading || !model ? "Loading…" : "No channels" });
+      sidebar.createDiv({
+			cls: "chatobby-channels__empty",
+			text: this.localError ? "Unavailable" : model?.loading || !model ? "Loading…" : "No channels",
+		});
       return;
     }
     for (const groupModel of model.groups) {
@@ -140,7 +143,10 @@ export class ChannelsView extends ChatobbyComponent {
       earlier.addEventListener("click", () => void this.options.onLoadEarlier(cursor));
     }
     if (!model || model.loading) {
-      messages.createDiv({ cls: "chatobby-channels__empty", text: "Loading messages…" });
+      messages.createDiv({
+			cls: "chatobby-channels__empty",
+			text: this.localError ? "Channel messages are unavailable." : "Loading messages…",
+		});
       return;
     }
     if (!model.selectedChannelId) {

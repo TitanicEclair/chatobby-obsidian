@@ -35,10 +35,11 @@ import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRa
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
 import { RuntimeStatusController, RuntimeStatusMenu } from "../features/runtime-status/public";
 import { ViewRuntimeController } from "../runtime/application/view-runtime-controller";
-import { parseLeafSessionState, parseNavigationState, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode } from "./controller/view-navigation-controller";
+import { parseLeafSessionState, parseNavigationState, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode } from "./controller/view-navigation-controller";
 import { openSystemPathExternally } from "./controller/system-path-opener";
 import { ConnectionStatusController } from "./controller/connection-status-controller";
 import { SessionPreferenceController } from "./controller/session-preference-controller";
+import { removeOnboardingPanel } from "./controller/onboarding-panel-controller";
 import { OperationCoordinator, type OperationDescriptor } from "../features/operations/public";
 import { TaskProgress } from "../features/tasks/public";
 import { routeExtensionPanelAction } from "./controller/extension-panel-action-router";
@@ -46,11 +47,10 @@ import { renderViewMode as renderShellViewMode } from "./controller/view-mode-re
 import { routePermissionSlash } from "./controller/permission-slash-router";
 import { FrontendProtocolController } from "../frontend/frontend-protocol-controller";
 import { FrontendStore } from "../frontend/frontend-store";
-import { toFeedDocumentProjection } from "../frontend/feed-adapter";
-import { CHATOBBY_FRONTEND_PROTOCOL_VERSION } from "../vendor/chatobby-client/ws-client.js";
+import { createFrontendBootstrapRequest } from "./controller/frontend-bootstrap-request";
+import { synchronizeFrontendFeed as syncFrontendFeedProjection } from "./controller/frontend-feed-sync";
 import type {
   FrontendBootstrap,
-  FrontendBootstrapRequest,
   FrontendChoiceControl,
   FrontendIntent,
   FrontendNavigationReference,
@@ -101,6 +101,7 @@ export class ChatobbyView extends ItemView {
   private unsubscribeFrontendStore: (() => void) | null = null;
   private pendingFrontendSnapshot: FrontendBootstrap | null = null;
   private appliedFrontendSnapshot: FrontendBootstrap | null = null;
+  private pendingFeedCatchup = false;
   private frontendApplyTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private readonly handleViewKeydown = (event: KeyboardEvent): void => {
     if (this.viewMode === "session-picker") {
@@ -141,6 +142,10 @@ export class ChatobbyView extends ItemView {
       },
       openChannels: (state) => this.channelScreen.open(state.channelId, state.messageId),
       openSessionPicker: () => this.sessionPickerMode.open(),
+      getLeafSessionState: () => ({
+        vaultDirectoryPath: this.sessions.workingDirectoryPath(),
+        sessionPath: this.activeTab()?.sessionFile,
+      }),
       onError: (error) => {
         console.error("Chatobby: view navigation failed", error);
         new Notice("Chatobby could not open that view.");
@@ -156,7 +161,7 @@ export class ChatobbyView extends ItemView {
     });
     this.frontendProtocol = new FrontendProtocolController({
       store: this.frontendStore,
-      createBootstrapRequest: () => this.createFrontendBootstrapRequest(),
+	  createBootstrapRequest: () => createFrontendBootstrapRequest(this.app, this.plugin, this.runtimeChannelId, this.gatherContext()),
       onError: (error) => {
         console.error("Chatobby: frontend protocol synchronization failed", error);
         new Notice(`Chatobby could not synchronize this view: ${errorMessage(error)}`);
@@ -261,7 +266,7 @@ export class ChatobbyView extends ItemView {
       forkSession: () => this.commandFork(),
       cloneSession: () => this.commandClone(),
       reload: () => this.executeReloadSlash(),
-      abort: () => this.getTransport()?.abort(),
+      abort: () => this.abortCurrentTurn(),
       bash: (parsed) => this.executeBashSlash(parsed),
       setModel: (parsed) => this.executeSetModelSlash(parsed),
       setThinking: (parsed) => this.executeSetThinkingSlash(parsed),
@@ -340,6 +345,7 @@ export class ChatobbyView extends ItemView {
   private get sessionState(): SessionState { return this.sessions.sessionState; }
   private set sessionState(state: SessionState) { this.sessions.sessionState = state; }
   private getTransport(): ChatobbyTransport | null { return this.plugin.getViewTransport(this); }
+  private abortCurrentTurn(): void { this.extensionUi.cancelActive(); this.getTransport()?.abort().catch(() => { }); }
   private runOperation<T>(descriptor: OperationDescriptor, operation: () => Promise<T>): Promise<T> { return this.operations.run(descriptor, operation); }
   getViewType(): string { return VIEW_TYPE; }
   getDisplayText(): string { return "Chatobby"; }
@@ -368,10 +374,20 @@ export class ChatobbyView extends ItemView {
   }
   override async setState(state: unknown, result: ViewStateResult): Promise<void> {
     const leafState = parseLeafSessionState(state);
+    const activateSession = shouldActivateLeafSession(
+      this.stateHydrated,
+      {
+        vaultDirectoryPath: this.sessions.workingDirectoryPath(),
+        sessionPath: this.activeTab()?.sessionFile,
+      },
+      leafState,
+    );
     if (leafState.vaultDirectoryPath !== undefined) {
       this.sessions.restoreWorkingDirectory(leafState.vaultDirectoryPath);
     }
-    if (leafState.sessionPath) this.pendingSessionPath = leafState.sessionPath;
+    if (leafState.sessionPath && leafState.sessionPath !== this.activeTab()?.sessionFile) {
+      this.pendingSessionPath = leafState.sessionPath;
+    }
     const navigation = parseNavigationState(state);
     result.history = this.viewNavigation.shouldRecordHistory(navigation);
     this.pendingNavigation = navigation;
@@ -380,7 +396,7 @@ export class ChatobbyView extends ItemView {
     // Feature screens are session-bound. Refresh the frontend bootstrap before
     // their controllers issue a screen request, or the request can race a
     // concurrent bootstrap and remain pending until the user refreshes again.
-    await this.activateSessionContext();
+    if (activateSession) await this.activateSessionContext();
     await this.viewNavigation.apply(navigation);
   }
 
@@ -396,13 +412,14 @@ export class ChatobbyView extends ItemView {
     this.buildComponents();
     this.componentsReady = true;
     await this.plugin.registerChatView(this);
+    await this.activateSessionContext();
     await this.viewNavigation.apply(this.pendingNavigation);
     this.plugin.setChatViewVisible(this, true);
     this.contentEl.addEventListener("keydown", this.handleViewKeydown, true);
     this.contentEl.addEventListener("chatobby:open-subagents", this.handleOpenSubagents);
     this.contentEl.addEventListener("chatobby:open-channels", this.handleOpenChannels);
-    this.bindCurrentTransport();
     this.unsubscribeFrontendStore = this.frontendStore.subscribe((snapshot) => this.scheduleFrontendSnapshot(snapshot));
+    this.bindCurrentTransport();
     this.runtimeLifecycle.open();
   }
 
@@ -421,6 +438,7 @@ export class ChatobbyView extends ItemView {
     this.frontendApplyTimer = null;
     this.pendingFrontendSnapshot = null;
     this.appliedFrontendSnapshot = null;
+	this.pendingFeedCatchup = false;
     this.frontendProtocol.destroy();
     this.boundTransport = null;
     this.liveStats.dispose();
@@ -491,7 +509,7 @@ export class ChatobbyView extends ItemView {
   }
   /** Abort the current generation (command palette). */
   commandAbort(): void {
-    this.getTransport()?.abort().catch(() => { });
+    this.abortCurrentTurn();
   }
 
   /** Trigger context compaction (command palette). */
@@ -618,7 +636,7 @@ export class ChatobbyView extends ItemView {
     this.composer = new Composer({
       send: (msg, att, signal) => this.sendPrompt(msg, att, signal),
       steer: (msg) => this.steerPrompt(msg),
-      abort: () => this.getTransport()?.abort().catch(() => { }),
+      abort: () => this.abortCurrentTurn(),
       canAbort: () => this.getTransport()?.isConnected ?? false,
       getSessionState: () => this.sessionState,
       getSessionPreferences: () => this.plugin.getSessionPreferences(),
@@ -805,6 +823,9 @@ export class ChatobbyView extends ItemView {
         PROMPT_START_TIMEOUT_MS,
         "Prompt did not start",
       );
+		void this.plugin.completeOnboarding()
+			.then(() => removeOnboardingPanel(this.getFeedStore()))
+			.catch((error) => console.error("Chatobby: failed to complete onboarding", error));
     } catch (error) {
       this.renderPromptFailure(message, error);
       throw error;
@@ -912,23 +933,6 @@ export class ChatobbyView extends ItemView {
     throw new Error(result.notice?.message ?? "Chatobby rejected the session change");
   }
 
-  private createFrontendBootstrapRequest(): FrontendBootstrapRequest {
-    const capabilities = this.gatherContext().capabilities;
-    const runtimeApp = this.app as typeof this.app & { version?: string };
-    return {
-      schemaVersion: FRONTEND_SCHEMA_VERSION,
-      connectorVersion: this.plugin.manifest.version,
-      obsidianVersion: runtimeApp.version ?? this.plugin.manifest.minAppVersion,
-      vaultInstanceId: this.app.vault.getName(),
-      viewId: this.runtimeChannelId,
-      supportedProtocolVersions: [CHATOBBY_FRONTEND_PROTOCOL_VERSION],
-      capabilities: {
-        featureFamilies: capabilities?.featureFamilies ?? [],
-        integrations: capabilities?.integrations ?? [],
-      },
-    };
-  }
-
   private scheduleFrontendSnapshot(snapshot: FrontendBootstrap): void {
     this.pendingFrontendSnapshot = snapshot;
     const generationCompleted = this.appliedFrontendSnapshot?.session?.streaming === true
@@ -966,12 +970,10 @@ export class ChatobbyView extends ItemView {
     if (session && sessionChanged) {
       this.sessions.applyRuntimeSession(session);
     }
-    if (feedChanged) {
-      this.getFeedStore().dispatch({
-        type: "feed.document-projection-synchronized",
-        projection: toFeedDocumentProjection(snapshot.feed),
-      });
-    }
+	if (feedChanged) {
+		if (this.viewMode === "chat") this.synchronizeFrontendFeed(snapshot);
+		else this.pendingFeedCatchup = true;
+	}
     if (sessionChanged && previous.isStreaming !== (session?.streaming ?? false)) {
       this.getFeedStore().dispatch({
         type: "feed.runtime-activity-synchronized",
@@ -1049,6 +1051,7 @@ export class ChatobbyView extends ItemView {
       openPermissions: () => this.openPermissionPolicyScreen(),
       openMemory: (actionId) => this.overlayScreens.memory.openFromExtensionAction(actionId),
       openSubagents: (tab) => this.openSubagentSessionsScreen(undefined, tab),
+		openSettings: () => this.plugin.openSettings(),
     });
   }
 
@@ -1290,9 +1293,21 @@ export class ChatobbyView extends ItemView {
 
   private renderViewMode(): void {
     renderShellViewMode(this.shell, this.viewMode, Boolean(this.activeTab()));
+		const chatVisible = this.viewMode === "chat";
+		if (chatVisible && this.pendingFeedCatchup && this.appliedFrontendSnapshot) {
+			this.synchronizeFrontendFeed(this.appliedFrontendSnapshot);
+		}
+		this.feed?.setActive(chatVisible);
+		this.toolbar?.setActive(chatVisible);
+		this.liveStats.setActive(chatVisible);
 		this.refreshTabBar();
     this.sessionAgentRail.refresh();
   }
+
+	private synchronizeFrontendFeed(snapshot: FrontendBootstrap): void {
+		syncFrontendFeedProjection(this.getFeedStore(), snapshot, this.plugin.settings.onboardingVersion, this.plugin.configuredProviders().length > 0);
+		this.pendingFeedCatchup = false;
+	}
 
   private finishOverlayClose(mode: OverlayViewMode | "subagents" | "channels", renderChat: boolean): void {
     if (this.viewMode === mode) this.viewMode = "chat";

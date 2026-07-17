@@ -30,7 +30,12 @@ export class EventsScreenController {
     this.view?.destroy();
     this.view = new EventsView({
       getModel: () => this.currentModel(),
-      subscribe: (listener) => this.options.getStore().subscribe(() => listener(this.currentModel())),
+      subscribe: (listener) => this.options.getStore().subscribeSelector(
+        (snapshot) => snapshot.screenModels.find(
+          (screen): screen is FrontendEventScreenViewModel => screen.screenId === "events",
+        ) ?? null,
+        listener,
+      ),
       onBack: () => this.close(),
       onRefresh: () => this.refresh(),
       onIntent: (intent) => this.dispatch(intent),
@@ -58,8 +63,12 @@ export class EventsScreenController {
   private async refresh(): Promise<void> {
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) return;
-    await this.options.getProtocol().loadScreen({ schemaVersion: 1, viewId: snapshot.viewId, screenId: "events" });
-    this.view?.setLocalError(null);
+    try {
+      await this.options.getProtocol().loadScreen({ schemaVersion: 1, viewId: snapshot.viewId, screenId: "events" });
+      this.view?.setLocalError(null);
+    } catch (error) {
+      this.view?.setLocalError(errorMessage(error));
+    }
   }
 
   private async dispatch(input: EventViewIntent): Promise<void> {
@@ -70,7 +79,6 @@ export class EventsScreenController {
       intentId: crypto.randomUUID(),
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session?.id,
-      expectedRevision: snapshot.revision,
       ...input,
     } as FrontendIntent;
     const outcome = await this.options.getProtocol().dispatch(intent);
@@ -85,4 +93,8 @@ export class EventsScreenController {
       (screen): screen is FrontendEventScreenViewModel => screen.screenId === "events",
     ) ?? null;
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

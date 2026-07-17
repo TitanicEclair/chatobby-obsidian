@@ -52,8 +52,15 @@ export class SubagentStore {
   private readonly unsubscribeFrontend: () => void;
 
   constructor(frontendStore: FrontendStore) {
-    this.unsubscribeFrontend = frontendStore.subscribe(() => this.synchronize(frontendStore));
-    this.synchronize(frontendStore);
+    this.unsubscribeFrontend = frontendStore.subscribeSelector(
+      (snapshot) => snapshot.screenModels.find(
+        (screen): screen is FrontendSubagentScreenViewModel => screen.screenId === "subagents",
+      ),
+      (model) => this.synchronize(model),
+    );
+    this.synchronize(frontendStore.snapshot?.screenModels.find(
+      (screen): screen is FrontendSubagentScreenViewModel => screen.screenId === "subagents",
+    ));
   }
 
   getSnapshot(): SubagentViewState {
@@ -70,10 +77,7 @@ export class SubagentStore {
     this.listeners.clear();
   }
 
-  private synchronize(frontendStore: FrontendStore): void {
-    const model = frontendStore.snapshot?.screenModels.find(
-      (screen): screen is FrontendSubagentScreenViewModel => screen.screenId === "subagents",
-    );
+  private synchronize(model: FrontendSubagentScreenViewModel | undefined): void {
     if (!model) return;
     this.state = toViewState(model);
     for (const listener of this.listeners) listener(this.state);

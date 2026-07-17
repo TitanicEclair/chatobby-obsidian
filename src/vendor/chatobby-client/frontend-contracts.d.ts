@@ -104,6 +104,7 @@ export interface FrontendToolActivityViewModel {
 export type FrontendFeedBlock = {
     readonly type: "user" | "system";
     readonly id: string;
+    readonly turnId?: string;
     readonly text: string;
     readonly images?: readonly {
         readonly data: string;
@@ -345,6 +346,8 @@ export interface FrontendPermissionProfileViewModel {
     readonly canActivate: boolean;
     readonly canEdit: boolean;
     readonly canDelete: boolean;
+    readonly deleteReplacementRequired: boolean;
+    readonly deleteImpactLabel?: string;
     readonly duplicateLabel: string;
 }
 export interface FrontendPermissionChannelGrantViewModel {
@@ -366,6 +369,7 @@ export interface FrontendPermissionAdvancedGroupViewModel {
 export interface FrontendPermissionScreenViewModel {
     readonly screenId: "permissions";
     readonly revision: number;
+    readonly profileRevision: number;
     readonly loading: boolean;
     readonly error?: string;
     readonly statusMessage?: string;
@@ -925,11 +929,14 @@ export interface FrontendSubscriptionRequest {
     readonly schemaVersion: 1;
     readonly viewId: string;
     readonly afterSequence?: number;
+    /** Capable clients request authoritative frontend patches without duplicate legacy session frames. */
+    readonly deliveryMode?: "patch-only";
 }
 export interface FrontendSubscriptionAck {
     readonly runtimeInstanceId: string;
     readonly sequence: number;
     readonly revision: number;
+    readonly deliveryMode: "patch-and-legacy" | "patch-only";
 }
 interface FrontendIntentBase {
     readonly schemaVersion: 1;
@@ -937,6 +944,9 @@ interface FrontendIntentBase {
     readonly viewId: string;
     readonly mainSessionId?: string;
     readonly expectedRevision?: number;
+}
+interface FrontendPermissionRevisionPayload {
+    readonly expectedProfileRevision: number;
 }
 export type FrontendIntent = (FrontendIntentBase & {
     readonly type: "session.create";
@@ -1001,6 +1011,7 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly payload: {
         readonly channelId: string;
         readonly archived: boolean;
+        readonly expectedChannelRevision: number;
     };
 }) | (FrontendIntentBase & {
     readonly type: "memory.decide-candidate";
@@ -1052,6 +1063,7 @@ export type FrontendIntent = (FrontendIntentBase & {
 }) | (FrontendIntentBase & {
     readonly type: "memory.update-policy";
     readonly payload: {
+        readonly expectedMemoryRevision: number;
         readonly backgroundLearning?: "off" | "suggest" | "auto";
         readonly correctionLearning?: "off" | "suggest" | "auto";
         readonly promptRouting?: "off" | "profile-project" | "hybrid";
@@ -1089,34 +1101,40 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly profileId: string;
     };
 }) | (FrontendIntentBase & {
-    readonly type: "permissions.activate-profile" | "permissions.duplicate-profile" | "permissions.delete-profile";
-    readonly payload: {
+    readonly type: "permissions.activate-profile" | "permissions.duplicate-profile";
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
     };
 }) | (FrontendIntentBase & {
+    readonly type: "permissions.delete-profile";
+    readonly payload: FrontendPermissionRevisionPayload & {
+        readonly profileId: string;
+        readonly replacementProfileId?: string;
+    };
+}) | (FrontendIntentBase & {
     readonly type: "permissions.update-profile";
-    readonly payload: {
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly name: string;
         readonly description: string;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.set-capability";
-    readonly payload: {
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly capabilityId: string;
         readonly decision: FrontendPermissionDecision;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.set-target";
-    readonly payload: {
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly keys: readonly string[];
         readonly decision: FrontendPermissionDecision;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.set-rule";
-    readonly payload: {
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly section: string;
         readonly pattern: string;
@@ -1124,20 +1142,20 @@ export type FrontendIntent = (FrontendIntentBase & {
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.remove-rule";
-    readonly payload: {
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly section: string;
         readonly pattern: string;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.add-channel" | "permissions.remove-channel";
-    readonly payload: {
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly channelId: string;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.set-channel";
-    readonly payload: {
+    readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly channelId: string;
         readonly action: "connect" | "read" | "send";

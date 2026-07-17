@@ -16,24 +16,27 @@ export class SubagentBlockView extends ChatobbyComponent {
     container.toggleClass("is-error", activity.status === "failed");
 
     const header = container.createDiv({ cls: "chatobby-subagent__header" });
-    const iconEl = header.createSpan({ cls: "chatobby-subagent__icon" });
-    setIcon(iconEl, iconForStatus(activity.status));
-    if (activity.status === "running" || activity.status === "created" || activity.status === "steered") iconEl.addClass("is-spinning");
+	const working = activity.status === "running" || activity.status === "created" || activity.status === "steered";
+	container.setAttr("aria-label", `${activity.name ?? activity.type}: ${statusLabel(activity)}`);
+	if (working) {
+		const iconEl = header.createSpan({ cls: "chatobby-subagent__icon is-spinning" });
+		setIcon(iconEl, "loader-circle");
+		iconEl.setAttr("role", "img");
+		iconEl.setAttr("aria-label", statusLabel(activity));
+		iconEl.setAttr("title", statusLabel(activity));
+	}
 
     const titleEl = header.createDiv({ cls: "chatobby-subagent__title" });
     titleEl.createSpan({ cls: "chatobby-subagent__label", text: activity.name ?? activity.type });
     if (activity.description !== "Subagent activity") {
       titleEl.createSpan({ cls: "chatobby-subagent__description", text: activity.description });
     }
-    header.createSpan({ cls: "chatobby-subagent__status", text: statusLabel(activity) });
-
     if (activity.source === "chatobby-supervisor") {
       const open = header.createEl("button", {
         cls: "chatobby-subagent__open clickable-icon",
         attr: { type: "button", title: "Open agent feed", "aria-label": "Open agent feed" },
       });
       setIcon(open, "panel-right-open");
-      open.createSpan({ text: "Open" });
       open.addEventListener("click", () => {
         open.dispatchEvent(new CustomEvent("chatobby:open-subagents", {
           bubbles: true,
@@ -63,22 +66,6 @@ export class SubagentBlockView extends ChatobbyComponent {
 
   protected componentClass(): string {
     return "chatobby-subagent";
-  }
-}
-
-function iconForStatus(status: SubagentActivity["status"]): string {
-  switch (status) {
-    case "completed":
-      return "check";
-    case "failed":
-      return "alert-circle";
-    case "steered":
-      return "send";
-    case "waiting":
-      return "circle-dot";
-    case "created":
-    case "running":
-      return "loader-circle";
   }
 }
 

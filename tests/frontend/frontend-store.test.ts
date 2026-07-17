@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FrontendResyncRequiredError, FrontendStore } from "../../src/frontend/frontend-store";
 import type { FrontendBootstrap, FrontendPatch } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 
@@ -53,6 +53,52 @@ describe("FrontendStore", () => {
     store.apply(createPatch(1, 0, [{ type: "task-plan.replace", taskPlan }]));
 
     expect(store.snapshot?.taskPlan).toEqual(taskPlan);
+  });
+
+  it("replays an existing bootstrap to late subscribers", () => {
+    const store = new FrontendStore();
+    const snapshot = bootstrap();
+    store.replace(snapshot);
+    const listener = vi.fn();
+
+    store.subscribe(listener);
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith(snapshot);
+  });
+
+  it("does not notify a screen selector for 1,000 feed-only appends", () => {
+    const store = new FrontendStore();
+    const permissionModel = { screenId: "permissions", revision: 1 } as FrontendBootstrap["screenModels"][number];
+	const eventModel = { screenId: "events", revision: 1 } as FrontendBootstrap["screenModels"][number];
+    store.replace({
+      ...bootstrap(),
+      feed: {
+        revision: 1,
+        blocks: [{ type: "text", id: "response", text: "", phase: "streaming" }],
+      },
+	  screenModels: [permissionModel, eventModel],
+    });
+    const listener = vi.fn();
+	const eventListener = vi.fn();
+    store.subscribeSelector(
+      (snapshot) => snapshot.screenModels.find((screen) => screen.screenId === "permissions"),
+      listener,
+    );
+	store.subscribeSelector(
+		(snapshot) => snapshot.screenModels.find((screen) => screen.screenId === "events"),
+		eventListener,
+	);
+
+    for (let sequence = 1; sequence <= 1_000; sequence += 1) {
+      store.apply(createPatch(sequence, sequence - 1, [
+        { type: "feed.text.append", blockId: "response", text: "x" },
+      ]));
+    }
+
+    expect(listener).not.toHaveBeenCalled();
+	expect(eventListener).not.toHaveBeenCalled();
+    expect(store.snapshot?.feed.blocks[0]).toMatchObject({ text: "x".repeat(1_000) });
   });
 });
 

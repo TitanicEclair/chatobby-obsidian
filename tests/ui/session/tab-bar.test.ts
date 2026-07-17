@@ -34,6 +34,8 @@ describe("TabBar", () => {
 		expect(element.querySelectorAll(".chatobby-tab-bar__action")).toHaveLength(8);
 		expect(element.querySelector<HTMLButtonElement>("[data-mode='memory']")?.getAttribute("aria-pressed")).toBe("true");
 		expect(element.querySelector<HTMLButtonElement>("[data-mode='memory']")?.getAttribute("aria-current")).toBe("page");
+		element.querySelector<HTMLButtonElement>("[data-mode='memory']")?.click();
+		expect(onNavigate).not.toHaveBeenCalled();
 		element.querySelector<HTMLButtonElement>("[data-mode='events']")?.click();
 		expect(onNavigate).toHaveBeenCalledWith("events");
 		element.querySelector<HTMLButtonElement>("[aria-label='Open new Chatobby view']")?.click();

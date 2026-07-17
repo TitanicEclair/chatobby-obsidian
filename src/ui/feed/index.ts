@@ -1,5 +1,6 @@
 import { htmlToMarkdown, type App, type Component } from "obsidian";
 import type { ExtensionPanelAction, FeedBlock, ThinkingDisplay, ThinkingDisplayMode } from "../../types";
+import { chatobbyPerformance } from "../../frontend/performance-monitor";
 import {
   blockId,
   feedSelectors,
@@ -8,10 +9,7 @@ import {
   type FeedSubscription,
 } from "../../features/feed/public";
 import { ChatobbyComponent } from "../shared/component";
-import {
-  SCROLL_BOTTOM_THRESHOLD_PX,
-  STREAM_TEXT_DEBOUNCE_MS,
-} from "../shared/constants";
+import { SCROLL_BOTTOM_THRESHOLD_PX, STREAM_TEXT_DEBOUNCE_MS } from "../shared/constants";
 import { CompactionBlockView } from "./compaction-block";
 import { ExtensionPanelBlockView } from "./extension-panel-block";
 import { preserveComposerFocusForFeedControl } from "./feed-focus";
@@ -25,8 +23,8 @@ import { ThinkingBlockView } from "./thinking-block";
 import { ToolBlockView } from "./tools/tool-block";
 import { TurnSummaryView } from "./turn-summary";
 import { UserBlockView } from "./user-block";
+import { hasLiveTiming, isInteractiveTarget, isTickable, renderKeyForCommit } from "./feed-render-policy";
 
-interface Tickable { tick(): void; }
 /** Narrow presentation commands exposed to feed block views. */
 export interface FeedViewActions {
   setScroll(isAtBottom: boolean, scrollTop: number): void;
@@ -95,6 +93,9 @@ export class FeedRenderer extends ChatobbyComponent {
   private autoScroll: boolean;
   private viewMode: "reading" | "source" = "reading";
   private sourceDirty = true;
+  private active = true;
+  private dirtyWhileInactive = false;
+	private pendingInteraction: InteractionCard | null | undefined;
 
   constructor(private readonly host: FeedHost) {
     super();
@@ -114,10 +115,44 @@ export class FeedRenderer extends ChatobbyComponent {
     this.bottomPinned = store.select(feedSelectors.scroll).isAtBottom;
     this.storeSubscription = store.subscribe((commit) => this.onCommit(commit));
     this.resetPendingCommit();
-    if (this.blocksEl) this.renderFullStore();
+    if (this.blocksEl && this.active) this.renderFullStore();
+    else this.dirtyWhileInactive = true;
+  }
+
+  /** Suspend presentation work while another Chatobby screen covers the feed. */
+  setActive(active: boolean): void {
+    if (this.active === active) return;
+    this.active = active;
+    if (!active) {
+      this.stopRenderTimer();
+      if (this.tickRaf) cancelAnimationFrame(this.tickRaf);
+      this.tickRaf = null;
+      if (this.pinRaf) cancelAnimationFrame(this.pinRaf);
+      this.pinRaf = 0;
+      this.contentResizeObserver?.disconnect();
+      return;
+    }
+    if (this.blocksEl) this.contentResizeObserver?.observe(this.blocksEl);
+	if (this.pendingInteraction !== undefined && this.interactionsEl) {
+		this.interactionsEl.empty();
+		this.pendingInteraction?.render(this.interactionsEl);
+		this.pendingInteraction = undefined;
+	}
+    if (this.dirtyWhileInactive) {
+      this.dirtyWhileInactive = false;
+      this.flushPendingCommit();
+    }
+    const blocks = this.currentBlocks();
+    this.syncLiveTimer(blocks);
+	this.updateJumpPill(this.store.select(feedSelectors.scroll).isAtBottom);
+    this.maybeScrollToBottom();
   }
 
   mountInteraction(card: InteractionCard): void {
+	if (!this.active) {
+		this.pendingInteraction = card;
+		return;
+	}
     if (!this.interactionsEl) return;
     this.interactionsEl.empty();
     card.render(this.interactionsEl);
@@ -125,6 +160,10 @@ export class FeedRenderer extends ChatobbyComponent {
   }
 
   clearInteraction(): void {
+	if (!this.active) {
+		this.pendingInteraction = null;
+		return;
+	}
     this.interactionsEl?.empty();
   }
 
@@ -245,6 +284,10 @@ export class FeedRenderer extends ChatobbyComponent {
 
   private onCommit(commit: FeedCommit): void {
     this.mergeCommit(commit);
+    if (!this.active) {
+      this.dirtyWhileInactive = true;
+      return;
+    }
     const renderKey = renderKeyForCommit(commit);
     if (!renderKey || renderKey.flush || renderKey.delayMs === 0) {
       this.flushPendingCommit();
@@ -260,11 +303,16 @@ export class FeedRenderer extends ChatobbyComponent {
     for (const id of commit.changes.removedBlockIds) this.pendingRemovedIds.add(id);
     this.pendingOrderChanged ||= commit.changes.orderChanged;
     this.pendingDocumentChanged ||= commit.changes.documentChanged;
-    if (commit.changes.scrollChanged) this.updateJumpPill(this.store.select(feedSelectors.scroll).isAtBottom);
+	if (this.active && commit.changes.scrollChanged) {
+		this.updateJumpPill(this.store.select(feedSelectors.scroll).isAtBottom);
+	}
   }
 
   private flushPendingCommit(): void {
-    if (!this.blocksEl) return;
+    if (!this.blocksEl || !this.active) {
+      this.dirtyWhileInactive = true;
+      return;
+    }
     const order = this.store.select(feedSelectors.orderedBlockIds);
     const visibleIds = new Set(order);
     this.blocksEl.querySelector(".chatobby-feed__empty")?.remove();
@@ -284,6 +332,7 @@ export class FeedRenderer extends ChatobbyComponent {
     this.syncLiveTimer(blocks);
     this.scrollEl?.setAttr("aria-busy", String(hasLiveTiming(this.store, blocks)));
     this.resetPendingCommit();
+	chatobbyPerformance.recordRetainedDomNodes(this.blocksEl.querySelectorAll("*").length);
     this.maybeScrollToBottom();
   }
 
@@ -308,6 +357,7 @@ export class FeedRenderer extends ChatobbyComponent {
     this.updateJumpPill(scroll.isAtBottom);
     this.syncLiveTimer(blocks);
     this.scrollEl?.setAttr("aria-busy", String(hasLiveTiming(this.store, blocks)));
+	chatobbyPerformance.recordRetainedDomNodes(this.blocksEl.querySelectorAll("*").length);
   }
 
   private currentBlocks(): FeedBlock[] {
@@ -392,7 +442,7 @@ export class FeedRenderer extends ChatobbyComponent {
    *  bottom on large blocks. Re-pin only while following — never yank a reader
    *  who scrolled up — and coalesce to one scroll per animation frame. */
   private onContentResized(): void {
-    if (this.pinRaf) return;
+    if (!this.active || this.pinRaf) return;
     this.pinRaf = requestAnimationFrame(() => {
       this.pinRaf = 0;
       if (!this.scrollEl) return;
@@ -499,7 +549,7 @@ export class FeedRenderer extends ChatobbyComponent {
   }
 
   private ensureRenderTimer(): void {
-    if (this.renderTimer) return;
+    if (!this.active || this.renderTimer) return;
     this.lastRenderTime = Date.now();
     this.renderTimer = setInterval(() => {
       if (!this.contentDirty) return;
@@ -517,7 +567,7 @@ export class FeedRenderer extends ChatobbyComponent {
   }
 
   private syncLiveTimer(blocks: readonly FeedBlock[]): void {
-    const needsTimer = hasLiveTiming(this.store, blocks);
+    const needsTimer = this.active && hasLiveTiming(this.store, blocks);
     if (needsTimer && !this.tickRaf) {
       this.lastTick = 0;
       this.scheduleTick();
@@ -529,6 +579,7 @@ export class FeedRenderer extends ChatobbyComponent {
   }
 
   private scheduleTick(): void {
+    if (!this.active) return;
     this.tickRaf = requestAnimationFrame(() => {
       this.tickRaf = null;
       const now = Date.now();
@@ -536,7 +587,7 @@ export class FeedRenderer extends ChatobbyComponent {
         this.lastTick = now;
         for (const mount of this.blockMounts.values()) if (isTickable(mount.view)) mount.view.tick();
       }
-      if ([...this.blockMounts.values()].some((mount) => isTickable(mount.view))) this.scheduleTick();
+      if (this.active && [...this.blockMounts.values()].some((mount) => isTickable(mount.view))) this.scheduleTick();
     });
   }
 
@@ -588,34 +639,4 @@ function createView(host: FeedHost, block: FeedBlock): ChatobbyComponent {
     case "subagent-communication": return new SubagentCommunicationBlockView(block, host);
     case "extension-panel": return new ExtensionPanelBlockView(host, block);
   }
-}
-
-function renderKeyForCommit(commit: FeedCommit): { delayMs: number; flush: boolean } | null {
-  if (commit.action.type !== "feed.document-projection-synchronized") return null;
-  const hasStreamingContent = commit.action.projection.blocks.some((block) =>
-    (block.type === "text" || block.type === "thinking" || block.type === "tools") && block.status === "streaming");
-  return hasStreamingContent
-    ? { delayMs: STREAM_TEXT_DEBOUNCE_MS, flush: false }
-    : { delayMs: 0, flush: true };
-}
-
-function hasLiveTiming(store: FeedStore, blocks: readonly FeedBlock[]): boolean {
-  if (store.select(feedSelectors.runTiming).runStartedAt != null) return true;
-  return blocks.some((block) => {
-    if (block.type === "thinking" || block.type === "text") return block.status === "streaming" && block.startedAt != null;
-    if (block.type === "tools") return block.items.some((item) => item.status === "running" && item.startTime != null);
-    return block.type === "subagent" && block.status === "streaming";
-  });
-}
-
-function isTickable(view: unknown): view is Tickable {
-  return typeof view === "object" && view !== null && typeof (view as Tickable).tick === "function";
-}
-
-const INTERACTIVE_SELECTOR = [
-  "button", "a[href]", "input", "select", "textarea", "[role='button']", "[role='menuitem']", ".chatobby-interaction-card",
-].join(",");
-
-function isInteractiveTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
 }

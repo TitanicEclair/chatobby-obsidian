@@ -36,7 +36,12 @@ export class MemoryScreenController {
     this.view?.destroy();
     this.view = new MemoryView({
       getModel: () => this.currentModel(),
-      subscribe: (listener) => this.options.getStore().subscribe(() => listener(this.currentModel())),
+      subscribe: (listener) => this.options.getStore().subscribeSelector(
+        (snapshot) => snapshot.screenModels.find(
+          (screen): screen is FrontendMemoryScreenViewModel => screen.screenId === "memory",
+        ) ?? null,
+        listener,
+      ),
       onBack: () => this.close(),
       onRefresh: () => this.refresh(),
       onIntent: (intent) => this.dispatch(intent),
@@ -71,24 +76,30 @@ export class MemoryScreenController {
   private async refresh(): Promise<void> {
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) return;
-    await this.options.getProtocol().loadScreen({
-      schemaVersion: 1,
-      viewId: snapshot.viewId,
-      screenId: "memory",
-    });
-    this.view?.setLocalError(null);
+    try {
+      await this.options.getProtocol().loadScreen({
+        schemaVersion: 1,
+        viewId: snapshot.viewId,
+        screenId: "memory",
+      });
+      this.view?.setLocalError(null);
+    } catch (error) {
+      this.view?.setLocalError(errorMessage(error));
+    }
   }
 
   private async dispatch(input: MemoryViewIntent): Promise<void> {
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) throw new Error("Chatobby frontend is not initialized");
-    const intent = {
+	const revisionedInput = input.type === "memory.update-policy"
+		? { ...input, payload: { ...input.payload, expectedMemoryRevision: this.currentModel()?.revision ?? 0 } }
+		: input;
+	const intent = {
       schemaVersion: 1 as const,
       intentId: crypto.randomUUID(),
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session?.id,
-      expectedRevision: snapshot.revision,
-      ...input,
+	  ...revisionedInput,
     } as FrontendIntent;
     const outcome = await this.options.getProtocol().dispatch(intent);
     if (outcome.status === "rejected" || outcome.status === "conflict") {
@@ -102,4 +113,8 @@ export class MemoryScreenController {
       (screen): screen is FrontendMemoryScreenViewModel => screen.screenId === "memory",
     ) ?? null;
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

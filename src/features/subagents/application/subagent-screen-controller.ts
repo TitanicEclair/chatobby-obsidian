@@ -208,7 +208,6 @@ export class SubagentScreenController {
       intentId: crypto.randomUUID(),
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session?.id,
-      expectedRevision: snapshot.revision,
       ...input,
     } as FrontendIntent;
     this.view?.setActionStatus(actionStatus(input.type));

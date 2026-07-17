@@ -11,6 +11,9 @@ export interface WsClientOptions {
     onClose?: () => void;
     runtime?: Omit<RuntimeClientHello, "type">;
     helloTimeout?: number;
+    connectTimeout?: number;
+    requestTimeout?: number;
+    disconnectTimeout?: number;
 }
 type ExtensionUIHandler = (request: WsExtensionUIRequest) => Promise<unknown>;
 /**

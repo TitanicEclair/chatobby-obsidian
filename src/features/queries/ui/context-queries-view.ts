@@ -92,7 +92,7 @@ export class ContextQueriesView extends ChatobbyComponent {
     const error = this.localError ?? model?.error;
     if (error) renderNotice(body, error, true);
     if (!model) {
-      renderEmpty(body, "loader-circle", "Loading project queries…");
+      renderEmpty(body, error ? "alert-circle" : "loader-circle", error ? "Project queries are unavailable." : "Loading project queries…");
       return;
     }
     if (model.statusMessage) renderNotice(body, model.statusMessage, false);

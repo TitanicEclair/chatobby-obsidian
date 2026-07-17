@@ -16,6 +16,7 @@ export class LiveStatsController {
   private inFlight = false;
   private queued = false;
   private disposed = false;
+  private active = true;
 
   constructor(private readonly options: LiveStatsControllerOptions) {}
 
@@ -54,7 +55,7 @@ export class LiveStatsController {
   }
 
   start(): void {
-    if (this.disposed || this.timer !== null) return;
+    if (this.disposed || !this.active || this.timer !== null) return;
     void this.refresh();
     this.timer = setInterval(() => void this.refresh(), LIVE_STATS_POLL_MS);
   }
@@ -68,6 +69,13 @@ export class LiveStatsController {
   sync(): void {
     const session = this.options.getSessionState();
     if (this.options.getTransport()?.isConnected && (session.isStreaming || session.isCompacting)) this.start();
+    else this.stop();
+  }
+
+  setActive(active: boolean): void {
+    if (this.active === active) return;
+    this.active = active;
+    if (active) this.sync();
     else this.stop();
   }
 

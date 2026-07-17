@@ -18,6 +18,7 @@ import {
 
 /** Shape of the full data.json on disk. */
 interface PersistedData {
+	onboardingVersion?: number;
   runtimeMode?: string;
   runtimeAutoStart?: boolean;
   runtimeLifetime?: string;
@@ -55,6 +56,7 @@ export class SettingsStore {
     const runtimeMode = resolveRuntimeMode(data);
 
     Object.assign(this.settings, {
+		onboardingVersion: resolveOnboardingVersion(data),
       runtimeMode,
       runtimeAutoStart: data.runtimeAutoStart ?? DEFAULT_PLUGIN_SETTINGS.runtimeAutoStart,
       runtimeLifetime: data.runtimeLifetime === "background" ? "background" : "obsidian-session",
@@ -77,6 +79,7 @@ export class SettingsStore {
   /** Save everything to data.json in a single write. */
   private async save(): Promise<void> {
     await this.plugin.saveData({
+		onboardingVersion: this.settings.onboardingVersion,
       runtimeMode: this.settings.runtimeMode,
       runtimeAutoStart: this.settings.runtimeAutoStart,
       runtimeLifetime: this.settings.runtimeLifetime,
@@ -134,6 +137,13 @@ export class SettingsStore {
     await this.updateSettings({ providerKeys: nextProviderKeys });
   }
 
+}
+
+function resolveOnboardingVersion(data: PersistedData): number {
+	if (typeof data.onboardingVersion === "number" && Number.isSafeInteger(data.onboardingVersion)) {
+		return Math.max(0, data.onboardingVersion);
+	}
+	return Object.values(data.providerKeys ?? {}).some(Boolean) ? 1 : 0;
 }
 
 function isCommandShell(value: string | undefined): value is PluginSettings["commandShell"] {

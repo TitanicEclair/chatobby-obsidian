@@ -30,7 +30,12 @@ export class ChannelScreenController {
     this.view?.destroy();
     this.view = new ChannelsView({
       getModel: () => this.currentModel(),
-      subscribe: (listener) => this.options.getStore().subscribe(() => listener(this.currentModel())),
+      subscribe: (listener) => this.options.getStore().subscribeSelector(
+        (snapshot) => snapshot.screenModels.find(
+          (screen): screen is FrontendChannelScreenViewModel => screen.screenId === "channels",
+        ) ?? null,
+        listener,
+      ),
       onBack: () => this.close(),
       onRefresh: () => this.refresh(),
       onSelectChannel: (id) => this.dispatch("channel.select", { channelId: id }),
@@ -87,13 +92,19 @@ export class ChannelScreenController {
       intentId: crypto.randomUUID(),
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session?.id,
-      expectedRevision: snapshot.revision,
     };
     const intent: FrontendIntent = type === "channel.select"
       ? { ...base, type, payload: payload as { channelId: string } }
       : type === "channel.load-earlier"
         ? { ...base, type, payload: payload as { cursor: string } }
-        : { ...base, type, payload: payload as { channelId: string; archived: boolean } };
+		: {
+			...base,
+			type,
+			payload: {
+				...(payload as { channelId: string; archived: boolean }),
+				expectedChannelRevision: this.currentModel()?.revision ?? 0,
+			},
+		};
     const outcome = await this.options.getProtocol().dispatch(intent);
     if (outcome.status === "rejected" || outcome.status === "conflict") {
       const message = outcome.notice?.message ?? "The channel action could not be applied.";

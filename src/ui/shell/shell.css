@@ -13,6 +13,7 @@
   min-height: 0;
   padding: 0 !important;
   color: var(--text-normal);
+  font-size: var(--chatobby-body-size);
   font-family: var(--font-interface-theme);
   container-type: inline-size;
   overflow: hidden !important;

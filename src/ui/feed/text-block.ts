@@ -1,6 +1,7 @@
 import { setIcon } from "obsidian";
 import type { StopReason, TextBlock } from "../../types";
 import { ChatobbyComponent } from "../shared/component";
+import { chatobbyPerformance } from "../../frontend/performance-monitor";
 import { formatDuration } from "../shared/format";
 import { decorateAfterMarkdown } from "./decorations";
 import type { FeedHost } from "./index";
@@ -31,6 +32,7 @@ export class TextBlockView extends ChatobbyComponent {
 
   complete(stopReason?: StopReason): void {
     if (this.block) this.block = { ...this.block, status: "complete", stopReason };
+    this.renderMarkdown();
     this.updateLabel();
     this.container?.removeClass("is-streaming");
     this.updateCopyButton();
@@ -89,7 +91,19 @@ export class TextBlockView extends ChatobbyComponent {
   private renderMarkdown(): void {
     if (!this.contentEl || !this.block) return;
     this.contentEl.empty();
+    if (this.block.status === "streaming") {
+      this.contentEl.addClass("is-streaming-text");
+      this.contentEl.textContent = this.block.text;
+      return;
+    }
+    this.contentEl.removeClass("is-streaming-text");
+	const startedAt = performance.now();
     const rendered = this.host.renderMarkdown(this.block.text, this.contentEl);
+	if (rendered instanceof Promise) {
+		void rendered.finally(() => chatobbyPerformance.recordMarkdownRender(performance.now() - startedAt));
+	} else {
+		chatobbyPerformance.recordMarkdownRender(performance.now() - startedAt);
+	}
     decorateAfterMarkdown(this.contentEl, rendered, {
       openVaultLink: (path) => this.host.openVaultLink(path),
       openSystemPath: (path) => this.host.openSystemPath(path),

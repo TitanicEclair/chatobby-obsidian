@@ -391,6 +391,19 @@ export default class ChatobbyPlugin extends Plugin {
     await this.store.rememberSessionPreferences(patch);
   }
 
+	openSettings(): void {
+		const app = this.app as typeof this.app & {
+			setting?: { open(): void; openTabById(id: string): void };
+		};
+		app.setting?.open();
+		app.setting?.openTabById(this.manifest.id);
+	}
+
+	async completeOnboarding(): Promise<void> {
+		if (this.settings.onboardingVersion >= 1) return;
+		await this.updateSettings({ onboardingVersion: 1 });
+	}
+
   getActiveVaultDirectory(): string {
     return this.settings.activeVaultDirectory;
   }

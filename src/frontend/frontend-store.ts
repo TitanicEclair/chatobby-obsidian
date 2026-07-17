@@ -5,6 +5,7 @@ import type {
   FrontendPatchOperation,
   FrontendScreenViewModel,
 } from "../vendor/chatobby-client/frontend-contracts.js";
+import { chatobbyPerformance } from "./performance-monitor";
 
 export class FrontendResyncRequiredError extends Error {
   constructor(message: string) {
@@ -19,6 +20,8 @@ export interface FrontendLocalOverlay {
 }
 
 type StoreListener = (snapshot: FrontendBootstrap) => void;
+type StoreSelector<T> = (snapshot: FrontendBootstrap) => T;
+type StoreSelectionListener<T> = (selection: T) => void;
 
 /**
  * Generic connector-side holder for runtime-owned read models.
@@ -29,6 +32,7 @@ export class FrontendStore {
   private readonly listeners = new Set<StoreListener>();
   private readonly expandedBlockIds = new Set<string>();
   private readonly drafts = new Map<string, string>();
+  private readonly feedBlockIndexes = new Map<string, number>();
 
   get snapshot(): FrontendBootstrap | null {
     return this.snapshotValue;
@@ -40,6 +44,7 @@ export class FrontendStore {
 
   replace(snapshot: FrontendBootstrap): void {
     this.snapshotValue = snapshot;
+    this.rebuildFeedBlockIndexes(snapshot.feed.blocks);
     this.emit();
   }
 
@@ -65,7 +70,16 @@ export class FrontendStore {
     }
 
     let next = snapshot;
-    for (const operation of patch.operations) next = applyOperation(next, operation);
+    for (const operation of patch.operations) {
+      next = applyOperation(next, operation, this.feedBlockIndexes);
+      if (
+        operation.type === "feed.document.replace" ||
+        operation.type === "feed.block.upsert" ||
+        operation.type === "feed.block.remove"
+      ) {
+        this.rebuildFeedBlockIndexes(next.feed.blocks);
+      }
+    }
     this.snapshotValue = { ...next, revision: patch.revision, sequence: patch.sequence };
     this.emit();
     return "applied";
@@ -83,16 +97,51 @@ export class FrontendStore {
 
   subscribe(listener: StoreListener): () => void {
     this.listeners.add(listener);
+    if (this.snapshotValue) listener(this.snapshotValue);
     return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Subscribe to one stable slice without replaying its current value.
+   * Screen renderers already synchronously read their initial model when they
+   * mount, so suppressing the initial replay avoids a duplicate first render.
+   */
+  subscribeSelector<T>(
+    selector: StoreSelector<T>,
+    listener: StoreSelectionListener<T>,
+    equals: (left: T, right: T) => boolean = Object.is,
+  ): () => void {
+    let hasSelection = this.snapshotValue !== null;
+    let selection = this.snapshotValue === null ? undefined : selector(this.snapshotValue);
+    const storeListener: StoreListener = (snapshot) => {
+      const next = selector(snapshot);
+      if (hasSelection && equals(selection as T, next)) return;
+      selection = next;
+      hasSelection = true;
+      listener(next);
+    };
+    this.listeners.add(storeListener);
+    return () => this.listeners.delete(storeListener);
   }
 
   private emit(): void {
     if (!this.snapshotValue) return;
+	const startedAt = performance.now();
     for (const listener of this.listeners) listener(this.snapshotValue);
+	chatobbyPerformance.recordStoreNotification(performance.now() - startedAt);
+  }
+
+  private rebuildFeedBlockIndexes(blocks: readonly FrontendFeedBlock[]): void {
+    this.feedBlockIndexes.clear();
+    for (const [index, block] of blocks.entries()) this.feedBlockIndexes.set(block.id, index);
   }
 }
 
-function applyOperation(snapshot: FrontendBootstrap, operation: FrontendPatchOperation): FrontendBootstrap {
+function applyOperation(
+  snapshot: FrontendBootstrap,
+  operation: FrontendPatchOperation,
+  feedBlockIndexes: ReadonlyMap<string, number>,
+): FrontendBootstrap {
   switch (operation.type) {
     case "session.replace":
       return { ...snapshot, session: operation.session };
@@ -106,7 +155,7 @@ function applyOperation(snapshot: FrontendBootstrap, operation: FrontendPatchOpe
       return { ...snapshot, feed: operation.feed };
     case "feed.block.upsert": {
       const blocks = [...snapshot.feed.blocks];
-      const existingIndex = blocks.findIndex((block) => block.id === operation.block.id);
+      const existingIndex = feedBlockIndexes.get(operation.block.id) ?? -1;
       if (existingIndex >= 0) blocks[existingIndex] = operation.block;
       else blocks.splice(Math.min(operation.index, blocks.length), 0, operation.block);
       return withFeedBlocks(snapshot, blocks);
@@ -114,12 +163,29 @@ function applyOperation(snapshot: FrontendBootstrap, operation: FrontendPatchOpe
     case "feed.block.remove":
       return withFeedBlocks(snapshot, snapshot.feed.blocks.filter((block) => block.id !== operation.blockId));
     case "feed.text.append":
-      return withFeedBlocks(snapshot, snapshot.feed.blocks.map((block) => appendText(block, operation.blockId, operation.text)));
+      return appendFeedText(snapshot, operation.blockId, operation.text, feedBlockIndexes);
     case "feed.turn.finalize":
       return withFeedBlocks(snapshot, snapshot.feed.blocks.map((block) => finalizeTurn(block, operation.turnId)));
     case "screen.replace":
       return withScreen(snapshot, operation.screen);
   }
+}
+
+function appendFeedText(
+  snapshot: FrontendBootstrap,
+  blockId: string,
+  text: string,
+  indexes: ReadonlyMap<string, number>,
+): FrontendBootstrap {
+  const index = indexes.get(blockId);
+  if (index === undefined) return snapshot;
+  const block = snapshot.feed.blocks[index];
+  if (!block) return snapshot;
+  const appended = appendText(block, blockId, text);
+  if (appended === block) return snapshot;
+  const blocks = [...snapshot.feed.blocks];
+  blocks[index] = appended;
+  return withFeedBlocks(snapshot, blocks);
 }
 
 function withScreen(snapshot: FrontendBootstrap, screen: FrontendScreenViewModel): FrontendBootstrap {

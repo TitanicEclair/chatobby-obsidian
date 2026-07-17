@@ -61,6 +61,18 @@ describe("SessionController", () => {
       name: "Recovered work",
       sessionFile: "C:/sessions/backend-session.jsonl",
     });
+    expect(renderActiveTab).toHaveBeenCalledOnce();
+  });
+
+  it("switches the visible feed when the first runtime session appears", () => {
+    const renderActiveTab = vi.fn();
+    const { controller } = harness({ renderActiveTab });
+    const emptyFeed = controller.feedStore();
+
+    controller.applyRuntimeSession(session("first-session"));
+
+    expect(controller.feedStore()).not.toBe(emptyFeed);
+    expect(renderActiveTab).toHaveBeenCalledOnce();
   });
 
   it("preserves the leaf-owned feed while refreshing session metadata", async () => {

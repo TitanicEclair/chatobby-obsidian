@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Fixed — first-run lifecycle and navigation reliability (2026-07-17)
+
+- Kept an active agent turn running when a Chatobby page or observer connection
+  closes, while retaining explicit Stop as the user-owned cancellation action.
+- Replayed the current frontend snapshot to newly mounted views and subscribed
+  before transport bootstrap so the first message and feature pages update
+  without a route-away/route-back refresh.
+- Made repeated clicks on the current or pending Chatobby destination a no-op,
+  preventing duplicate Obsidian history entries and extra Back presses.
+- Added bounded connector requests, backend commands, shell commands, arbitrary
+  tool execution, and unanswered permission prompts so stalled work resolves to
+  a visible error instead of waiting indefinitely.
+- Replaced indefinite feature-page loading states with actionable unavailable
+  messages when the runtime cannot answer.
+- Added an inline first-run guide for runtime connection, provider setup,
+  permission policy review, and sending the first prompt.
+- Preserved permission-page scroll position while live policy changes save and
+  restored Obsidian-sized typography throughout the Chatobby view.
+
 ### Added — public alpha distribution (2026-07-17)
 
 - Added official runtime-download recovery actions, public installation and

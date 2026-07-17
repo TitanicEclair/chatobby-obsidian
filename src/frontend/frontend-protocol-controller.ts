@@ -9,6 +9,7 @@ import type {
 } from "../vendor/chatobby-client/frontend-contracts.js";
 import { FRONTEND_RESYNC_MIN_INTERVAL_MS } from "../ui/shared/constants";
 import { FrontendResyncRequiredError, FrontendStore } from "./frontend-store";
+import { chatobbyPerformance } from "./performance-monitor";
 
 export interface FrontendProtocolControllerOptions {
   readonly store: FrontendStore;
@@ -76,10 +77,12 @@ export class FrontendProtocolController {
       schemaVersion: 1,
       viewId: request.viewId,
       afterSequence: bootstrap.sequence,
+	  deliveryMode: "patch-only",
     });
   }
 
   private handlePatch(patch: FrontendPatch): void {
+	chatobbyPerformance.recordPatch();
     try {
       this.options.store.apply(patch);
     } catch (error) {

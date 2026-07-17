@@ -100,6 +100,10 @@ export class SessionController {
     });
     this.runtimeMessageCount = session.messageCount;
     this.options.refreshTabBar();
+    // A newly projected runtime session owns a different feed store. Switch the
+    // visible renderer immediately so the first prompt and its live patches do
+    // not remain hidden in the new store until an unrelated navigation render.
+    if (identityChanged) this.options.renderActiveTab();
     if (identityChanged || previous?.sessionFile !== session.recoveryPath || previous?.name !== session.name) {
       this.options.persistLeafState();
     }

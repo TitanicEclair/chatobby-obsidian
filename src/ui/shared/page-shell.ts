@@ -1,4 +1,5 @@
 import { setIcon } from "obsidian";
+import { chatobbyPerformance } from "../../frontend/performance-monitor";
 
 export interface PageHeaderElements {
   readonly header: HTMLElement;
@@ -27,6 +28,7 @@ interface PageTabOptions {
 
 /** Shared visual and semantic shell for every full-page Chatobby surface. */
 export function createPageHeader(parent: HTMLElement, options: PageHeaderOptions): PageHeaderElements {
+	chatobbyPerformance.recordPageRender(options.title.toLowerCase());
   const header = parent.createDiv({ cls: classes("chatobby-page__header", options.headerClass) });
   const title = header.createDiv({
     cls: classes("chatobby-page__title", options.titleClass),

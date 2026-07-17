@@ -33,11 +33,23 @@ export class ChatobbySettingTab extends PluginSettingTab {
       text: "Local AI sessions, tools, and automations for this vault.",
     });
 
+		this.renderFirstRunSection(containerEl);
     this.renderConnectionSection(containerEl);
-    this.renderDisplaySection(containerEl);
     this.renderCredentialsSection(containerEl);
+		this.renderDisplaySection(containerEl);
     this.renderHelpSection(containerEl);
   }
+
+	private renderFirstRunSection(containerEl: HTMLElement): void {
+		if (this.plugin.settings.onboardingVersion >= 1) return;
+		const section = containerEl.createDiv({
+			cls: "chatobby-settings-note",
+		});
+		section.createEl("strong", { text: "Start here" });
+		section.createDiv({
+			text: "Chatobby starts its signed local runtime automatically. Connect one model provider below, return to the Chatobby tab, review the active permission profile if needed, then send a message.",
+		});
+	}
 
   private renderConnectionSection(containerEl: HTMLElement): void {
     new Setting(containerEl).setName("Runtime").setHeading();
@@ -182,10 +194,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Command shell")
-      .setDesc("Shell used for terminal commands. Automatic is recommended; a change applies after the runtime restarts.")
+      .setDesc("Shell used for terminal commands. Automatic uses Git Bash on Windows and your configured shell or a Bash/sh fallback on macOS and Linux. Changes apply after the runtime restarts.")
       .addDropdown((dropdown) => {
         dropdown
-          .addOption("auto", "Automatic")
+          .addOption("auto", "Automatic (recommended)")
           .addOption("pwsh", "PowerShell 7")
           .addOption("powershell", "Windows PowerShell")
           .addOption("cmd", "Command Prompt")

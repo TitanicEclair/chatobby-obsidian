@@ -22,7 +22,16 @@ interface NavigationHandlers {
   openSubagents: (state: ChatobbyNavigationState) => void;
   openChannels: (state: ChatobbyNavigationState) => void;
   openSessionPicker: () => Promise<void>;
+  getLeafSessionState?: () => { vaultDirectoryPath?: string; sessionPath?: string };
   onError: (error: unknown) => void;
+}
+
+interface WorkspaceLeafHistoryBridge {
+  history?: {
+    backHistory?: unknown[];
+    forwardHistory?: unknown[];
+  };
+  trigger?: (name: string) => void;
 }
 
 /** Owns Obsidian history state and routes it to one mutually exclusive Chatobby screen. */
@@ -61,15 +70,21 @@ export class ViewNavigationController {
     this.setState(state, false);
   }
 
-  /** Collapse the current Chatobby route to its main feed without adding another history entry. */
+  /** Collapse the current Chatobby route to its main feed and discard stale page routes. */
   reset(): void {
-    this.pendingHistoryIntent = null;
+    clearWorkspaceLeafNavigationHistory(this.leaf);
     this.setState({ mode: "chat" }, false);
   }
 
   private setState(state: ChatobbyNavigationState, recordHistory: boolean): void {
+    if (this.pendingHistoryIntent && sameNavigationState(this.pendingHistoryIntent.state, state)) return;
+    if (!this.pendingHistoryIntent && sameNavigationState(this.current, state)) return;
     this.pendingHistoryIntent = { state: { ...state }, record: recordHistory };
-    void this.leaf.setViewState({ type: this.viewType, state: { ...state }, active: true })
+    void this.leaf.setViewState({
+      type: this.viewType,
+      state: { ...this.handlers.getLeafSessionState?.(), ...state },
+      active: true,
+    })
       .catch((error: unknown) => {
         if (this.pendingHistoryIntent && sameNavigationState(this.pendingHistoryIntent.state, state)) {
           this.pendingHistoryIntent = null;
@@ -89,6 +104,21 @@ export class ViewNavigationController {
     else if (state.mode === "channels") this.handlers.openChannels(state);
     else await this.handlers.openSessionPicker();
   }
+}
+
+/**
+ * Obsidian exposes history recording through ViewStateResult but currently has
+ * no public API for clearing a leaf's completed navigation stack. Keep the
+ * feature-detected compatibility bridge isolated here so the project button
+ * can provide a genuine route reset instead of making users press Back through
+ * pages they deliberately left behind.
+ */
+export function clearWorkspaceLeafNavigationHistory(leaf: WorkspaceLeaf): void {
+  const bridge = leaf as unknown as WorkspaceLeafHistoryBridge;
+  if (!Array.isArray(bridge.history?.backHistory) || !Array.isArray(bridge.history.forwardHistory)) return;
+  bridge.history.backHistory.splice(0);
+  bridge.history.forwardHistory.splice(0);
+  bridge.trigger?.("history-change");
 }
 
 export function parseNavigationState(value: unknown): ChatobbyNavigationState {
@@ -112,6 +142,17 @@ export function parseLeafSessionState(value: unknown): { vaultDirectoryPath?: st
     vaultDirectoryPath: typeof record.vaultDirectoryPath === "string" ? record.vaultDirectoryPath : undefined,
     sessionPath: typeof record.sessionPath === "string" ? record.sessionPath : undefined,
   };
+}
+
+/** Decide whether an Obsidian state update changes runtime session identity. */
+export function shouldActivateLeafSession(
+  hydrated: boolean,
+  current: { vaultDirectoryPath: string; sessionPath?: string },
+  requested: { vaultDirectoryPath?: string; sessionPath?: string },
+): boolean {
+  if (!hydrated) return true;
+  if (requested.vaultDirectoryPath !== undefined && requested.vaultDirectoryPath !== current.vaultDirectoryPath) return true;
+  return requested.sessionPath !== undefined && requested.sessionPath !== current.sessionPath;
 }
 
 function isViewMode(value: unknown): value is ChatobbyViewMode {

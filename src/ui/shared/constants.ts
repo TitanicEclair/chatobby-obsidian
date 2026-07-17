@@ -15,7 +15,7 @@ export const STREAM_THINKING_DEBOUNCE_MS = 300;
 /** Debounce for text block renders during streaming (ms). Balances responsiveness against
  *  the cost of full-markdown DOM rebuilds — every render tears down and recreates the
  *  entire text block through Obsidian's synchronous MarkdownRenderer. */
-export const STREAM_TEXT_DEBOUNCE_MS = 500;
+export const STREAM_TEXT_DEBOUNCE_MS = 32;
 
 /** Debounce for tool call renders during streaming (ms). Zero — discrete events, render immediately. */
 export const STREAM_TOOLCALL_DEBOUNCE_MS = 250;

@@ -40,6 +40,29 @@ describe("ExtensionUiController", () => {
     expect(interaction).toBeNull();
     expect(clearInteraction).toHaveBeenCalledTimes(2);
   });
+
+  it("cancels the active request and clears its interaction", async () => {
+    let interaction: InteractionState | null = null;
+    const clearInteraction = vi.fn();
+    const renderer = {
+      mountInteraction: vi.fn(),
+      clearInteraction,
+    } as unknown as FeedRenderer;
+    const controller = new ExtensionUiController({
+      getFeedStore: () => createFeedStore(),
+      getFeedRenderer: () => renderer,
+      setComposerText: vi.fn(),
+      getActiveInteraction: () => interaction,
+      setActiveInteraction: (next) => { interaction = next; },
+    });
+    const pending = controller.handle(confirmRequest("confirm-abort", "Run a command"));
+
+    controller.cancelActive();
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(interaction).toBeNull();
+    expect(clearInteraction).toHaveBeenCalledTimes(1);
+  });
 });
 
 function confirmRequest(id: string, message: string): WsExtensionUIRequest {

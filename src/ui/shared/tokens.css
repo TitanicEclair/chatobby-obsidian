@@ -18,8 +18,8 @@
   --chatobby-shadow-color: var(--background-modifier-box-shadow);
   --chatobby-shadow-raised: 0 12px 34px color-mix(in srgb, var(--background-modifier-box-shadow) 28%, transparent);
   --chatobby-line: var(--chatobby-border);
-  --chatobby-body-size: var(--font-ui-small);
-  --chatobby-meta-size: var(--font-ui-smaller);
+  --chatobby-body-size: var(--font-text-size);
+  --chatobby-meta-size: var(--font-ui-small);
   --chatobby-edge-padding: clamp(var(--size-4-3), 3cqi, var(--size-4-8));
   --chatobby-content-max-width: min(920px, 100%);
   --chatobby-surface-soft: var(--chatobby-surface-muted);

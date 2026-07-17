@@ -197,7 +197,36 @@ describe("DefaultChatobbyRuntimeManager", () => {
     expect(launch.env.CHATOBBY_SHELL).toBe("bash");
   });
 
-  it("enters a crash loop after three failed starts and manual restart resets it", async () => {
+  it("recovers automatically after three transient start failures", async () => {
+    vi.useFakeTimers();
+    try {
+      const leaseStore = fakeLeaseStore(null);
+      let attempts = 0;
+      let spawned = false;
+      vi.mocked(leaseStore.readCandidate).mockImplementation(async () => spawned ? CANDIDATE : null);
+      const processLauncher: ManagedProcessLauncher = {
+        spawn: vi.fn(async () => {
+          attempts += 1;
+          if (attempts <= 3) throw new Error("package replacement in progress");
+          spawned = true;
+          return processHandle();
+        }),
+      };
+      const manager = createManager({ leaseStore, processLauncher });
+
+      await expect(manager.ensureReady({ reason: "view-open" })).rejects.toThrow("package replacement in progress");
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.waitFor(() => expect(manager.state.status).toBe("ready"));
+
+      expect(processLauncher.spawn).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("enters a crash loop after five failed starts and manual restart resets it", async () => {
     vi.useFakeTimers();
     try {
       const leaseStore = fakeLeaseStore(null);
@@ -212,12 +241,14 @@ describe("DefaultChatobbyRuntimeManager", () => {
       expect(manager.state).toMatchObject({ status: "error", retryAt: expect.any(Number) });
       await vi.advanceTimersByTimeAsync(1_000);
       await vi.advanceTimersByTimeAsync(2_000);
-      expect(processLauncher.spawn).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(processLauncher.spawn).toHaveBeenCalledTimes(5);
       expect(manager.state.status).toBe("crash_loop");
 
       await expect(manager.restart("manual-restart")).rejects.toThrow("spawn failed");
       expect(manager.state.status).toBe("error");
-      expect(processLauncher.spawn).toHaveBeenCalledTimes(4);
+      expect(processLauncher.spawn).toHaveBeenCalledTimes(6);
     } finally {
       vi.useRealTimers();
     }

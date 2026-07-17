@@ -93,6 +93,8 @@ export type ThinkingDisplay = "hidden" | "collapsed" | "expanded";
 
 /** Settings owned by the Obsidian SettingTab. Persisted to data.json. */
 export interface PluginSettings {
+	/** Completed first-run experience version. Zero means the setup guide is still active. */
+	onboardingVersion: number;
   /** Product runtime ownership mode. */
   runtimeMode: "managed" | "external" | "developer";
   /** Automatically acquire the managed runtime when a visible Chatobby view opens. */
@@ -122,6 +124,7 @@ export interface PluginSettings {
 }
 
 export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
+	onboardingVersion: 0,
   runtimeMode: "managed",
   runtimeAutoStart: true,
   runtimeLifetime: "obsidian-session",

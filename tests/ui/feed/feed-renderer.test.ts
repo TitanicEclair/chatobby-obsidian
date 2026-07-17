@@ -281,10 +281,11 @@ describe("FeedRenderer", () => {
     const el = mount(renderer);
 
     expect(el.querySelector(".chatobby-subagent__label")?.textContent).toBe("General purpose");
-    expect(el.querySelector(".chatobby-subagent__status")?.textContent).toBe("waiting");
+	expect(el.querySelector(".chatobby-subagent__status")).toBeNull();
+	expect(el.querySelector(".chatobby-subagent__icon")).toBeNull();
     expect(el.querySelector(".chatobby-subagent__detail")).toBeNull();
     const open = el.querySelector<HTMLButtonElement>(".chatobby-subagent__open");
-    expect(open?.textContent).toBe("Open");
+	expect(open?.getAttribute("aria-label")).toBe("Open agent feed");
     expect(open?.parentElement?.classList.contains("chatobby-subagent__header")).toBe(true);
   });
 
@@ -326,6 +327,36 @@ describe("FeedRenderer", () => {
     expect(el.querySelector("[data-block-id='block-user']")?.classList.contains("is-selected")).toBe(false);
     expect(el.querySelector("[data-block-id='block-text']")?.classList.contains("is-selected")).toBe(false);
   });
+
+	it("suspends hidden feed rendering and performs one catch-up render on activation", () => {
+		vi.useFakeTimers();
+		const host = createMockFeedHost();
+		const renderer = new FeedRenderer(host);
+		const element = mount(renderer);
+		renderer.setActive(false);
+
+		host.getFeedStore().dispatch({
+			type: "feed.document-projection-synchronized",
+			projection: { blocks: [{
+				type: "text",
+				id: "hidden-response",
+				turnId: "turn-hidden",
+				text: "**finished while hidden**",
+				startIndex: 0,
+				endIndex: 0,
+				status: "complete",
+			}] },
+		});
+		vi.advanceTimersByTime(1_000);
+		expect(element.textContent).not.toContain("finished while hidden");
+		expect(host.renderMarkdown).not.toHaveBeenCalled();
+
+		renderer.setActive(true);
+		expect(element.textContent).toContain("finished while hidden");
+		expect(host.renderMarkdown).toHaveBeenCalledTimes(1);
+		renderer.setActive(true);
+		expect(host.renderMarkdown).toHaveBeenCalledTimes(1);
+	});
 
   it("toggles to a read-only source view of the feed", () => {
     const state: LegacyFeedState = {
@@ -624,7 +655,8 @@ describe("FeedRenderer", () => {
 
     expect(el.querySelector(".chatobby-subagent__label")?.textContent).toBe("Research");
     expect(el.querySelector(".chatobby-subagent__description")?.textContent).toBe("Map the API surface");
-    expect(el.querySelector(".chatobby-subagent__status")?.textContent).toBe("completed");
+	expect(el.querySelector(".chatobby-subagent__status")).toBeNull();
+	expect(el.querySelector(".chatobby-subagent__icon")).toBeNull();
     expect(el.querySelector(".chatobby-subagent__meta")?.textContent).toContain("30 tokens");
     expect(el.querySelector(".chatobby-subagent__detail")?.textContent).toContain("Found the relevant event bus route.");
   });
@@ -701,9 +733,9 @@ describe("FeedRenderer", () => {
     });
 
     expect(el.textContent).not.toContain("delayed");
-    vi.advanceTimersByTime(499);
+	vi.advanceTimersByTime(31);
     expect(el.textContent).not.toContain("delayed");
-    vi.advanceTimersByTime(1);
+	vi.advanceTimersByTime(1);
     expect(el.textContent).toContain("delayed");
   });
 

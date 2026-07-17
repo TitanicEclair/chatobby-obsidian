@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatobbyTransport } from "../../src/transport/ws-client";
 import type { ReadyRuntime } from "../../src/runtime/public";
 
@@ -101,6 +101,25 @@ describe("ChatobbyTransport", () => {
     expect(FakeWebSocket.instances).toHaveLength(1);
     await transport.disconnect();
   });
+
+	it("rejects a backend request that never receives a response", async () => {
+		const transport = new ChatobbyTransport(externalRuntime());
+		const connect = transport.connect();
+		FakeWebSocket.instances[0]!.open();
+		await connect;
+		vi.useFakeTimers();
+		try {
+			const pending = transport.getProviders();
+			const rejection = expect(pending).rejects.toThrow(
+				"Chatobby runtime request timed out after 30000ms: get_providers",
+			);
+			await vi.advanceTimersByTimeAsync(30_000);
+			await rejection;
+		} finally {
+			vi.useRealTimers();
+			await transport.disconnect();
+		}
+	});
 
   it("keeps independent transports connected to the same runtime URL", async () => {
     const first = new ChatobbyTransport(externalRuntime());

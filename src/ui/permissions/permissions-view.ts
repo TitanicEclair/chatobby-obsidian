@@ -10,7 +10,8 @@ const DECISIONS: readonly FrontendPermissionDecision[] = ["allow", "ask", "deny"
 
 export type PermissionViewIntent =
   | { readonly type: "permissions.select-profile"; readonly payload: { readonly profileId: string } }
-  | { readonly type: "permissions.activate-profile" | "permissions.duplicate-profile" | "permissions.delete-profile"; readonly payload: { readonly profileId: string } }
+  | { readonly type: "permissions.activate-profile" | "permissions.duplicate-profile"; readonly payload: { readonly profileId: string } }
+  | { readonly type: "permissions.delete-profile"; readonly payload: { readonly profileId: string; readonly replacementProfileId?: string } }
   | { readonly type: "permissions.update-profile"; readonly payload: { readonly profileId: string; readonly name: string; readonly description: string } }
   | { readonly type: "permissions.set-capability"; readonly payload: { readonly profileId: string; readonly capabilityId: string; readonly decision: FrontendPermissionDecision } }
   | { readonly type: "permissions.set-target"; readonly payload: { readonly profileId: string; readonly keys: readonly string[]; readonly decision: FrontendPermissionDecision } }
@@ -33,6 +34,7 @@ export class PermissionsView extends ChatobbyComponent {
   private localError: string | null = null;
   private saving = false;
   private editingProfileId: string | null = null;
+  private deletingProfileId: string | null = null;
   private readonly openDisclosures = new Set<string>();
 
   constructor(private readonly props: PermissionsViewProps) {
@@ -71,6 +73,7 @@ export class PermissionsView extends ChatobbyComponent {
   private renderState(model: FrontendPermissionScreenViewModel | null): void {
     const container = this.container;
     if (!container) return;
+    const scrollTop = container.querySelector<HTMLElement>(".chatobby-permissions__body")?.scrollTop ?? 0;
     container.empty();
     const { actions } = createPageHeader(container, {
       title: "Permissions",
@@ -89,6 +92,7 @@ export class PermissionsView extends ChatobbyComponent {
     if (error) body.createDiv({ cls: "chatobby-permissions__state is-error", text: error });
     if (!model) {
       body.createDiv({ cls: "chatobby-permissions__state", text: error ? "Permission profiles are unavailable." : "Loading permission profiles…" });
+      body.scrollTop = scrollTop;
       return;
     }
     if (model.statusMessage) body.createDiv({ cls: "chatobby-permissions__notice", text: model.statusMessage });
@@ -100,6 +104,7 @@ export class PermissionsView extends ChatobbyComponent {
     this.restoreDisclosure(storage, "policy-storage");
     storage.createEl("summary", { text: "Policy storage" });
     for (const line of model.storageLines) storage.createDiv({ text: line });
+    body.scrollTop = scrollTop;
   }
 
   private renderProfiles(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
@@ -107,10 +112,13 @@ export class PermissionsView extends ChatobbyComponent {
     const toolbar = section.createDiv({ cls: "chatobby-permissions__profile-toolbar" });
     const picker = toolbar.createDiv({ cls: "chatobby-permissions__profile-picker" });
     const select = picker.createEl("select", { cls: "chatobby-permissions__profile-select", attr: { "aria-label": "Selected permission profile" } });
-    for (const profile of model.profiles) select.createEl("option", { text: profile.name, value: profile.id }).selected = profile.selected;
+	for (const profile of model.profiles) {
+		select.createEl("option", { text: profile.name, attr: { value: profile.id } }).selected = profile.selected;
+	}
     setIcon(picker.createSpan({ cls: "chatobby-permissions__profile-chevron" }), "chevron-down");
     select.addEventListener("change", () => {
       this.editingProfileId = null;
+      this.deletingProfileId = null;
       void this.runIntent({ type: "permissions.select-profile", payload: { profileId: select.value } });
     });
     const profile = model.selectedProfile;
@@ -123,7 +131,11 @@ export class PermissionsView extends ChatobbyComponent {
       .addEventListener("click", () => void this.runIntent({ type: "permissions.duplicate-profile", payload: { profileId: profile.id } }));
     if (profile.canDelete) {
       const remove = iconButton(toolbar, "trash-2", "Delete profile");
-      remove.addEventListener("click", () => void this.runIntent({ type: "permissions.delete-profile", payload: { profileId: profile.id } }));
+      remove.addEventListener("click", () => {
+        this.editingProfileId = null;
+        this.deletingProfileId = profile.id;
+        this.renderState(this.props.getModel());
+      });
     }
     const card = section.createDiv({ cls: "chatobby-permissions__profile-card" });
     const summary = card.createDiv({ cls: "chatobby-permissions__profile-summary" });
@@ -139,6 +151,10 @@ export class PermissionsView extends ChatobbyComponent {
     }
     if (profile.builtIn) {
       card.createDiv({ cls: "chatobby-permissions__profile-note", text: "Built-in profile. Choose Customize to make an editable copy." });
+      return;
+    }
+    if (this.deletingProfileId === profile.id) {
+      this.renderDeleteConfirmation(card, model);
       return;
     }
     if (this.editingProfileId !== profile.id) return;
@@ -161,6 +177,57 @@ export class PermissionsView extends ChatobbyComponent {
         type: "permissions.update-profile",
         payload: { profileId: profile.id, name: name.value.trim(), description: description.value.trim() },
       }, () => { this.editingProfileId = null; });
+    });
+  }
+
+  private renderDeleteConfirmation(card: HTMLElement, model: FrontendPermissionScreenViewModel): void {
+    const profile = model.selectedProfile;
+    const confirmation = card.createDiv({ cls: "chatobby-permissions__delete-confirmation" });
+    confirmation.createDiv({
+      cls: "chatobby-permissions__delete-title",
+      text: `Delete “${profile.name}”?`,
+    });
+    confirmation.createDiv({
+      cls: "chatobby-permissions__delete-description",
+      text: profile.deleteImpactLabel ?? "This custom policy will be permanently removed.",
+    });
+    let replacement: HTMLSelectElement | null = null;
+    if (profile.deleteReplacementRequired) {
+      const field = confirmation.createEl("label", { cls: "chatobby-permissions__profile-field" });
+      field.createSpan({ text: "Replacement policy" });
+      replacement = field.createEl("select", { attr: { "aria-label": "Replacement permission policy" } });
+	  replacement.createEl("option", { text: "Choose a replacement…", attr: { value: "" } });
+      for (const candidate of model.profiles) {
+        if (candidate.id === profile.id) continue;
+		replacement.createEl("option", { text: candidate.name, attr: { value: candidate.id } });
+      }
+    }
+    const actions = confirmation.createDiv({ cls: "chatobby-permissions__profile-editor-actions" });
+    actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => {
+      this.deletingProfileId = null;
+      this.renderState(this.props.getModel());
+    });
+    const remove = actions.createEl("button", {
+      cls: "mod-warning",
+      text: "Delete policy",
+      attr: { type: "button" },
+    });
+    if (replacement) remove.disabled = true;
+    replacement?.addEventListener("change", () => {
+      remove.disabled = !replacement?.value;
+    });
+    remove.addEventListener("click", () => {
+      if (profile.deleteReplacementRequired && !replacement?.value) return;
+      void this.runIntent(
+        {
+          type: "permissions.delete-profile",
+          payload: {
+            profileId: profile.id,
+            replacementProfileId: replacement?.value || undefined,
+          },
+        },
+        () => { this.deletingProfileId = null; },
+      );
     });
   }
 
@@ -267,7 +334,7 @@ export class PermissionsView extends ChatobbyComponent {
     const row = parent.createDiv({ cls: "chatobby-permissions__add-rule" });
     const input = row.createEl("input", { attr: { type: "text", placeholder, "aria-label": `New ${section} rule` } });
     const decision = row.createEl("select", { attr: { "aria-label": "New rule decision" } });
-    for (const value of DECISIONS) decision.createEl("option", { text: titleCase(value), value });
+	for (const value of DECISIONS) decision.createEl("option", { text: titleCase(value), attr: { value } });
     decision.value = "ask";
     const save = (): void => {
       if (!input.value.trim() || !isDecision(decision.value)) return;

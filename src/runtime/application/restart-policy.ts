@@ -1,13 +1,13 @@
 const FAILURE_WINDOW_MS = 60_000;
 const STABILITY_RESET_MS = 60_000;
-const RESTART_DELAYS_MS = [1_000, 2_000, 4_000] as const;
+const RESTART_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
 
 export interface RestartDecision {
   crashLoop: boolean;
   delayMs?: number;
 }
 
-/** Bounded three-attempt restart circuit breaker. */
+/** Bounded five-attempt restart circuit breaker. */
 export class RuntimeRestartPolicy {
   private failures: number[] = [];
 

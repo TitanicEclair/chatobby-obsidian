@@ -45,6 +45,7 @@ export class Toolbar extends ChatobbyComponent {
   private compactionCompleted = false;
   private compactionCompletionTimer: ReturnType<typeof setTimeout> | null = null;
   private documentListenersBound = false;
+  private active = true;
   private readonly handleDocumentPointerDown = (event: PointerEvent): void => {
     const target = event.target;
     if (!(target instanceof Node) || this.contextMenuEl?.contains(target) || this.meterEl?.contains(target)) return;
@@ -82,6 +83,7 @@ export class Toolbar extends ChatobbyComponent {
 
   /** Full refresh: flags + stats. Use on bind, tab switch, stats load, connection change. */
   renderStatus(): void {
+    if (!this.active) return;
     this.renderFlags();
     this.renderStats();
   }
@@ -90,6 +92,7 @@ export class Toolbar extends ChatobbyComponent {
    *  Safe to call on every agent event; no-ops when nothing changed. Does NOT touch the stats
    *  subtree, so it does not cause layout/style thrash during streaming. */
   renderFlags(): void {
+    if (!this.active) return;
     const conn = this.host.getConnectionState();
     const runtime = this.host.getRuntimeState();
     const session = this.host.getSessionState();
@@ -197,11 +200,24 @@ export class Toolbar extends ChatobbyComponent {
     super.destroy();
   }
 
+  setActive(active: boolean): void {
+    if (this.active === active) return;
+    this.active = active;
+    if (!active) {
+      if (this.elapsedTimer) clearInterval(this.elapsedTimer);
+      this.elapsedTimer = null;
+      this.closeContextMenu();
+      return;
+    }
+    this.renderStatus();
+  }
+
   private toggleContextMenu(): void {
     if (!this.meterEl) return;
     const open = this.contextMenuEl?.hasClass("is-open") !== true;
     this.contextMenuEl?.toggleClass("is-open", open);
     this.meterEl.setAttr("aria-expanded", String(open));
+    if (open) this.renderStats();
   }
 
   private closeContextMenu(): void {
@@ -218,6 +234,7 @@ export class Toolbar extends ChatobbyComponent {
       });
     }
     const wasOpen = this.contextMenuEl.hasClass("is-open");
+    if (!wasOpen && this.contextMenuEl.childElementCount > 0) return;
     this.contextMenuEl.empty();
     this.contextMenuEl.toggleClass("is-open", wasOpen);
     this.contextMenuEl.createDiv({ cls: "chatobby-context-menu__title", text: "Context" });
@@ -288,7 +305,7 @@ export class Toolbar extends ChatobbyComponent {
   }
 
   private syncElapsedTimer(): void {
-    const active = this.host.getFeedStore().select(feedSelectors.runTiming).runStartedAt != null;
+    const active = this.active && this.host.getFeedStore().select(feedSelectors.runTiming).runStartedAt != null;
     if (active && !this.elapsedTimer) {
       // Render once so the elapsed element exists immediately when a run starts.
       this.renderStats();
