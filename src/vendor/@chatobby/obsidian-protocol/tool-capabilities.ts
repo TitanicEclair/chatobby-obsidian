@@ -57,7 +57,6 @@ const TOOL_PLUGIN_REQUIREMENTS: Readonly<Partial<Record<ObsidianToolName, readon
 	obsidian_browser_type: ["webviewer"],
 	obsidian_browser_press: ["webviewer"],
 	obsidian_browser_wait: ["webviewer"],
-	obsidian_browser_evaluate: ["webviewer"],
 	obsidian_browser_screenshot: ["webviewer"],
 	obsidian_browser_close: ["webviewer"],
 	obsidian_daily_note: ["daily-notes"],
@@ -70,10 +69,26 @@ const TOOL_PLUGIN_REQUIREMENTS: Readonly<Partial<Record<ObsidianToolName, readon
 };
 
 const CLI_TOOLS = new Set<ObsidianToolName>([
-	"obsidian_daily_note", "obsidian_base", "obsidian_file_history", "obsidian_sync", "obsidian_bookmarks",
-	"obsidian_template", "obsidian_plugin", "obsidian_appearance", "obsidian_quickadd", "obsidian_dev_diagnostics",
-	"obsidian_outline", "obsidian_backlinks", "obsidian_orphans", "obsidian_unresolved", "obsidian_wordcount",
-	"obsidian_deadends", "obsidian_recents", "obsidian_random", "obsidian_run_cli", "obsidian_read_cli_result",
+	"obsidian_daily_note",
+	"obsidian_base",
+	"obsidian_file_history",
+	"obsidian_sync",
+	"obsidian_bookmarks",
+	"obsidian_template",
+	"obsidian_plugin",
+	"obsidian_appearance",
+	"obsidian_quickadd",
+	"obsidian_dev_diagnostics",
+	"obsidian_outline",
+	"obsidian_backlinks",
+	"obsidian_orphans",
+	"obsidian_unresolved",
+	"obsidian_wordcount",
+	"obsidian_deadends",
+	"obsidian_recents",
+	"obsidian_random",
+	"obsidian_run_cli",
+	"obsidian_read_cli_result",
 ]);
 
 const RETRIEVAL_ENHANCEMENTS: readonly string[] = ["graphify", "smart-connections"];
@@ -108,9 +123,9 @@ export function evaluateObsidianToolAvailability(
 	return {
 		toolName: descriptor.toolName,
 		available:
-			state.capabilities.includes(descriptor.capability)
-			&& missingPlugins.length === 0
-			&& missingRuntimeDependencies.length === 0,
+			state.capabilities.includes(descriptor.capability) &&
+			missingPlugins.length === 0 &&
+			missingRuntimeDependencies.length === 0,
 		missingPlugins,
 		missingRuntimeDependencies,
 		availableEnhancements,
@@ -122,12 +137,19 @@ function capabilityForOperation(operation: ObsidianOperationName): ObsidianBridg
 	if (operation.startsWith("browser.")) return "browser";
 	if (operation.startsWith("retrieval.")) return "retrieval";
 	if (operation.startsWith("cli.")) return "cli";
-	if (operation.startsWith("metadata.") || operation.startsWith("properties.") || operation.startsWith("frontmatter.") || operation.startsWith("tags.")) return "metadata";
+	if (
+		operation.startsWith("metadata.") ||
+		operation.startsWith("properties.") ||
+		operation.startsWith("frontmatter.") ||
+		operation.startsWith("tags.")
+	)
+		return "metadata";
 	if (operation.startsWith("links.") || operation.startsWith("graph.")) return "links";
 	if (operation.startsWith("tasks.")) return "tasks";
 	if (operation.startsWith("attachment.")) return "attachments";
 	if (operation.startsWith("editor.")) return "editor";
-	if (operation.startsWith("workspace.") || operation.startsWith("app.") || operation === "registry.status") return "workspace";
+	if (operation.startsWith("workspace.") || operation.startsWith("app.") || operation === "registry.status")
+		return "workspace";
 	if (operation.startsWith("commands.")) return "commands";
 	if (operation.startsWith("hotkeys.")) return "hotkeys";
 	return "vault";

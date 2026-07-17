@@ -533,18 +533,6 @@ export const handleBrowserWait: OperationHandler = async (args, signal, app) => 
   return { ...(await browserTabInfo(app, leaf)), ...result };
 };
 
-export const handleBrowserEvaluate: OperationHandler = async (args, signal, app) => {
-  assertNotAborted(signal);
-  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
-  const result = await runPageOperation(requireWebView(leaf), "evaluate", {
-    script: args.script,
-    maxChars: args.maxChars,
-    timeoutMs: args.timeoutMs,
-  });
-  assertNotAborted(signal);
-  return { ...(await browserTabInfo(app, leaf)), ...result };
-};
-
 export const handleBrowserScreenshot: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const leaf = requireBrowserLeaf(app, leafIdFrom(args));

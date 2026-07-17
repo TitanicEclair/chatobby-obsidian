@@ -58,6 +58,16 @@ export type { ObsidianVaultSelector } from "./bridge-selectors.ts";
 // --- Vault selectors ---
 export { parseVaultSelector } from "./bridge-selectors.ts";
 export type {
+	ObsidianDirectToolName,
+	ObsidianMcpPolicyOptions,
+	ObsidianMcpServerPolicy,
+} from "./mcp-policy.ts";
+// --- MCP adapter policy ---
+export {
+	createObsidianMcpServerPolicy,
+	OBSIDIAN_DEFAULT_DIRECT_TOOLS,
+} from "./mcp-policy.ts";
+export type {
 	ObsidianBrowserToolName,
 	ObsidianCliFamilyToolName,
 	ObsidianCliSubstrateToolName,
@@ -84,16 +94,6 @@ export {
 	OBSIDIAN_RETRIEVAL_TOOL_NAMES,
 	OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
 } from "./mcp-tool-catalog.ts";
-export type {
-	ObsidianDirectToolName,
-	ObsidianMcpPolicyOptions,
-	ObsidianMcpServerPolicy,
-} from "./mcp-policy.ts";
-// --- MCP adapter policy ---
-export {
-	createObsidianMcpServerPolicy,
-	OBSIDIAN_DEFAULT_DIRECT_TOOLS,
-} from "./mcp-policy.ts";
 export type {
 	ObsidianGraphComponent,
 	ObsidianRetrievalBackendStatus,

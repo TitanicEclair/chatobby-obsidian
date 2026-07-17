@@ -65,7 +65,6 @@ const BACKEND_BROWSER_TOOL_NAMES = [
   "obsidian_browser_type",
   "obsidian_browser_press",
   "obsidian_browser_wait",
-  "obsidian_browser_evaluate",
   "obsidian_browser_screenshot",
   "obsidian_browser_close",
 ] as const;
@@ -117,8 +116,8 @@ describe("MCP tool catalog", () => {
         expect(implemented.has(operation)).toBe(true);
       }
     }
-    expect(Object.keys(OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP)).toHaveLength(63);
-    expect(OBSIDIAN_NON_DIRECT_TOOL_NAMES).toHaveLength(63);
+    expect(Object.keys(OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP)).toHaveLength(62);
+    expect(OBSIDIAN_NON_DIRECT_TOOL_NAMES).toHaveLength(62);
   });
 
   it("keeps CLI process operations runtime-owned", () => {
@@ -131,10 +130,10 @@ describe("MCP tool catalog", () => {
     }
   });
 
-  it("keeps the full registered tool surface at 73 canonical obsidian_* names", () => {
+  it("keeps the full registered tool surface at 72 canonical obsidian_* names", () => {
     expect(OBSIDIAN_DEFAULT_DIRECT_TOOLS).toHaveLength(10);
-    expect(OBSIDIAN_ALL_TOOL_NAMES).toHaveLength(73);
-    expect(new Set(OBSIDIAN_ALL_TOOL_NAMES).size).toBe(73);
+    expect(OBSIDIAN_ALL_TOOL_NAMES).toHaveLength(72);
+    expect(new Set(OBSIDIAN_ALL_TOOL_NAMES).size).toBe(72);
     for (const name of OBSIDIAN_ALL_TOOL_NAMES) {
       expect(name.startsWith("obsidian_")).toBe(true);
     }

@@ -71,7 +71,6 @@ import {
   handleBrowserType,
   handleBrowserPress,
   handleBrowserWait,
-  handleBrowserEvaluate,
   handleBrowserScreenshot,
   handleBrowserClose,
 } from "./operations/browser-operations";
@@ -141,7 +140,6 @@ const HANDLERS: Record<string, OperationHandler> = {
   "browser.type": handleBrowserType,
   "browser.press": handleBrowserPress,
   "browser.wait": handleBrowserWait,
-  "browser.evaluate": handleBrowserEvaluate,
   "browser.screenshot": handleBrowserScreenshot,
   "browser.close": handleBrowserClose,
 

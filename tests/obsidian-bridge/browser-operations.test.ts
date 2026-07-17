@@ -1,5 +1,6 @@
 import type { App, WorkspaceLeaf, ViewState } from "obsidian";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { executeBrowserPageOperation } from "../../src/obsidian-bridge/browser/page-runtime";
 import { executeOperation } from "../../src/obsidian-bridge/operation-registry";
 
 interface FakeWebView extends HTMLElement {
@@ -31,7 +32,12 @@ function createFakeWebView(): FakeWebView {
   element.loadURL = async (url: string) => {
     runtimeUrl = url;
   };
-  element.executeJavaScript = async (code: string) => await (0, eval)(code) as unknown;
+  element.executeJavaScript = async (code: string) => {
+    const prefix = `(${executeBrowserPageOperation.toString()})(`;
+    if (!code.startsWith(prefix) || !code.endsWith(")")) throw new Error("Unexpected page runtime script");
+    const input = JSON.parse(code.slice(prefix.length, -1)) as Parameters<typeof executeBrowserPageOperation>[0];
+    return await executeBrowserPageOperation(input);
+  };
   element.canGoBack = () => true;
   element.canGoForward = () => true;
   element.goBack = vi.fn();
@@ -151,7 +157,7 @@ describe("browser operations", () => {
     expect(app.leaf.detached).toBe(true);
   });
 
-  it("navigates, snapshots, interacts, waits, and evaluates in a webviewer leaf", async () => {
+  it("navigates, snapshots, interacts, and waits in a webviewer leaf", async () => {
     const app = createBrowserApp();
     await executeOperation("browser.open", { url: "https://example.com" }, signal, app);
 
@@ -172,8 +178,6 @@ describe("browser operations", () => {
     const waited = await executeOperation("browser.wait", { leafId: "leaf-1", text: "abcdef" }, signal, app) as Record<string, unknown>;
     expect(waited).toMatchObject({ matched: true });
 
-    const evaluated = await executeOperation("browser.evaluate", { leafId: "leaf-1", script: "document.querySelector('h1').textContent" }, signal, app) as Record<string, unknown>;
-    expect(evaluated).toMatchObject({ resultType: "string", text: "Example article" });
   });
 
   it("supports structured DOM inspection, keyboard input, screenshots, and history", async () => {

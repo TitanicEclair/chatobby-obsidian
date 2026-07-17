@@ -7,8 +7,7 @@ export type BrowserPageAction =
   | "fill"
   | "focus"
   | "bounds"
-  | "wait"
-  | "evaluate";
+  | "wait";
 
 export interface BrowserPageInput extends Record<string, unknown> {
   action: BrowserPageAction;
@@ -736,41 +735,6 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
       check();
     });
     return { ok: true, matched, elapsedMs: Date.now() - started, page: pageEnvelope() };
-  }
-
-  if (input.action === "evaluate") {
-    const source = String(input.script || "");
-    const maxChars = typeof input.maxChars === "number" ? Math.max(1, Math.min(100_000, input.maxChars)) : 12_000;
-    const timeoutMs = typeof input.timeoutMs === "number" ? Math.max(100, Math.min(10_000, input.timeoutMs)) : 3_000;
-    const run = async (): Promise<unknown> => {
-      try {
-        return await (0, eval)(source);
-      } catch {
-        return await (0, eval)(`(async () => {\n${source}\n})()`);
-      }
-    };
-    const value = await Promise.race([
-      run(),
-      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error(`Page script exceeded ${timeoutMs}ms`)), timeoutMs)),
-    ]);
-    let text: string;
-    if (typeof value === "string") text = value;
-    else if (value === undefined) text = "undefined";
-    else {
-      try {
-        text = JSON.stringify(value, null, 2);
-      } catch {
-        text = String(value);
-      }
-    }
-    return {
-      ok: true,
-      page: pageEnvelope(),
-      resultType: value === null ? "null" : typeof value,
-      text: text.slice(0, maxChars),
-      totalChars: text.length,
-      truncated: text.length > maxChars,
-    };
   }
 
   throw new Error(`Unsupported browser page action: ${String(input.action)}`);

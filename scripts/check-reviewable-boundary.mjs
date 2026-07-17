@@ -66,6 +66,9 @@ for (const path of sourceFiles(sourceRoot)) {
   }
   if (/\bauth\.json\b/i.test(source)) failures.push(`${relativePath} contains connector credential-file behavior`);
   if (/types\/tool-semantics|classifyTool\s*\(/.test(source)) failures.push(`${relativePath} contains connector tool-name semantics`);
+  if (/\beval\s*\(|\(\s*0\s*,\s*eval\s*\)\s*\(|\b(?:new\s+)?Function\s*\(/.test(source)) {
+    failures.push(`${relativePath} contains arbitrary code evaluation`);
+  }
   if (/feed\.agent-event-received|applyFeedEvent|handleEvent\s*\(/.test(source)) {
     failures.push(`${relativePath} contains raw agent-event reduction`);
   }
