@@ -71,7 +71,7 @@ export class RuntimeStatusController {
       this.actionButton(container, "Start", () => this.host.start());
     } else if (state.status === "error" || state.status === "crash_loop") {
       if (shouldOfferRuntimeDownload(state)) {
-        this.actionButton(container, "Get runtime", async () => openChatobbyUrl(CHATOBBY_RUNTIME_RELEASES_URL));
+        this.actionButton(container, "Install runtime", async () => openChatobbyUrl(CHATOBBY_RUNTIME_RELEASES_URL));
       }
       this.actionButton(container, state.status === "crash_loop" ? "Try again" : "Retry", () => this.host.restart());
       const details = container.createEl("details", { cls: "chatobby-runtime-status__diagnostics" });
@@ -111,11 +111,7 @@ export class RuntimeStatusController {
 function shouldOfferRuntimeDownload(
   state: Extract<RuntimeLifecycleState, { status: "error" | "crash_loop" }>,
 ): boolean {
-  if (state.mode !== "managed") return false;
-  return state.diagnostics.code === "configuration_invalid"
-    || state.diagnostics.code === "descriptor_invalid"
-    || state.diagnostics.code === "protocol_incompatible"
-    || state.diagnostics.code === "spawn_failed";
+  return state.mode === "managed" && state.diagnostics.code === "runtime_not_installed";
 }
 
 const STATUS_REVEAL_DELAY_MS = 250;

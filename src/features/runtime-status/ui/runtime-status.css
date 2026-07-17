@@ -1,15 +1,20 @@
 .chatobby-runtime-status {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
   display: flex;
   align-items: flex-start;
   gap: var(--size-4-2);
   width: min(var(--chatobby-content-max-width), calc(100% - (2 * var(--chatobby-edge-padding))));
-  margin: var(--size-4-2) auto 0;
+  margin: var(--size-4-2) 0 0;
   padding: var(--size-4-2) var(--size-4-3);
   border: 1px solid var(--chatobby-border);
   border-radius: var(--radius-m);
   background: var(--chatobby-surface-muted);
   color: var(--text-muted);
   box-sizing: border-box;
+  transform: translateX(-50%);
 }
 
 .chatobby-runtime-status.is-hidden {

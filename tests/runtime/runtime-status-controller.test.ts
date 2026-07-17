@@ -71,8 +71,8 @@ describe("RuntimeStatusController", () => {
       status: "error",
       mode: "managed",
       diagnostics: {
-        code: "spawn_failed",
-        message: "The installer-managed Chatobby runtime is not installed",
+        code: "runtime_not_installed",
+        message: "The Chatobby runtime is not installed",
         recentLogs: [],
         occurredAt: 1,
       },
@@ -82,7 +82,7 @@ describe("RuntimeStatusController", () => {
     controller.bind(container);
 
     const button = Array.from(container.querySelectorAll("button"))
-      .find((candidate) => candidate.textContent === "Get runtime") as HTMLButtonElement;
+      .find((candidate) => candidate.textContent === "Install runtime") as HTMLButtonElement;
     button.click();
 
     expect(open).toHaveBeenCalledWith(
@@ -90,6 +90,25 @@ describe("RuntimeStatusController", () => {
       "_blank",
       "noopener,noreferrer",
     );
+  });
+
+  it("does not present installation as the fix for a transient startup failure", () => {
+    const state: RuntimeLifecycleState = {
+      status: "error",
+      mode: "managed",
+      diagnostics: {
+        code: "spawn_failed",
+        message: "The installed runtime could not start",
+        recentLogs: [],
+        occurredAt: 1,
+      },
+    };
+    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart: vi.fn() });
+    const container = document.body.createDiv();
+    controller.bind(container);
+
+    expect(Array.from(container.querySelectorAll("button")).map((button) => button.textContent))
+      .toEqual(["Retry"]);
   });
 });
 

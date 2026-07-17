@@ -119,13 +119,13 @@ export function buildViewShell(container: HTMLElement, handlers: ShellHandlers):
 
   const tabBarHostEl = container.createDiv({ cls: "chatobby-session-bar" });
   const subagentRailHostEl = container.createDiv({ cls: "chatobby-session-agent-rail-host" });
-  const runtimeStatusHostEl = container.createDiv({ cls: "chatobby-runtime-status is-hidden" });
 
   const sessionPickerHostEl = container.createDiv({ cls: "chatobby-session-picker-host is-hidden" });
 
   // ── Feed ─────────────────────────────────────────────────────────
 
   const feedWrap = container.createDiv({ cls: "chatobby-feed-wrap" });
+  const runtimeStatusHostEl = feedWrap.createDiv({ cls: "chatobby-runtime-status is-hidden" });
   const feedEl = feedWrap.createDiv({ cls: "chatobby-feed" });
 
   // ── Composer ─────────────────────────────────────────────────────

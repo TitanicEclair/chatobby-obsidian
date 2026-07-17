@@ -45,7 +45,7 @@ export interface ManagedCommand {
 export interface RuntimeManagerDeps {
   getConfiguration(): RuntimeConfiguration;
   getVaultPaths(): ChatobbyVaultRuntimePaths | null;
-  resolveManagedCommand(): ManagedCommand;
+  resolveManagedCommand(): ManagedCommand | null;
   connectRuntime(runtime: ReadyRuntime): Promise<void>;
   disconnectRuntime(): Promise<void>;
   pluginVersion: string;
@@ -223,6 +223,10 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         this.emit({ status: "error", mode, diagnostics });
         throw failure;
       }
+      if (failure.code === "runtime_not_installed") {
+        this.emit({ status: "error", mode, diagnostics });
+        throw failure;
+      }
       const decision = this.restartPolicy.recordFailure();
       if (decision.crashLoop) {
         this.emit({ status: "crash_loop", mode, diagnostics });
@@ -262,6 +266,9 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     if (!vaultPaths) throw new RuntimeStartError("configuration_invalid", "Chatobby requires a filesystem-backed vault");
     const vaultId = deriveRuntimeVaultId(vaultPaths.vaultRoot);
     const managedCommand = mode === "managed" ? this.deps.resolveManagedCommand() : null;
+    if (mode === "managed" && !managedCommand) {
+      throw new RuntimeStartError("runtime_not_installed", "The Chatobby runtime is not installed");
+    }
     const expectedFingerprint = managedCommand?.runtimePackageFingerprint;
     const existing = await this.leases.readCandidate(vaultId);
     if (existing) {
@@ -393,6 +400,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     const command = mode === "managed"
       ? managedCommand ?? this.deps.resolveManagedCommand()
       : { command: configuration.developerCommand, args: [...configuration.developerArgs] };
+    if (!command) throw new RuntimeStartError("runtime_not_installed", "The Chatobby runtime is not installed");
     if (!command.command.trim()) {
       throw new RuntimeStartError("configuration_invalid", "Chatobby runtime command is empty");
     }

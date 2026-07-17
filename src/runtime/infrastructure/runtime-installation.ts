@@ -62,7 +62,7 @@ export class ManagedRuntimeResolver {
     this.trustedPublicKey = trustedPublicKey;
   }
 
-  resolve(): ManagedCommand {
+  resolve(): ManagedCommand | null {
     if (this.buildMode === "release") {
       if (!this.trustedPublicKey) throw new Error("The release connector has no trusted Chatobby runtime public key");
       const installed = resolveInstalledRuntime(this.getInstallRoot(), this.pluginVersion, this.trustedPublicKey);
@@ -73,7 +73,7 @@ export class ManagedRuntimeResolver {
           runtimePackageFingerprint: runtimePackageFingerprint(installed.manifest),
         };
       }
-      throw new Error("The installer-managed Chatobby runtime is not installed");
+      return null;
     }
     const explicit = process.env.CHATOBBY_EXECUTABLE_PATH?.trim();
     if (explicit) return { command: explicit, args: [] };

@@ -105,6 +105,19 @@ describe("runtime installation", () => {
       .toThrow("no trusted Chatobby runtime public key");
   });
 
+  it("reports an absent release runtime without treating it as a corrupt package", async () => {
+    const installRoot = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+
+    expect(new ManagedRuntimeResolver(
+      () => null,
+      () => installRoot,
+      "release",
+      "0.1.0",
+      publicKeyPem(keys.publicKey),
+    ).resolve()).toBeNull();
+  });
+
   it("installs complete signed packages and atomically rolls the pointer back", async () => {
     const installRoot = await temporaryDirectory();
     const source = await temporaryDirectory();

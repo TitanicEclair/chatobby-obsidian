@@ -226,6 +226,27 @@ describe("DefaultChatobbyRuntimeManager", () => {
     }
   });
 
+  it("does not retry while the managed runtime is not installed", async () => {
+    vi.useFakeTimers();
+    try {
+      const processLauncher = fakeProcessLauncher();
+      const manager = createManager({ managedCommand: null, processLauncher });
+
+      await expect(manager.ensureReady({ reason: "view-open" })).rejects.toThrow("runtime is not installed");
+      expect(manager.state).toMatchObject({
+        status: "error",
+        diagnostics: { code: "runtime_not_installed" },
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(processLauncher.spawn).not.toHaveBeenCalled();
+      expect(manager.state.status).toBe("error");
+      expect(manager.state).not.toHaveProperty("retryAt");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("enters a crash loop after five failed starts and manual restart resets it", async () => {
     vi.useFakeTimers();
     try {
@@ -383,11 +404,13 @@ function createManager(overrides: ManagerOverrides = {}) {
   return new DefaultChatobbyRuntimeManager({
     getConfiguration: () => configuration,
     getVaultPaths: () => VAULT_PATHS,
-    resolveManagedCommand: () => overrides.managedCommand ?? ({
-      command: "chatobby",
-      args: [],
-      runtimePackageFingerprint: DESCRIPTOR.runtimePackageFingerprint ?? undefined,
-    }),
+    resolveManagedCommand: () => "managedCommand" in overrides
+      ? overrides.managedCommand ?? null
+      : {
+          command: "chatobby",
+          args: [],
+          runtimePackageFingerprint: DESCRIPTOR.runtimePackageFingerprint ?? undefined,
+        },
     connectRuntime: overrides.connectRuntime ?? (async () => {}),
     disconnectRuntime: overrides.disconnectRuntime ?? (async () => {}),
     pluginVersion: "0.1.0-test",
@@ -455,5 +478,5 @@ interface ManagerOverrides {
   connectRuntime?: (runtime: ReadyRuntime) => Promise<void>;
   disconnectRuntime?: () => Promise<void>;
   runtimePublicKey?: string | null;
-  managedCommand?: { command: string; args: string[]; runtimePackageFingerprint?: string };
+  managedCommand?: { command: string; args: string[]; runtimePackageFingerprint?: string } | null;
 }
