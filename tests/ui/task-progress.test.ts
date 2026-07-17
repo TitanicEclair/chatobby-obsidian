@@ -59,6 +59,7 @@ describe("TaskProgress", () => {
     const css = readFileSync("src/features/tasks/ui/tasks.css", "utf8");
     expect(css).toContain("--chatobby-content-max");
     expect(css).toMatch(/\.chatobby-task-progress-host\s*\{[^}]*background:\s*transparent;/su);
+    expect(css).toMatch(/\.chatobby-task-progress-host \.chatobby-task-progress__toggle\s*\{[^}]*background:\s*transparent;/su);
     expect(css).toContain("@container (max-width: 440px)");
   });
 });
