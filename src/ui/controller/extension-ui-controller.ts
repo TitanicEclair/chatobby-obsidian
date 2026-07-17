@@ -30,7 +30,7 @@ export class ExtensionUiController {
   async handle(request: WsExtensionUIRequest): Promise<unknown> {
     switch (request.method) {
       case "notify": this.appendNotice(request.params); return undefined;
-      case "setTitle": document.title = String(request.params.title ?? "Chatobby"); return undefined;
+      case "setTitle": document.title = typeof request.params.title === "string" ? request.params.title : "Chatobby"; return undefined;
       case "setWidget": this.updateWidget(request.params); return undefined;
       case "select":
       case "confirm":

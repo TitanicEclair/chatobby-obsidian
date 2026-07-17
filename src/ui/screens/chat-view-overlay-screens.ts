@@ -41,33 +41,33 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     if (mode !== "queries") queries.close(false);
   };
   memory = new MemoryScreenController({
-    getHost: options.getHost,
-    getStore: options.getFrontendStore,
-    getProtocol: options.getFrontendProtocol,
+    getHost: () => options.getHost(),
+    getStore: () => options.getFrontendStore(),
+    getProtocol: () => options.getFrontendProtocol(),
     prepareOpen: () => prepare("memory"),
     onOpened: () => options.onOpened("memory"),
     onClosed: (renderChat) => options.onClosed("memory", renderChat),
   });
   permissions = new PermissionsScreenController({
-    getHost: options.getHost,
-    getStore: options.getFrontendStore,
-    getProtocol: options.getFrontendProtocol,
+    getHost: () => options.getHost(),
+    getStore: () => options.getFrontendStore(),
+    getProtocol: () => options.getFrontendProtocol(),
     prepareOpen: () => prepare("permissions"),
     onOpened: () => options.onOpened("permissions"),
     onClosed: (renderChat) => options.onClosed("permissions", renderChat),
   });
   events = new EventsScreenController({
-    getHost: options.getHost,
-    getStore: options.getFrontendStore,
-    getProtocol: options.getFrontendProtocol,
+    getHost: () => options.getHost(),
+    getStore: () => options.getFrontendStore(),
+    getProtocol: () => options.getFrontendProtocol(),
     prepareOpen: () => prepare("events"),
     onOpened: () => options.onOpened("events"),
     onClosed: (renderChat) => options.onClosed("events", renderChat),
   });
   queries = new ContextQueryScreenController({
-    getHost: options.getHost,
-    getStore: options.getFrontendStore,
-    getProtocol: options.getFrontendProtocol,
+    getHost: () => options.getHost(),
+    getStore: () => options.getFrontendStore(),
+    getProtocol: () => options.getFrontendProtocol(),
     prepareOpen: () => prepare("queries"),
     onOpened: () => options.onOpened("queries"),
     onClosed: (renderChat) => options.onClosed("queries", renderChat),

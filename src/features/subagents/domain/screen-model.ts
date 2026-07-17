@@ -50,7 +50,7 @@ export interface SubagentScreenActions {
   decidePermission: (runId: string, nodeId: string, requestId: string, approved: boolean, value?: string) => Promise<void>;
   decideAcceptance: (runId: string, nodeId: string, approved: boolean, note?: string) => Promise<void>;
   promoteArtifact: (artifactId: string, expectedRevision: number, targetVaultPath: string) => Promise<void>;
-  saveDefinition: (definition: AgentDefinition, permissionProfileId: string | "inherit") => Promise<void>;
+  saveDefinition: (definition: AgentDefinition, permissionProfileId: string) => Promise<void>;
   deleteDefinition: (definition: AgentDefinition) => Promise<void>;
   saveWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
   deleteWorkflow: (workflow: WorkflowDefinition) => Promise<void>;

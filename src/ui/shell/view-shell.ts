@@ -79,7 +79,7 @@ export function buildComposerShell(
   const inputEl = inputWrap.createEl("textarea", {
     cls: "chatobby-input",
     attr: { rows: "2", "aria-label": inputLabel },
-  }) as HTMLTextAreaElement;
+  });
   const barEl = cardEl.createDiv({ cls: "chatobby-composer-bar" });
   const controlsEl = barEl.createDiv({ cls: "chatobby-composer-controls-host" });
   const actionsEl = barEl.createDiv({ cls: "chatobby-composer-actions" });
@@ -134,8 +134,7 @@ export function buildViewShell(container: HTMLElement, handlers: ShellHandlers):
   const composer = buildComposerShell(container, "Message input");
 
   // Bottom bar: inline session controls (left) + status + send/stop actions (right).
-  const toolbar = document.createElement("div");
-  toolbar.className = "chatobby-toolbar chatobby-composer-status";
+  const toolbar = composer.barEl.createDiv({ cls: "chatobby-toolbar chatobby-composer-status" });
   composer.barEl.insertBefore(toolbar, composer.actionsEl);
   const toolbarLeft = toolbar.createDiv({ cls: "chatobby-toolbar-left" });
   const connectionEl = toolbarLeft.createEl("button", {

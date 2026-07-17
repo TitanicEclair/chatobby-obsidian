@@ -76,6 +76,10 @@ export class Setting {
     this.descEl.textContent = description;
     return this;
   }
+  setHeading(): this {
+    this.settingEl.classList.add("setting-item-heading");
+    return this;
+  }
   addText(): this {
     return this;
   }

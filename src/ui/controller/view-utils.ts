@@ -17,10 +17,13 @@ export function createProjectedFeedStore(): FeedStore {
 /** Rejects with a descriptive error if a backend operation does not start in time. */
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} within ${timeoutMs / 1000}s`)), timeoutMs);
+    const timer = window.setTimeout(() => reject(new Error(`${label} within ${timeoutMs / 1000}s`)), timeoutMs);
     promise.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (error) => { clearTimeout(timer); reject(error); },
+      (value) => { window.clearTimeout(timer); resolve(value); },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
     );
   });
 }

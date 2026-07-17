@@ -56,7 +56,10 @@ export function revokeComposerAttachment(attachment: ComposerAttachment): void {
 }
 
 function safeFileName(name: string): string {
-  const fileName = basename(name).replace(/[<>:"/\\|?*\x00-\x1F]/g, "-").trim();
+  const fileName = Array.from(basename(name), (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || '<>:"/\\|?*'.includes(character) ? "-" : character;
+  }).join("").trim();
   return fileName.length > 0 ? fileName : "attachment";
 }
 

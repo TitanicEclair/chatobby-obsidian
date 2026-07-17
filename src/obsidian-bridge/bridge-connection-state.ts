@@ -91,7 +91,7 @@ export function transitionBridgeConnection(
         };
       }
       // Check if the close code is non-retryable
-      if (state.closeCode !== undefined && NON_RETRYABLE_CLOSE_CODES.has(state.closeCode)) {
+      if (state.closeCode !== undefined && TERMINAL_CLOSE_CODES.has(state.closeCode)) {
         return {
           ...state,
           status: "error",
@@ -112,6 +112,6 @@ export function canRetryBridge(state: BridgeConnectionState): boolean {
   if (state.status !== "disconnected" && state.status !== "error") return false;
   if (state.reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) return false;
   // Non-retryable close codes
-  if (state.closeCode !== undefined && NON_RETRYABLE_CLOSE_CODES.has(state.closeCode)) return false;
+  if (state.closeCode !== undefined && TERMINAL_CLOSE_CODES.has(state.closeCode)) return false;
   return true;
 }

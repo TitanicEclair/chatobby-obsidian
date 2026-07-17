@@ -162,7 +162,7 @@ function renderMixedToolResult(container: HTMLElement, result: unknown[], isErro
 function formatArgs(raw: string): string {
   if (!raw) return "";
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     return JSON.stringify(parsed, null, 2);
   } catch {
     return raw;
@@ -208,7 +208,7 @@ function renderDiffHunks(container: HTMLElement, hunks: DiffHunk[]): void {
 function safeParseObject(raw: string): Record<string, unknown> | null {
   if (!raw) return null;
   try {
-    const value = JSON.parse(raw);
+    const value: unknown = JSON.parse(raw);
     return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
   } catch {
     return null;
@@ -221,7 +221,7 @@ function stringify(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
-    return String(value);
+    return "[Unserializable value]";
   }
 }
 

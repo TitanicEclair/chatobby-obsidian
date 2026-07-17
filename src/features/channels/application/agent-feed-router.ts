@@ -1,4 +1,4 @@
-import { Notice, type App } from "obsidian";
+import { FileSystemAdapter, Notice, type App } from "obsidian";
 import type { SessionListItem } from "../../../types";
 import type { FrontendNavigationReference } from "../../../vendor/chatobby-client/frontend-contracts.js";
 
@@ -67,8 +67,8 @@ function isAgentFeedTarget(value: unknown): value is AgentFeedNavigationTarget {
 }
 
 function vaultBasePath(app: App): string | null {
-  const adapter = app.vault.adapter as { getBasePath?: unknown };
-  if (typeof adapter.getBasePath !== "function") return null;
+  const adapter = app.vault.adapter;
+  if (!(adapter instanceof FileSystemAdapter)) return null;
   const basePath = adapter.getBasePath().trim();
   return basePath || null;
 }

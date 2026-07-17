@@ -34,7 +34,7 @@ export function decorateCodeBlocks(container: HTMLElement): void {
       const code = block.querySelector("code")?.textContent ?? block.textContent ?? "";
       navigator.clipboard.writeText(code).catch(() => {});
       btn.addClass("is-copied");
-      setTimeout(() => btn.removeClass("is-copied"), 1200);
+      btn.win.setTimeout(() => btn.removeClass("is-copied"), 1200);
     });
   }
 }
@@ -44,9 +44,9 @@ export function decorateMarkdownTables(container: HTMLElement): void {
     table.addClass("chatobby-markdown-table");
     const parent = table.parentElement;
     if (parent?.hasClass("chatobby-markdown-table-wrap")) continue;
-    const wrapper = document.createElement("div");
-    wrapper.className = "chatobby-markdown-table-wrap";
-    parent?.insertBefore(wrapper, table);
+    if (!parent) continue;
+    const wrapper = parent.createDiv({ cls: "chatobby-markdown-table-wrap" });
+    parent.insertBefore(wrapper, table);
     wrapper.appendChild(table);
   }
 }
@@ -76,7 +76,7 @@ function decorateRenderedAnchors(container: HTMLElement, decorators: LinkDecorat
   }
 }
 
-const WIKILINK_RE = /\[\[([^\[\]\n]+?)\]\]/g;
+const WIKILINK_RE = /\[\[([^[\]\n]+?)\]\]/g;
 const VAULT_PATH_RE = /(^|[^[\w/:.-])(\.?\/?[\w][\w/.-]*\.md)(?=[\s)\].,;:!?]|$)/g;
 const WINDOWS_PATH_RE = /\b([A-Za-z]:\\[^\n<>:"|?*]+?)(?=[\s)\],;:!?]|$)/g;
 const FILE_URL_RE = /\bfile:\/\/\/[^\s)\],;:!?]+/g;
@@ -113,7 +113,8 @@ function obsidianUriTarget(href: string): string | null {
 }
 
 function linkifyPlainTextRefs(container: HTMLElement, decorators: LinkDecorators): void {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+  const ownerDocument = container.ownerDocument;
+  const walker = ownerDocument.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       const parent = node.parentElement;
       if (!parent || isExcludedTextParent(parent)) return NodeFilter.FILTER_REJECT;
@@ -124,7 +125,8 @@ function linkifyPlainTextRefs(container: HTMLElement, decorators: LinkDecorators
   const nodes: Text[] = [];
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (node instanceof Text) nodes.push(node);
+    const TextConstructor = ownerDocument.defaultView?.Text ?? Text;
+    if (node instanceof TextConstructor) nodes.push(node);
   }
 
   for (const node of nodes) {
@@ -137,14 +139,15 @@ function replaceTextRefs(node: Text, decorators: LinkDecorators): void {
   const refs = findPlainRefs(text);
   if (refs.length === 0) return;
 
-  const fragment = document.createDocumentFragment();
+  const ownerDocument = node.ownerDocument;
+  const fragment = ownerDocument.createDocumentFragment();
   let cursor = 0;
   for (const ref of refs) {
-    if (ref.start > cursor) fragment.appendChild(document.createTextNode(text.slice(cursor, ref.start)));
-    const link = document.createElement("a");
+    if (ref.start > cursor) fragment.appendChild(ownerDocument.createTextNode(text.slice(cursor, ref.start)));
+    const link = ownerDocument.createElement("a");
     link.className = ref.kind === "vault" ? "internal-link chatobby-vault-link" : "external-link chatobby-system-path-link";
     link.textContent = ref.label;
-    link.setAttribute("href", ref.kind === "vault" ? ref.target : `file:///${ref.target.replace(/\\/g, "/")}`);
+    link.href = ref.kind === "vault" ? ref.target : `file:///${ref.target.replace(/\\/g, "/")}`;
     link.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -154,7 +157,7 @@ function replaceTextRefs(node: Text, decorators: LinkDecorators): void {
     fragment.appendChild(link);
     cursor = ref.end;
   }
-  if (cursor < text.length) fragment.appendChild(document.createTextNode(text.slice(cursor)));
+  if (cursor < text.length) fragment.appendChild(ownerDocument.createTextNode(text.slice(cursor)));
   node.parentNode?.replaceChild(fragment, node);
 }
 

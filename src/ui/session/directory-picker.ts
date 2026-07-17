@@ -2,15 +2,12 @@
  * Directory picker modal for vault folder selection.
  *
  * Uses Obsidian's FuzzySuggestModal to list all vault folders
- * (excluding .obsidian, .chatobby, .git) with fuzzy search.
+ * (excluding the configured settings folder, .chatobby, and .git) with fuzzy search.
  *
  * Target architecture — see docs/vault-session-prefs.md for full design.
  */
 
 import { App, FuzzySuggestModal, TFolder } from "obsidian";
-
-/** Prefixes to exclude from the directory list. */
-const EXCLUDED_PREFIXES = [".obsidian", ".chatobby", ".git"];
 
 /**
  * Modal for selecting the active Chatobby working directory.
@@ -38,10 +35,11 @@ export class DirectoryPickerModal extends FuzzySuggestModal<TFolder> {
 
   getItems(): TFolder[] {
     const root = this.app.vault.getRoot();
+    const excludedPrefixes = [this.app.vault.configDir, ".chatobby", ".git"];
     const folders = this.app.vault
       .getAllFolders(false)
       .filter(
-        (f) => !EXCLUDED_PREFIXES.some((prefix) => f.path.startsWith(prefix)),
+        (folder) => !excludedPrefixes.some((prefix) => folder.path.startsWith(prefix)),
       );
     return [root, ...folders.filter((folder) => folder !== root)];
   }

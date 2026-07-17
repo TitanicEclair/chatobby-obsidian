@@ -26,4 +26,4 @@ export interface FeedSnapshotV2 {
 }
 
 export type FeedSnapshot = FeedSnapshotV2;
-export type UnknownFeedSnapshot = FeedSnapshot | unknown;
+export type UnknownFeedSnapshot = unknown;

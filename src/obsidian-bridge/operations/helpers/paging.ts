@@ -95,15 +95,20 @@ export function encodeSearchCursor(cursor: SearchCursor): string {
 /** Decode a base64 search cursor string. Returns null if invalid. */
 export function decodeSearchCursor(encoded: string): SearchCursor | null {
   try {
-    const obj = JSON.parse(atob(encoded));
-    if (typeof obj === "object" && obj !== null &&
-        typeof obj.fileIndex === "number" && typeof obj.matchIndex === "number") {
+    const obj: unknown = JSON.parse(atob(encoded));
+    if (isSearchCursor(obj)) {
       return { fileIndex: Math.floor(obj.fileIndex), matchIndex: Math.floor(obj.matchIndex) };
     }
     return null;
   } catch {
     return null;
   }
+}
+
+function isSearchCursor(value: unknown): value is SearchCursor {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.fileIndex === "number" && typeof candidate.matchIndex === "number";
 }
 
 /** Standard page info shape matching the MCP ObsidianPageInfo contract. */

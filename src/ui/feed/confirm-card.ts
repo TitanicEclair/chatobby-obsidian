@@ -35,8 +35,8 @@ export class ConfirmCard extends InteractionCard {
 
   protected onRender(container: HTMLElement): void {
     super.onRender(container);
-    if (this.bodyEl && this.state?.params.message) {
-      this.bodyEl.textContent = String(this.state.params.message);
+    if (this.bodyEl) {
+      this.bodyEl.textContent = typeof this.state?.params.message === "string" ? this.state.params.message : "";
     }
     const confirm = this.actionsEl?.createEl("button", {
       cls: "chatobby-confirm-card__confirm",

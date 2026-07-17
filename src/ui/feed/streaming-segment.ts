@@ -11,7 +11,7 @@ export interface ContentSegment {
   type: SegmentType;
   element: HTMLElement;
   isFrozen: boolean;
-  debounceTimer: ReturnType<typeof setTimeout> | null;
+  debounceTimer: number | null;
   debounceMs: number;
   buffer: unknown;
 }
@@ -20,7 +20,7 @@ export function createSegment(contentIndex: number, type: SegmentType): ContentS
   return {
     contentIndex,
     type,
-    element: document.createElement("div"),
+    element: createDiv(),
     isFrozen: false,
     debounceTimer: null,
     debounceMs: debounceMsForType(type),
@@ -31,15 +31,15 @@ export function createSegment(contentIndex: number, type: SegmentType): ContentS
 export function updateSegment(segment: ContentSegment, content: unknown): void {
   if (segment.isFrozen) return;
   segment.buffer = content;
-  if (segment.debounceTimer) clearTimeout(segment.debounceTimer);
-  segment.debounceTimer = setTimeout(() => {
+  if (segment.debounceTimer) segment.element.win.clearTimeout(segment.debounceTimer);
+  segment.debounceTimer = segment.element.win.setTimeout(() => {
     segment.element.textContent = stringifySegmentContent(segment.buffer);
     segment.debounceTimer = null;
   }, segment.debounceMs);
 }
 
 export function freezeSegment(segment: ContentSegment): void {
-  if (segment.debounceTimer) clearTimeout(segment.debounceTimer);
+  if (segment.debounceTimer) segment.element.win.clearTimeout(segment.debounceTimer);
   segment.element.textContent = stringifySegmentContent(segment.buffer);
   segment.debounceTimer = null;
   segment.isFrozen = true;
