@@ -16,7 +16,8 @@ describe("frontend feature boundaries", () => {
 
     const settings = readFileSync(join(sourceRoot, "settings.ts"), "utf8");
     expect(settings).not.toMatch(/\.createEl\(["']h[1-6]["']/);
-    expect(settings.match(/\.setHeading\(\)/g)).toHaveLength(5);
+    expect(settings).not.toMatch(/\.setName\(["']Chatobby["']\)[\s\S]{0,80}\.setHeading\(\)/);
+    expect(settings.match(/\.setHeading\(\)/g)).toHaveLength(4);
   });
 
   it("prevents source outside the feed feature from deep-importing feed internals", () => {

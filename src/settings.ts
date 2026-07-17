@@ -28,11 +28,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("chatobby-settings");
 
-    const heading = new Setting(containerEl)
-      .setName("Chatobby")
-      .setDesc("Local AI sessions, tools, and automations for this vault.")
-      .setHeading();
-    heading.settingEl.addClass("chatobby-settings__heading");
+    containerEl.createDiv({
+      cls: "chatobby-settings__intro",
+      text: "Local AI sessions, tools, and automations for this vault.",
+    });
 
     this.renderConnectionSection(containerEl);
     this.renderDisplaySection(containerEl);
