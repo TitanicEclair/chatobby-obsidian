@@ -2,8 +2,19 @@
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-19
+
+### Changed
+
+- Made Stop acknowledge cancellation immediately while the runtime finishes
+  bounded cleanup, so a slow provider cannot leave the composer controls hung.
+- Expanded the public guide around installation, permissions, project
+  guidance, Context Queries, skills, subagents, workflows, Events, and privacy.
+
 ### Fixed
 
+- Routed subagent permission decisions to the exact requesting child and kept
+  stale permission actions from targeting an unrelated or completed run.
 - Made vault entry listing treat `.`, `./`, `/`, and the empty folder as the
   vault root, normalize Windows separators, and reject traversal attempts.
 
