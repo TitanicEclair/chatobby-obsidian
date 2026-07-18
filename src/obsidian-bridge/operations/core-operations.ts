@@ -3,7 +3,7 @@
 //
 // See docs/tooling/bridge-executor.md §8 for the Obsidian API mapping.
 
-import type { TFile } from "obsidian";
+import type { TFile, WorkspaceLeaf } from "obsidian";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 import { findLiteralMatches, getFilteredMarkdownFiles, fileToNoteRef } from "./helpers/search";
@@ -323,6 +323,7 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
     : typeof args.mode === "string" ? mapLegacyMode(args.mode)
     : "current";
   const focus = args.focus === true;
+  const requestedLeafId = typeof args.leafId === "string" ? args.leafId : undefined;
 
   const file = app.vault.getAbstractFileByPath(path);
   if (!file || !("stat" in file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
@@ -332,8 +333,15 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
   type LeafTarget = "current" | "new-tab" | "split-right" | "split-down" | "new-window";
   const target = targetArg as LeafTarget;
 
-  let leaf: import("obsidian").WorkspaceLeaf;
-  switch (target) {
+  let leaf: WorkspaceLeaf;
+  if (requestedLeafId) {
+    let exactLeaf: WorkspaceLeaf | undefined;
+    app.workspace.iterateAllLeaves((candidate) => {
+      if ((candidate as unknown as { id?: string }).id === requestedLeafId) exactLeaf = candidate;
+    });
+    if (!exactLeaf) throw new BridgeError("INVALID_INPUT", `Workspace leaf not found: ${requestedLeafId}`);
+    leaf = exactLeaf;
+  } else switch (target) {
     case "current":
       leaf = app.workspace.getLeaf(false);
       break;
@@ -363,7 +371,8 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
   return {
     opened: true,
     note: { path: tfile.path, basename: tfile.basename, mtime: tfile.stat.mtime, ctime: tfile.stat.ctime },
-    target,
+    target: requestedLeafId ? "leaf" : target,
+    leafId: (leaf as unknown as { id?: string }).id ?? "",
   };
 };
 

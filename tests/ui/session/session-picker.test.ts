@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { SessionPickerComponent } from "../../../src/ui/session/session-picker";
 import type { SessionListItem } from "../../../src/types";
@@ -264,5 +265,36 @@ describe("SessionPickerComponent", () => {
     expect(root.querySelectorAll(".chatobby-session-picker__directory")).toHaveLength(1);
     root.querySelector<HTMLButtonElement>(".chatobby-session-picker__disclosure")?.click();
     expect(root.querySelectorAll(".chatobby-session-picker__directory")).toHaveLength(2);
+  });
+
+  it("keeps the session name primary while progressively hiding narrow-pane metadata", async () => {
+    const picker = new SessionPickerComponent({
+      getTransport: async () => ({
+        listSessions: async () => [session({ path: "C:/sessions/one.jsonl", id: "one", name: "Planning session" })],
+      }),
+      directories,
+      initialDirectoryPath: "",
+      onSelect: vi.fn(async () => {}),
+      onUseDirectory: vi.fn(),
+      onCreateSession: vi.fn(async () => {}),
+      onDelete: vi.fn(async () => {}),
+      onAdvancedAction: vi.fn(async () => {}),
+    });
+    const root = mount(picker);
+    await settle();
+
+    expect(root.querySelector(".chatobby-session-picker__item-title")?.textContent).toBe("Planning session");
+    expect(root.querySelector(".chatobby-session-picker__item-meta-last")).not.toBeNull();
+    expect(root.querySelector(".chatobby-session-picker__item-meta-created")).not.toBeNull();
+    expect(root.querySelector(".chatobby-session-picker__item-meta-messages")?.textContent).toBe("3 messages");
+
+    const css = readFileSync("src/ui/session/session-picker.css", "utf8");
+    expect(css).toContain("container-name: chatobby-session-list");
+    expect(css).toMatch(/button\.chatobby-session-picker__item-open[\s\S]*height: auto;[\s\S]*overflow: hidden;/u);
+    expect(css).toMatch(/item-meta-messages[\s\S]*grid-row: 1 \/ span 2;/u);
+    expect(css).toMatch(/@container chatobby-session-list \(max-width: 400px\)[\s\S]*item-meta-messages/u);
+    expect(css).toMatch(/@container chatobby-session-list \(max-width: 320px\)[\s\S]*item-meta-created/u);
+    expect(css).toMatch(/@container chatobby-session-list \(max-width: 220px\)[\s\S]*item-meta \{ display: none; \}/u);
+    expect(css).not.toMatch(/item-title[^}]*display:\s*none/u);
   });
 });

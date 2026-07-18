@@ -21,7 +21,6 @@ export interface ChatViewOverlayScreenOptions {
   getFrontendStore(): FrontendStore;
   getFrontendProtocol(): FrontendProtocolController;
   prepareOpen(): void;
-  closeSubagents(): void;
   onOpened(mode: OverlayViewMode): void;
   onClosed(mode: OverlayViewMode, renderChat: boolean): void;
 }
@@ -34,7 +33,6 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
   let queries: ContextQueryScreenController;
   const prepare = (mode: OverlayViewMode): void => {
     options.prepareOpen();
-    options.closeSubagents();
     if (mode !== "memory") memory.close(false);
     if (mode !== "permissions") permissions.close(false);
     if (mode !== "events") events.close(false);

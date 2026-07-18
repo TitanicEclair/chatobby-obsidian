@@ -183,6 +183,7 @@ describe("SubagentsView", () => {
       store,
       actions: actions(),
       onBack: vi.fn(),
+      onOpenManagement: vi.fn(),
       initialFeedOnly: true,
       createFeedHost: createMockFeedHostForStore,
     });
@@ -197,6 +198,24 @@ describe("SubagentsView", () => {
     expect(element.textContent).not.toContain("Filter runs");
     expect(element.textContent).not.toContain("Tokens");
     expect(element.textContent).not.toContain("Cost");
+  });
+
+  it("routes a child feed back through the subagent management destination", () => {
+    const store = createStore();
+    const onOpenManagement = vi.fn();
+    const view = new SubagentsView({
+      store,
+      actions: actions(),
+      onBack: vi.fn(),
+      onOpenManagement,
+      initialFeedOnly: true,
+      createFeedHost: createMockFeedHostForStore,
+    });
+    const element = mount(view);
+
+    element.querySelector<HTMLButtonElement>("[aria-label='Back to subagents']")?.click();
+
+    expect(onOpenManagement).toHaveBeenCalledOnce();
   });
 
   it("shows the actual model and hides transcript promotion and duplicate message controls", () => {
@@ -237,6 +256,7 @@ function createView(store: SubagentStore, callbacks = actions()): SubagentsView 
     store,
     actions: callbacks,
     onBack: vi.fn(),
+    onOpenManagement: vi.fn(),
     createFeedHost: createMockFeedHostForStore,
   });
 }

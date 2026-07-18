@@ -21,6 +21,8 @@
 .chatobby-channels__conversation { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .chatobby-channels__conversation-heading { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--size-2-2); padding: var(--size-4-3) var(--chatobby-edge-padding); border-bottom: var(--border-width) solid var(--chatobby-border); }
 .chatobby-channels__conversation-heading-copy { display: flex; min-width: 0; flex-direction: column; }
+.chatobby-channels__conversation-actions { display: flex; align-items: center; gap: var(--size-2-1); }
+.chatobby-channels__conversation-actions .is-danger { color: var(--text-error); }
 .chatobby-channels__conversation-heading strong { overflow-wrap: anywhere; }
 .chatobby-channels__conversation-heading-copy span { color: var(--text-faint); font-size: var(--font-ui-smaller); }
 .chatobby-channels__messages { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: var(--size-4-3); padding: var(--size-4-4) var(--chatobby-edge-padding); overflow-y: auto; user-select: text; }

@@ -58,6 +58,7 @@ export const OBSIDIAN_BROWSER_TOOL_OPERATION_MAP = {
 	obsidian_browser_read: "browser.read",
 	obsidian_browser_dom: "browser.dom",
 	obsidian_browser_click: "browser.click",
+	obsidian_browser_pointer: "browser.pointer",
 	obsidian_browser_type: "browser.type",
 	obsidian_browser_press: "browser.press",
 	obsidian_browser_wait: "browser.wait",

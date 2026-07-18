@@ -54,6 +54,7 @@ const TOOL_PLUGIN_REQUIREMENTS: Readonly<Partial<Record<ObsidianToolName, readon
 	obsidian_browser_read: ["webviewer"],
 	obsidian_browser_dom: ["webviewer"],
 	obsidian_browser_click: ["webviewer"],
+	obsidian_browser_pointer: ["webviewer"],
 	obsidian_browser_type: ["webviewer"],
 	obsidian_browser_press: ["webviewer"],
 	obsidian_browser_wait: ["webviewer"],

@@ -35,7 +35,7 @@ import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRa
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
 import { RuntimeStatusController, RuntimeStatusMenu, RuntimeUpdateController } from "../features/runtime-status/public";
 import { ViewRuntimeController } from "../runtime/application/view-runtime-controller";
-import { parseLeafSessionState, parseNavigationState, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode } from "./controller/view-navigation-controller";
+import { closeInactiveViewSurfaces, parseLeafSessionState, parseNavigationState, ribbonModeForNavigation, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode, type ExclusiveViewSurface } from "./controller/view-navigation-controller";
 import { openSystemPathExternally } from "./controller/system-path-opener";
 import { ConnectionStatusController } from "./controller/connection-status-controller";
 import { SessionPreferenceController } from "./controller/session-preference-controller";
@@ -117,7 +117,7 @@ export class ChatobbyView extends ItemView {
       if (this.overlayScreens.queries.handleKeydown(event)) event.stopPropagation();
     } else if (this.viewMode === "subagents") {
       if (this.subagentScreen.handleKeydown(event)) event.stopPropagation();
-    }
+    } else if (this.viewMode === "chat" && this.composer.handleViewKeydown(event)) event.stopPropagation();
   };
   private readonly handleOpenSubagents = (event: Event): void => {
     const detail = (event as CustomEvent<{ runId?: string; nodeId?: string; feedOnly?: boolean }>).detail;
@@ -129,10 +129,9 @@ export class ChatobbyView extends ItemView {
     this.navigation = true;
     this.viewNavigation = new ViewNavigationController(leaf, VIEW_TYPE, {
       openChat: () => {
-        this.overlayScreens.closeAll(false);
-        this.subagentScreen.close(false);
-        this.channelScreen.close(false);
-        this.exitSessionPickerMode();
+        this.prepareExclusiveSurface("chat");
+        this.viewMode = "chat";
+        this.renderViewMode();
       },
       openPermissions: () => this.overlayScreens.permissions.open(),
       openMemory: () => this.overlayScreens.memory.open(),
@@ -225,9 +224,7 @@ export class ChatobbyView extends ItemView {
       getTransport: () => this.ensureConnectedTransport("browsing session directories"),
       getScope: () => this.resolveWorkingDirectoryScope("browsing session directories"),
       prepareOpen: () => {
-        this.closeSlashMenu();
-        this.overlayScreens.closeAll(false);
-        this.subagentScreen.close(false);
+        this.prepareExclusiveSurface("session-picker");
       },
       useDirectory: async (directory) => { await this.directoryRouter.use(directory.vaultDirectoryPath); },
       resumeSession: (path, directory) => this.directoryRouter.resume(path, directory.vaultDirectoryPath),
@@ -280,11 +277,8 @@ export class ChatobbyView extends ItemView {
       getFrontendStore: () => this.frontendStore,
       getFrontendProtocol: () => this.frontendProtocol,
       prepareOpen: () => {
-        this.closeSlashMenu();
-        this.exitSessionPickerMode();
-        this.channelScreen.close(false);
+        this.prepareExclusiveSurface("overlays");
       },
-      closeSubagents: () => this.subagentScreen.close(false),
       onOpened: (mode) => { this.viewMode = mode; this.renderViewMode(); },
       onClosed: (mode, renderChat) => this.finishOverlayClose(mode, renderChat),
     });
@@ -293,10 +287,7 @@ export class ChatobbyView extends ItemView {
       getFrontendStore: () => this.frontendStore,
       getFrontendProtocol: () => this.frontendProtocol,
       prepareOpen: () => {
-        this.closeSlashMenu();
-        this.exitSessionPickerMode();
-        this.overlayScreens.closeAll(false);
-        this.channelScreen.close(false);
+        this.prepareExclusiveSurface("subagents");
       },
       onOpened: () => { this.viewMode = "subagents"; this.renderViewMode(); },
       onClosed: (renderChat) => this.finishOverlayClose("subagents", renderChat),
@@ -319,10 +310,7 @@ export class ChatobbyView extends ItemView {
       getStore: () => this.frontendStore,
       getProtocol: () => this.frontendProtocol,
       prepareOpen: () => {
-        this.closeSlashMenu();
-        this.exitSessionPickerMode();
-        this.overlayScreens.closeAll(false);
-        this.subagentScreen.close(false);
+        this.prepareExclusiveSurface("channels");
       },
       onOpened: () => { this.viewMode = "channels"; this.renderViewMode(); },
       onClosed: (renderChat) => this.finishOverlayClose("channels", renderChat),
@@ -422,6 +410,7 @@ export class ChatobbyView extends ItemView {
     this.unsubscribeFrontendStore = this.frontendStore.subscribe((snapshot) => this.scheduleFrontendSnapshot(snapshot));
     this.bindCurrentTransport();
     this.runtimeLifecycle.open();
+    this.focusComposerSoon();
   }
 
   async onClose(): Promise<void> {
@@ -464,7 +453,8 @@ export class ChatobbyView extends ItemView {
 
   /** Focus the composer textarea. */
   focusComposer(): void {
-    this.composer.focus();
+    if (this.viewMode === "chat") this.composer.focus();
+    else if (this.viewMode === "subagents") this.subagentScreen.focusComposer();
   }
   /** Replace the composer text (used by the obsidian:// prompt handler). */
   setComposerText(text: string): void {
@@ -614,7 +604,7 @@ export class ChatobbyView extends ItemView {
         this.sessions.workingDirectoryPath(),
         this.app.vault.getName(),
       ),
-			activeMode: () => this.viewMode,
+			activeMode: () => ribbonModeForNavigation(this.viewMode, this.viewNavigation.state()),
 			onReturnToChat: () => this.viewNavigation.reset(),
 			onCreateView: () => this.onCreateTab(),
 			onNavigate: (mode) => this.navigateTo({ mode }),
@@ -1296,14 +1286,19 @@ export class ChatobbyView extends ItemView {
     return this.sessions.activeTab();
   }
 
-  private exitSessionPickerMode(): void {
-    this.sessionPickerMode.exit();
+  private prepareExclusiveSurface(target: ExclusiveViewSurface): void {
+    this.closeSlashMenu();
+    closeInactiveViewSurfaces(target, {
+      sessionPicker: () => this.sessionPickerMode.destroy(),
+      overlays: () => this.overlayScreens.closeAll(false),
+      subagents: () => this.subagentScreen.close(false),
+      channels: () => this.channelScreen.close(false),
+    });
   }
 
   private focusComposerSoon(): void {
-    requestAnimationFrame(() => this.focusComposer());
+    requestAnimationFrame(() => { if (this.app.workspace.getActiveViewOfType(ChatobbyView) === this) this.focusComposer(); });
   }
-
   private renderViewMode(): void {
     renderShellViewMode(this.shell, this.viewMode, Boolean(this.activeTab()));
 		const chatVisible = this.viewMode === "chat";

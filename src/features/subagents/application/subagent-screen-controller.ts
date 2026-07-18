@@ -23,6 +23,7 @@ export interface SubagentScreenControllerOptions {
   prepareOpen: () => void;
   onOpened: () => void;
   onClosed: (renderChat: boolean) => void;
+  onOpenManagement: () => void;
   openPermissions: () => void;
   createFeedHost: SubagentFeedHostFactory;
 }
@@ -42,6 +43,10 @@ export class SubagentScreenController {
     return this.view?.handleKeydown(event) ?? false;
   }
 
+  focusComposer(): void {
+    this.view?.focusComposer();
+  }
+
   open(runId?: string, initialTab: SubagentScreenTab = "runs", nodeId?: string, feedOnly = false): void {
     this.pendingRunId = runId;
     this.pendingNodeId = nodeId;
@@ -51,6 +56,7 @@ export class SubagentScreenController {
       store: this.store,
       actions: this.actions(),
       onBack: () => this.close(),
+      onOpenManagement: this.options.onOpenManagement,
       initialTab,
       initialFeedOnly: feedOnly,
       createFeedHost: this.options.createFeedHost,

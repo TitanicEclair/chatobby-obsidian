@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- Expanded existing Obsidian workspace and Web Viewer operations with exact
+  leaf targeting, compact layout metadata, right/double click, and one native
+  pointer operation for hover, scrolling, and drag interactions.
+- Promoted temporary composer attachments through Obsidian's configured
+  attachment location and returned the exact Markdown link and embed.
+
+### Changed
+
+- Clarified subagent displays so their default token budget represents uncached
+  model work rather than repeated prompt-cache reads.
+
+### Fixed
+
+- Restored scrolling for long Memory record lists without introducing a nested
+  competing scroll container.
+
 ## [0.1.4] - 2026-07-18
 
 - Removed arbitrary Web Viewer page-script evaluation while retaining bounded

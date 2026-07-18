@@ -289,7 +289,18 @@ export function createMockWorkspace(opts?: {
   openNotes?: string[];
   files?: Map<string, string>;
 }): Workspace {
-  const leaves: Array<{ view: { editor?: MockEditor; file?: TFile; getViewType: () => string }; openFile?: (f: TFile) => Promise<void>; detach?: () => void; setPinned?: (p: boolean) => void }> = [];
+  interface MockLeaf {
+    id: string;
+    view: { editor?: MockEditor; file?: TFile; getViewType: () => string; getDisplayText: () => string };
+    openFile(f: TFile): Promise<void>;
+    getViewState(): { type: string; state: { file?: string }; pinned: boolean };
+    setViewState(state: { type: string; state?: unknown; pinned?: boolean }): Promise<void>;
+    detach(): void;
+    setPinned(pinned: boolean): void;
+  }
+  const leaves: MockLeaf[] = [];
+  let activeLeaf: MockLeaf | undefined;
+  let nextLeafId = 1;
 
   const files = opts?.files ?? new Map<string, string>();
   const makeLeaf = (path: string, viewOpts?: MockAppOptions["activeView"]) => {
@@ -300,22 +311,42 @@ export function createMockWorkspace(opts?: {
       viewOpts?.cursor,
       viewOpts?.selection,
     );
-    const file = createMockFile(path, content);
+    let file = createMockFile(path, content);
+    let viewType = "markdown";
+    let pinned = false;
     const leaf = {
-      view: { editor, file, getViewType: () => "markdown" },
-      openFile: async (f: TFile) => { file.path = f.path; },
-      detach: () => { /* noop */ },
-      setPinned: (_p: boolean) => { /* noop */ },
+      id: `leaf-${nextLeafId++}`,
+      view: { editor, file, getViewType: () => viewType, getDisplayText: () => file.basename },
+      openFile: async (nextFile: TFile) => {
+        file = nextFile;
+        leaf.view.file = nextFile;
+        viewType = "markdown";
+      },
+      getViewState: () => ({ type: viewType, state: { file: file.path }, pinned }),
+      setViewState: async (state: { type: string; state?: unknown; pinned?: boolean }) => {
+        viewType = state.type;
+        pinned = state.pinned ?? pinned;
+      },
+      detach: () => {
+        const index = leaves.indexOf(leaf);
+        if (index >= 0) leaves.splice(index, 1);
+        if (activeLeaf === leaf) activeLeaf = leaves[0];
+      },
+      setPinned: (nextPinned: boolean) => { pinned = nextPinned; },
     };
     return leaf;
   };
 
   if (opts?.activeView) {
-    leaves.push(makeLeaf(opts.activeView.path, opts.activeView));
+    const leaf = makeLeaf(opts.activeView.path, opts.activeView);
+    leaves.push(leaf);
+    activeLeaf = leaf;
   }
   for (const path of opts?.openNotes ?? []) {
     if (!leaves.some((l) => l.view.file?.path === path)) {
-      leaves.push(makeLeaf(path));
+      const leaf = makeLeaf(path);
+      leaves.push(leaf);
+      activeLeaf ??= leaf;
     }
   }
 
@@ -323,19 +354,46 @@ export function createMockWorkspace(opts?: {
     getActiveViewOfType() {
       return leaves[0]?.view ?? null;
     },
-    getLeavesOfType(_type: string) {
-      return leaves;
+    getLeavesOfType(type: string) {
+      return leaves.filter((leaf) => leaf.view.getViewType() === type);
     },
-    getLeaf(..._args: unknown[]) {
-      const leaf = leaves[0] ?? makeLeaf("temp.md");
+    getLeaf(...args: unknown[]) {
+      if (args[0] === "tab" || args[0] === "split" || args[0] === "window") {
+        const leaf = makeLeaf("temp.md");
+        leaves.push(leaf);
+        return leaf;
+      }
+      const leaf = activeLeaf ?? leaves[0] ?? makeLeaf("temp.md");
+      if (!leaves.includes(leaf)) leaves.push(leaf);
       return leaf;
     },
-    setActiveLeaf(_leaf: unknown, _opts?: { focus?: boolean }) { /* noop */ },
+    setActiveLeaf(leaf: unknown, _opts?: { focus?: boolean }) { activeLeaf = leaf as MockLeaf; },
+    iterateAllLeaves(callback: (leaf: MockLeaf) => void) { for (const leaf of leaves) callback(leaf); },
+    getLayout() {
+      return {
+        main: {
+          id: "main-tabs",
+          type: "tabs",
+          currentTab: activeLeaf?.id,
+          children: leaves.map((leaf) => ({ id: leaf.id, type: "leaf", state: { type: leaf.view.getViewType() } })),
+        },
+      };
+    },
+    createLeafBySplit(_source: MockLeaf) {
+      const leaf = makeLeaf("temp.md");
+      leaves.push(leaf);
+      return leaf;
+    },
+    async duplicateLeaf(source: MockLeaf) {
+      const leaf = makeLeaf(source.view.file?.path ?? "temp.md");
+      leaves.push(leaf);
+      return leaf;
+    },
     openPopoutLeaf() {
-      return leaves[0] ?? makeLeaf("temp.md");
+      return activeLeaf ?? leaves[0] ?? makeLeaf("temp.md");
     },
     get activeLeaf() {
-      return leaves[0];
+      return activeLeaf;
     },
   } as unknown as Workspace;
   return ws;
@@ -371,6 +429,8 @@ export function createMockApp(files: Map<string, string>, opts?: MockAppOptions)
     workspace,
     fileManager: {
       trashFile: (file: TFile) => (vault as unknown as { trash: (entry: TFile) => Promise<void> }).trash(file),
+      getAvailablePathForAttachment: async (fileName: string) => `attachments/${fileName}`,
+      generateMarkdownLink: (file: TFile) => `[[${file.path}]]`,
     },
   } as unknown as App & Record<string, unknown>;
 

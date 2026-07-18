@@ -123,14 +123,18 @@ export class MemoryView extends ChatobbyComponent {
   private renderState(model: FrontendMemoryScreenViewModel | null): void {
     const container = this.container;
     if (!container) return;
+    const previousBody = container.querySelector<HTMLElement>(".chatobby-memory__body");
+    const previousScrollTop = previousBody?.dataset.memoryTab === this.tab ? previousBody.scrollTop : null;
     container.empty();
     this.renderHeader(container, model);
     this.renderTabs(container, model);
     const body = container.createDiv({ cls: "chatobby-page__body chatobby-memory__body" });
+    body.dataset.memoryTab = this.tab;
     const error = this.localError ?? model?.error;
     if (error) renderNotice(body, error, true);
     if (!model) {
       renderState(body, this.localError ? "alert-circle" : "loader-circle", this.localError ? "Memory is unavailable." : "Loading memory…", Boolean(this.localError));
+      if (previousScrollTop !== null) body.scrollTop = previousScrollTop;
       return;
     }
     if (model.statusMessage) renderNotice(body, model.statusMessage, false);
@@ -138,6 +142,7 @@ export class MemoryView extends ChatobbyComponent {
     if (this.tab === "memories") this.renderMemories(body, model);
     else if (this.tab === "suggestions") this.renderSuggestions(body, model);
     else this.renderSettings(body, model);
+    if (previousScrollTop !== null) body.scrollTop = previousScrollTop;
   }
 
   private renderHeader(container: HTMLElement, model: FrontendMemoryScreenViewModel | null): void {
@@ -255,20 +260,25 @@ export class MemoryView extends ChatobbyComponent {
       const item = list.createDiv({ cls: `chatobby-memory__record${expanded ? " is-active" : ""}`, attr: { role: "listitem" } });
       const button = item.createEl("button", {
         cls: "chatobby-memory__record-summary",
-        attr: { type: "button", "aria-expanded": String(expanded) },
+        attr: { type: "button", "aria-expanded": String(expanded), "data-record-id": record.id },
       });
       setIcon(button.createSpan({ cls: "chatobby-memory__record-icon" }), record.iconToken);
-      const copy = button.createSpan({ cls: "chatobby-memory__record-copy" });
-      const meta = copy.createSpan({ cls: "chatobby-memory__record-meta" });
-      meta.createSpan({ text: record.label });
-      if (record.stateLabel) meta.createSpan({ cls: "chatobby-memory__record-state", text: record.stateLabel });
-      copy.createSpan({ cls: "chatobby-memory__record-content", text: record.content });
+      const category = button.createSpan({ cls: "chatobby-memory__record-category" });
+      category.createSpan({ cls: "chatobby-memory__record-label", text: record.label });
+      if (record.stateLabel) category.createSpan({ cls: "chatobby-memory__record-state", text: record.stateLabel });
+      button.createSpan({ cls: "chatobby-memory__record-divider", attr: { "aria-hidden": "true" } });
+      button.createSpan({ cls: "chatobby-memory__record-content", text: record.content });
       button.addEventListener("click", () => {
         this.selectedIndex = index;
         this.selectedRecordId = expanded ? null : record.id;
         this.editing = false;
         this.deleteConfirmId = null;
         this.renderState(this.props.getModel());
+        const buttons = this.container?.querySelectorAll<HTMLButtonElement>(".chatobby-memory__record-summary");
+        const nextButton = buttons
+          ? Array.from(buttons).find((candidate) => candidate.dataset.recordId === record.id)
+          : undefined;
+        nextButton?.focus({ preventScroll: true });
       });
       if (expanded) this.renderDetail(item, record);
     });

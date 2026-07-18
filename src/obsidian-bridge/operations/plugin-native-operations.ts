@@ -456,10 +456,20 @@ export const handleEntryTrash: OperationHandler = async (args, _signal, app) => 
 
 export const handleAttachmentImport: OperationHandler = async (args, _signal, app) => {
   // Accept MCP-canonical field names (targetPath, content) and legacy (path, base64).
-  const path = strArg(args, "targetPath", false) ?? strArg(args, "path", true);
+  const requestedPath = strArg(args, "targetPath", false) ?? strArg(args, "path", false);
+  const fileName = strArg(args, "fileName", false);
+  const activeFile = (app.workspace as unknown as { getActiveFile?: () => TFile | null }).getActiveFile?.();
+  const sourceNotePath = strArg(args, "sourceNotePath", false) ?? activeFile?.path ?? "";
+  if (!requestedPath && !fileName) {
+    throw new BridgeError("INVALID_INPUT", "attachment.import requires targetPath or fileName");
+  }
+  const path = normalizeVaultPath(
+    requestedPath ?? await app.fileManager.getAvailablePathForAttachment(fileName as string, sourceNotePath || undefined),
+  );
   if (app.vault.getAbstractFileByPath(path)) {
     throw new BridgeError("PATH_EXISTS", `Attachment already exists: ${path}`);
   }
+  await ensureVaultParent(app, path);
 
   // content/base64: the MCP server reads a file and base64-encodes it server-side,
   // then sends the result as `content`. `base64` is the legacy field name.
@@ -469,19 +479,40 @@ export const handleAttachmentImport: OperationHandler = async (args, _signal, ap
   const mimeType = typeof args.mimeType === "string" ? args.mimeType : undefined;
 
   let sizeBytes: number;
+  let file: TFile;
   if (base64 !== undefined) {
     const buffer = base64ToArrayBuffer(base64);
     sizeBytes = buffer.byteLength;
-    await (app.vault as unknown as { createBinary: (p: string, d: ArrayBuffer) => Promise<TFile> }).createBinary(path, buffer);
+    file = await (app.vault as unknown as { createBinary: (p: string, d: ArrayBuffer) => Promise<TFile> }).createBinary(path, buffer);
   } else if (typeof args.text === "string") {
     sizeBytes = args.text.length;
-    await app.vault.create(path, args.text);
+    file = await app.vault.create(path, args.text);
   } else {
     throw new BridgeError("INVALID_INPUT", "attachment.import requires 'content' (base64), 'base64' (legacy), or 'text'");
   }
 
-  return { path, sizeBytes, ...(mimeType ? { mimeType } : {}) };
+  const markdownLink = app.fileManager.generateMarkdownLink(file, sourceNotePath);
+  return {
+    path,
+    sizeBytes,
+    markdownLink,
+    markdownEmbed: `!${markdownLink}`,
+    ...(mimeType ? { mimeType } : {}),
+  };
 };
+
+async function ensureVaultParent(app: App, filePath: string): Promise<void> {
+  const segments = filePath.split("/").slice(0, -1);
+  let current = "";
+  for (const segment of segments) {
+    current = current ? `${current}/${segment}` : segment;
+    if (!app.vault.getAbstractFileByPath(current)) await app.vault.createFolder(current);
+  }
+}
+
+function normalizeVaultPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").replace(/\/{2,}/g, "/");
+}
 
 // ── Local helpers ─────────────────────────────────────────────────────
 

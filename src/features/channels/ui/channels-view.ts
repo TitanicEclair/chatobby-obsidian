@@ -15,6 +15,7 @@ export interface ChannelsViewOptions {
   onSelectChannel(channelId: string): Promise<void>;
   onLoadEarlier(cursor: string): Promise<void>;
   onSetArchived(channelId: string, archived: boolean): Promise<void>;
+  onDeleteChannel(channelId: string): Promise<void>;
   onOpenAgent(reference: FrontendNavigationReference): Promise<void>;
   focusMessageId?: string;
 }
@@ -120,10 +121,11 @@ export class ChannelsView extends ChatobbyComponent {
     headingCopy.createEl("strong", { text: model?.heading ?? "Select a channel" });
     if (model?.subheading) headingCopy.createSpan({ text: model.subheading });
     const selected = model?.groups.flatMap((group) => group.items).find((item) => item.id === model.selectedChannelId);
-    if (selected && (selected.archived || selected.canArchive)) {
+    if (selected && (selected.archived || selected.canArchive || selected.canDelete)) {
+      const actions = heading.createDiv({ cls: "chatobby-channels__conversation-actions" });
       const archived = selected.archived;
       const manage = createPageIconButton(
-        heading,
+        actions,
         archived ? "archive-restore" : "archive",
         archived ? "Restore channel" : "Archive channel",
       );
@@ -131,6 +133,14 @@ export class ChannelsView extends ChatobbyComponent {
         if (!archived && !window.confirm(`Archive “${selected.label}”? Its messages remain available under Archived.`)) return;
         void this.options.onSetArchived(selected.id, !archived);
       });
+      if (selected.canDelete) {
+        const remove = createPageIconButton(actions, "trash-2", "Delete channel permanently");
+        remove.addClass("is-danger");
+        remove.addEventListener("click", () => {
+          if (!window.confirm(`Permanently delete “${selected.label}” and all of its messages? This cannot be undone.`)) return;
+          void this.options.onDeleteChannel(selected.id);
+        });
+      }
     }
     const messages = conversation.createDiv({ cls: "chatobby-channels__messages", attr: { role: "log", "aria-live": "polite" } });
     if (model?.nextCursor) {

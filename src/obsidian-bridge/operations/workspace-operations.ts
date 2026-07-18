@@ -40,8 +40,11 @@ interface MarkdownViewLike {
 }
 
 interface LeafLike {
+	id?: string;
   view?: unknown;
   openFile?(file: TFile): Promise<void> | void;
+	getViewState?(): { type: string; state?: unknown; pinned?: boolean };
+	setViewState?(state: { type: string; state?: unknown; pinned?: boolean; active?: boolean }): Promise<void> | void;
   setPinned?(pinned: boolean): void;
   detach?(): void;
 }
@@ -51,6 +54,10 @@ interface WorkspaceLike {
   activeLeaf?: LeafLike | null;
   getLeaf?(...args: unknown[]): LeafLike;
   setActiveLeaf?(leaf: LeafLike, opts?: { focus?: boolean }): void;
+	iterateAllLeaves?(callback: (leaf: LeafLike) => void): void;
+	getLayout?(): Record<string, unknown>;
+	createLeafBySplit?(leaf: LeafLike, direction?: "vertical" | "horizontal", before?: boolean): LeafLike;
+	duplicateLeaf?(leaf: LeafLike, direction?: "vertical" | "horizontal"): Promise<LeafLike>;
 }
 
 function getWorkspace(app: App): WorkspaceLike {
@@ -59,6 +66,53 @@ function getWorkspace(app: App): WorkspaceLike {
 
 function isMarkdownView(view: unknown): view is MarkdownViewLike {
   return !!view && typeof view === "object" && "editor" in view && "file" in view;
+}
+
+function leafId(leaf: LeafLike): string {
+	return leaf.id ?? (leaf as unknown as { id?: string }).id ?? "";
+}
+
+function allLeaves(workspace: WorkspaceLike): LeafLike[] {
+	const leaves: LeafLike[] = [];
+	workspace.iterateAllLeaves?.((leaf) => leaves.push(leaf));
+	if (leaves.length > 0) return leaves;
+	for (const leaf of workspace.getLeavesOfType("markdown") ?? []) {
+		if (!leaves.includes(leaf)) leaves.push(leaf);
+	}
+	if (workspace.activeLeaf && !leaves.includes(workspace.activeLeaf)) leaves.push(workspace.activeLeaf);
+	return leaves;
+}
+
+function findLeafById(workspace: WorkspaceLike, id: string | undefined): LeafLike | undefined {
+	return id ? allLeaves(workspace).find((leaf) => leafId(leaf) === id) : undefined;
+}
+
+function sanitizeLayoutNode(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(sanitizeLayoutNode);
+	if (!value || typeof value !== "object") return undefined;
+	const record = value as Record<string, unknown>;
+	const sanitized: Record<string, unknown> = {};
+	for (const key of ["id", "type", "direction", "currentTab"] as const) {
+		if (typeof record[key] === "string" || typeof record[key] === "number") sanitized[key] = record[key];
+	}
+	if (Array.isArray(record.children)) sanitized.children = record.children.map(sanitizeLayoutNode);
+	const state = record.state;
+	if (state && typeof state === "object" && !Array.isArray(state)) {
+		const stateRecord = state as Record<string, unknown>;
+		if (typeof stateRecord.type === "string") sanitized.viewType = stateRecord.type;
+	}
+	return sanitized;
+}
+
+function sanitizedWorkspaceLayout(workspace: WorkspaceLike): Record<string, unknown> | undefined {
+	const layout = workspace.getLayout?.();
+	if (!layout) return undefined;
+	const sanitized: Record<string, unknown> = {};
+	for (const key of ["main", "left", "right", "floating"] as const) {
+		const node = sanitizeLayoutNode(layout[key]);
+		if (node !== undefined) sanitized[key] = node;
+	}
+	return sanitized;
 }
 
 /** Find an active markdown view, preferring the workspace's active leaf. */
@@ -209,23 +263,49 @@ export const handleEditorFocus: OperationHandler = async (args, _signal, app) =>
 
 export const handleWorkspaceGet: OperationHandler = async (_args, _signal, app) => {
   const ws = getWorkspace(app);
-  const leaves = ws.getLeavesOfType("markdown") ?? [];
-  const activeView = ws.activeLeaf?.view;
+  const leaves = allLeaves(ws);
+  const activeLeafId = ws.activeLeaf ? leafId(ws.activeLeaf) : undefined;
   const openNotes = [];
+  const leafSummaries: Array<Record<string, unknown>> = [];
   for (const leaf of leaves) {
+    const viewState = leaf.getViewState?.();
+    const state = viewState?.state && typeof viewState.state === "object" && !Array.isArray(viewState.state)
+      ? viewState.state as Record<string, unknown>
+      : {};
+    const view = leaf.view as { getViewType?: () => string; getDisplayText?: () => string } | undefined;
+    const viewType = view?.getViewType?.() ?? viewState?.type ?? "unknown";
+    const id = leafId(leaf);
+    const summary: Record<string, unknown> = {
+      leafId: id,
+      viewType,
+      isActive: leaf === ws.activeLeaf,
+      pinned: viewState?.pinned === true,
+    };
+    const title = view?.getDisplayText?.();
+    if (title) summary.title = title;
+    if (typeof state.file === "string") summary.path = state.file;
+    if (typeof state.url === "string") summary.url = state.url;
+    leafSummaries.push(summary);
     if (isMarkdownView(leaf.view)) {
       const v = leaf.view;
       openNotes.push({
+        leafId: id,
         path: v.file.path,
         basename: v.file.basename,
         type: v.getViewType?.() ?? "markdown",
         mtime: v.file.stat.mtime,
         ctime: v.file.stat.ctime,
-        isActive: v === activeView,
+        isActive: leaf === ws.activeLeaf,
       });
     }
   }
-  return { openNotes };
+  const layout = sanitizedWorkspaceLayout(ws);
+  return {
+    ...(activeLeafId ? { activeLeafId } : {}),
+    leaves: leafSummaries,
+    openNotes,
+    ...(layout ? { layout } : {}),
+  };
 };
 
 // ── workspace.manage ──────────────────────────────────────────────────
@@ -233,20 +313,42 @@ export const handleWorkspaceGet: OperationHandler = async (_args, _signal, app) 
 export const handleWorkspaceManage: OperationHandler = async (args, _signal, app) => {
   const action = typeof args.action === "string" ? args.action : undefined;
   const path = typeof args.path === "string" ? args.path : undefined;
+  const requestedLeafId = typeof args.leafId === "string" ? args.leafId : undefined;
   if (!action) throw new BridgeError("INVALID_INPUT", "workspace.manage requires 'action'");
   const ws = getWorkspace(app);
+	const exactLeaf = findLeafById(ws, requestedLeafId);
+	if (requestedLeafId && !exactLeaf) {
+		throw new BridgeError("INVALID_INPUT", `Workspace leaf not found: ${requestedLeafId}`);
+	}
 
   switch (action) {
-    case "split":
-    case "duplicate": {
-      const active = ws.activeLeaf ?? ws.getLeavesOfType("markdown")[0];
-      const activeFile = isMarkdownView(active?.view) ? active.view.file : null;
+    case "split": {
+      const active = exactLeaf ?? ws.activeLeaf ?? ws.getLeavesOfType("markdown")[0];
+      if (!active) return { action, applied: false, reason: "No available leaf" };
       const direction = typeof args.direction === "string" ? args.direction : "right";
-      const leaf = ws.getLeaf ? ws.getLeaf("split", direction === "up" || direction === "down" ? "horizontal" : "vertical") : active;
+      const splitDirection = direction === "up" || direction === "down" ? "horizontal" : "vertical";
+      const before = direction === "left" || direction === "up";
+      const leaf = ws.createLeafBySplit?.(active, splitDirection, before)
+        ?? ws.getLeaf?.("split", splitDirection)
+        ?? active;
       if (!leaf) return { action, applied: false, reason: "No available leaf" };
-      if (activeFile && leaf.openFile) await leaf.openFile(activeFile);
       if (ws.setActiveLeaf) ws.setActiveLeaf(leaf, { focus: true });
-      return { action, applied: true, ...(direction ? { direction } : {}) };
+      return { action, applied: true, direction, leafId: leafId(leaf), sourceLeafId: leafId(active) };
+    }
+    case "duplicate": {
+      const active = exactLeaf ?? ws.activeLeaf ?? ws.getLeavesOfType("markdown")[0];
+      if (!active) return { action, applied: false, reason: "No available leaf" };
+      const direction = typeof args.direction === "string" ? args.direction : "right";
+      const splitDirection = direction === "up" || direction === "down" ? "horizontal" : "vertical";
+      let leaf = await ws.duplicateLeaf?.(active, splitDirection);
+      if (!leaf) {
+        const before = direction === "left" || direction === "up";
+        leaf = ws.createLeafBySplit?.(active, splitDirection, before) ?? ws.getLeaf?.("split", splitDirection) ?? active;
+        const state = active.getViewState?.();
+        if (state && leaf !== active) await leaf.setViewState?.({ ...state, active: true });
+      }
+      ws.setActiveLeaf?.(leaf, { focus: true });
+      return { action, applied: true, direction, leafId: leafId(leaf), sourceLeafId: leafId(active) };
     }
     case "open": {
       if (!path) throw new BridgeError("INVALID_INPUT", "workspace.manage 'open' requires 'path'");
@@ -259,9 +361,9 @@ export const handleWorkspaceManage: OperationHandler = async (args, _signal, app
     }
     case "close":
     case "close-others": {
-      const target = path
+      const target = exactLeaf ?? (path
         ? ws.getLeavesOfType("markdown").find((l) => isMarkdownView(l.view) && (l.view as MarkdownViewLike).file.path === path)
-        : ws.activeLeaf ?? undefined;
+        : ws.activeLeaf ?? undefined);
       if (!target) return { action, path, applied: false, reason: "No matching leaf" };
       if (action === "close-others") {
         for (const leaf of ws.getLeavesOfType("markdown")) {
@@ -270,7 +372,7 @@ export const handleWorkspaceManage: OperationHandler = async (args, _signal, app
       } else {
         target.detach?.();
       }
-      return { action, path, applied: true };
+      return { action, path, leafId: leafId(target), applied: true };
     }
     case "pin":
     case "unpin": {

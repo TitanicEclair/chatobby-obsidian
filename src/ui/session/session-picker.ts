@@ -298,8 +298,16 @@ export class SessionPickerComponent extends ChatobbyComponent {
         main.createDiv({ cls: "chatobby-session-picker__item-directory", text: this.directoryLabelForSession(session) });
       }
       const meta = open.createDiv({ cls: "chatobby-session-picker__item-meta" });
-      meta.createDiv({ text: `Last used ${formatTimestamp(session.modified)}` });
-      meta.createDiv({ text: `Created ${formatTimestamp(session.created)} · ${session.messageCount} messages` });
+      const lastUsed = meta.createSpan({ cls: "chatobby-session-picker__item-meta-last" });
+      lastUsed.createSpan({ cls: "chatobby-session-picker__item-meta-label", text: "Last used " });
+      lastUsed.createSpan({ text: formatTimestamp(session.modified) });
+      const created = meta.createSpan({ cls: "chatobby-session-picker__item-meta-created" });
+      created.createSpan({ cls: "chatobby-session-picker__item-meta-label", text: "Created " });
+      created.createSpan({ text: formatTimestamp(session.created) });
+      meta.createSpan({
+        cls: "chatobby-session-picker__item-meta-messages",
+        text: `${session.messageCount} ${session.messageCount === 1 ? "message" : "messages"}`,
+      });
       item.addEventListener("contextmenu", (event) => this.openSessionMenu(event, session));
     });
   }

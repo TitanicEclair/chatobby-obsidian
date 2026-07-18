@@ -41,6 +41,7 @@ export class ChannelScreenController {
       onSelectChannel: (id) => this.dispatch("channel.select", { channelId: id }),
       onLoadEarlier: (cursor) => this.dispatch("channel.load-earlier", { cursor }),
       onSetArchived: (id, archived) => this.dispatch("channel.set-archived", { channelId: id, archived }),
+      onDeleteChannel: (id) => this.dispatch("channel.delete", { channelId: id }),
       onOpenAgent: (reference) => this.options.openAgentFeed(reference),
       focusMessageId: messageId,
     });
@@ -82,7 +83,7 @@ export class ChannelScreenController {
   }
 
   private async dispatch(
-    type: "channel.select" | "channel.load-earlier" | "channel.set-archived",
+    type: "channel.select" | "channel.load-earlier" | "channel.set-archived" | "channel.delete",
     payload: { channelId: string } | { cursor: string } | { channelId: string; archived: boolean },
   ): Promise<void> {
     const snapshot = this.options.getStore().snapshot;
@@ -97,14 +98,23 @@ export class ChannelScreenController {
       ? { ...base, type, payload: payload as { channelId: string } }
       : type === "channel.load-earlier"
         ? { ...base, type, payload: payload as { cursor: string } }
-		: {
-			...base,
-			type,
-			payload: {
-				...(payload as { channelId: string; archived: boolean }),
-				expectedChannelRevision: this.currentModel()?.revision ?? 0,
-			},
-		};
+		: type === "channel.set-archived"
+			? {
+				...base,
+				type,
+				payload: {
+					...(payload as { channelId: string; archived: boolean }),
+					expectedChannelRevision: this.currentModel()?.revision ?? 0,
+				},
+			}
+			: {
+				...base,
+				type,
+				payload: {
+					...(payload as { channelId: string }),
+					expectedChannelRevision: this.currentModel()?.revision ?? 0,
+				},
+			};
     const outcome = await this.options.getProtocol().dispatch(intent);
     if (outcome.status === "rejected" || outcome.status === "conflict") {
       const message = outcome.notice?.message ?? "The channel action could not be applied.";

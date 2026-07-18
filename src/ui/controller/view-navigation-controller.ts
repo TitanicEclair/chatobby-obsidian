@@ -2,6 +2,14 @@ import type { WorkspaceLeaf } from "obsidian";
 
 export type ChatobbyViewMode = "chat" | "session-picker" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries";
 export type ChatobbySubagentTab = "runs" | "inbox" | "agents" | "workflows" | "settings";
+export type ExclusiveViewSurface = "chat" | "session-picker" | "overlays" | "subagents" | "channels";
+
+export interface ExclusiveViewSurfaceClosers {
+  sessionPicker(): void;
+  overlays(): void;
+  subagents(): void;
+  channels(): void;
+}
 
 export interface ChatobbyNavigationState {
   mode: ChatobbyViewMode;
@@ -11,6 +19,25 @@ export interface ChatobbyNavigationState {
   feedOnly?: boolean;
   channelId?: string;
   messageId?: string;
+}
+
+/** Map internal routes onto the page ribbon without treating child feeds as management pages. */
+export function ribbonModeForNavigation(
+  viewMode: ChatobbyViewMode,
+  state: ChatobbyNavigationState,
+): ChatobbyViewMode {
+  return viewMode === "subagents" && state.mode === "subagents" && state.feedOnly ? "chat" : viewMode;
+}
+
+/** Close every full-view surface except the one being entered. */
+export function closeInactiveViewSurfaces(
+  target: ExclusiveViewSurface,
+  closers: ExclusiveViewSurfaceClosers,
+): void {
+  if (target !== "session-picker") closers.sessionPicker();
+  if (target !== "overlays") closers.overlays();
+  if (target !== "subagents") closers.subagents();
+  if (target !== "channels") closers.channels();
 }
 
 interface NavigationHandlers {

@@ -24,6 +24,7 @@ import {
   rebaseActivations,
   toHighlightRanges,
 } from "./slash-state";
+import { routePrintableKeyToComposer } from "./view-key-routing";
 
 const MAX_COMPOSER_ATTACHMENTS = 8;
 const COMPOSER_ATTACHMENT_ACCEPT = [
@@ -313,6 +314,11 @@ export class Composer extends ChatobbyComponent {
         this.clear();
       }
     }
+  }
+
+  /** Capture ordinary typing that began elsewhere in the visible chat surface. */
+  handleViewKeydown(event: KeyboardEvent): boolean {
+    return this.inputEl ? routePrintableKeyToComposer(event, this.inputEl) : false;
   }
 
   /** Handle input events (text change). */

@@ -96,7 +96,8 @@ describe("frontend feature boundaries", () => {
     expect(css).toMatch(/\.chatobby-memory__body\s*\{[^}]*overflow-y:\s*auto;/s);
     expect(css).toMatch(/\.chatobby-memory__tabs\s*\{[^}]*overflow-x:\s*auto;/s);
     expect(css).toMatch(/\.chatobby-memory__record-summary\s*\{[^}]*height:\s*auto;/s);
-    expect(css).toMatch(/\.chatobby-memory__record-content\s*\{[^}]*-webkit-line-clamp:\s*3;/s);
+    expect(css).toMatch(/\.chatobby-memory__record-content\s*\{[^}]*-webkit-line-clamp:\s*2;/s);
+    expect(css).toMatch(/\.chatobby-memory__records\s*\{[^}]*display:\s*grid;[^}]*gap:/s);
     expect(css).toContain('.chatobby-view[data-layout="compact"] .chatobby-memory__setting-row');
   });
 
@@ -106,6 +107,7 @@ describe("frontend feature boundaries", () => {
     expect(css).toMatch(/\.chatobby-subagents__body\s*\{[^}]*overflow-y:\s*auto;/s);
     expect(css).toContain('.chatobby-view[data-layout="compact"] .chatobby-subagents__run-layout');
     expect(css).toContain("grid-template-columns: 1fr;");
+    expect(css).toMatch(/\.chatobby-subagents__run-filters\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
   });
 
   it("keeps focused reducers and extracted controllers within reviewable size limits", () => {

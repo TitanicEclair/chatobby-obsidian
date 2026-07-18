@@ -11,6 +11,7 @@ import type {
 import type { SubagentScreenActions } from "../domain/screen-model";
 import type { SubagentViewState } from "../state/subagent-store";
 import { renderArtifacts, renderPendingDecision } from "./agent-resources";
+import { routePrintableKeyToComposer } from "../../../ui/composer/view-key-routing";
 
 export type SubagentFeedHostFactory = (getFeedStore: () => FeedStore) => FeedHost;
 
@@ -76,6 +77,10 @@ export class AgentConversationView extends ChatobbyComponent {
 
   focusComposer(): void {
     this.inputEl?.focus();
+  }
+
+  handleViewKeydown(event: KeyboardEvent): boolean {
+    return this.inputEl ? routePrintableKeyToComposer(event, this.inputEl) : false;
   }
 
   destroy(): void {

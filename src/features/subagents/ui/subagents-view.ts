@@ -18,6 +18,7 @@ export interface SubagentsViewProps {
   store: SubagentStore;
   actions: SubagentScreenActions;
   onBack: () => void;
+  onOpenManagement: () => void;
   initialTab?: SubagentScreenTab;
   initialFeedOnly?: boolean;
   createFeedHost: SubagentFeedHostFactory;
@@ -31,7 +32,6 @@ export class SubagentsView extends ChatobbyComponent {
   private startExpanded = false;
   private actionStatus: string | null = null;
   private feedOnly: boolean;
-  private tabs: HTMLElement | null = null;
   private titleMain: HTMLElement | null = null;
   private conversation: AgentConversationView | null = null;
 
@@ -60,8 +60,12 @@ export class SubagentsView extends ChatobbyComponent {
     this.container?.focus();
   }
 
-  handleKeydown(_event: KeyboardEvent): boolean {
-    return false;
+  focusComposer(): void {
+    this.conversation?.focusComposer();
+  }
+
+  handleKeydown(event: KeyboardEvent): boolean {
+    return this.feedOnly ? this.conversation?.handleViewKeydown(event) ?? false : false;
   }
 
   setActionStatus(message: string | null): void {
@@ -91,13 +95,7 @@ export class SubagentsView extends ChatobbyComponent {
         className: "chatobby-subagents__icon-button",
       });
       supervisor.addEventListener("click", () => {
-        this.conversation?.destroy();
-        this.conversation = null;
-        this.feedOnly = false;
-        this.container?.removeClass("is-feed-only");
-        this.tabs?.removeClass("is-hidden");
-        this.renderTitle();
-        this.renderBody();
+        this.props.onOpenManagement();
       });
       return;
     }
@@ -127,7 +125,6 @@ export class SubagentsView extends ChatobbyComponent {
       container,
       `chatobby-subagents__tabs${this.feedOnly ? " is-hidden" : ""}`,
     );
-    this.tabs = tabs;
     const labels: ReadonlyArray<[SubagentScreenTab, string]> = [
       ["runs", "Runs"],
       ["inbox", "Inbox"],

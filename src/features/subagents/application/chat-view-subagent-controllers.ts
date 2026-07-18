@@ -38,6 +38,7 @@ export function createChatViewSubagentControllers(
     prepareOpen: options.prepareOpen,
     onOpened: options.onOpened,
     onClosed: options.onClosed,
+    onOpenManagement: options.openAgentHistory,
     openPermissions: options.openPermissions,
     createFeedHost: options.createFeedHost,
   });

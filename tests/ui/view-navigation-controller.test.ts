@@ -1,13 +1,34 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceLeaf } from "obsidian";
 import {
+  closeInactiveViewSurfaces,
   clearWorkspaceLeafNavigationHistory,
+  ribbonModeForNavigation,
   shouldActivateLeafSession,
   type ChatobbyNavigationState,
   ViewNavigationController,
 } from "../../src/ui/controller/view-navigation-controller";
 
 describe("ViewNavigationController", () => {
+  it("closes every inactive full-view surface during page transitions", () => {
+    const closers = {
+      sessionPicker: vi.fn(),
+      overlays: vi.fn(),
+      subagents: vi.fn(),
+      channels: vi.fn(),
+    };
+
+    closeInactiveViewSurfaces("session-picker", closers);
+    expect(closers.sessionPicker).not.toHaveBeenCalled();
+    expect(closers.overlays).toHaveBeenCalledOnce();
+    expect(closers.subagents).toHaveBeenCalledOnce();
+    expect(closers.channels).toHaveBeenCalledOnce();
+
+    for (const close of Object.values(closers)) close.mockClear();
+    closeInactiveViewSurfaces("chat", closers);
+    for (const close of Object.values(closers)) expect(close).toHaveBeenCalledOnce();
+  });
+
   it("records opened screens but replaces workflow completions without appending history", () => {
     const leaf = {
       setViewState: vi.fn(async () => {}),
@@ -61,6 +82,17 @@ describe("ViewNavigationController", () => {
     expect(shouldActivateLeafSession(true, current, current)).toBe(false);
     expect(shouldActivateLeafSession(true, current, { sessionPath: "other.jsonl" })).toBe(true);
     expect(shouldActivateLeafSession(false, current, {})).toBe(true);
+  });
+
+  it("does not mark the Subagents management page active for a child conversation feed", () => {
+    expect(ribbonModeForNavigation("subagents", {
+      mode: "subagents",
+      runId: "run-a",
+      nodeId: "node-a",
+      feedOnly: true,
+    })).toBe("chat");
+    expect(ribbonModeForNavigation("subagents", { mode: "subagents" })).toBe("subagents");
+    expect(ribbonModeForNavigation("memory", { mode: "memory" })).toBe("memory");
   });
 
   it("does not write Obsidian history for the current or already-pending route", async () => {

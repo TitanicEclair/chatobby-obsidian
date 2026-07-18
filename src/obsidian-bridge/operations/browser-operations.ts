@@ -134,6 +134,14 @@ function listWebViewerLeaves(app: App): WorkspaceLeaf[] {
   return app.workspace.getLeavesOfType(WEBVIEWER_TYPE);
 }
 
+function findAnyLeaf(app: App, leafId: string): WorkspaceLeaf | null {
+  let found: WorkspaceLeaf | null = null;
+  app.workspace.iterateAllLeaves((leaf) => {
+    if (getLeafId(leaf) === leafId) found = leaf;
+  });
+  return found;
+}
+
 function findBrowserLeaf(app: App, leafId?: string): WorkspaceLeaf | null {
   const leaves = listWebViewerLeaves(app);
   if (leafId) return leaves.find((leaf) => getLeafId(leaf) === leafId) ?? null;
@@ -254,6 +262,42 @@ function targetArguments(args: Record<string, unknown>): Record<string, unknown>
   };
 }
 
+function destinationArguments(args: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ref: args.toRef,
+    cssSelector: args.toCssSelector,
+    role: args.toRole,
+    name: args.toName,
+    text: args.toText,
+    index: args.toIndex,
+    exact: args.exact,
+    strict: args.strict,
+    documentId: args.documentId,
+  };
+}
+
+interface BrowserPoint {
+  x: number;
+  y: number;
+}
+
+async function targetCenter(webview: WebViewElement, target: Record<string, unknown>): Promise<BrowserPoint> {
+  const boundsResult = await runPageOperation(webview, "bounds", target);
+  const element = asRecord(boundsResult.element);
+  const bounds = asRecord(element.bounds);
+  if (![bounds.x, bounds.y, bounds.width, bounds.height].every((value) => typeof value === "number")) {
+    throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Browser target did not provide usable bounds");
+  }
+  return {
+    x: Math.max(0, Math.round((bounds.x as number) + (bounds.width as number) / 2)),
+    y: Math.max(0, Math.round((bounds.y as number) + (bounds.height as number) / 2)),
+  };
+}
+
+function viewportCenter(webview: WebViewElement): BrowserPoint {
+  return { x: Math.max(0, Math.round(webview.clientWidth / 2)), y: Math.max(0, Math.round(webview.clientHeight / 2)) };
+}
+
 function encodeCursor(cursor: BrowserCursor): string {
   return `browser-v1:${encodeURIComponent(JSON.stringify(cursor))}`;
 }
@@ -325,7 +369,9 @@ export const handleBrowserOpen: OperationHandler = async (args, signal, app) => 
       return { opened: false, reused: true, ...(await browserTabInfo(app, existing)) };
     }
   }
-  const leaf = resolveBrowserTarget(app, args.target);
+  const requestedLeafId = leafIdFrom(args);
+  const leaf = requestedLeafId ? findAnyLeaf(app, requestedLeafId) : resolveBrowserTarget(app, args.target);
+  if (!leaf) throw new BridgeError("INVALID_INPUT", `Workspace leaf not found: ${requestedLeafId}`);
   const viewState: ViewState = { type: WEBVIEWER_TYPE, state: { url, navigate: true }, active: args.focus !== false };
   await leaf.setViewState(viewState);
   assertNotAborted(signal);
@@ -479,10 +525,66 @@ export const handleBrowserDom: OperationHandler = async (args, signal, app) => {
 export const handleBrowserClick: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const leaf = requireBrowserLeaf(app, leafIdFrom(args));
-  const result = await runPageOperation(requireWebView(leaf), "click", targetArguments(args));
+  const webview = requireWebView(leaf);
+  const button = args.button === "middle" || args.button === "right" ? args.button : "left";
+  const clickCount = args.clickCount === 2 ? 2 : 1;
+  let result: Record<string, unknown>;
+  if (webview.sendInputEvent) {
+    const point = await targetCenter(webview, targetArguments(args));
+    await webview.sendInputEvent({ type: "mouseMove", ...point });
+    await webview.sendInputEvent({ type: "mouseDown", ...point, button, clickCount });
+    await webview.sendInputEvent({ type: "mouseUp", ...point, button, clickCount });
+    result = { clicked: true, button, clickCount, point };
+  } else if (button === "left" && clickCount === 1) {
+    result = await runPageOperation(webview, "click", targetArguments(args));
+  } else {
+    throw new BridgeError("UNSUPPORTED_OPERATION", "Native Web Viewer pointer input is unavailable");
+  }
   assertNotAborted(signal);
   if (typeof args.waitAfterMs === "number") await waitLocal(args.waitAfterMs, signal);
   return { ...(await browserTabInfo(app, leaf)), ...result };
+};
+
+export const handleBrowserPointer: OperationHandler = async (args, signal, app) => {
+  assertNotAborted(signal);
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const webview = requireWebView(leaf);
+  if (!webview.sendInputEvent) throw new BridgeError("UNSUPPORTED_OPERATION", "Native Web Viewer pointer input is unavailable");
+  const action = typeof args.action === "string" ? args.action : "";
+  const start = args.ref || args.cssSelector || args.role || args.text
+    ? await targetCenter(webview, targetArguments(args))
+    : viewportCenter(webview);
+  if (action === "hover") {
+    await webview.sendInputEvent({ type: "mouseMove", ...start });
+    return { hovered: true, point: start, ...(await browserTabInfo(app, leaf)) };
+  }
+  if (action === "scroll") {
+    const deltaX = typeof args.deltaX === "number" ? args.deltaX : 0;
+    const deltaY = typeof args.deltaY === "number" ? args.deltaY : 0;
+    await webview.sendInputEvent({ type: "mouseWheel", ...start, deltaX, deltaY, canScroll: true });
+    return { scrolled: true, point: start, deltaX, deltaY, ...(await browserTabInfo(app, leaf)) };
+  }
+  if (action === "drag") {
+    const end = typeof args.toX === "number" && typeof args.toY === "number"
+      ? { x: Math.round(args.toX), y: Math.round(args.toY) }
+      : await targetCenter(webview, destinationArguments(args));
+    const button = args.button === "middle" || args.button === "right" ? args.button : "left";
+    const steps = typeof args.steps === "number" ? args.steps : 8;
+    await webview.sendInputEvent({ type: "mouseMove", ...start });
+    await webview.sendInputEvent({ type: "mouseDown", ...start, button, clickCount: 1 });
+    for (let index = 1; index <= steps; index += 1) {
+      const progress = index / steps;
+      await webview.sendInputEvent({
+        type: "mouseMove",
+        x: Math.round(start.x + (end.x - start.x) * progress),
+        y: Math.round(start.y + (end.y - start.y) * progress),
+        button,
+      });
+    }
+    await webview.sendInputEvent({ type: "mouseUp", ...end, button, clickCount: 1 });
+    return { dragged: true, from: start, to: end, button, steps, ...(await browserTabInfo(app, leaf)) };
+  }
+  throw new BridgeError("INVALID_INPUT", `Unknown browser pointer action: ${action}`);
 };
 
 export const handleBrowserType: OperationHandler = async (args, signal, app) => {

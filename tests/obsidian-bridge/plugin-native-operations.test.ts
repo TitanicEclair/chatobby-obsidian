@@ -232,6 +232,21 @@ describe("folder.create / entry.copy / entry.move / entry.trash / attachment.imp
     // duplicate still rejected
     await expect(executeOperation("attachment.import", { targetPath: "pic.webp", content: "AA" }, signal, app)).rejects.toThrow(BridgeError);
   });
+  it("uses Obsidian's attachment location and returns a ready embed", async () => {
+    const app = appWith([["Notes/source.md", "# Source"]], { activeView: { path: "Notes/source.md" } });
+    const r = (await executeOperation(
+      "attachment.import",
+      { fileName: "photo.png", sourceNotePath: "Notes/source.md", content: "AQID", mimeType: "image/png" },
+      signal,
+      app,
+    )) as Obj;
+    expect(r).toMatchObject({
+      path: "attachments/photo.png",
+      markdownLink: "[[attachments/photo.png]]",
+      markdownEmbed: "![[attachments/photo.png]]",
+    });
+    expect(app.vault.getAbstractFileByPath("attachments/photo.png")).not.toBeNull();
+  });
   it("rejects copy/move onto an existing destination", async () => {
     const app = appWith([["a.md", "x"], ["b.md", "y"]]);
     await expect(executeOperation("entry.copy", { source: "a.md", destination: "b.md" }, signal, app)).rejects.toThrow(BridgeError);
@@ -282,6 +297,9 @@ describe("workspace.get / workspace.manage", () => {
     const app = appWith([["a.md", ""], ["b.md", ""]], { openNotes: ["a.md", "b.md"] });
     const r = (await executeOperation("workspace.get", {}, signal, app)) as Obj;
     expect((r.openNotes as unknown[])).toHaveLength(2);
+    expect(r).toMatchObject({ activeLeafId: "leaf-1" });
+    expect((r.leaves as Array<Obj>).map((leaf) => leaf.leafId)).toEqual(["leaf-1", "leaf-2"]);
+    expect(r.layout).toBeDefined();
   });
   it("opens a note via manage", async () => {
     const app = appWith([["n.md", ""]]);
@@ -290,12 +308,14 @@ describe("workspace.get / workspace.manage", () => {
   });
   it("accepts MCP split/duplicate/close manage actions", async () => {
     const app = appWith([["n.md", ""]], { activeView: { path: "n.md" } });
-    const split = (await executeOperation("workspace.manage", { action: "split", direction: "right" }, signal, app)) as Obj;
-    const duplicate = (await executeOperation("workspace.manage", { action: "duplicate" }, signal, app)) as Obj;
-    const close = (await executeOperation("workspace.manage", { action: "close" }, signal, app)) as Obj;
-    expect(split.applied).toBe(true);
-    expect(duplicate.applied).toBe(true);
-    expect(close.applied).toBe(true);
+    const split = (await executeOperation("workspace.manage", { action: "split", leafId: "leaf-1", direction: "right" }, signal, app)) as Obj;
+    const duplicate = (await executeOperation("workspace.manage", { action: "duplicate", leafId: "leaf-1" }, signal, app)) as Obj;
+    const close = (await executeOperation("workspace.manage", { action: "close", leafId: split.leafId }, signal, app)) as Obj;
+    expect(split).toMatchObject({ applied: true, leafId: "leaf-2", sourceLeafId: "leaf-1" });
+    expect(duplicate).toMatchObject({ applied: true, leafId: "leaf-3", sourceLeafId: "leaf-1" });
+    expect(close).toMatchObject({ applied: true, leafId: "leaf-2" });
+    await expect(executeOperation("workspace.manage", { action: "close", leafId: "missing" }, signal, app))
+      .rejects.toThrow("Workspace leaf not found");
   });
   it("rejects an unknown action", async () => {
     await expect(executeOperation("workspace.manage", { action: "bogus" }, signal, appWith([]))).rejects.toThrow(BridgeError);

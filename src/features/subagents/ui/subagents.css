@@ -227,8 +227,8 @@
 .chatobby-subagents__scope { color: var(--text-faint); font-size: var(--font-ui-smaller); }
 .chatobby-subagents__run-filter-disclosure { border-bottom: var(--border-width) solid var(--chatobby-border); }
 .chatobby-subagents__run-filter-disclosure > summary { padding: var(--size-2-2) 0; color: var(--text-muted); cursor: pointer; font-size: var(--font-ui-smaller); }
-.chatobby-subagents__run-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--size-2-2); padding-bottom: var(--size-4-3); }
-.chatobby-subagents__run-filter-actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: var(--size-2-2); }
+.chatobby-subagents__run-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--size-2-2); padding-bottom: var(--size-4-3); }
+.chatobby-subagents__run-filter-actions { display: flex; grid-column: 1; flex-wrap: wrap; justify-content: flex-end; gap: var(--size-2-2); }
 .chatobby-subagents__management-field { display: grid; gap: var(--size-2-1); min-width: 0; }
 .chatobby-subagents__management-field > span,
 .chatobby-subagents__management-hint { color: var(--text-muted); font-size: var(--font-ui-smaller); }

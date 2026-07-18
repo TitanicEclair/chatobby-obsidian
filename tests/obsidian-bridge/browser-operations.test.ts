@@ -89,6 +89,7 @@ function createBrowserApp(): App & { leaf: FakeLeaf } {
     getLeavesOfType: (type: string) => (type === "webviewer" && leaf.getViewState().type === "webviewer" ? [leaf] : []),
     getLeaf: () => leaf,
     setActiveLeaf: () => {},
+    iterateAllLeaves: (callback: (candidate: FakeLeaf) => void) => callback(leaf),
   };
   return { workspace, leaf } as unknown as App & { leaf: FakeLeaf };
 }
@@ -118,7 +119,7 @@ describe("browser operations", () => {
 
   it("opens a URL in a webviewer leaf", async () => {
     const app = createBrowserApp();
-    const result = await executeOperation("browser.open", { url: "https://example.com", target: "new-tab" }, signal, app) as Record<string, unknown>;
+    const result = await executeOperation("browser.open", { url: "https://example.com", leafId: "leaf-1" }, signal, app) as Record<string, unknown>;
     expect(result).toMatchObject({ opened: true, leafId: "leaf-1", type: "webviewer" });
     expect(app.leaf.getViewState()).toMatchObject({
       type: "webviewer",
@@ -169,7 +170,39 @@ describe("browser operations", () => {
     expect(Number(snapshot.returnedElements)).toBeGreaterThanOrEqual(2);
 
     const clicked = await executeOperation("browser.click", { leafId: "leaf-1", role: "button", name: "Continue", strict: true }, signal, app) as Record<string, unknown>;
-    expect(clicked).toMatchObject({ clicked: true });
+    expect(clicked).toMatchObject({ clicked: true, button: "left", clickCount: 1 });
+
+    const rightClicked = await executeOperation(
+      "browser.click",
+      { leafId: "leaf-1", role: "button", name: "Continue", button: "right", clickCount: 2 },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    expect(rightClicked).toMatchObject({ clicked: true, button: "right", clickCount: 2 });
+
+    const hovered = await executeOperation(
+      "browser.pointer",
+      { leafId: "leaf-1", action: "hover", role: "button", name: "Continue" },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    expect(hovered).toMatchObject({ hovered: true });
+
+    const scrolled = await executeOperation(
+      "browser.pointer",
+      { leafId: "leaf-1", action: "scroll", deltaY: 500 },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    expect(scrolled).toMatchObject({ scrolled: true, deltaY: 500 });
+
+    const dragged = await executeOperation(
+      "browser.pointer",
+      { leafId: "leaf-1", action: "drag", role: "button", name: "Continue", toX: 200, toY: 150, steps: 3 },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    expect(dragged).toMatchObject({ dragged: true, to: { x: 200, y: 150 }, steps: 3 });
 
     const typed = await executeOperation("browser.type", { leafId: "leaf-1", role: "textbox", name: "Search", text: "query", strict: true }, signal, app) as Record<string, unknown>;
     expect(typed).toMatchObject({ filled: true });

@@ -77,7 +77,7 @@ export function renderSettingsPanel(host: HTMLElement, state: SubagentViewState,
   const retention = addNumberField(advancedGrid, "Keep completed runs (days)", resolved.settings.retentionDays, 1, 3650);
   const mode = addSelectField(advancedGrid, "Default executor", resolved.settings.defaultExecutionMode, ["auto", "in-process", "worker-process"]);
   const turns = addOptionalNumberField(advancedGrid, "Default turn limit", resolved.settings.defaultMaxTurnsPerNode);
-  const tokens = addOptionalNumberField(advancedGrid, "Default total token budget", resolved.settings.defaultMaxTokens);
+	const tokens = addOptionalNumberField(advancedGrid, "Default uncached token budget", resolved.settings.defaultMaxTokens);
   const minutes = addOptionalNumberField(
     advancedGrid,
     "Default time budget (minutes)",

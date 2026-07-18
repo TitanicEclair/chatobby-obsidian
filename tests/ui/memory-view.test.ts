@@ -63,6 +63,8 @@ describe("MemoryView", () => {
     expect(el.textContent).not.toContain("Activity");
     expect(el.textContent).not.toContain("Vault-wide memory");
     expect(el.querySelector(".chatobby-memory__detail")).toBeNull();
+    expect(el.querySelectorAll(".chatobby-memory__record-category")).toHaveLength(2);
+    expect(el.querySelectorAll(".chatobby-memory__record-divider")).toHaveLength(2);
   });
 
   it("dispatches runtime filtering and search intents instead of filtering records locally", async () => {
@@ -93,6 +95,22 @@ describe("MemoryView", () => {
     expect(el.textContent).toContain("Record memory:1 · revision 1");
     el.querySelector<HTMLButtonElement>(".chatobby-memory__record-summary")?.click();
     expect(el.querySelector(".chatobby-memory__detail")).toBeNull();
+  });
+
+  it("preserves the memory page scroll position while expanding and retracting a record", () => {
+    const harness = createHarness();
+    const el = mount(harness.view);
+    const body = el.querySelector<HTMLElement>(".chatobby-memory__body");
+    if (!body) throw new Error("memory body missing");
+    body.scrollTop = 480;
+
+    el.querySelector<HTMLButtonElement>("[data-record-id='memory:2']")?.click();
+
+    const expandedBody = el.querySelector<HTMLElement>(".chatobby-memory__body");
+    expect(expandedBody?.scrollTop).toBe(480);
+    expect(document.activeElement).toBe(el.querySelector("[data-record-id='memory:2']"));
+    el.querySelector<HTMLButtonElement>("[data-record-id='memory:2']")?.click();
+    expect(el.querySelector<HTMLElement>(".chatobby-memory__body")?.scrollTop).toBe(480);
   });
 
   it("dispatches archive and requires inline confirmation before delete", async () => {

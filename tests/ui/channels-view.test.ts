@@ -8,6 +8,7 @@ describe("ChannelsView", () => {
     let model = channelModel();
     const listeners = new Set<(value: FrontendChannelScreenViewModel | null) => void>();
     const onSetArchived = vi.fn(async () => {});
+    const onDeleteChannel = vi.fn(async () => {});
     const view = new ChannelsView({
       getModel: () => model,
       subscribe: (listener) => {
@@ -20,6 +21,7 @@ describe("ChannelsView", () => {
       onLoadEarlier: vi.fn(async () => {}),
       onOpenAgent: vi.fn(async () => {}),
       onSetArchived,
+      onDeleteChannel,
     });
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -46,7 +48,21 @@ describe("ChannelsView", () => {
     host.querySelector<HTMLButtonElement>('[aria-label="Archive channel"]')?.click();
     expect(onSetArchived).toHaveBeenCalledWith("session-channel", true);
 
-    model = { ...model, revision: 2, messages: [...model.messages, {
+	model = {
+		...model,
+		revision: 2,
+		groups: model.groups.map((group) => ({
+			...group,
+			items: group.items.map((item) => item.id === "session-channel"
+				? { ...item, archived: true, canArchive: false, canDelete: true }
+				: item),
+		})),
+	};
+	for (const listener of listeners) listener(model);
+	host.querySelector<HTMLButtonElement>('[aria-label="Delete channel permanently"]')?.click();
+	expect(onDeleteChannel).toHaveBeenCalledWith("session-channel");
+
+    model = { ...model, revision: 3, messages: [...model.messages, {
       ...model.messages[0]!,
       id: "message-2",
       order: 2,
@@ -94,6 +110,7 @@ function channelModel(): FrontendChannelScreenViewModel {
           selected: true,
           archived: false,
           canArchive: true,
+          canDelete: false,
         }],
       },
       {
@@ -107,6 +124,7 @@ function channelModel(): FrontendChannelScreenViewModel {
           selected: false,
           archived: false,
           canArchive: true,
+          canDelete: false,
         }],
       },
     ],

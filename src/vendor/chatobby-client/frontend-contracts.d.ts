@@ -201,6 +201,7 @@ export interface FrontendChannelDirectoryItem {
     readonly selected: boolean;
     readonly archived: boolean;
     readonly canArchive: boolean;
+    readonly canDelete: boolean;
 }
 export interface FrontendChannelGroupViewModel {
     readonly id: "current" | "named" | "sessions" | "archived";
@@ -1020,6 +1021,12 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly payload: {
         readonly channelId: string;
         readonly archived: boolean;
+        readonly expectedChannelRevision: number;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "channel.delete";
+    readonly payload: {
+        readonly channelId: string;
         readonly expectedChannelRevision: number;
     };
 }) | (FrontendIntentBase & {

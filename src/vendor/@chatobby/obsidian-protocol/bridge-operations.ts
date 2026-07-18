@@ -60,6 +60,7 @@ export const OBSIDIAN_BROWSER_OPERATIONS = [
 	"browser.read",
 	"browser.dom",
 	"browser.click",
+	"browser.pointer",
 	"browser.type",
 	"browser.press",
 	"browser.wait",

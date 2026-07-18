@@ -134,9 +134,14 @@ export default class ChatobbyPlugin extends Plugin {
     this.registerView(VIEW_TYPE_CHATOBBY, (leaf) => new ChatobbyView(leaf, this));
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
       if (leaf?.view instanceof ChatobbyView) {
-        void leaf.view.activateSessionContext().catch((error) => {
-          console.error("Chatobby: could not activate leaf session context", error);
-        });
+        const view = leaf.view;
+        void view.activateSessionContext()
+          .then(() => {
+            if (this.app.workspace.getActiveViewOfType(ChatobbyView) === view) view.focusComposer();
+          })
+          .catch((error) => {
+            console.error("Chatobby: could not activate leaf session context", error);
+          });
       }
     }));
     this.addSettingTab(new ChatobbySettingTab(this.app, this));

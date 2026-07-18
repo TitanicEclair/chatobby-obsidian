@@ -604,6 +604,18 @@ describe("core operations", () => {
       expect(focusedLeaf).toBe(mockLeaf);
     });
 
+    it("opens into an exact workspace leaf", async () => {
+      const app = createMockApp(new Map([["test.md", "content"]]), { activeView: { path: "test.md" } });
+      const result = await executeOperation(
+        "note.open",
+        { path: "test.md", leafId: "leaf-1", focus: true },
+        makeSignal(),
+        app,
+      ) as Record<string, unknown>;
+
+      expect(result).toMatchObject({ opened: true, target: "leaf", leafId: "leaf-1" });
+    });
+
     it("throws NOTE_NOT_FOUND for missing file", async () => {
       const app = createMockApp(new Map());
       await expect(
