@@ -257,13 +257,26 @@ describe("Composer", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("hides send and shows stop while the session is streaming", () => {
+	it("hides send and shows stop while the session is streaming", () => {
     const streamingState: SessionState = { ...EMPTY_SESSION_STATE, isStreaming: true };
     const { sendBtn, stopBtn } = bindComposer(createHost({ getSessionState: () => streamingState }));
 
     expect(sendBtn.classList.contains("is-hidden")).toBe(true);
-    expect(stopBtn.classList.contains("is-hidden")).toBe(false);
-  });
+		expect(stopBtn.classList.contains("is-hidden")).toBe(false);
+	});
+
+	it("disables Stop with an accessible progress state until streaming ends", () => {
+		const streamingState: SessionState = { ...EMPTY_SESSION_STATE, isStreaming: true };
+		const { composer, stopBtn } = bindComposer(createHost({ getSessionState: () => streamingState }));
+
+		composer.setStopping(true);
+		expect(stopBtn.disabled).toBe(true);
+		expect(stopBtn.classList.contains("is-stopping")).toBe(true);
+		expect(stopBtn.getAttribute("aria-label")).toBe("Stopping current turn");
+
+		composer.setStreaming(false);
+		expect(stopBtn.classList.contains("is-stopping")).toBe(false);
+	});
 
   it("opens slash suggestions for a cursor-local slash token", () => {
     const setSlashMatches = vi.fn();

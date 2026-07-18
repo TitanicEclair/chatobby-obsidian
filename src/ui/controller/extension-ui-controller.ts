@@ -56,19 +56,24 @@ export class ExtensionUiController {
     if (this.activeCard instanceof InputCard || this.activeCard instanceof EditorCard) this.activeCard.submit();
   }
 
-  cancelActive(): void {
-    this.activeCard?.cancel();
-  }
+	cancelActive(): void {
+		this.activeCard?.cancel();
+	}
 
-  dispose(): void {
-    for (const resolve of this.pending.values()) resolve(undefined);
-    this.pending.clear();
-    this.queuedRequests.length = 0;
-    this.activeCard = null;
-    this.activeRequestId = null;
-    this.options.setActiveInteraction(null);
-    this.options.getFeedRenderer()?.clearInteraction();
-  }
+	/** Cancel the active interaction and every queued request without mounting another card. */
+	cancelAll(): void {
+		for (const resolve of this.pending.values()) resolve(undefined);
+		this.pending.clear();
+		this.queuedRequests.length = 0;
+		this.activeCard = null;
+		this.activeRequestId = null;
+		this.options.setActiveInteraction(null);
+		this.options.getFeedRenderer()?.clearInteraction();
+	}
+
+	dispose(): void {
+		this.cancelAll();
+	}
 
   private showInteraction(request: WsExtensionUIRequest): Promise<unknown> {
     if (!isBlockingInteraction(request.method)) return Promise.resolve(undefined);

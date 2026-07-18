@@ -41,7 +41,7 @@ describe("ExtensionUiController", () => {
     expect(clearInteraction).toHaveBeenCalledTimes(2);
   });
 
-  it("cancels the active request and clears its interaction", async () => {
+	it("cancels the active request and clears its interaction", async () => {
     let interaction: InteractionState | null = null;
     const clearInteraction = vi.fn();
     const renderer = {
@@ -61,8 +61,32 @@ describe("ExtensionUiController", () => {
 
     await expect(pending).resolves.toBeUndefined();
     expect(interaction).toBeNull();
-    expect(clearInteraction).toHaveBeenCalledTimes(1);
-  });
+		expect(clearInteraction).toHaveBeenCalledTimes(1);
+	});
+
+	it("cancels the active and queued requests without mounting the next card", async () => {
+		let interaction: InteractionState | null = null;
+		const mountInteraction = vi.fn();
+		const clearInteraction = vi.fn();
+		const renderer = { mountInteraction, clearInteraction } as unknown as FeedRenderer;
+		const controller = new ExtensionUiController({
+			getFeedStore: () => createFeedStore(),
+			getFeedRenderer: () => renderer,
+			setComposerText: vi.fn(),
+			getActiveInteraction: () => interaction,
+			setActiveInteraction: (next) => { interaction = next; },
+		});
+		const first = controller.handle(confirmRequest("confirm-1", "Read a path"));
+		const second = controller.handle(confirmRequest("confirm-2", "Call an MCP tool"));
+
+		controller.cancelAll();
+
+		await expect(first).resolves.toBeUndefined();
+		await expect(second).resolves.toBeUndefined();
+		expect(interaction).toBeNull();
+		expect(mountInteraction).toHaveBeenCalledTimes(1);
+		expect(clearInteraction).toHaveBeenCalledTimes(1);
+	});
 });
 
 function confirmRequest(id: string, message: string): WsExtensionUIRequest {

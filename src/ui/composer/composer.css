@@ -501,8 +501,18 @@ button.chatobby-send-btn:hover {
 
 /* The stop square reads smaller than the arrow so the "stop" intent is unmistakable. */
 .chatobby-stop-btn svg {
-  width: calc(var(--size-4-4) * 0.62);
-  height: calc(var(--size-4-4) * 0.62);
+	width: calc(var(--size-4-4) * 0.62);
+	height: calc(var(--size-4-4) * 0.62);
+}
+
+.chatobby-stop-btn.is-stopping svg {
+	width: var(--size-4-4);
+	height: var(--size-4-4);
+	animation: chatobby-composer-spin 0.8s linear infinite;
+}
+
+@keyframes chatobby-composer-spin {
+	to { transform: rotate(360deg); }
 }
 
 .chatobby-settings-note {

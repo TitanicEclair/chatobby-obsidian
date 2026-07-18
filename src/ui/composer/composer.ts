@@ -90,7 +90,8 @@ export class Composer extends ChatobbyComponent {
   private stopBtn: HTMLButtonElement | null = null;
 
   private state = createInitialComposerState();
-  private isStreaming = false;
+	private isStreaming = false;
+	private isStopping = false;
   private promptInFlight = false;
   private pendingSendAbort: AbortController | null = null;
   private pendingSendSequence = 0;
@@ -135,11 +136,20 @@ export class Composer extends ChatobbyComponent {
   }
 
   /** Set streaming state — toggles send/stop button availability. */
-  setStreaming(isStreaming: boolean): void {
-    this.isStreaming = isStreaming;
-    if (!isStreaming) this.disarmAbortConfirm();
-    this.updateControls();
-  }
+	setStreaming(isStreaming: boolean): void {
+		this.isStreaming = isStreaming;
+		if (!isStreaming) {
+			this.isStopping = false;
+			this.disarmAbortConfirm();
+		}
+		this.updateControls();
+	}
+
+	/** Reflect an accepted Stop request until the terminal session patch arrives. */
+	setStopping(isStopping: boolean): void {
+		this.isStopping = isStopping;
+		this.updateControls();
+	}
 
   /** Focus the input textarea. */
   focus(): void {
@@ -377,21 +387,29 @@ export class Composer extends ChatobbyComponent {
       this.sendBtn.disabled = turnActive || empty;
     }
 
-    if (this.stopBtn) {
-      this.stopBtn.toggleClass("is-hidden", !turnActive);
-      this.stopBtn.disabled = !turnActive;
-      this.stopBtn.empty();
-      if (turnActive && this.abortConfirmArmed) {
-        this.stopBtn.textContent = "Esc";
+		if (this.stopBtn) {
+			this.stopBtn.toggleClass("is-hidden", !turnActive);
+			this.stopBtn.disabled = !turnActive || this.isStopping || !this.host.canAbort();
+			this.stopBtn.empty();
+			if (turnActive && this.isStopping) {
+				setIcon(this.stopBtn, "loader-circle");
+				this.stopBtn.setAttr("aria-label", "Stopping current turn");
+				this.stopBtn.setAttr("title", "Stopping current turn");
+				this.stopBtn.addClass("is-stopping");
+				this.stopBtn.removeClass("is-confirming");
+			} else if (turnActive && this.abortConfirmArmed) {
+				this.stopBtn.textContent = "Esc";
         this.stopBtn.setAttr("aria-label", "Press Escape again to stop current turn");
         this.stopBtn.setAttr("title", "Press Escape again to stop current turn");
-        this.stopBtn.addClass("is-confirming");
-      } else {
+				this.stopBtn.addClass("is-confirming");
+				this.stopBtn.removeClass("is-stopping");
+			} else {
         setIcon(this.stopBtn, this.promptInFlight ? "x" : "square");
         this.stopBtn.setAttr("aria-label", this.promptInFlight ? "Cancel pending send" : "Stop current turn");
         this.stopBtn.setAttr("title", this.promptInFlight ? "Cancel pending send" : "Stop current turn");
-        this.stopBtn.removeClass("is-confirming");
-      }
+				this.stopBtn.removeClass("is-confirming");
+				this.stopBtn.removeClass("is-stopping");
+			}
     }
   }
 

@@ -45,6 +45,8 @@ import { TaskProgress } from "../features/tasks/public";
 import { routeExtensionPanelAction } from "./controller/extension-panel-action-router";
 import { renderViewMode as renderShellViewMode } from "./controller/view-mode-renderer";
 import { routePermissionSlash } from "./controller/permission-slash-router";
+import { resolveSubagentPermissionAction } from "./controller/subagent-permission-action";
+import { TurnAbortController } from "./controller/turn-abort-controller";
 import { FrontendProtocolController } from "../frontend/frontend-protocol-controller";
 import { FrontendStore } from "../frontend/frontend-store";
 import { createFrontendBootstrapRequest } from "./controller/frontend-bootstrap-request";
@@ -95,6 +97,7 @@ export class ChatobbyView extends ItemView {
   private readonly sessionAgentRail: SessionAgentRailController;
   private readonly channelScreen: ChannelScreenController;
   private readonly extensionUi: ExtensionUiController;
+  private readonly turnAbort: TurnAbortController;
   private readonly connectionStatus: ConnectionStatusController;
   private readonly sessionPreferences: SessionPreferenceController;
   private readonly frontendStore = new FrontendStore();
@@ -103,7 +106,7 @@ export class ChatobbyView extends ItemView {
   private pendingFrontendSnapshot: FrontendBootstrap | null = null;
   private appliedFrontendSnapshot: FrontendBootstrap | null = null;
   private pendingFeedCatchup = false;
-  private frontendApplyTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	private frontendApplyTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private readonly handleViewKeydown = (event: KeyboardEvent): void => {
     if (this.viewMode === "session-picker") {
       if (this.sessionPickerMode.handleKeydown(event)) event.stopPropagation();
@@ -264,7 +267,7 @@ export class ChatobbyView extends ItemView {
       forkSession: () => this.commandFork(),
       cloneSession: () => this.commandClone(),
       reload: () => this.executeReloadSlash(),
-      abort: () => this.abortCurrentTurn(),
+      abort: () => this.turnAbort.request(),
       bash: (parsed) => this.executeBashSlash(parsed),
       setModel: (parsed) => this.executeSetModelSlash(parsed),
       setThinking: (parsed) => this.executeSetThinkingSlash(parsed),
@@ -323,6 +326,13 @@ export class ChatobbyView extends ItemView {
       getActiveInteraction: () => this.sessions.activeInteraction(),
       setActiveInteraction: (interaction) => this.setActiveInteraction(interaction),
     });
+    this.turnAbort = new TurnAbortController({
+      cancelInteractions: () => this.extensionUi.cancelAll(),
+      getTransport: () => this.getTransport(),
+      setStopping: (stopping) => this.composer?.setStopping(stopping),
+      setStreaming: (streaming) => this.composer?.setStreaming(streaming),
+      reportError: (error) => { new Notice(`Could not stop the current turn: ${String(error)}`); },
+    });
     this.connectionStatus = new ConnectionStatusController(() => this.getFeedStore());
     this.sessionPreferences = new SessionPreferenceController({
       remember: (patch) => this.plugin.rememberSessionPreferences(patch),
@@ -334,7 +344,6 @@ export class ChatobbyView extends ItemView {
   private get sessionState(): SessionState { return this.sessions.sessionState; }
   private set sessionState(state: SessionState) { this.sessions.sessionState = state; }
   private getTransport(): ChatobbyTransport | null { return this.plugin.getViewTransport(this); }
-  private abortCurrentTurn(): void { this.extensionUi.cancelActive(); this.getTransport()?.abort().catch(() => { }); }
   private runOperation<T>(descriptor: OperationDescriptor, operation: () => Promise<T>): Promise<T> { return this.operations.run(descriptor, operation); }
   getViewType(): string { return VIEW_TYPE; }
   getDisplayText(): string { return "Chatobby"; }
@@ -501,7 +510,7 @@ export class ChatobbyView extends ItemView {
   }
   /** Abort the current generation (command palette). */
   commandAbort(): void {
-    this.abortCurrentTurn();
+    this.turnAbort.request();
   }
 
   /** Trigger context compaction (command palette). */
@@ -628,7 +637,7 @@ export class ChatobbyView extends ItemView {
     this.composer = new Composer({
       send: (msg, att, signal) => this.sendPrompt(msg, att, signal),
       steer: (msg) => this.steerPrompt(msg),
-      abort: () => this.abortCurrentTurn(),
+      abort: () => this.turnAbort.request(),
       canAbort: () => this.getTransport()?.isConnected ?? false,
       getSessionState: () => this.sessionState,
       getSessionPreferences: () => this.plugin.getSessionPreferences(),
@@ -705,7 +714,6 @@ export class ChatobbyView extends ItemView {
   feedThinkingDisplay(): typeof this.plugin.settings.thinkingDisplay { return this.plugin.settings.thinkingDisplay; }
 
   hasActiveWork(): boolean { return this.sessionState.isStreaming || this.sessionState.isCompacting; }
-
   /** Whether the vault runtime and its session transport are ready. */
   private isBackendAvailable(): boolean {
     return this.plugin.getRuntimeState().status === "ready" && (this.getTransport()?.isConnected ?? false);
@@ -734,7 +742,7 @@ export class ChatobbyView extends ItemView {
     // Subscribe to connection state changes
     this.unsubscribeConnection = transport.onConnectionChange((state) => {
       this.toolbar.renderStatus();
-      this.composer.setStreaming(this.sessionState.isStreaming);
+		this.turnAbort.setStreaming(this.sessionState.isStreaming);
       this.composerControls.refresh();
       if (state.status === "connected") {
         this.synchronizeConnectedTransport(transport);
@@ -987,7 +995,7 @@ export class ChatobbyView extends ItemView {
     if (commandsChanged) this.slashCommands.setRuntimeCommands(snapshot.localCommands);
     if (taskPlanChanged) this.taskProgress.setModel(snapshot.taskPlan);
     if (composerChanged) this.composerControls?.refresh();
-    if (sessionChanged) this.composer?.setStreaming(session?.streaming ?? false);
+	if (sessionChanged) this.turnAbort.setStreaming(session?.streaming ?? false);
     if (session && sessionChanged) {
       if (!previous.isStreaming && session.streaming) this.liveStats.start();
       if (previous.isStreaming && !session.streaming) {
@@ -1068,13 +1076,11 @@ export class ChatobbyView extends ItemView {
 	}
 
 	private async decideSubagentPermission(actionId: string): Promise<void> {
-		const parts = actionId.split(":").map((part) => decodeURIComponent(part));
-		const [prefix, decision, runId, nodeId, permissionRequestId, ...rest] = parts;
-		if (prefix !== "subagent-permission" || (decision !== "approve" && decision !== "deny") ||
-			!runId || !nodeId || !permissionRequestId || rest.length > 0) return;
+		const payload = await resolveSubagentPermissionAction(this.app, actionId);
+		if (!payload) return;
 		await this.dispatchNoticeIntent({
 			type: "subagent.decide-permission",
-			payload: { runId, nodeId, permissionRequestId, approved: decision === "approve" },
+			payload,
 		});
 	}
 
@@ -1370,7 +1376,7 @@ export class ChatobbyView extends ItemView {
     this.liveStats.reset();
     this.toolbar?.renderStatus();
     this.composerControls?.refresh();
-    this.composer?.setStreaming(this.sessionState.isStreaming);
+	this.turnAbort.setStreaming(this.sessionState.isStreaming);
     this.feed?.switchStore(this.getFeedStore());
     this.sessionAgentRail.scheduleRefresh();
     void this.liveStats.refresh();
