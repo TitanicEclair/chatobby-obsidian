@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-18
+
 ### Added
 
 - Expanded existing Obsidian workspace and Web Viewer operations with exact
@@ -19,6 +21,12 @@
 
 - Restored scrolling for long Memory record lists without introducing a nested
   competing scroll container.
+- Kept session-directory names and message metadata contained and readable in
+  both side-by-side and stacked layouts.
+- Migrated Chatobby-owned native skills out of user-visible skill directories
+  while preserving user-authored content.
+- Removed review-only incompatibilities around cross-window DOM checks,
+  Promise rejection values, and narrow channel layouts.
 
 ## [0.1.4] - 2026-07-18
 

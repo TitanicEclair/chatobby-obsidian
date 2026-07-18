@@ -1,7 +1,7 @@
-# Chatobby 0.1.5 manual-verification candidate
+# Chatobby 0.1.5 public alpha
 
-This is an unpublished candidate. Do not tag or publish it until the integration
-suite passes and the product owner completes manual verification.
+This release focuses on predictable subagent budgets, reliable navigation,
+long-page usability, and more precise Obsidian workspace and Web Viewer tools.
 
 ## What changed
 
@@ -18,14 +18,20 @@ suite passes and the product owner completes manual verification.
   attachment location and return the exact Markdown link and embed.
 - Agent guidance now explains screenshot-model requirements and the richer
   workspace, browser, and attachment workflows.
+- Session browsing keeps compact names and metadata within their rows across
+  narrow and wide panes.
+- Chatobby-owned native skills migrate out of user-visible skill directories
+  without deleting user-authored content.
+- The release files are built, verified, and supplied with GitHub build
+  provenance attestations from the tagged source.
 
-## Manual checks before release
+## Verification
 
-- Confirm a long Memory list scrolls to its final item in the target vault.
-- Run a small multi-turn subagent task and confirm cached input does not exhaust
-  its token budget or replace a successful result.
-- Exercise exact-pane note/browser opening and native pointer interactions.
-- Promote an image and a document attachment and verify their returned embeds
-  resolve at the configured attachment location.
-- Confirm normal navigation through Permissions, Events, Queries, Channels,
-  Tasks, and Subagents remains scrollable and retains page state.
+- The source and architecture checks pass.
+- The complete plugin test suite passes.
+- Release assets are minified, source-map free, limited to `main.js`,
+  `manifest.json`, and `styles.css`, and checked for local paths, credentials,
+  signing material, and unexpected files.
+
+Chatobby remains public-alpha software. Back up important vaults and begin with
+the minimum permissions needed for the task.
