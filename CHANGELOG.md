@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Made vault entry listing treat `.`, `./`, `/`, and the empty folder as the
+  vault root, normalize Windows separators, and reject traversal attempts.
+
 ## [0.1.5] - 2026-07-18
 
 ### Added

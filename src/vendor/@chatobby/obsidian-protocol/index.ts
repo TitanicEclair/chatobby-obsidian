@@ -117,3 +117,5 @@ export type {
 	ObsidianToolCapabilityDescriptor,
 } from "./tool-capabilities.ts";
 export { evaluateObsidianToolAvailability, OBSIDIAN_TOOL_CAPABILITY_CATALOG } from "./tool-capabilities.ts";
+// --- Vault-relative paths ---
+export { normalizeVaultFolderPath } from "./vault-paths.ts";

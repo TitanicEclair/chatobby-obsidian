@@ -302,9 +302,9 @@ describe("core operations", () => {
   });
 
   describe("vault.list", () => {
-    it("lists root entries with MCP-compatible basename/type fields", async () => {
+    it.each(["/", "", ".", "./", ".\\"])("lists root entries for alias %j", async (folder) => {
       const app = createMockApp(new Map([["root.md", "root"], ["folder/note.md", "child"], ["image.png", "png"]]));
-      const result = await executeOperation("vault.list", { folder: "/" }, makeSignal(), app) as Record<string, unknown>;
+      const result = await executeOperation("vault.list", { folder }, makeSignal(), app) as Record<string, unknown>;
       const entries = result.entries as Array<Record<string, unknown>>;
 
       expect(entries).toEqual(expect.arrayContaining([
@@ -312,6 +312,26 @@ describe("core operations", () => {
         expect.objectContaining({ path: "folder", basename: "folder", type: "folder" }),
         expect.objectContaining({ path: "image.png", basename: "image", type: "attachment", extension: "png" }),
       ]));
+    });
+
+    it("normalizes nested separators and rejects traversal", async () => {
+      const app = createMockApp(new Map([["folder/note.md", "child"]]));
+      const result = await executeOperation(
+        "vault.list",
+        { folder: ".\\folder\\" },
+        makeSignal(),
+        app,
+      ) as Record<string, unknown>;
+      expect(result.entries).toEqual([
+        expect.objectContaining({ path: "folder/note.md", type: "note" }),
+      ]);
+
+      await expect(
+        executeOperation("vault.list", { folder: "../outside" }, makeSignal(), app),
+      ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(
+        executeOperation("vault.list", { folder: "/C:/outside" }, makeSignal(), app),
+      ).rejects.toMatchObject({ code: "INVALID_INPUT" });
     });
 
     it("throws NOTE_NOT_FOUND for non-existent folder", async () => {

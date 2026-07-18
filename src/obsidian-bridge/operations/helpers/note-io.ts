@@ -4,6 +4,7 @@
 // See docs/tooling/bridge-executor.md §8 for the Obsidian API mapping.
 
 import type { App, TFile, TFolder } from "obsidian";
+import { normalizeVaultFolderPath } from "../../../vendor/@chatobby/obsidian-protocol/vault-paths";
 import { BridgeError } from "../../types";
 import { pageTextLines } from "./paging";
 import { computeDiff, type DiffHunk } from "../../../utils/diff";
@@ -267,7 +268,13 @@ export function listEntries(
   folderPath: string,
   opts: { recursive?: boolean; entryTypes?: string[] } = {},
 ): { entries: ObsidianEntryRef[] } | null {
-  const normalizedFolder = folderPath === "/" ? "" : folderPath.replace(/^\/+|\/+$/g, "");
+  let normalizedFolder: string;
+  try {
+    normalizedFolder = normalizeVaultFolderPath(folderPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid vault folder path.";
+    throw new BridgeError("INVALID_INPUT", message);
+  }
   const vaultWithRoot = app.vault as unknown as { getRoot?: () => TFolder };
   const folder = normalizedFolder === ""
     ? vaultWithRoot.getRoot?.()
