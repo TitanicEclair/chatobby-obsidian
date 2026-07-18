@@ -7,7 +7,7 @@ export interface RuntimeStatusMenuHost {
   restart(): Promise<void>;
   stop(): Promise<void>;
   supportsRuntimeUpdates(): boolean;
-  manageRuntime(): void;
+  manageRuntime(repair?: boolean): void;
 }
 
 /** Keyboard-accessible runtime actions attached to the composer status button. */
@@ -38,10 +38,13 @@ export class RuntimeStatusMenu {
       const missing = state.status === "error"
         && state.mode === "managed"
         && state.diagnostics.code === "runtime_not_installed";
+      const invalid = state.status === "error"
+        && state.mode === "managed"
+        && state.diagnostics.code === "runtime_package_invalid";
       menu.addItem((item) => item
-        .setTitle(missing ? "Install Chatobby runtime" : "Check for runtime updates")
-        .setIcon(missing ? "download" : "refresh-cw")
-        .onClick(() => this.host.manageRuntime()));
+        .setTitle(missing ? "Install Chatobby runtime" : invalid ? "Repair Chatobby" : "Check for runtime updates")
+        .setIcon(missing ? "download" : invalid ? "shield-alert" : "refresh-cw")
+        .onClick(() => this.host.manageRuntime(invalid)));
     }
     if (state.status === "ready" || state.status === "error" || state.status === "crash_loop") {
       menu.addItem((item) => item

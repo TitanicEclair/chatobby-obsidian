@@ -1,4 +1,4 @@
-import { createHash, verify } from "node:crypto";
+import { createHash, randomUUID, verify } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { copyFile, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -28,6 +28,12 @@ export interface RuntimePackageManifest {
   files: RuntimePackageFile[];
   signatureAlgorithm: "ed25519";
   signature: string;
+}
+
+export interface PendingRuntimePackageInstallation {
+  executable: string;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
 }
 
 export type ConnectorBuildMode = "development" | "release";
@@ -118,11 +124,23 @@ export class RuntimePackageInstaller {
   }
 
   async install(sourceDirectory: string, manifest: RuntimePackageManifest, pluginVersion: string): Promise<string> {
+    const installation = await this.prepareInstall(sourceDirectory, manifest, pluginVersion);
+    await installation.commit();
+    return installation.executable;
+  }
+
+  async prepareInstall(
+    sourceDirectory: string,
+    manifest: RuntimePackageManifest,
+    pluginVersion: string,
+  ): Promise<PendingRuntimePackageInstallation> {
     verifyRuntimePackage(sourceDirectory, manifest, pluginVersion, this.trustedPublicKey);
     const versionsRoot = join(this.installRoot, "versions");
     const versionDirectory = join(versionsRoot, manifest.version);
-    const stagedDirectory = join(versionsRoot, `.${manifest.version}.${process.pid}.staged`);
-    const backupDirectory = join(versionsRoot, `.${manifest.version}.${process.pid}.backup`);
+    const operationId = randomUUID();
+    const stagedDirectory = join(versionsRoot, `.${manifest.version}.${operationId}.staged`);
+    const backupDirectory = join(versionsRoot, `.${manifest.version}.${operationId}.backup`);
+    const failedDirectory = join(versionsRoot, `.${manifest.version}.${operationId}.failed`);
     await mkdir(versionsRoot, { recursive: true });
     await Promise.all([
       this.removeDirectory(stagedDirectory, { recursive: true, force: true }),
@@ -138,7 +156,9 @@ export class RuntimePackageInstaller {
       encoding: "utf8",
       mode: 0o600,
     });
+    verifyRuntimePackage(stagedDirectory, manifest, pluginVersion, this.trustedPublicKey);
 
+    const current = readPointer(this.installRoot);
     const hadExistingVersion = existsSync(versionDirectory);
     if (hadExistingVersion) await rename(versionDirectory, backupDirectory);
     try {
@@ -150,18 +170,48 @@ export class RuntimePackageInstaller {
       throw error;
     }
 
-    const current = readPointer(this.installRoot);
-    await writePointer(this.installRoot, {
-      version: manifest.version,
-      ...(current && current.version !== manifest.version ? { previousVersion: current.version } : {}),
-    });
-    if (hadExistingVersion) {
-      // Windows keeps a running executable locked after its package directory is
-      // moved aside. The verified replacement and pointer are already committed,
-      // so stale-backup cleanup is best effort rather than an installation failure.
-      await this.removeDirectory(backupDirectory, { recursive: true, force: true }).catch(() => undefined);
+    try {
+      await writePointer(this.installRoot, {
+        version: manifest.version,
+        ...(current && current.version !== manifest.version ? { previousVersion: current.version } : {}),
+        ...(current?.version === manifest.version && current.previousVersion
+          ? { previousVersion: current.previousVersion }
+          : {}),
+      });
+    } catch (error) {
+      await this.removeDirectory(versionDirectory, { recursive: true, force: true }).catch(() => undefined);
+      if (hadExistingVersion && existsSync(backupDirectory)) await rename(backupDirectory, versionDirectory);
+      await restorePointer(this.installRoot, current).catch(() => undefined);
+      throw error;
     }
-    return packagePath(versionDirectory, manifest.executable);
+    let settled = false;
+    return {
+      executable: packagePath(versionDirectory, manifest.executable),
+      commit: async () => {
+        if (settled) return;
+        settled = true;
+        if (hadExistingVersion) {
+          // A successful reconnect proves the replacement can execute. Cleanup is
+          // best effort because antivirus scanners may briefly retain file handles.
+          await this.removeDirectory(backupDirectory, { recursive: true, force: true }).catch(() => undefined);
+        }
+      },
+      rollback: async () => {
+        if (settled) return;
+        if (existsSync(versionDirectory)) await rename(versionDirectory, failedDirectory);
+        try {
+          if (hadExistingVersion && existsSync(backupDirectory)) await rename(backupDirectory, versionDirectory);
+          await restorePointer(this.installRoot, current);
+          settled = true;
+        } catch (error) {
+          if (!existsSync(versionDirectory) && existsSync(failedDirectory)) {
+            await rename(failedDirectory, versionDirectory).catch(() => undefined);
+          }
+          throw error;
+        }
+        await this.removeDirectory(failedDirectory, { recursive: true, force: true }).catch(() => undefined);
+      },
+    };
   }
 
   async rollback(pluginVersion: string): Promise<string> {
@@ -390,6 +440,14 @@ async function writePointer(root: string, pointer: RuntimeInstallPointer): Promi
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify(pointer, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   await rename(temporary, path);
+}
+
+async function restorePointer(root: string, pointer: RuntimeInstallPointer | null): Promise<void> {
+  if (pointer) {
+    await writePointer(root, pointer);
+    return;
+  }
+  await rm(join(root, "current.json"), { force: true });
 }
 
 function isCompatiblePluginVersion(version: string, minimum: string, maximum: string): boolean {

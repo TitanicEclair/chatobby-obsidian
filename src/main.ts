@@ -376,14 +376,15 @@ export default class ChatobbyPlugin extends Plugin {
     return this.runtimeUpdates.onStateChange(listener);
   }
 
-  openRuntimeInstaller(): void {
+  openRuntimeInstaller(repair = false): void {
     new RuntimeInstallModal(this.app, {
       getState: () => this.runtimeUpdates.state,
       onStateChange: (listener) => this.runtimeUpdates.onStateChange(listener),
       checkForUpdate: () => this.runtimeUpdates.check(true),
+      checkForRepair: () => this.runtimeUpdates.checkForRepair(),
       install: (signal) => this.runtimeUpdates.install(signal),
       hasActiveWork: () => this.hasActiveRuntimeWork(),
-    }).open();
+    }, repair).open();
   }
 
   private hasActiveRuntimeWork(): boolean {

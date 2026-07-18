@@ -47,9 +47,9 @@ export class RuntimeUpdateController {
       setIcon(icon, "download");
       container.createSpan({
         cls: "chatobby-runtime-update__label",
-        text: `Runtime ${state.descriptor.version} available`,
+        text: state.kind === "repair" ? "Runtime repair is ready" : `Runtime ${state.descriptor.version} available`,
       });
-      this.action(container, "Update Chatobby");
+      this.action(container, state.kind === "repair" ? "Repair Chatobby" : "Update Chatobby");
     } else if (state.status === "installing") {
       container.removeClass("is-hidden");
       container.addClass("is-progress");
@@ -83,9 +83,9 @@ export class RuntimeUpdateController {
 function stateKey(state: RuntimeUpdateState): string {
   switch (state.status) {
     case "available":
-      return `available:${state.descriptor.version}`;
+      return `available:${state.kind}:${state.descriptor.version}`;
     case "installing":
-      return `installing:${state.descriptor.version}:${state.phase}:${Math.floor(progressRatio(state) * 100)}`;
+      return `installing:${state.kind}:${state.descriptor.version}:${state.phase}:${Math.floor(progressRatio(state) * 100)}`;
     case "error":
       return `error:${state.message}:${state.descriptor?.version ?? ""}`;
     case "current":

@@ -44,4 +44,34 @@ describe("RuntimeStatusMenu", () => {
     install?.callback?.();
     expect(manageRuntime).toHaveBeenCalledOnce();
   });
+
+  it("routes an invalid signed package to same-version repair", () => {
+    const manageRuntime = vi.fn();
+    const state: RuntimeLifecycleState = {
+      status: "error",
+      mode: "managed",
+      diagnostics: {
+        code: "runtime_package_invalid",
+        message: "Runtime package signature is invalid",
+        recentLogs: [],
+        occurredAt: 1,
+      },
+    };
+    const menu = new RuntimeStatusMenu({
+      getState: () => state,
+      hasActiveWork: () => false,
+      restart: vi.fn(),
+      stop: vi.fn(),
+      supportsRuntimeUpdates: () => true,
+      manageRuntime,
+    });
+    const button = document.body.createEl("button");
+    menu.bind(button);
+    button.dispatchEvent(new MouseEvent("click"));
+
+    const repair = testMenu.lastShown?.items.find((item) => item.title === "Repair Chatobby");
+    expect(repair?.icon).toBe("shield-alert");
+    repair?.callback?.();
+    expect(manageRuntime).toHaveBeenCalledWith(true);
+  });
 });

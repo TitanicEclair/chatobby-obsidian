@@ -161,6 +161,24 @@ describe("runtime installation", () => {
     expect(JSON.parse(await readFile(join(installRoot, "current.json"), "utf8"))).toEqual({ version: "1.0.0" });
   });
 
+  it("keeps a same-version repair rollback-capable until reconnection is committed", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const installer = new RuntimePackageInstaller(installRoot, publicKeyPem(keys.publicKey));
+    const originalManifest = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+    await installer.install(source, originalManifest, "0.1.0");
+    const repairedManifest = await writeRuntimePackage(source, "1.0.0", "runtime-repaired", keys.privateKey);
+
+    const pending = await installer.prepareInstall(source, repairedManifest, "0.1.0");
+    expect(await readFile(pending.executable, "utf8")).toBe("runtime-repaired");
+
+    await pending.rollback();
+
+    expect(await readFile(pending.executable, "utf8")).toBe("runtime-original");
+    expect(JSON.parse(await readFile(join(installRoot, "current.json"), "utf8"))).toEqual({ version: "1.0.0" });
+  });
+
   it("rejects a package whose signature is not trusted", async () => {
     const installRoot = await temporaryDirectory();
     const source = await temporaryDirectory();

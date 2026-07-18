@@ -49,7 +49,12 @@ describe("RuntimeStatusController", () => {
         occurredAt: 1,
       },
     };
-    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart, install: vi.fn() });
+    const controller = new RuntimeStatusController({
+      getState: () => state,
+      start: vi.fn(),
+      restart,
+      install: vi.fn(),
+    });
     const container = document.body.createDiv();
     controller.bind(container);
     const firstTitle = container.querySelector(".chatobby-runtime-status__title");
@@ -77,7 +82,12 @@ describe("RuntimeStatusController", () => {
         occurredAt: 1,
       },
     };
-    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart: vi.fn(), install });
+    const controller = new RuntimeStatusController({
+      getState: () => state,
+      start: vi.fn(),
+      restart: vi.fn(),
+      install,
+    });
     const container = document.body.createDiv();
     controller.bind(container);
 
@@ -99,17 +109,55 @@ describe("RuntimeStatusController", () => {
         occurredAt: 1,
       },
     };
-    const controller = new RuntimeStatusController({ getState: () => state, start: vi.fn(), restart: vi.fn(), install: vi.fn() });
+    const controller = new RuntimeStatusController({
+      getState: () => state,
+      start: vi.fn(),
+      restart: vi.fn(),
+      install: vi.fn(),
+    });
     const container = document.body.createDiv();
     controller.bind(container);
 
     expect(Array.from(container.querySelectorAll("button")).map((button) => button.textContent))
       .toEqual(["Retry"]);
   });
+
+  it("offers verified repair instead of retrying an invalid managed package", () => {
+    const install = vi.fn(async () => {});
+    const state: RuntimeLifecycleState = {
+      status: "error",
+      mode: "managed",
+      diagnostics: {
+        code: "runtime_package_invalid",
+        message: "Runtime package signature is invalid",
+        recentLogs: [],
+        occurredAt: 1,
+      },
+    };
+    const controller = new RuntimeStatusController({
+      getState: () => state,
+      start: vi.fn(),
+      restart: vi.fn(),
+      install,
+    });
+    const container = document.body.createDiv();
+    controller.bind(container);
+
+    expect(container.textContent).toContain("Chatobby needs repair");
+    expect(Array.from(container.querySelectorAll("button")).map((button) => button.textContent))
+      .toEqual(["Repair Chatobby"]);
+    (container.querySelector("button") as HTMLButtonElement).click();
+    expect(install).toHaveBeenCalledWith(true);
+  });
 });
 
 function controllerFor(getState: () => RuntimeLifecycleState): RuntimeStatusController {
-  return new RuntimeStatusController({ getState, start: vi.fn(), restart: vi.fn(), install: vi.fn() });
+  return new RuntimeStatusController({
+    getState,
+    start: vi.fn(),
+    restart: vi.fn(),
+    install: vi.fn(),
+  });
 }
 
 function readyState(): RuntimeLifecycleState {

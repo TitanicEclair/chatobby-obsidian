@@ -1,4 +1,5 @@
 import type {
+  PendingRuntimePackageInstallation,
   RuntimePackageInstaller,
 } from "../infrastructure/runtime-installation";
 import {
@@ -9,27 +10,34 @@ import {
 } from "../infrastructure/runtime-update-client";
 
 export type RuntimeUpdateInstallPhase = "downloading" | "extracting" | "installing" | "reconnecting";
+export type RuntimeUpdateOfferKind = "install" | "update" | "repair";
 
 export type RuntimeUpdateState =
   | { status: "idle" }
   | { status: "checking" }
-  | { status: "available"; descriptor: RuntimeUpdateDescriptor; installedVersion: string | null }
+  | {
+    status: "available";
+    descriptor: RuntimeUpdateDescriptor;
+    installedVersion: string | null;
+    kind: RuntimeUpdateOfferKind;
+  }
   | { status: "current"; installedVersion: string; checkedAt: number }
   | {
     status: "installing";
     descriptor: RuntimeUpdateDescriptor;
     installedVersion: string | null;
+    kind: RuntimeUpdateOfferKind;
     phase: RuntimeUpdateInstallPhase;
     completed: number;
     total: number;
   }
-  | { status: "error"; message: string; descriptor?: RuntimeUpdateDescriptor };
+  | { status: "error"; message: string; descriptor?: RuntimeUpdateDescriptor; kind?: RuntimeUpdateOfferKind };
 
 export interface RuntimeUpdateManagerDeps {
   pluginVersion: string;
   enabled: boolean;
   client: RuntimeUpdateClientLike;
-  installer: Pick<RuntimePackageInstaller, "install">;
+  installer: Pick<RuntimePackageInstaller, "prepareInstall">;
   getInstalledVersion(): string | null;
   hasActiveWork(): boolean;
   stopRuntime(): Promise<void>;
@@ -80,6 +88,14 @@ export class RuntimeUpdateManager {
     return operation;
   }
 
+  async checkForRepair(): Promise<RuntimeUpdateDescriptor> {
+    if (!this.deps.enabled) throw new Error("Runtime repair is available only in release builds");
+    if (this.checkPromise) await this.checkPromise.catch(() => undefined);
+    const descriptor = await this.checkInternal(true);
+    if (!descriptor) throw new Error("No compatible Chatobby runtime is available for repair");
+    return descriptor;
+  }
+
   install(signal?: AbortSignal): Promise<string> {
     if (this.installPromise) return this.installPromise;
     const operation = this.installInternal(signal).finally(() => {
@@ -89,17 +105,32 @@ export class RuntimeUpdateManager {
     return operation;
   }
 
-  private async checkInternal(): Promise<RuntimeUpdateDescriptor | null> {
+  private async checkInternal(repair = false): Promise<RuntimeUpdateDescriptor | null> {
     this.emit({ status: "checking" });
     try {
       const descriptor = await this.deps.client.fetchLatest(this.deps.pluginVersion);
       this.checked = true;
       const installedVersion = this.deps.getInstalledVersion();
+      if (repair && installedVersion) {
+        const comparison = compareRuntimeVersions(installedVersion, descriptor.version);
+        if (comparison > 0) {
+          throw new Error(
+            `Installed runtime ${installedVersion} is newer than the latest compatible repair package ${descriptor.version}`,
+          );
+        }
+        this.emit({
+          status: "available",
+          descriptor,
+          installedVersion,
+          kind: comparison === 0 ? "repair" : "update",
+        });
+        return descriptor;
+      }
       if (installedVersion && compareRuntimeVersions(installedVersion, descriptor.version) >= 0) {
         this.emit({ status: "current", installedVersion, checkedAt: (this.deps.now ?? Date.now)() });
         return null;
       }
-      this.emit({ status: "available", descriptor, installedVersion });
+      this.emit({ status: "available", descriptor, installedVersion, kind: installedVersion ? "update" : "install" });
       return descriptor;
     } catch (error) {
       this.emit({ status: "error", message: errorMessage(error) });
@@ -110,38 +141,61 @@ export class RuntimeUpdateManager {
   private async installInternal(signal?: AbortSignal): Promise<string> {
     if (!this.deps.enabled) throw new Error("Runtime installation is available only in release builds");
     if (this.deps.hasActiveWork()) throw new Error("Finish the current Chatobby response before updating the runtime");
-    const descriptor = this.availableDescriptor() ?? await this.check(true);
+    const offer = this.availableOffer();
+    const descriptor = offer?.descriptor ?? await this.check(true);
     if (!descriptor) return this.deps.getInstalledVersion() ?? "current";
-    const installedVersion = this.deps.getInstalledVersion();
+    const installedVersion = offer?.installedVersion ?? this.deps.getInstalledVersion();
+    const kind = offer?.kind ?? (installedVersion ? "update" : "install");
     this.progressKey = null;
-    this.emitInstall(descriptor, installedVersion, "downloading", 0, descriptor.bundle.size);
+    this.emitInstall(descriptor, installedVersion, kind, "downloading", 0, descriptor.bundle.size);
     let staged: Awaited<ReturnType<RuntimeUpdateClientLike["stage"]>> | null = null;
+    let installation: PendingRuntimePackageInstallation | null = null;
     let stopped = false;
     try {
       staged = await this.deps.client.stage(
         descriptor,
         this.deps.pluginVersion,
         signal,
-        (progress) => this.handleProgress(descriptor, installedVersion, progress),
+        (progress) => this.handleProgress(descriptor, installedVersion, kind, progress),
       );
-      this.emitInstall(descriptor, installedVersion, "installing", 0, 1);
+      this.emitInstall(descriptor, installedVersion, kind, "installing", 0, 1);
       await this.deps.stopRuntime();
       stopped = true;
-      await this.deps.installer.install(staged.directory, staged.manifest, this.deps.pluginVersion);
-      this.emitInstall(descriptor, installedVersion, "reconnecting", 1, 1);
+      installation = await this.deps.installer.prepareInstall(staged.directory, staged.manifest, this.deps.pluginVersion);
+      this.emitInstall(descriptor, installedVersion, kind, "reconnecting", 1, 1);
       await this.deps.startRuntime();
       stopped = false;
+      await installation.commit();
       this.checked = true;
       this.emit({ status: "current", installedVersion: descriptor.version, checkedAt: (this.deps.now ?? Date.now)() });
       return descriptor.version;
     } catch (error) {
-      if (stopped) await this.deps.startRuntime().catch(() => undefined);
-      if (error instanceof Error && error.name === "AbortError") {
-        this.emit({ status: "available", descriptor, installedVersion });
-      } else {
-        this.emit({ status: "error", message: errorMessage(error), descriptor });
+      let recoveryError: unknown = null;
+      if (installation) {
+        try {
+          await this.deps.stopRuntime();
+          await installation.rollback();
+          await this.deps.startRuntime();
+          stopped = false;
+        } catch (candidate) {
+          recoveryError = candidate;
+        }
+      } else if (stopped) {
+        try {
+          await this.deps.startRuntime();
+        } catch (candidate) {
+          recoveryError = candidate;
+        }
       }
-      throw error;
+      const failure = recoveryError
+        ? new Error(`${errorMessage(error)} Automatic rollback could not restore Chatobby: ${errorMessage(recoveryError)}`)
+        : error;
+      if (failure instanceof Error && failure.name === "AbortError") {
+        this.emit({ status: "available", descriptor, installedVersion, kind });
+      } else {
+        this.emit({ status: "error", message: errorMessage(failure), descriptor, kind });
+      }
+      throw failure;
     } finally {
       await staged?.cleanup().catch(() => undefined);
     }
@@ -150,23 +204,29 @@ export class RuntimeUpdateManager {
   private handleProgress(
     descriptor: RuntimeUpdateDescriptor,
     installedVersion: string | null,
+    kind: RuntimeUpdateOfferKind,
     progress: RuntimeUpdateTransferProgress,
   ): void {
     const percent = progress.total <= 0 ? 0 : Math.floor((progress.completed / progress.total) * 100);
     const key = `${progress.phase}:${percent}`;
     if (key === this.progressKey) return;
     this.progressKey = key;
-    this.emitInstall(descriptor, installedVersion, progress.phase, progress.completed, progress.total);
+    this.emitInstall(descriptor, installedVersion, kind, progress.phase, progress.completed, progress.total);
   }
 
   private emitInstall(
     descriptor: RuntimeUpdateDescriptor,
     installedVersion: string | null,
+    kind: RuntimeUpdateOfferKind,
     phase: RuntimeUpdateInstallPhase,
     completed: number,
     total: number,
   ): void {
-    this.emit({ status: "installing", descriptor, installedVersion, phase, completed, total });
+    this.emit({ status: "installing", descriptor, installedVersion, kind, phase, completed, total });
+  }
+
+  private availableOffer(): Extract<RuntimeUpdateState, { status: "available" }> | null {
+    return this.stateValue.status === "available" ? this.stateValue : null;
   }
 
   private availableDescriptor(): RuntimeUpdateDescriptor | null {

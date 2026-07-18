@@ -16,6 +16,7 @@ export { RuntimeUpdateManager } from "./application/runtime-update-manager";
 export type {
   RuntimeUpdateInstallPhase,
   RuntimeUpdateManagerDeps,
+  RuntimeUpdateOfferKind,
   RuntimeUpdateState,
 } from "./application/runtime-update-manager";
 export type { RuntimeUpdateDescriptor } from "./infrastructure/runtime-update-client";

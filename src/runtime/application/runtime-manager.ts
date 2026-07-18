@@ -223,7 +223,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         this.emit({ status: "error", mode, diagnostics });
         throw failure;
       }
-      if (failure.code === "runtime_not_installed") {
+      if (failure.code === "runtime_not_installed" || failure.code === "runtime_package_invalid") {
         this.emit({ status: "error", mode, diagnostics });
         throw failure;
       }
@@ -265,7 +265,14 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     const vaultPaths = this.deps.getVaultPaths();
     if (!vaultPaths) throw new RuntimeStartError("configuration_invalid", "Chatobby requires a filesystem-backed vault");
     const vaultId = deriveRuntimeVaultId(vaultPaths.vaultRoot);
-    const managedCommand = mode === "managed" ? this.deps.resolveManagedCommand() : null;
+    let managedCommand: ManagedCommand | null = null;
+    if (mode === "managed") {
+      try {
+        managedCommand = this.deps.resolveManagedCommand();
+      } catch (error) {
+        throw new RuntimeStartError("runtime_package_invalid", errorMessage(error));
+      }
+    }
     if (mode === "managed" && !managedCommand) {
       throw new RuntimeStartError("runtime_not_installed", "The Chatobby runtime is not installed");
     }

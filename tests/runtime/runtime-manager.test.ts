@@ -247,6 +247,29 @@ describe("DefaultChatobbyRuntimeManager", () => {
     }
   });
 
+  it("classifies an invalid signed package as repairable and does not retry it", async () => {
+    vi.useFakeTimers();
+    try {
+      const processLauncher = fakeProcessLauncher();
+      const manager = createManager({
+        managedCommandError: new Error("Runtime package signature is invalid"),
+        processLauncher,
+      });
+
+      await expect(manager.ensureReady({ reason: "view-open" })).rejects.toThrow("signature is invalid");
+      expect(manager.state).toMatchObject({
+        status: "error",
+        diagnostics: { code: "runtime_package_invalid" },
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(processLauncher.spawn).not.toHaveBeenCalled();
+      expect(manager.state).not.toHaveProperty("retryAt");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("enters a crash loop after five failed starts and manual restart resets it", async () => {
     vi.useFakeTimers();
     try {
@@ -404,13 +427,16 @@ function createManager(overrides: ManagerOverrides = {}) {
   return new DefaultChatobbyRuntimeManager({
     getConfiguration: () => configuration,
     getVaultPaths: () => VAULT_PATHS,
-    resolveManagedCommand: () => "managedCommand" in overrides
-      ? overrides.managedCommand ?? null
-      : {
+    resolveManagedCommand: () => {
+      if (overrides.managedCommandError) throw overrides.managedCommandError;
+      return "managedCommand" in overrides
+        ? overrides.managedCommand ?? null
+        : {
           command: "chatobby",
           args: [],
           runtimePackageFingerprint: DESCRIPTOR.runtimePackageFingerprint ?? undefined,
-        },
+        };
+    },
     connectRuntime: overrides.connectRuntime ?? (async () => {}),
     disconnectRuntime: overrides.disconnectRuntime ?? (async () => {}),
     pluginVersion: "0.1.0-test",
@@ -479,4 +505,5 @@ interface ManagerOverrides {
   disconnectRuntime?: () => Promise<void>;
   runtimePublicKey?: string | null;
   managedCommand?: { command: string; args: string[]; runtimePackageFingerprint?: string } | null;
+  managedCommandError?: Error;
 }

@@ -671,7 +671,7 @@ export class ChatobbyView extends ItemView {
       getState: () => this.plugin.getRuntimeState(),
       start: () => this.plugin.startBackend(),
       restart: () => this.plugin.restartRuntime(),
-      install: async () => this.plugin.openRuntimeInstaller(),
+      install: async (repair) => this.plugin.openRuntimeInstaller(repair),
     });
     this.runtimeStatusMenu = new RuntimeStatusMenu({
       getState: () => this.plugin.getRuntimeState(),
@@ -679,7 +679,7 @@ export class ChatobbyView extends ItemView {
       restart: () => this.plugin.restartRuntime(),
       stop: () => this.plugin.stopBackend(),
       supportsRuntimeUpdates: () => this.plugin.isReleaseBuild(),
-      manageRuntime: () => this.plugin.openRuntimeInstaller(),
+      manageRuntime: (repair) => this.plugin.openRuntimeInstaller(repair),
     });
     this.runtimeUpdate = new RuntimeUpdateController({
       getState: () => this.plugin.getRuntimeUpdateState(),

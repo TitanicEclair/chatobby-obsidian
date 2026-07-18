@@ -9,6 +9,7 @@ export interface RuntimeInstallModalHost {
   getState(): RuntimeUpdateState;
   onStateChange(listener: (state: RuntimeUpdateState) => void): () => void;
   checkForUpdate(): Promise<unknown>;
+  checkForRepair(): Promise<unknown>;
   install(signal?: AbortSignal): Promise<string>;
   hasActiveWork(): boolean;
 }
@@ -19,13 +20,18 @@ export class RuntimeInstallModal extends Modal {
   private abortController: AbortController | null = null;
   private completedVersion: string | null = null;
 
-  constructor(app: App, private readonly host: RuntimeInstallModalHost) {
+  constructor(app: App, private readonly host: RuntimeInstallModalHost, private readonly repairRequested = false) {
     super(app);
   }
 
   onOpen(): void {
     this.modalEl.addClass("chatobby-runtime-install-modal");
     this.unsubscribe = this.host.onStateChange(() => this.render());
+    if (this.repairRequested) {
+      void this.refreshRepair();
+      this.render();
+      return;
+    }
     this.render();
     const state = this.host.getState();
     if (state.status === "idle" || (state.status === "error" && !state.descriptor)) {
@@ -78,14 +84,17 @@ export class RuntimeInstallModal extends Modal {
       return;
     }
     if (state.status === "available") {
-      const installingFresh = state.installedVersion === null;
-      this.setTitle(installingFresh ? "Install Chatobby" : "Update Chatobby");
-      this.statusIcon(installingFresh ? "download" : "package-open");
+      const installingFresh = state.kind === "install";
+      const repairing = state.kind === "repair";
+      this.setTitle(installingFresh ? "Install Chatobby" : repairing ? "Repair Chatobby" : "Update Chatobby");
+      this.statusIcon(installingFresh ? "download" : repairing ? "shield-check" : "package-open");
       this.contentEl.createDiv({
         cls: "chatobby-runtime-install__lead",
         text: installingFresh
           ? "Chatobby needs its local runtime before it can start."
-          : `Runtime ${state.descriptor.version} is ready to install.`,
+          : repairing
+            ? `A fresh, signed copy of runtime ${state.descriptor.version} is ready to replace the invalid package.`
+            : `Runtime ${state.descriptor.version} is ready to install.`,
       });
       this.releaseSummary(state);
       if (this.host.hasActiveWork()) {
@@ -97,7 +106,7 @@ export class RuntimeInstallModal extends Modal {
       this.actions([
         { label: "Cancel", run: () => this.close() },
         {
-          label: installingFresh ? "Install" : "Update",
+          label: installingFresh ? "Install" : repairing ? "Repair" : "Update",
           primary: true,
           disabled: this.host.hasActiveWork(),
           run: () => void this.install(),
@@ -106,7 +115,9 @@ export class RuntimeInstallModal extends Modal {
       return;
     }
     if (state.status === "installing") {
-      this.setTitle(state.installedVersion ? "Updating Chatobby" : "Installing Chatobby");
+      this.setTitle(
+        state.kind === "repair" ? "Repairing Chatobby" : state.kind === "update" ? "Updating Chatobby" : "Installing Chatobby",
+      );
       this.statusIcon("loader-circle", true);
       this.contentEl.createDiv({ cls: "chatobby-runtime-install__lead", text: phaseLabel(state) });
       const progress = progressRatio(state);
@@ -139,7 +150,11 @@ export class RuntimeInstallModal extends Modal {
     });
     this.actions([
       { label: "Release page", run: () => openChatobbyUrl(CHATOBBY_RUNTIME_RELEASES_URL) },
-      { label: "Try again", primary: true, run: () => void this.refresh() },
+      {
+        label: "Try again",
+        primary: true,
+        run: () => void (this.repairRequested || state.kind === "repair" ? this.refreshRepair() : this.refresh()),
+      },
     ]);
   }
 
@@ -185,6 +200,14 @@ export class RuntimeInstallModal extends Modal {
     }
   }
 
+  private async refreshRepair(): Promise<void> {
+    try {
+      await this.host.checkForRepair();
+    } catch (error) {
+      console.error("Chatobby: runtime repair check failed", error);
+    }
+  }
+
   private async install(): Promise<void> {
     if (this.host.hasActiveWork()) {
       new Notice("Finish the current Chatobby response before updating the runtime");
@@ -214,7 +237,7 @@ interface ModalAction {
 function phaseLabel(state: Extract<RuntimeUpdateState, { status: "installing" }>): string {
   switch (state.phase) {
     case "downloading":
-      return `Downloading runtime ${state.descriptor.version}…`;
+      return `${state.kind === "repair" ? "Downloading a fresh copy of" : "Downloading"} runtime ${state.descriptor.version}…`;
     case "extracting":
       return "Checking and preparing the downloaded files…";
     case "installing":

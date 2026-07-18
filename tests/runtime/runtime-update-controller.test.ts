@@ -19,7 +19,7 @@ describe("RuntimeUpdateController", () => {
     controller.bind(container);
     expect(container.hasClass("is-hidden")).toBe(true);
 
-    state = { status: "available", descriptor: descriptor(), installedVersion: "0.1.2" };
+    state = { status: "available", descriptor: descriptor(), installedVersion: "0.1.2", kind: "update" };
     listener?.(state);
 
     expect(container.hasClass("is-hidden")).toBe(false);

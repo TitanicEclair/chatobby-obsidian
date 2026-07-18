@@ -8,12 +8,13 @@ afterEach(() => document.body.empty());
 
 describe("RuntimeInstallModal", () => {
   it("explains a fresh install and requires an explicit confirmation", async () => {
-    const state: RuntimeUpdateState = { status: "available", descriptor: descriptor(), installedVersion: null };
+    const state: RuntimeUpdateState = { status: "available", descriptor: descriptor(), installedVersion: null, kind: "install" };
     const install = vi.fn(async () => "0.1.2");
     const modal = new RuntimeInstallModal({} as App, {
       getState: () => state,
       onStateChange: () => () => undefined,
       checkForUpdate: vi.fn(),
+      checkForRepair: vi.fn(),
       install,
       hasActiveWork: () => false,
     });
@@ -31,11 +32,17 @@ describe("RuntimeInstallModal", () => {
   });
 
   it("does not allow an update to interrupt active work", () => {
-    const state: RuntimeUpdateState = { status: "available", descriptor: descriptor(), installedVersion: "0.1.1" };
+    const state: RuntimeUpdateState = {
+      status: "available",
+      descriptor: descriptor(),
+      installedVersion: "0.1.1",
+      kind: "update",
+    };
     const modal = new RuntimeInstallModal({} as App, {
       getState: () => state,
       onStateChange: () => () => undefined,
       checkForUpdate: vi.fn(),
+      checkForRepair: vi.fn(),
       install: vi.fn(),
       hasActiveWork: () => true,
     });
@@ -46,6 +53,35 @@ describe("RuntimeInstallModal", () => {
     const update = Array.from(modal.contentEl.querySelectorAll("button"))
       .find((candidate) => candidate.textContent === "Update") as HTMLButtonElement;
     expect(update.disabled).toBe(true);
+  });
+
+  it("presents same-version repair as a distinct explicit action", async () => {
+    const state: RuntimeUpdateState = {
+      status: "available",
+      descriptor: descriptor(),
+      installedVersion: "0.1.2",
+      kind: "repair",
+    };
+    const checkForRepair = vi.fn();
+    const install = vi.fn(async () => "0.1.2");
+    const modal = new RuntimeInstallModal({} as App, {
+      getState: () => state,
+      onStateChange: () => () => undefined,
+      checkForUpdate: vi.fn(),
+      checkForRepair,
+      install,
+      hasActiveWork: () => false,
+    }, true);
+
+    modal.open();
+
+    expect(modal.titleEl.textContent).toBe("Repair Chatobby");
+    expect(modal.contentEl.textContent).toContain("fresh, signed copy");
+    expect(checkForRepair).toHaveBeenCalledOnce();
+    const repair = Array.from(modal.contentEl.querySelectorAll("button"))
+      .find((candidate) => candidate.textContent === "Repair") as HTMLButtonElement;
+    repair.click();
+    await vi.waitFor(() => expect(install).toHaveBeenCalledOnce());
   });
 });
 

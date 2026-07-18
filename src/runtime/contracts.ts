@@ -13,6 +13,7 @@ export type RuntimeLifetime = "obsidian-session" | "background";
 export type RuntimeFailureCode =
   | "configuration_invalid"
   | "runtime_not_installed"
+  | "runtime_package_invalid"
   | "descriptor_invalid"
   | "identity_mismatch"
   | "authentication_failed"

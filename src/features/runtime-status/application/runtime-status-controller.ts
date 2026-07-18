@@ -5,7 +5,7 @@ export interface RuntimeStatusHost {
   getState(): RuntimeLifecycleState;
   start(): Promise<void>;
   restart(): Promise<void>;
-  install(): Promise<void>;
+  install(repair?: boolean): Promise<void>;
 }
 
 /** Render low-noise lifecycle progress and actionable terminal failures. */
@@ -72,8 +72,11 @@ export class RuntimeStatusController {
     } else if (state.status === "error" || state.status === "crash_loop") {
       if (shouldOfferRuntimeDownload(state)) {
         this.actionButton(container, "Install runtime", () => this.host.install());
+      } else if (shouldOfferRuntimeRepair(state)) {
+        this.actionButton(container, "Repair Chatobby", () => this.host.install(true));
+      } else {
+        this.actionButton(container, state.status === "crash_loop" ? "Try again" : "Retry", () => this.host.restart());
       }
-      this.actionButton(container, state.status === "crash_loop" ? "Try again" : "Retry", () => this.host.restart());
       const details = container.createEl("details", { cls: "chatobby-runtime-status__diagnostics" });
       details.createEl("summary", { text: "Details" });
       details.createEl("code", { text: state.diagnostics.code });
@@ -114,6 +117,12 @@ function shouldOfferRuntimeDownload(
   return state.mode === "managed" && state.diagnostics.code === "runtime_not_installed";
 }
 
+function shouldOfferRuntimeRepair(
+  state: Extract<RuntimeLifecycleState, { status: "error" | "crash_loop" }>,
+): boolean {
+  return state.mode === "managed" && state.diagnostics.code === "runtime_package_invalid";
+}
+
 const STATUS_REVEAL_DELAY_MS = 250;
 
 interface RuntimeStatePresentation {
@@ -137,6 +146,15 @@ function presentRuntimeState(state: RuntimeLifecycleState): RuntimeStatePresenta
     case "stopping":
       return { title: "Stopping Chatobby", detail: "Finishing runtime cleanup.", icon: "loader-circle", failure: false, loading: true };
     case "error":
+      if (state.mode === "managed" && state.diagnostics.code === "runtime_package_invalid") {
+        return {
+          title: "Chatobby needs repair",
+          detail: state.diagnostics.message,
+          icon: "shield-alert",
+          failure: true,
+          loading: false,
+        };
+      }
       return { title: "Chatobby could not start", detail: state.diagnostics.message, icon: "circle-alert", failure: true, loading: false };
     case "crash_loop":
       return { title: "Automatic restart paused", detail: state.diagnostics.message, icon: "triangle-alert", failure: true, loading: false };
