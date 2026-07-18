@@ -367,6 +367,8 @@
   box-shadow: inset 2px 0 0 var(--chatobby-accent);
 }
 .chatobby-session-picker__body {
+  container-name: chatobby-session-list;
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -398,17 +400,6 @@
   .chatobby-session-picker__workspace {
     grid-template-columns: minmax(148px, 36%) minmax(0, 1fr);
   }
-  .chatobby-session-picker__item-open {
-    grid-template-columns: 1fr;
-    gap: var(--size-2-1);
-  }
-  .chatobby-session-picker__item-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--size-2-1) var(--size-4-2);
-    white-space: normal;
-    text-align: left;
-  }
 }
 @container (max-width: 480px) {
   .chatobby-session-picker__workspace {
@@ -433,6 +424,7 @@
   min-width: 0;
   max-width: 100%;
   min-height: 42px;
+  height: auto;
   padding: 0;
   border: 0;
   border-bottom: var(--border-width) solid color-mix(in srgb, var(--chatobby-border) 72%, transparent);
@@ -451,12 +443,14 @@ button.chatobby-session-picker__item-open {
   max-width: 100%;
   min-width: 0;
   min-height: 40px;
+  height: auto;
   padding: var(--size-2-2) var(--size-4-2);
   border: 0;
   border-radius: 0;
   color: inherit;
   background: transparent;
   box-shadow: none;
+  overflow: hidden;
   text-align: left;
   box-sizing: border-box;
 }
@@ -484,14 +478,49 @@ button.chatobby-session-picker__item-open {
   font-size: var(--font-ui-smaller);
 }
 .chatobby-session-picker__item-meta {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) max-content;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: var(--size-2-1) var(--size-4-2);
   color: var(--text-muted);
   font-family: var(--font-monospace-theme);
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
   text-align: right;
 }
-.chatobby-session-picker__item-meta > div + div {
-  margin-top: var(--size-2-1);
+.chatobby-session-picker__item-meta-last {
+  grid-column: 1;
+  grid-row: 1;
+}
+.chatobby-session-picker__item-meta-created {
+  grid-column: 1;
+  grid-row: 2;
+}
+.chatobby-session-picker__item-meta-messages {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+@container chatobby-session-list (max-width: 520px) {
+  .chatobby-session-picker__item-open {
+    grid-template-columns: 1fr;
+    gap: var(--size-2-1);
+  }
+  .chatobby-session-picker__item-meta {
+    justify-self: stretch;
+    text-align: left;
+  }
+}
+@container chatobby-session-list (max-width: 400px) {
+  .chatobby-session-picker__item-meta-messages {
+    display: none;
+  }
+}
+@container chatobby-session-list (max-width: 320px) {
+  .chatobby-session-picker__item-meta-created {
+    display: none;
+  }
 }
 @container (max-width: 340px) {
   .chatobby-session-picker__header {
@@ -500,10 +529,17 @@ button.chatobby-session-picker__item-open {
   .chatobby-session-picker__directory-actions {
     margin-left: auto;
   }
-  .chatobby-session-picker__item-meta > div:last-child {
+  .chatobby-session-picker__hint {
     display: none;
   }
-  .chatobby-session-picker__hint {
+}
+@container chatobby-session-list (max-width: 260px) {
+  .chatobby-session-picker__item-meta-label {
+    display: none;
+  }
+}
+@container chatobby-session-list (max-width: 220px) {
+  .chatobby-session-picker__item-meta {
     display: none;
   }
 }
@@ -1180,6 +1216,16 @@ button.chatobby-send-btn:hover {
 .chatobby-stop-btn svg {
   width: calc(var(--size-4-4) * 0.62);
   height: calc(var(--size-4-4) * 0.62);
+}
+.chatobby-stop-btn.is-stopping svg {
+  width: var(--size-4-4);
+  height: var(--size-4-4);
+  animation: chatobby-composer-spin 0.8s linear infinite;
+}
+@keyframes chatobby-composer-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .chatobby-settings-note {
   color: var(--text-muted);
@@ -3302,7 +3348,12 @@ button.chatobby-send-btn:hover {
   justify-content: flex-end;
   gap: var(--size-2-2);
 }
-.chatobby-memory__records,
+.chatobby-memory__records {
+  display: grid;
+  min-width: 0;
+  flex: 0 0 auto;
+  gap: var(--size-2-2);
+}
 .chatobby-memory__detail {
   min-width: 0;
   border: var(--border-width) solid var(--chatobby-border);
@@ -3311,53 +3362,60 @@ button.chatobby-send-btn:hover {
 }
 .chatobby-memory__record {
   width: 100%;
-  border-bottom: var(--border-width) solid var(--chatobby-border);
+  border: var(--border-width) solid var(--chatobby-border);
+  border-radius: var(--radius-m);
   background: var(--chatobby-canvas);
+  overflow: hidden;
 }
 .chatobby-memory__record-summary {
   display: grid;
   width: 100%;
   height: auto;
   min-height: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--size-4-2);
-  padding: var(--size-2-2) var(--size-4-3);
+  grid-template-columns: auto minmax(min-content, max-content) 1px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--size-2-2);
+  padding: var(--size-2-1) var(--size-4-3);
   border: 0;
   border-radius: 0;
   background: var(--chatobby-canvas);
   text-align: left;
 }
-.chatobby-memory__record:last-child {
-  border-bottom: 0;
-}
-.chatobby-memory__record-summary:hover,
-.chatobby-memory__record.is-active > .chatobby-memory__record-summary {
+.chatobby-memory__record-summary:hover {
   background: var(--chatobby-surface-hover);
+}
+.chatobby-memory__record.is-active > .chatobby-memory__record-summary {
+  background: var(--chatobby-canvas);
 }
 .chatobby-memory__record.is-active {
   box-shadow: inset 3px 0 0 var(--chatobby-accent);
 }
 .chatobby-memory__record-icon {
   display: inline-flex;
-  margin-top: 2px;
+  align-self: center;
   color: var(--text-muted);
 }
-.chatobby-memory__record-copy {
+.chatobby-memory__record-category {
   display: flex;
   min-width: 0;
-  flex-direction: column;
+  max-width: 12rem;
+  align-items: center;
   gap: var(--size-2-1);
-}
-.chatobby-memory__record-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--size-2-2);
   color: var(--text-faint);
   font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+.chatobby-memory__record-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .chatobby-memory__record-state {
   color: var(--text-accent);
+}
+.chatobby-memory__record-divider {
+  width: 1px;
+  height: 1.25em;
+  background: var(--chatobby-border);
 }
 .chatobby-memory__record-content {
   display: -webkit-box;
@@ -3367,14 +3425,14 @@ button.chatobby-send-btn:hover {
   line-height: var(--line-height-normal);
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
 .chatobby-memory__record > .chatobby-memory__detail {
   padding: var(--size-4-3) var(--size-4-4) var(--size-4-4);
   border: 0;
   border-top: var(--border-width) solid var(--chatobby-border);
   border-radius: 0;
-  background: var(--chatobby-surface-muted);
+  background: var(--chatobby-canvas);
 }
 .chatobby-memory__detail-empty {
   display: flex;
@@ -4534,13 +4592,14 @@ button.chatobby-send-btn:hover {
 }
 .chatobby-subagents__run-filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--size-2-2);
   padding-bottom: var(--size-4-3);
 }
 .chatobby-subagents__run-filter-actions {
   display: flex;
-  grid-column: 1 / -1;
+  grid-column: 1;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--size-2-2);
 }
@@ -5114,17 +5173,22 @@ button.chatobby-send-btn:hover {
 
 /* src/features/runtime-status/ui/runtime-status.css */
 .chatobby-runtime-status {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
   display: flex;
   align-items: flex-start;
   gap: var(--size-4-2);
   width: min(var(--chatobby-content-max-width), calc(100% - (2 * var(--chatobby-edge-padding))));
-  margin: var(--size-4-2) auto 0;
+  margin: var(--size-4-2) 0 0;
   padding: var(--size-4-2) var(--size-4-3);
   border: 1px solid var(--chatobby-border);
   border-radius: var(--radius-m);
   background: var(--chatobby-surface-muted);
   color: var(--text-muted);
   box-sizing: border-box;
+  transform: translateX(-50%);
 }
 .chatobby-runtime-status.is-hidden {
   display: none;
@@ -5186,6 +5250,117 @@ button.chatobby-send-btn:hover {
   max-width: 100%;
   flex-basis: 100%;
 }
+.chatobby-runtime-update {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  width: min(var(--chatobby-content-max-width), calc(100% - (2 * var(--chatobby-edge-padding))));
+  min-height: 28px;
+  margin: 0 auto;
+  padding: 0 var(--size-4-2);
+  color: var(--text-muted);
+  font-size: var(--chatobby-meta-size);
+  box-sizing: border-box;
+}
+.chatobby-runtime-update.is-hidden {
+  display: none;
+}
+.chatobby-runtime-update__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--chatobby-accent);
+}
+.chatobby-runtime-update.is-progress .chatobby-runtime-update__icon svg,
+.chatobby-runtime-install__icon.is-spinning svg {
+  animation: chatobby-runtime-spin 1.2s linear infinite;
+}
+.chatobby-runtime-update.is-error .chatobby-runtime-update__icon {
+  color: var(--text-error);
+}
+.chatobby-runtime-update__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chatobby-runtime-update__action {
+  margin-left: auto;
+  padding: 2px var(--size-4-2);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  font-size: inherit;
+}
+.chatobby-runtime-update__action:hover,
+.chatobby-runtime-update__action:focus-visible {
+  background: var(--background-modifier-hover);
+}
+.chatobby-runtime-install-modal {
+  width: min(520px, calc(100vw - (2 * var(--size-4-4))));
+}
+.chatobby-runtime-install-modal .modal-content {
+  padding-top: var(--size-4-2);
+}
+.chatobby-runtime-install__icon {
+  display: inline-flex;
+  margin: var(--size-4-2) 0 var(--size-4-3);
+  color: var(--text-accent);
+}
+.chatobby-runtime-install__icon svg {
+  width: 24px;
+  height: 24px;
+}
+.chatobby-runtime-install__lead {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  line-height: var(--line-height-normal);
+}
+.chatobby-runtime-install__hint,
+.chatobby-runtime-install__notice {
+  margin-top: var(--size-4-3);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: var(--line-height-normal);
+}
+.chatobby-runtime-install__notice {
+  color: var(--text-warning);
+}
+.chatobby-runtime-install__summary {
+  display: flex;
+  gap: var(--size-4-3);
+  margin-top: var(--size-4-3);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.chatobby-runtime-install__details {
+  margin-top: var(--size-4-3);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.chatobby-runtime-install__details p {
+  margin: var(--size-4-2) 0 0;
+  line-height: var(--line-height-normal);
+}
+.chatobby-runtime-install__progress {
+  height: 3px;
+  margin-top: var(--size-4-4);
+  overflow: hidden;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-border);
+}
+.chatobby-runtime-install__progress-value {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--interactive-accent);
+  transition: width 120ms linear;
+}
+.chatobby-runtime-install__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--size-4-2);
+  margin-top: var(--size-4-5);
+}
 
 /* src/features/tasks/ui/tasks.css */
 .chatobby-task-progress-host {
@@ -5202,7 +5377,7 @@ button.chatobby-send-btn:hover {
 .chatobby-task-progress-host.is-view-hidden {
   display: none;
 }
-.chatobby-task-progress__toggle {
+.chatobby-task-progress-host .chatobby-task-progress__toggle {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -5217,8 +5392,8 @@ button.chatobby-send-btn:hover {
   color: var(--text-muted);
   text-align: left;
 }
-.chatobby-task-progress__toggle:hover,
-.chatobby-task-progress__toggle:focus-visible {
+.chatobby-task-progress-host .chatobby-task-progress__toggle:hover,
+.chatobby-task-progress-host .chatobby-task-progress__toggle:focus-visible {
   background: transparent;
   color: var(--text-normal);
 }
@@ -6100,6 +6275,14 @@ button.chatobby-send-btn:hover {
   min-width: 0;
   flex-direction: column;
 }
+.chatobby-channels__conversation-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-1);
+}
+.chatobby-channels__conversation-actions .is-danger {
+  color: var(--text-error);
+}
 .chatobby-channels__conversation-heading strong {
   overflow-wrap: anywhere;
 }
@@ -6233,7 +6416,11 @@ button.chatobby-send-btn:hover {
     display: none;
   }
   .chatobby-channels__group {
-    display: contents;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: stretch;
+    gap: var(--size-2-1);
+    margin-top: 0;
   }
   .chatobby-channels__channel {
     flex: 0 0 min(220px, 72cqw);
