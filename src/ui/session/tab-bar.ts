@@ -22,7 +22,7 @@ export class TabBar extends ChatobbyComponent {
   refresh(): void {
     if (this.directoryLabelEl) this.directoryLabelEl.textContent = this.host.workingDirectoryLabel();
 		for (const element of Array.from(this.pagesEl?.children ?? [])) {
-			if (!(element instanceof HTMLElement)) continue;
+			if (!isDomElementOfType(element, HTMLElement)) continue;
 			const active = element.dataset.mode === this.host.activeMode();
 			element.toggleClass("is-active", active);
 			element.setAttr("aria-pressed", String(active));
@@ -85,4 +85,13 @@ export class TabBar extends ChatobbyComponent {
 			this.host.onNavigate(mode);
 		});
 	}
+}
+
+function isDomElementOfType<T extends Element>(
+	element: Element,
+	constructor: { new (): T; prototype: T },
+): element is T {
+	return typeof element.instanceOf === "function"
+		? element.instanceOf(constructor)
+		: constructor.prototype.isPrototypeOf(element);
 }

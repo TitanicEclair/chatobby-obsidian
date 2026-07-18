@@ -126,7 +126,7 @@ function linkifyPlainTextRefs(container: HTMLElement, decorators: LinkDecorators
   while (walker.nextNode()) {
     const node = walker.currentNode;
     const TextConstructor = ownerDocument.defaultView?.Text ?? Text;
-    if (node instanceof TextConstructor) nodes.push(node);
+    if (isDomNodeOfType(node, TextConstructor)) nodes.push(node);
   }
 
   for (const node of nodes) {
@@ -253,4 +253,13 @@ function isExcludedTextParent(element: HTMLElement): boolean {
 
 function isPromiseLike(value: void | Promise<void>): value is Promise<void> {
   return Boolean(value && typeof value.then === "function");
+}
+
+function isDomNodeOfType<T extends Node>(
+  node: Node,
+  constructor: { new (): T; prototype: T },
+): node is T {
+  return typeof node.instanceOf === "function"
+    ? node.instanceOf(constructor)
+    : constructor.prototype.isPrototypeOf(node);
 }

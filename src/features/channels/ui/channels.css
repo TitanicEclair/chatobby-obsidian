@@ -46,7 +46,7 @@
   .chatobby-channels__layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .chatobby-channels__sidebar { display: flex; align-items: stretch; gap: var(--size-2-1); padding: var(--size-2-2); overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: var(--border-width) solid var(--chatobby-border); }
   .chatobby-channels__section-label { display: none; }
-	.chatobby-channels__group { display: contents; }
+	.chatobby-channels__group { display: flex; flex: 0 0 auto; align-items: stretch; gap: var(--size-2-1); margin-top: 0; }
   .chatobby-channels__channel { flex: 0 0 min(220px, 72cqw); width: min(220px, 72cqw); min-width: 150px; }
 }
 

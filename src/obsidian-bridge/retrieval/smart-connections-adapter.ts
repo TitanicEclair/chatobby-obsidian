@@ -348,9 +348,9 @@ function withTimeout<T>(promise: Promise<T>): Promise<T> {
     promise.then((value) => {
       clearTimeout(timer);
       resolve(value);
-    }, (error) => {
+    }, (error: unknown) => {
       clearTimeout(timer);
-      reject(error);
+      reject(error instanceof Error ? error : new Error(String(error)));
     });
   });
 }
