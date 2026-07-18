@@ -3,8 +3,9 @@
 ## Chatobby runtime is not installed
 
 Select **Get runtime** in the Chatobby view or settings, install the latest
-`Chatobby-Setup.exe` from the official GitHub release, then select
-**Check again**. Do not copy `chatobby.exe` into the plugin folder.
+`Chatobby-Runtime-Setup-<version>.exe` from the official GitHub release, then
+select **Check again**. This installer does not ask for a vault. Do not copy
+`chatobby.exe` into the plugin folder.
 
 ## The runtime is incompatible or damaged
 
@@ -38,4 +39,3 @@ Use the [issue tracker](https://github.com/TitanicEclair/chatobby-obsidian/issue
 for ordinary defects. Do not attach provider credentials, raw vault content,
 private session transcripts, or signing material. Follow
 [SECURITY.md](../SECURITY.md) for vulnerabilities.
-
