@@ -272,6 +272,22 @@ describe("Composer", () => {
     expect(input.value).toBe("return to this later");
   });
 
+  it("captures the stash shortcut before Obsidian handles its global hotkey", () => {
+    const { composer, input } = bindComposer(createHost());
+    input.value = "capture this draft";
+    composer.handleInput();
+    const event = new KeyboardEvent("keydown", {
+      key: "s",
+      ctrlKey: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "target", { value: input });
+
+    expect(composer.handleCapturedKeydown(event)).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
+    expect(input.value).toBe("");
+  });
+
   it("restores a just-submitted message when cancellation happens before output", () => {
     const abort = vi.fn();
     const { composer, input } = bindComposer(createHost({ abort, getTurnOutputMarker: () => "unchanged" }));

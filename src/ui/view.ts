@@ -111,6 +111,7 @@ export class ChatobbyView extends ItemView {
   private pendingFeedCatchup = false;
 	private frontendApplyTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private readonly handleViewKeydown = (event: KeyboardEvent): void => {
+    if (this.viewMode === "chat" && this.composer.handleCapturedKeydown(event)) { event.stopImmediatePropagation(); return; }
     if (this.viewMode === "session-picker") {
       if (this.sessionPickerMode.handleKeydown(event)) event.stopPropagation();
     } else if (this.viewMode === "permissions") {
@@ -411,7 +412,6 @@ export class ChatobbyView extends ItemView {
     if (activateSession) await this.activateSessionContext();
     await this.viewNavigation.apply(navigation);
   }
-
   onPaneMenu(menu: Menu, source: "more-options" | "tab-header" | string): void {
     super.onPaneMenu(menu, source);
     menu.addItem((item) => item

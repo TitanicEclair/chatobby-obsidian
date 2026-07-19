@@ -333,11 +333,7 @@ export class Composer extends ChatobbyComponent {
     }
 
     const bindings = this.host.getComposerKeybindings?.() ?? DEFAULT_COMPOSER_KEYBINDINGS;
-    if (matchesComposerKeybinding(e, bindings.stashDraft)) {
-      e.preventDefault();
-      this.stashCurrentDraft();
-      return;
-    }
+    if (this.handleCapturedKeydown(e)) return;
     if (matchesComposerKeybinding(e, bindings.previousMessage) && this.recallPreviousMessage()) {
       e.preventDefault();
       return;
@@ -364,6 +360,16 @@ export class Composer extends ChatobbyComponent {
         this.clear();
       }
     }
+  }
+
+  /** Capture modifier shortcuts before Obsidian's global hotkey router consumes them. */
+  handleCapturedKeydown(event: KeyboardEvent): boolean {
+    if (event.target && event.target !== this.inputEl) return false;
+    const bindings = this.host.getComposerKeybindings?.() ?? DEFAULT_COMPOSER_KEYBINDINGS;
+    if (!matchesComposerKeybinding(event, bindings.stashDraft)) return false;
+    event.preventDefault();
+    this.stashCurrentDraft();
+    return true;
   }
 
   /** Capture ordinary typing that began elsewhere in the visible chat surface. */
