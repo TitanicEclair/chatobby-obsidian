@@ -678,11 +678,24 @@ button.chatobby-send-btn:hover {
   line-height: var(--line-height-tight);
   box-shadow: none;
 }
+.chatobby-slash-menu__command {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--size-2-2);
+  flex-wrap: wrap;
+}
 .chatobby-slash-menu__name {
   min-width: 0;
   color: var(--text-normal);
   font-family: var(--font-monospace-theme);
   font-size: var(--chatobby-meta-size);
+  overflow-wrap: anywhere;
+}
+.chatobby-slash-menu__usage {
+  color: var(--text-faint);
+  font-family: var(--font-monospace-theme);
+  font-size: var(--font-ui-smaller);
   overflow-wrap: anywhere;
 }
 .chatobby-slash-menu__desc {

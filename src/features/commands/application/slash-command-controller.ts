@@ -53,6 +53,7 @@ export class SlashCommandController {
     return this.runtimeCommands.map((command) => ({
       name: command.name,
       description: command.description,
+      usage: usageFor(command),
       source: command.source,
       showInMenu: command.showInMenu,
       argParser: parserFor(command),
@@ -151,4 +152,22 @@ function parserFor(command: FrontendLocalCommandViewModel): SlashCommandSpec["ar
   if (command.argument.kind === "optional-path") return optionalPathArg();
   if (command.argument.kind === "fixed-whitespace") return fixedWhitespaceArgs(command.argument.count ?? 1);
   return optionalRestOfLineArg();
+}
+
+function usageFor(command: FrontendLocalCommandViewModel): string | undefined {
+  const label = compactArgumentLabel(command.argument.missingLabel);
+  switch (command.argument.kind) {
+    case "none": return undefined;
+    case "required-rest": return `<${label ?? "value"}>`;
+    case "optional-rest": return `[${label ?? "text"}]`;
+    case "optional-path": return "[path]";
+    case "fixed-whitespace": {
+      const count = command.argument.count ?? 1;
+      return Array.from({ length: count }, (_, index) => `<${count === 1 ? label ?? "value" : `value-${index + 1}`}>`).join(" ");
+    }
+  }
+}
+
+function compactArgumentLabel(value: string | undefined): string | undefined {
+  return value?.trim().replace(/^(?:a|an|the)\s+/iu, "").replace(/\s+/gu, "-");
 }

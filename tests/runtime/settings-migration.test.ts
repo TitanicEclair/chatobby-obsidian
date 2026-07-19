@@ -59,6 +59,26 @@ describe("runtime settings migration", () => {
     expect(settings.autoNameStrategy).toBe("truncate");
     expect(plugin.saveData).toHaveBeenCalledWith(expect.objectContaining({ autoNameStrategy: "truncate" }));
   });
+
+  it("fills missing composer shortcuts and preserves valid custom bindings", async () => {
+    const plugin = fakePlugin({ composerKeybindings: { stashDraft: "Mod+K" } });
+    const settings = defaults();
+    const store = new SettingsStore(plugin.value, settings);
+
+    await store.load();
+    await store.updateSettings({
+      composerKeybindings: { ...settings.composerKeybindings, cancelTurn: "Mod+Escape" },
+    });
+
+    expect(settings.composerKeybindings).toEqual({
+      previousMessage: "ArrowUp",
+      stashDraft: "Mod+K",
+      cancelTurn: "Mod+Escape",
+    });
+    expect(plugin.saveData).toHaveBeenCalledWith(expect.objectContaining({
+      composerKeybindings: settings.composerKeybindings,
+    }));
+  });
 });
 
 function defaults(): PluginSettings {
@@ -66,6 +86,7 @@ function defaults(): PluginSettings {
     ...DEFAULT_PLUGIN_SETTINGS,
     developerArgs: [...DEFAULT_PLUGIN_SETTINGS.developerArgs],
     providerKeys: { ...DEFAULT_PLUGIN_SETTINGS.providerKeys },
+    composerKeybindings: { ...DEFAULT_PLUGIN_SETTINGS.composerKeybindings },
   };
 }
 

@@ -10,6 +10,7 @@ import { Toolbar } from "./toolbar/toolbar";
 import { FeedRenderer, type FeedHost } from "./feed";
 import { createChatViewFeedHost } from "./feed/chat-view-feed-host";
 import { Composer } from "./composer/composer";
+import { createComposerContextHost } from "./composer/composer-context-host";
 import { ComposerControls } from "./composer/composer-controls";
 import { promptText } from "./modals/modals";
 import { openAutoCompactionSettings, toggleAutoCompaction, type AutoCompactionActionOptions } from "./controller/auto-compaction-controller";
@@ -641,6 +642,7 @@ export class ChatobbyView extends ItemView {
       canAbort: () => this.getTransport()?.isConnected ?? false,
       getSessionState: () => this.sessionState,
       getSessionPreferences: () => this.plugin.getSessionPreferences(),
+      ...createComposerContextHost(() => this.plugin.settings.composerKeybindings, () => this.frontendStore.snapshot?.feed.blocks ?? []),
       getSlashCommands: () => this.slashCommands.catalog(),
       setSlashMatches: (matches) => this.updateSlashMenu(matches),
       setSlashArgumentOptions: (options) => this.updateSlashArgumentMenu(options),
@@ -799,10 +801,7 @@ export class ChatobbyView extends ItemView {
     }
   }
 
-  // ── Event dispatch ──────────────────────────────────────────────
-
   // ── Actions ─────────────────────────────────────────────────────
-
   private async sendPrompt(
     message: string,
     attachments?: WsPromptAttachment[],
@@ -984,6 +983,7 @@ export class ChatobbyView extends ItemView {
 	if (feedChanged) {
 		if (this.viewMode === "chat") this.synchronizeFrontendFeed(snapshot);
 		else this.pendingFeedCatchup = true;
+		this.composer?.observeTurnProgress();
 	}
     if (sessionChanged && previous.isStreaming !== (session?.streaming ?? false)) {
       this.getFeedStore().dispatch({

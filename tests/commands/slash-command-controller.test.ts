@@ -88,6 +88,21 @@ describe("SlashCommandController runtime catalogue", () => {
     ]);
   });
 
+  it("projects readable argument syntax from the runtime contract", () => {
+    const controller = new SlashCommandController(createOptions());
+    controller.setRuntimeCommands([
+      command("effort", "set-thinking", {
+        argument: { kind: "fixed-whitespace", count: 1, missingLabel: "an effort level" },
+      }),
+      command("bash", "bash", { argument: { kind: "required-rest", missingLabel: "a command" } }),
+    ]);
+
+    expect(controller.catalog()).toMatchObject([
+      { name: "effort", usage: "<effort-level>" },
+      { name: "bash", usage: "<command>" },
+    ]);
+  });
+
   it("keeps the first runtime projection when producers report a duplicate name", () => {
     const controller = new SlashCommandController(createOptions());
     controller.setRuntimeCommands([

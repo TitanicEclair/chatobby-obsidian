@@ -1,6 +1,12 @@
 import { Modal, Notice, PluginSettingTab, Setting, type App } from "obsidian";
 import type ChatobbyPlugin from "./main";
-import type { PluginSettings, ThinkingDisplay, WsProviderInfo } from "./types";
+import {
+  DEFAULT_COMPOSER_KEYBINDINGS,
+  type ComposerKeybindings,
+  type PluginSettings,
+  type ThinkingDisplay,
+  type WsProviderInfo,
+} from "./types";
 import { formatCommandArgs, splitCommandArgs } from "./backend/command-line";
 import {
   CHATOBBY_CONNECTOR_REPOSITORY_URL,
@@ -9,6 +15,11 @@ import {
   openChatobbyUrl,
 } from "./publication";
 import type { RuntimeLifecycleState } from "./runtime/public";
+import {
+  composerKeybindingFromEvent,
+  composerKeybindingLabel,
+  type ComposerKeybindingAction,
+} from "./ui/composer/keybindings";
 
 const THINKING_DISPLAY_OPTIONS: ThinkingDisplay[] = ["hidden", "collapsed", "expanded"];
 
@@ -291,6 +302,73 @@ export class ChatobbySettingTab extends PluginSettingTab {
             });
           });
       });
+
+    new Setting(containerEl)
+      .setName("Composer shortcuts")
+      .setDesc("These shortcuts apply only while the Chatobby message box is focused.");
+    this.renderComposerKeybinding(
+      containerEl,
+      "previousMessage",
+      "Previous message",
+      "Recall earlier prompts when the cursor is at the beginning of the message.",
+    );
+    this.renderComposerKeybinding(
+      containerEl,
+      "stashDraft",
+      "Stash draft",
+      "Temporarily clear the message and restore it after the next message is submitted.",
+    );
+    this.renderComposerKeybinding(
+      containerEl,
+      "cancelTurn",
+      "Cancel turn",
+      "Arm and confirm cancellation without affecting other Obsidian editors.",
+    );
+  }
+
+  private renderComposerKeybinding(
+    containerEl: HTMLElement,
+    action: ComposerKeybindingAction,
+    name: string,
+    description: string,
+  ): void {
+    const setting = new Setting(containerEl).setName(name).setDesc(description);
+    setting.addText((text) => {
+      text.setValue(composerKeybindingLabel(this.plugin.settings.composerKeybindings[action]));
+      text.inputEl.readOnly = true;
+      text.inputEl.setAttr("aria-label", `${name} shortcut. Focus and press a replacement shortcut.`);
+      text.inputEl.addEventListener("keydown", (event) => {
+        const binding = composerKeybindingFromEvent(event);
+        if (!binding) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (bindingUsedByAnotherAction(this.plugin.settings.composerKeybindings, action, binding)) {
+          new Notice(`${composerKeybindingLabel(binding)} is already assigned to another Chatobby action.`);
+          return;
+        }
+        text.setValue(composerKeybindingLabel(binding));
+        void this.updateSettings({
+          composerKeybindings: { ...this.plugin.settings.composerKeybindings, [action]: binding },
+        }).catch((error) => {
+          console.error("Chatobby: failed to update composer shortcut", error);
+          new Notice("Failed to update composer shortcut");
+        });
+      });
+    });
+    setting.addButton((button) => button
+      .setButtonText("Reset")
+      .setTooltip(`Reset ${name.toLowerCase()}`)
+      .onClick(() => {
+        void this.updateSettings({
+          composerKeybindings: {
+            ...this.plugin.settings.composerKeybindings,
+            [action]: DEFAULT_COMPOSER_KEYBINDINGS[action],
+          },
+        }).then(() => this.display()).catch((error) => {
+          console.error("Chatobby: failed to reset composer shortcut", error);
+          new Notice("Failed to reset composer shortcut");
+        });
+      }));
   }
 
   private renderCredentialsSection(containerEl: HTMLElement): void {
@@ -544,6 +622,15 @@ function labelThinkingDisplay(value: ThinkingDisplay): string {
     case "expanded":
       return "Expanded";
   }
+}
+
+function bindingUsedByAnotherAction(
+  bindings: ComposerKeybindings,
+  action: ComposerKeybindingAction,
+  binding: string,
+): boolean {
+  return (Object.entries(bindings) as Array<[ComposerKeybindingAction, string]>)
+    .some(([candidate, value]) => candidate !== action && value === binding);
 }
 
 function providerDescription(provider: WsProviderInfo, configured: boolean): string {

@@ -11,8 +11,8 @@
 import { Notice, setIcon } from "obsidian";
 import { ChatobbyComponent } from "../shared/component";
 import { resizeComposerInput } from "../shell/view-shell";
-import type { ComposerAttachment, SessionPreferences, SessionState, WsPromptAttachment } from "../../types";
-import { INITIAL_COMPOSER_STATE } from "../../types";
+import type { ComposerAttachment, ComposerKeybindings, SessionPreferences, SessionState, WsPromptAttachment } from "../../types";
+import { DEFAULT_COMPOSER_KEYBINDINGS, INITIAL_COMPOSER_STATE } from "../../types";
 import { revokeComposerAttachment } from "../../attachments/attachment-store";
 import { ABORT_CONFIRM_TIMEOUT_MS } from "../shared/constants";
 import type { SlashActivation, SlashArgumentOption, SlashCommandSpec, SlashHighlightRange, SlashParsedCommand, SlashSubmitPlan, SlashToken } from "./slash-command";
@@ -25,6 +25,7 @@ import {
   toHighlightRanges,
 } from "./slash-state";
 import { routePrintableKeyToComposer } from "./view-key-routing";
+import { matchesComposerKeybinding } from "./keybindings";
 
 const MAX_COMPOSER_ATTACHMENTS = 8;
 const COMPOSER_ATTACHMENT_ACCEPT = [
@@ -48,6 +49,12 @@ export interface ComposerHost {
   getSessionState(): SessionState | null;
   /** Get current session preferences. */
   getSessionPreferences(): SessionPreferences;
+  /** Focus-sensitive shortcuts configured for this Chatobby composer. */
+  getComposerKeybindings?(): ComposerKeybindings;
+  /** User prompts already present in the active session. */
+  getPromptHistory?(): readonly string[];
+  /** Stable representation of visible non-user output for early-cancel recovery. */
+  getTurnOutputMarker?(): string;
   /** Current slash command catalog. */
   getSlashCommands?(): readonly SlashCommandSpec[];
   /** Update visible slash suggestions. */
@@ -101,6 +108,11 @@ export class Composer extends ChatobbyComponent {
   private activations: SlashActivation[] = [];
   private cancelledToken: { slashStart: number; tokenText: string; deletionSeen: boolean } | null = null;
   private pendingArgumentCompletion: { command: SlashParsedCommand } | null = null;
+  private readonly submittedPromptHistory: string[] = [];
+  private historyIndex: number | null = null;
+  private historyDraft = "";
+  private stashedDraft: ComposerDraftSnapshot | null = null;
+  private recoverableSubmission: RecoverableSubmission | null = null;
 
   constructor(private host: ComposerHost) {
     super();
@@ -141,6 +153,10 @@ export class Composer extends ChatobbyComponent {
 		if (!isStreaming) {
 			this.isStopping = false;
 			this.disarmAbortConfirm();
+			this.discardRecoverableSubmission();
+		}
+		if (isStreaming) {
+			this.observeTurnProgress();
 		}
 		this.updateControls();
 	}
@@ -164,6 +180,7 @@ export class Composer extends ChatobbyComponent {
   /** Set the input text (e.g., for prefill from command palette). */
   setText(text: string): void {
     this.disarmAbortConfirm();
+    this.resetHistoryNavigation();
     this.state.text = text;
     this.activations = [];
     this.cancelledToken = null;
@@ -177,8 +194,13 @@ export class Composer extends ChatobbyComponent {
 
   /** Clear the input. */
   clear(): void {
+    this.clearDraft(true);
+  }
+
+  private clearDraft(revokeAttachments: boolean): void {
     this.disarmAbortConfirm();
-    for (const attachment of this.state.attachments) revokeComposerAttachment(attachment);
+    this.resetHistoryNavigation();
+    if (revokeAttachments) this.releaseDraftAttachments(this.captureDraft());
     this.state = createInitialComposerState();
     this.activations = [];
     this.cancelledToken = null;
@@ -211,6 +233,9 @@ export class Composer extends ChatobbyComponent {
     this.pendingSendAbort = pendingAbort;
     this.activePendingSendId = pendingSendId;
     const submittedAttachmentIds = this.state.attachments.map((attachment) => attachment.id);
+    const submittedDraft = this.captureDraft();
+    const outputMarker = this.currentTurnOutputMarker();
+    const recoverOnEarlyCancel = commands.length === 0;
     try {
       const attachments = this.state.attachments.length > 0 ? this.state.attachments.map((attachment) => attachment.prompt) : undefined;
       const result = commands.length > 0 && this.host.submitSlashPlan
@@ -219,7 +244,9 @@ export class Composer extends ChatobbyComponent {
       if (isPromiseLike(result)) {
         void Promise.resolve(result).then(
           () => {
-            if (!pendingAbort.signal.aborted && this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) this.clear();
+            if (!pendingAbort.signal.aborted && this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
+              this.acceptSubmittedDraft(submittedDraft, outputMarker, recoverOnEarlyCancel);
+            }
             this.finishPendingSend(pendingSendId);
           },
           (error) => {
@@ -228,7 +255,9 @@ export class Composer extends ChatobbyComponent {
           },
         );
       } else {
-        if (!pendingAbort.signal.aborted && this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) this.clear();
+        if (!pendingAbort.signal.aborted && this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
+          this.acceptSubmittedDraft(submittedDraft, outputMarker, recoverOnEarlyCancel);
+        }
         this.pendingSendAbort = null;
         this.activePendingSendId = null;
         this.setPromptInFlight(false);
@@ -262,7 +291,7 @@ export class Composer extends ChatobbyComponent {
       this.setPromptInFlight(false);
       return;
     }
-    this.host.abort();
+    this.abortAcceptedTurn();
   }
 
   /** Handle keyboard shortcuts in the input. */
@@ -303,6 +332,17 @@ export class Composer extends ChatobbyComponent {
       if (e.key === "Escape") { e.preventDefault(); this.cancelCurrentToken(); return; }
     }
 
+    const bindings = this.host.getComposerKeybindings?.() ?? DEFAULT_COMPOSER_KEYBINDINGS;
+    if (matchesComposerKeybinding(e, bindings.stashDraft)) {
+      e.preventDefault();
+      this.stashCurrentDraft();
+      return;
+    }
+    if (matchesComposerKeybinding(e, bindings.previousMessage) && this.recallPreviousMessage()) {
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (this.promptInFlight) {
@@ -313,7 +353,7 @@ export class Composer extends ChatobbyComponent {
       } else {
         this.send();
       }
-    } else if (e.key === "Escape") {
+    } else if (matchesComposerKeybinding(e, bindings.cancelTurn)) {
       if (this.currentToken()) {
         e.preventDefault();
         this.cancelCurrentToken();
@@ -334,6 +374,7 @@ export class Composer extends ChatobbyComponent {
   /** Handle input events (text change). */
   handleInput(): void {
     this.disarmAbortConfirm();
+    this.resetHistoryNavigation();
     const nextText = this.inputEl?.value ?? "";
     // Forward live text to active interaction card (for input/editor types).
     if (this.host.isInteractionActive?.()) {
@@ -373,7 +414,8 @@ export class Composer extends ChatobbyComponent {
 
   private isTurnActive(): boolean {
     const session = this.host.getSessionState();
-    return this.promptInFlight || this.isStreaming || session?.isStreaming === true || session?.isCompacting === true;
+    return this.promptInFlight || this.recoverableSubmission !== null || this.isStreaming ||
+      session?.isStreaming === true || session?.isCompacting === true;
   }
 
   private updateControls(): void {
@@ -416,7 +458,7 @@ export class Composer extends ChatobbyComponent {
   private confirmAbortWithEscape(): void {
     if (this.abortConfirmArmed) {
       this.disarmAbortConfirm();
-      this.host.abort();
+      this.abortAcceptedTurn();
       return;
     }
     this.abortConfirmArmed = true;
@@ -447,6 +489,142 @@ export class Composer extends ChatobbyComponent {
     this.pendingSendAbort = null;
     this.activePendingSendId = null;
     this.setPromptInFlight(false);
+  }
+
+  private acceptSubmittedDraft(
+    draft: ComposerDraftSnapshot,
+    outputMarker: string,
+    recoverOnEarlyCancel: boolean,
+  ): void {
+    if (draft.text.trim()) this.submittedPromptHistory.push(draft.text);
+    this.resetHistoryNavigation();
+    if (recoverOnEarlyCancel) {
+      this.discardRecoverableSubmission();
+      this.recoverableSubmission = { draft, outputMarker };
+      this.clearDraft(false);
+    } else {
+      this.clearDraft(true);
+    }
+    this.restoreStashedDraft();
+    this.observeTurnProgress();
+  }
+
+  private abortAcceptedTurn(): void {
+    const recoverable = this.recoverableSubmission;
+    if (recoverable && this.currentTurnOutputMarker() === recoverable.outputMarker) {
+      this.recoverableSubmission = null;
+      if (this.state.text.trim() || this.state.attachments.length > 0) {
+        this.replaceStashedDraft(this.captureDraft());
+      }
+      this.restoreDraft(recoverable.draft);
+      new Notice("Cancelled message restored.");
+    } else {
+      this.discardRecoverableSubmission();
+    }
+    this.host.abort();
+  }
+
+  /** Reconcile early-cancel recovery after a feed projection changes. */
+  observeTurnProgress(): void {
+    const recoverable = this.recoverableSubmission;
+    if (recoverable && this.currentTurnOutputMarker() !== recoverable.outputMarker) {
+      this.discardRecoverableSubmission();
+    }
+  }
+
+  private currentTurnOutputMarker(): string {
+    return this.host.getTurnOutputMarker?.() ?? "";
+  }
+
+  private discardRecoverableSubmission(): void {
+    if (!this.recoverableSubmission) return;
+    this.releaseDraftAttachments(this.recoverableSubmission.draft);
+    this.recoverableSubmission = null;
+  }
+
+  private stashCurrentDraft(): void {
+    if (!this.state.text.trim() && this.state.attachments.length === 0) {
+      if (this.stashedDraft) {
+        this.restoreStashedDraft();
+        new Notice("Stashed draft restored.");
+      }
+      return;
+    }
+    this.replaceStashedDraft(this.captureDraft());
+    this.clearDraft(false);
+    new Notice("Draft stashed. It will return after your next message.");
+  }
+
+  private replaceStashedDraft(draft: ComposerDraftSnapshot): void {
+    if (this.stashedDraft) this.releaseDraftAttachments(this.stashedDraft);
+    this.stashedDraft = draft;
+  }
+
+  private restoreStashedDraft(): void {
+    const stashed = this.stashedDraft;
+    if (!stashed) return;
+    this.stashedDraft = null;
+    this.restoreDraft(stashed);
+  }
+
+  private recallPreviousMessage(): boolean {
+    if (!this.inputEl || this.inputEl.selectionStart !== 0 || this.inputEl.selectionEnd !== 0) return false;
+    const history = mergePromptHistory(this.host.getPromptHistory?.() ?? [], this.submittedPromptHistory);
+    if (history.length === 0) return false;
+    if (this.historyIndex === null) {
+      this.historyDraft = this.state.text;
+      this.historyIndex = history.length - 1;
+    } else if (this.historyIndex > 0) {
+      this.historyIndex -= 1;
+    }
+    this.applyHistoryText(history[this.historyIndex] ?? this.historyDraft);
+    return true;
+  }
+
+  private applyHistoryText(text: string): void {
+    this.state.text = text;
+    this.activations = [];
+    this.cancelledToken = null;
+    this.pendingArgumentCompletion = null;
+    if (this.inputEl) {
+      this.inputEl.value = text;
+      this.inputEl.setSelectionRange(0, 0);
+    }
+    this.resizeInput();
+    this.updateControls();
+    this.refreshSlashState();
+  }
+
+  private resetHistoryNavigation(): void {
+    this.historyIndex = null;
+    this.historyDraft = "";
+  }
+
+  private captureDraft(): ComposerDraftSnapshot {
+    return {
+      text: this.state.text,
+      attachments: [...this.state.attachments],
+      activations: this.activations.map((activation) => ({ ...activation })),
+    };
+  }
+
+  private restoreDraft(draft: ComposerDraftSnapshot): void {
+    this.state.text = draft.text;
+    this.state.attachments = [...draft.attachments];
+    this.activations = draft.activations.map((activation) => ({ ...activation }));
+    this.cancelledToken = null;
+    this.pendingArgumentCompletion = null;
+    this.resetHistoryNavigation();
+    if (this.inputEl) this.inputEl.value = draft.text;
+    this.resizeInput();
+    this.updateControls();
+    this.refreshSlashState();
+    this.renderAttachments();
+    this.inputEl?.focus();
+  }
+
+  private releaseDraftAttachments(draft: ComposerDraftSnapshot): void {
+    for (const attachment of draft.attachments) revokeComposerAttachment(attachment);
   }
 
   private bindAttachmentEvents(card: HTMLElement): void {
@@ -774,6 +952,27 @@ function createInitialComposerState(): typeof INITIAL_COMPOSER_STATE {
     ...INITIAL_COMPOSER_STATE,
     attachments: [],
   };
+}
+
+interface ComposerDraftSnapshot {
+  text: string;
+  attachments: ComposerAttachment[];
+  activations: SlashActivation[];
+}
+
+interface RecoverableSubmission {
+  draft: ComposerDraftSnapshot;
+  outputMarker: string;
+}
+
+function mergePromptHistory(remote: readonly string[], local: readonly string[]): string[] {
+  let overlap = Math.min(remote.length, local.length);
+  while (overlap > 0) {
+    const remoteStart = remote.length - overlap;
+    if (local.slice(0, overlap).every((value, index) => value === remote[remoteStart + index])) break;
+    overlap -= 1;
+  }
+  return [...remote, ...local.slice(overlap)];
 }
 
 function activationIcon(command: SlashCommandSpec): string {

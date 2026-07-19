@@ -3,9 +3,10 @@ import { SlashMenu } from "../../src/ui/composer/slash-menu";
 import type { SlashCommandSpec } from "../../src/ui/composer/slash-command";
 import { noArgs } from "../../src/ui/composer/slash-parsers";
 
-function command(name: string): SlashCommandSpec {
+function command(name: string, usage?: string): SlashCommandSpec {
   return {
     name,
+    usage,
     source: "local",
     argParser: noArgs(),
     surroundingTextPolicy: "allow",
@@ -39,6 +40,16 @@ describe("SlashMenu", () => {
     } finally {
       HTMLElement.prototype.scrollIntoView = previous;
     }
+  });
+
+  it("shows compact argument syntax beside commands that accept input", () => {
+    const menu = new SlashMenu();
+    const host = document.createElement("div");
+    menu.render(host);
+    menu.setMatches([command("effort", "<effort-level>")]);
+
+    expect(host.querySelector(".chatobby-slash-menu__name")?.textContent).toBe("/effort");
+    expect(host.querySelector(".chatobby-slash-menu__usage")?.textContent).toBe("<effort-level>");
   });
 });
 

@@ -155,8 +155,11 @@ describe("Composer", () => {
     resolveSend?.();
     await Promise.resolve();
 
-    expect(sendBtn.classList.contains("is-hidden")).toBe(false);
     expect(input.value).toBe("");
+    expect(stopBtn.classList.contains("is-hidden")).toBe(false);
+
+    composer.setStreaming(false);
+    expect(sendBtn.classList.contains("is-hidden")).toBe(false);
   });
 
   it("retains the editable draft when runtime preparation or prompt start fails", async () => {
@@ -220,6 +223,83 @@ describe("Composer", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(focusFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("recalls the previous prompt only when the cursor is at the first character", () => {
+    const { composer, input } = bindComposer(createHost({ getPromptHistory: () => ["first prompt", "second prompt"] }));
+    input.value = "current draft";
+    input.setSelectionRange(3, 3);
+    composer.handleInput();
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }));
+    expect(input.value).toBe("current draft");
+
+    input.setSelectionRange(0, 0);
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }));
+    expect(input.value).toBe("second prompt");
+    expect(input.selectionStart).toBe(0);
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }));
+    expect(input.value).toBe("first prompt");
+  });
+
+  it("uses the configured previous-message shortcut instead of a hardcoded key", () => {
+    const { composer, input } = bindComposer(createHost({
+      getPromptHistory: () => ["remember me"],
+      getComposerKeybindings: () => ({ previousMessage: "Mod+P", stashDraft: "Mod+S", cancelTurn: "Escape" }),
+    }));
+    input.setSelectionRange(0, 0);
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }));
+    expect(input.value).toBe("");
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "p", ctrlKey: true, cancelable: true }));
+    expect(input.value).toBe("remember me");
+  });
+
+  it("stashes a draft and restores it after the next successful submission", () => {
+    const send = vi.fn();
+    const { composer, input } = bindComposer(createHost({ send }));
+    input.value = "return to this later";
+    composer.handleInput();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, cancelable: true }));
+    expect(input.value).toBe("");
+
+    input.value = "send this first";
+    composer.handleInput();
+    composer.send();
+
+    expect(send).toHaveBeenCalledWith("send this first", undefined, expect.any(AbortSignal));
+    expect(input.value).toBe("return to this later");
+  });
+
+  it("restores a just-submitted message when cancellation happens before output", () => {
+    const abort = vi.fn();
+    const { composer, input } = bindComposer(createHost({ abort, getTurnOutputMarker: () => "unchanged" }));
+    input.value = "restore this request";
+    composer.handleInput();
+    composer.send();
+    expect(input.value).toBe("");
+
+    composer.stop();
+
+    expect(abort).toHaveBeenCalledOnce();
+    expect(input.value).toBe("restore this request");
+  });
+
+  it("does not restore a submitted message after visible turn output begins", () => {
+    const abort = vi.fn();
+    let marker = "before";
+    const { composer, input } = bindComposer(createHost({ abort, getTurnOutputMarker: () => marker }));
+    input.value = "do not restore after output";
+    composer.handleInput();
+    composer.send();
+    marker = "after";
+    composer.observeTurnProgress();
+
+    composer.stop();
+
+    expect(abort).toHaveBeenCalledOnce();
+    expect(input.value).toBe("");
   });
 
   it("Escape clears the draft when idle and there is text (no abort)", () => {

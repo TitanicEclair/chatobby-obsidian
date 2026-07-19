@@ -29,6 +29,11 @@ describe("ChatobbySettingTab", () => {
         runtimeLifetime: "obsidian-session",
         thinkingDisplay: "collapsed",
         autoScroll: true,
+        composerKeybindings: {
+          previousMessage: "ArrowUp",
+          stashDraft: "Mod+S",
+          cancelTurn: "Escape",
+        },
         autoNameStrategy: "truncate",
         externalServerUrl: "",
         developerCommand: "chatobby",

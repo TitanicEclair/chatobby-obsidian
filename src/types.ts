@@ -89,6 +89,19 @@ export interface WsSessionState {
 /** How thinking/reasoning blocks are rendered in the conversation feed. */
 export type ThinkingDisplay = "hidden" | "collapsed" | "expanded";
 
+/** Composer-local shortcuts. `Mod` means Ctrl on Windows/Linux and Command on macOS. */
+export interface ComposerKeybindings {
+  previousMessage: string;
+  stashDraft: string;
+  cancelTurn: string;
+}
+
+export const DEFAULT_COMPOSER_KEYBINDINGS: ComposerKeybindings = {
+  previousMessage: "ArrowUp",
+  stashDraft: "Mod+S",
+  cancelTurn: "Escape",
+};
+
 // ── Layer 1: Plugin Settings (persisted, infrastructure) ─────────────
 
 /** Settings owned by the Obsidian SettingTab. Persisted to data.json. */
@@ -117,6 +130,8 @@ export interface PluginSettings {
   thinkingDisplay: ThinkingDisplay;
   /** Whether the feed auto-scrolls to bottom on new content. */
   autoScroll: boolean;
+  /** Focus-sensitive shortcuts owned by the Chatobby composer. */
+  composerKeybindings: ComposerKeybindings;
   /** Vault-relative directory used for new sessions and resume listing. Empty string = vault root. */
   activeVaultDirectory: string;
   /** How new sessions are auto-named: "truncate" (first 5 words) or "model" (LLM call). */
@@ -136,6 +151,7 @@ export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   providerKeys: {},
   thinkingDisplay: "collapsed",
   autoScroll: true,
+  composerKeybindings: { ...DEFAULT_COMPOSER_KEYBINDINGS },
   activeVaultDirectory: "",
   autoNameStrategy: "truncate",
 };

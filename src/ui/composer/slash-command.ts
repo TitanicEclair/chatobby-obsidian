@@ -33,6 +33,8 @@ export interface SlashArgumentOption {
 export interface SlashCommandSpec {
   name: string;
   description?: string;
+  /** Compact argument syntax shown beside the command name. */
+  usage?: string;
   source: SlashCommandSource;
   /** False keeps a retired alias executable without advertising it in autocomplete. */
   showInMenu?: boolean;

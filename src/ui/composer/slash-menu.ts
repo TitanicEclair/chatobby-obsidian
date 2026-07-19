@@ -89,7 +89,9 @@ export class SlashMenu extends ChatobbyComponent {
       const icon = item.createSpan({ cls: "chatobby-slash-menu__icon" });
       setIcon(icon, SOURCE_ICON[cmd.source] ?? "square");
       const body = item.createDiv({ cls: "chatobby-slash-menu__body" });
-      body.createSpan({ cls: "chatobby-slash-menu__name", text: `/${cmd.name}` });
+      const commandLine = body.createDiv({ cls: "chatobby-slash-menu__command" });
+      commandLine.createSpan({ cls: "chatobby-slash-menu__name", text: `/${cmd.name}` });
+      if (cmd.usage) commandLine.createSpan({ cls: "chatobby-slash-menu__usage", text: cmd.usage });
       body.createSpan({ cls: "chatobby-slash-menu__desc", text: cmd.description ?? "" });
       if (index === this.selected) item.createEl("kbd", { cls: "chatobby-slash-menu__key", text: "Tab" });
     });

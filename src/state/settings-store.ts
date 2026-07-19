@@ -11,6 +11,7 @@ import type { Plugin } from "obsidian";
 import {
   DEFAULT_PLUGIN_SETTINGS,
   DEFAULT_SESSION_PREFERENCES,
+  type ComposerKeybindings,
   type PluginSettings,
   type SessionPreferences,
   type ThinkingDisplay,
@@ -34,6 +35,7 @@ interface PersistedData {
   providerKeys?: Record<string, boolean>;
   thinkingDisplay?: string;
   autoScroll?: boolean;
+  composerKeybindings?: Partial<ComposerKeybindings>;
   autoNameStrategy?: string;
   activeVaultDirectory?: string;
   sessionPreferences?: Partial<SessionPreferences>;
@@ -68,6 +70,7 @@ export class SettingsStore {
       providerKeys: data.providerKeys ?? DEFAULT_PLUGIN_SETTINGS.providerKeys,
       thinkingDisplay: (data.thinkingDisplay as ThinkingDisplay) ?? DEFAULT_PLUGIN_SETTINGS.thinkingDisplay,
       autoScroll: data.autoScroll ?? DEFAULT_PLUGIN_SETTINGS.autoScroll,
+      composerKeybindings: resolveComposerKeybindings(data.composerKeybindings),
       autoNameStrategy: data.autoNameStrategy === "model" ? "model" : "truncate",
       activeVaultDirectory: data.activeVaultDirectory ?? DEFAULT_PLUGIN_SETTINGS.activeVaultDirectory,
     });
@@ -91,6 +94,7 @@ export class SettingsStore {
       providerKeys: this.settings.providerKeys,
       thinkingDisplay: this.settings.thinkingDisplay,
       autoScroll: this.settings.autoScroll,
+      composerKeybindings: this.settings.composerKeybindings,
       autoNameStrategy: this.settings.autoNameStrategy,
       activeVaultDirectory: this.settings.activeVaultDirectory,
       sessionPreferences: this.sessionPrefs,
@@ -137,6 +141,18 @@ export class SettingsStore {
     await this.updateSettings({ providerKeys: nextProviderKeys });
   }
 
+}
+
+function resolveComposerKeybindings(value: Partial<ComposerKeybindings> | undefined): ComposerKeybindings {
+  return {
+    previousMessage: validBinding(value?.previousMessage, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.previousMessage),
+    stashDraft: validBinding(value?.stashDraft, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.stashDraft),
+    cancelTurn: validBinding(value?.cancelTurn, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.cancelTurn),
+  };
+}
+
+function validBinding(value: string | undefined, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 function resolveOnboardingVersion(data: PersistedData): number {
