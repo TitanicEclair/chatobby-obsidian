@@ -51,6 +51,7 @@ interface LeafLike {
 
 interface WorkspaceLike {
   getLeavesOfType(type: string): LeafLike[];
+  getLeafById?(id: string): LeafLike | null;
   activeLeaf?: LeafLike | null;
   getLeaf?(...args: unknown[]): LeafLike;
   setActiveLeaf?(leaf: LeafLike, opts?: { focus?: boolean }): void;
@@ -75,7 +76,6 @@ function leafId(leaf: LeafLike): string {
 function allLeaves(workspace: WorkspaceLike): LeafLike[] {
 	const leaves: LeafLike[] = [];
 	workspace.iterateAllLeaves?.((leaf) => leaves.push(leaf));
-	if (leaves.length > 0) return leaves;
 	for (const leaf of workspace.getLeavesOfType("markdown") ?? []) {
 		if (!leaves.includes(leaf)) leaves.push(leaf);
 	}
@@ -84,7 +84,8 @@ function allLeaves(workspace: WorkspaceLike): LeafLike[] {
 }
 
 function findLeafById(workspace: WorkspaceLike, id: string | undefined): LeafLike | undefined {
-	return id ? allLeaves(workspace).find((leaf) => leafId(leaf) === id) : undefined;
+	if (!id) return undefined;
+	return workspace.getLeafById?.(id) ?? allLeaves(workspace).find((leaf) => leafId(leaf) === id);
 }
 
 function sanitizeLayoutNode(value: unknown): unknown {

@@ -688,6 +688,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
     const matches = (): boolean => {
       if (input.state === "interactive" && document.readyState === "loading") return false;
       if (input.state === "complete" && document.readyState !== "complete") return false;
+      if (typeof input.url === "string" && location.href !== input.url) return false;
       if (typeof input.urlIncludes === "string" && !location.href.includes(input.urlIncludes)) return false;
       if (typeof input.cssSelector === "string") {
         const element = document.querySelector(input.cssSelector);

@@ -87,6 +87,7 @@ function createBrowserApp(): App & { leaf: FakeLeaf } {
   const workspace = {
     activeLeaf: leaf,
     getLeavesOfType: (type: string) => (type === "webviewer" && leaf.getViewState().type === "webviewer" ? [leaf] : []),
+    getLeafById: (id: string) => id === leaf.id ? leaf : null,
     getLeaf: () => leaf,
     setActiveLeaf: () => {},
     iterateAllLeaves: (callback: (candidate: FakeLeaf) => void) => callback(leaf),
@@ -125,6 +126,83 @@ describe("browser operations", () => {
       type: "webviewer",
       state: { url: "https://example.com/", navigate: true },
     });
+  });
+
+  it("recovers when Obsidian creates the Web Viewer before its dom-ready event", async () => {
+    const app = createBrowserApp();
+    const webview = app.leaf.view.containerEl?.querySelector("webview") as FakeWebView;
+    const originalSetViewState = app.leaf.setViewState.bind(app.leaf);
+    const notReady = new Error("The WebView must be attached to the DOM and the dom-ready event emitted before this method can be called.");
+    let ready = false;
+    let runtimeUrl = "";
+    webview.getURL = () => {
+      if (!ready) throw notReady;
+      return runtimeUrl;
+    };
+    webview.loadURL = async (url: string) => {
+      runtimeUrl = url;
+    };
+    app.leaf.setViewState = async (state: ViewState) => {
+      await originalSetViewState(state);
+      window.setTimeout(() => {
+        ready = true;
+        webview.dispatchEvent(new Event("dom-ready"));
+      }, 0);
+      throw notReady;
+    };
+
+    const result = await executeOperation(
+      "browser.open",
+      { url: "https://example.com/ready", leafId: "leaf-1" },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+
+    expect(result).toMatchObject({ opened: true, leafId: "leaf-1", url: "https://example.com/ready" });
+  });
+
+  it("creates left and upper Web Viewer splits before the active leaf", async () => {
+    const app = createBrowserApp();
+    const left = createFakeLeaf("leaf-left");
+    const upper = createFakeLeaf("leaf-up");
+    const createLeafBySplit = vi.fn()
+      .mockReturnValueOnce(left)
+      .mockReturnValueOnce(upper);
+    (app.workspace as unknown as { createLeafBySplit: typeof createLeafBySplit }).createLeafBySplit = createLeafBySplit;
+
+    const leftResult = await executeOperation(
+      "browser.open",
+      { url: "https://example.com/left", target: "split-left" },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    const upperResult = await executeOperation(
+      "browser.open",
+      { url: "https://example.com/up", target: "split-up" },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+
+    expect(createLeafBySplit).toHaveBeenNthCalledWith(1, app.leaf, "vertical", true);
+    expect(createLeafBySplit).toHaveBeenNthCalledWith(2, app.leaf, "horizontal", true);
+    expect(leftResult).toMatchObject({ opened: true, leafId: "leaf-left" });
+    expect(upperResult).toMatchObject({ opened: true, leafId: "leaf-up" });
+  });
+
+  it("resolves exact Web Viewer leaf IDs through the canonical workspace lookup", async () => {
+    const app = createBrowserApp();
+    (app.workspace as unknown as { iterateAllLeaves: (callback: (leaf: FakeLeaf) => void) => void }).iterateAllLeaves = () => {};
+
+    await executeOperation("browser.open", { url: "https://example.com", leafId: "leaf-1" }, signal, app);
+    const result = await executeOperation(
+      "workspace.manage",
+      { action: "close", leafId: "leaf-1" },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+
+    expect(result).toMatchObject({ applied: true, leafId: "leaf-1" });
+    expect(app.leaf.detached).toBe(true);
   });
 
   it("lists, reads, and closes webviewer leaves", async () => {
@@ -210,6 +288,14 @@ describe("browser operations", () => {
 
     const waited = await executeOperation("browser.wait", { leafId: "leaf-1", text: "abcdef" }, signal, app) as Record<string, unknown>;
     expect(waited).toMatchObject({ matched: true });
+
+    const exactUrlWait = await executeOperation(
+      "browser.wait",
+      { leafId: "leaf-1", url: window.location.href },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    expect(exactUrlWait).toMatchObject({ matched: true });
 
   });
 

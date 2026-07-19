@@ -1,4 +1,4 @@
-import type { App, WorkspaceLeaf, ViewState } from "obsidian";
+import type { App, WorkspaceLeaf } from "obsidian";
 import {
   executeBrowserPageOperation,
   type BrowserPageAction,
@@ -10,6 +10,7 @@ import { BridgeError } from "../types";
 const WEBVIEWER_TYPE = "webviewer";
 const DEFAULT_MAX_CHARS = 12_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 5_000;
+const WEBVIEWER_READY_TIMEOUT_MS = 5_000;
 
 interface WebViewerState {
   url?: string;
@@ -89,6 +90,105 @@ function getWebViewElement(leaf: WorkspaceLeaf): WebViewElement | null {
   return getLeafContainer(leaf)?.querySelector("webview") as WebViewElement | null;
 }
 
+function safeWebViewValue<T>(read: () => T): T | undefined {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
+}
+
+function isWebViewReady(webview: WebViewElement): boolean {
+  if (!webview.getURL) return Boolean(webview.executeJavaScript);
+  try {
+    webview.getURL();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isDomReadyError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("dom-ready") || message.includes("attached to the dom");
+}
+
+async function waitForWebViewReady(
+  leaf: WorkspaceLeaf,
+  signal: AbortSignal,
+  timeoutMs = WEBVIEWER_READY_TIMEOUT_MS,
+): Promise<WebViewElement> {
+  assertNotAborted(signal);
+  const container = getLeafContainer(leaf);
+  if (!container) throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web viewer tab has no accessible container");
+  const initial = getWebViewElement(leaf);
+  if (initial && isWebViewReady(initial)) return initial;
+
+  return await new Promise<WebViewElement>((resolve, reject) => {
+    let current: WebViewElement | null = null;
+    let settled = false;
+    const finish = (webview?: WebViewElement, error?: BridgeError): void => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      current?.removeEventListener("dom-ready", onReady);
+      if (error) reject(error);
+      else if (webview) resolve(webview);
+    };
+    const onReady = (): void => {
+      const webview = current ?? getWebViewElement(leaf);
+      if (webview) finish(webview);
+    };
+    const watchCurrent = (): void => {
+      const candidate = getWebViewElement(leaf);
+      if (!candidate) return;
+      if (candidate !== current) {
+        current?.removeEventListener("dom-ready", onReady);
+        current = candidate;
+        current.addEventListener("dom-ready", onReady);
+      }
+      if (isWebViewReady(candidate)) finish(candidate);
+    };
+    const observer = new MutationObserver(watchCurrent);
+    const onAbort = (): void => finish(undefined, new BridgeError("DEADLINE_EXCEEDED", "Browser operation aborted", true));
+    const timeout = window.setTimeout(
+      () => finish(
+        undefined,
+        new BridgeError(
+          "DEADLINE_EXCEEDED",
+          `Web viewer leaf ${getLeafId(leaf)} did not become ready within ${timeoutMs}ms`,
+          true,
+        ),
+      ),
+      timeoutMs,
+    );
+    signal.addEventListener("abort", onAbort, { once: true });
+    observer.observe(container, { childList: true, subtree: true });
+    watchCurrent();
+  });
+}
+
+async function setWebViewerUrl(leaf: WorkspaceLeaf, url: string, signal: AbortSignal): Promise<WebViewElement> {
+  let retryNavigation = false;
+  try {
+    await leaf.setViewState({ type: WEBVIEWER_TYPE, state: { url, navigate: true }, active: true });
+  } catch (error) {
+    if (!isDomReadyError(error)) throw error;
+    retryNavigation = true;
+  }
+  const webview = await waitForWebViewReady(leaf, signal);
+  if (retryNavigation) {
+    if (!webview.loadURL) {
+      throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web viewer became ready but navigation is unavailable");
+    }
+    await webview.loadURL(url);
+  }
+  return webview;
+}
+
 function normalizeHttpUrl(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) throw new BridgeError("INVALID_INPUT", "Browser operation requires a URL");
   let parsed: URL;
@@ -105,23 +205,16 @@ function normalizeHttpUrl(value: unknown): string {
 
 function getWebViewerUrl(leaf: WorkspaceLeaf): string | undefined {
   const webview = getWebViewElement(leaf);
-  try {
-    const runtimeUrl = webview?.getURL?.();
-    if (runtimeUrl) return runtimeUrl;
-  } catch {
-    // Fall through to persisted view state.
-  }
+  const runtimeUrl = webview?.getURL ? safeWebViewValue(() => webview.getURL?.()) : undefined;
+  if (runtimeUrl) return runtimeUrl;
   const state = asRecord(leaf.getViewState().state) as WebViewerState;
   return typeof state.url === "string" ? state.url : undefined;
 }
 
 function getWebViewerTitle(leaf: WorkspaceLeaf): string | undefined {
-  try {
-    const title = getWebViewElement(leaf)?.getTitle?.();
-    if (title) return title;
-  } catch {
-    // Fall through to the Obsidian view title.
-  }
+  const webview = getWebViewElement(leaf);
+  const title = webview?.getTitle ? safeWebViewValue(() => webview.getTitle?.()) : undefined;
+  if (title) return title;
   const viewTitle = (leaf.view as unknown as { getDisplayText?: () => string }).getDisplayText?.();
   return viewTitle || undefined;
 }
@@ -135,6 +228,8 @@ function listWebViewerLeaves(app: App): WorkspaceLeaf[] {
 }
 
 function findAnyLeaf(app: App, leafId: string): WorkspaceLeaf | null {
+  const direct = app.workspace.getLeafById(leafId);
+  if (direct) return direct;
   let found: WorkspaceLeaf | null = null;
   app.workspace.iterateAllLeaves((leaf) => {
     if (getLeafId(leaf) === leafId) found = leaf;
@@ -152,8 +247,9 @@ function findBrowserLeaf(app: App, leafId?: string): WorkspaceLeaf | null {
 
 async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTabInfo> {
   const webview = getWebViewElement(leaf);
+  const loading = webview?.isLoading ? safeWebViewValue(() => webview.isLoading?.()) : undefined;
   let page: Record<string, unknown> | undefined;
-  if (webview?.executeJavaScript && !webview.isLoading?.()) {
+  if (webview?.executeJavaScript && loading === false) {
     try {
       const result = await runPageOperation(webview, "page", {});
       page = asRecord(result.page);
@@ -163,17 +259,21 @@ async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTab
   }
   const url = getWebViewerUrl(leaf);
   const title = getWebViewerTitle(leaf);
+  const crashed = webview?.isCrashed ? safeWebViewValue(() => webview.isCrashed?.()) : undefined;
+  const canGoBack = webview?.canGoBack ? safeWebViewValue(() => webview.canGoBack?.()) : undefined;
+  const canGoForward = webview?.canGoForward ? safeWebViewValue(() => webview.canGoForward?.()) : undefined;
+  const audible = webview?.isCurrentlyAudible ? safeWebViewValue(() => webview.isCurrentlyAudible?.()) : undefined;
   return {
     leafId: getLeafId(leaf),
     type: getLeafViewType(leaf),
     isActive: leaf === app.workspace.activeLeaf,
     ...(url ? { url } : {}),
     ...(title ? { title } : {}),
-    ...(webview?.isLoading ? { loading: webview.isLoading() } : {}),
-    ...(webview?.isCrashed ? { crashed: webview.isCrashed() } : {}),
-    ...(webview?.canGoBack ? { canGoBack: webview.canGoBack() } : {}),
-    ...(webview?.canGoForward ? { canGoForward: webview.canGoForward() } : {}),
-    ...(webview?.isCurrentlyAudible ? { audible: webview.isCurrentlyAudible() } : {}),
+    ...(loading !== undefined ? { loading } : {}),
+    ...(crashed !== undefined ? { crashed } : {}),
+    ...(canGoBack !== undefined ? { canGoBack } : {}),
+    ...(canGoForward !== undefined ? { canGoForward } : {}),
+    ...(audible !== undefined ? { audible } : {}),
     ...(page ? { page } : {}),
   };
 }
@@ -181,7 +281,15 @@ async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTab
 function resolveBrowserTarget(app: App, target: unknown): WorkspaceLeaf {
   switch (target) {
     case "current": return app.workspace.getLeaf(false);
+    case "split-left": {
+      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      return app.workspace.createLeafBySplit(source, "vertical", true);
+    }
     case "split-right": return app.workspace.getLeaf("split", "vertical");
+    case "split-up": {
+      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      return app.workspace.createLeafBySplit(source, "horizontal", true);
+    }
     case "split-down": return app.workspace.getLeaf("split", "horizontal");
     case "new-window": return app.workspace.getLeaf("window");
     case "new-tab":
@@ -372,8 +480,7 @@ export const handleBrowserOpen: OperationHandler = async (args, signal, app) => 
   const requestedLeafId = leafIdFrom(args);
   const leaf = requestedLeafId ? findAnyLeaf(app, requestedLeafId) : resolveBrowserTarget(app, args.target);
   if (!leaf) throw new BridgeError("INVALID_INPUT", `Workspace leaf not found: ${requestedLeafId}`);
-  const viewState: ViewState = { type: WEBVIEWER_TYPE, state: { url, navigate: true }, active: args.focus !== false };
-  await leaf.setViewState(viewState);
+  await setWebViewerUrl(leaf, url, signal);
   assertNotAborted(signal);
   if (args.focus !== false) app.workspace.setActiveLeaf(leaf, { focus: true });
   return { opened: true, ...(await browserTabInfo(app, leaf)) };
@@ -382,7 +489,7 @@ export const handleBrowserOpen: OperationHandler = async (args, signal, app) => 
 export const handleBrowserNavigate: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const leaf = requireBrowserLeaf(app, leafIdFrom(args));
-  const webview = getWebViewElement(leaf);
+  const webview = await waitForWebViewReady(leaf, signal);
   const action = typeof args.action === "string" ? args.action : "url";
   let requestedUrl: string | undefined;
   if (action === "url") {
@@ -391,10 +498,10 @@ export const handleBrowserNavigate: OperationHandler = async (args, signal, app)
       try {
         await webview.loadURL(requestedUrl);
       } catch {
-        await leaf.setViewState({ type: WEBVIEWER_TYPE, state: { url: requestedUrl, navigate: true }, active: true });
+        await setWebViewerUrl(leaf, requestedUrl, signal);
       }
     } else {
-      await leaf.setViewState({ type: WEBVIEWER_TYPE, state: { url: requestedUrl, navigate: true }, active: true });
+      await setWebViewerUrl(leaf, requestedUrl, signal);
     }
   } else if (action === "back") {
     if (!webview?.goBack || webview.canGoBack?.() === false) throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web viewer cannot go back");
@@ -624,6 +731,7 @@ export const handleBrowserWait: OperationHandler = async (args, signal, app) => 
   const result = await runPageOperation(requireWebView(leaf), "wait", {
     cssSelector: args.cssSelector,
     text: args.text,
+    url: args.url,
     urlIncludes: args.urlIncludes,
     state: args.state,
     visible: args.visible,

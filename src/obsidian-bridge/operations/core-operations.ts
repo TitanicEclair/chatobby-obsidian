@@ -330,15 +330,17 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
   const tfile = file as TFile;
 
   // Resolve target to a leaf
-  type LeafTarget = "current" | "new-tab" | "split-right" | "split-down" | "new-window";
+  type LeafTarget = "current" | "new-tab" | "split-left" | "split-right" | "split-up" | "split-down" | "new-window";
   const target = targetArg as LeafTarget;
 
   let leaf: WorkspaceLeaf;
   if (requestedLeafId) {
-    let exactLeaf: WorkspaceLeaf | undefined;
-    app.workspace.iterateAllLeaves((candidate) => {
-      if ((candidate as unknown as { id?: string }).id === requestedLeafId) exactLeaf = candidate;
-    });
+    let exactLeaf = app.workspace.getLeafById?.(requestedLeafId) ?? undefined;
+    if (!exactLeaf) {
+      app.workspace.iterateAllLeaves((candidate) => {
+        if ((candidate as unknown as { id?: string }).id === requestedLeafId) exactLeaf = candidate;
+      });
+    }
     if (!exactLeaf) throw new BridgeError("INVALID_INPUT", `Workspace leaf not found: ${requestedLeafId}`);
     leaf = exactLeaf;
   } else switch (target) {
@@ -348,9 +350,19 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
     case "new-tab":
       leaf = app.workspace.getLeaf("tab");
       break;
+    case "split-left": {
+      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      leaf = app.workspace.createLeafBySplit(source, "vertical", true);
+      break;
+    }
     case "split-right":
       leaf = app.workspace.getLeaf("split", "vertical");
       break;
+    case "split-up": {
+      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      leaf = app.workspace.createLeafBySplit(source, "horizontal", true);
+      break;
+    }
     case "split-down":
       leaf = app.workspace.getLeaf("split", "horizontal");
       break;
