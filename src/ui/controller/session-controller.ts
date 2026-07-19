@@ -56,6 +56,7 @@ export class SessionController {
   private sessionTargetTransition: Promise<void> | null = null;
   private readonly workingDirectory: WorkingDirectoryController;
   private runtimeMessageCount = 0;
+  private runtimeWorkingDirectory: string | null = null;
 
   constructor(private readonly options: SessionControllerOptions) {
     this.workingDirectory = new WorkingDirectoryController(options.app, options.plugin);
@@ -99,6 +100,7 @@ export class SessionController {
       },
     });
     this.runtimeMessageCount = session.messageCount;
+    this.runtimeWorkingDirectory = session.workingDirectory;
     this.options.refreshTabBar();
     // A newly projected runtime session owns a different feed store. Switch the
     // visible renderer immediately so the first prompt and its live patches do
@@ -233,7 +235,13 @@ export class SessionController {
   async ensureActiveSessionTarget(): Promise<SessionTab> {
     await this.sessionTargetTransition;
     if (!this.activeTab()) await this.createSession();
-    else await this.reconcileActiveSession();
+    else {
+      await this.reconcileActiveSession();
+      const scope = this.resolveWorkingDirectoryScope("preparing the selected directory");
+      if (scope && this.runtimeWorkingDirectory && !sameWorkingDirectory(this.runtimeWorkingDirectory, scope.cwd)) {
+        await this.createSession();
+      }
+    }
     const active = this.activeTab();
     if (!active || this.sessionState.sessionId !== active.sessionId) {
       throw new Error("Chatobby could not establish the visible session as the prompt destination.");
@@ -245,6 +253,7 @@ export class SessionController {
   markTransportDisconnected(): TransportInterruption {
     const active = this.activeTab();
     if (!active) return { hadActiveWork: false, hadInteraction: false };
+    this.runtimeWorkingDirectory = null;
     const disconnected = disconnectSession(active);
     this.tabs.set(disconnected.tab);
     this.options.renderActiveTab();

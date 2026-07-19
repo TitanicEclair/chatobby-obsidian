@@ -8,6 +8,7 @@ describe("LeafDirectoryRouter", () => {
     const setCurrentDirectory = vi.fn(async () => undefined);
     const rememberDefaultDirectory = vi.fn(async () => undefined);
     const openDirectoryTarget = vi.fn(async () => project);
+    const ensureDirectoryTarget = vi.fn(async () => undefined);
     const router = new LeafDirectoryRouter({
       currentTarget: () => current,
       currentDirectory: () => "Inbox",
@@ -17,6 +18,7 @@ describe("LeafDirectoryRouter", () => {
       rememberDefaultDirectory,
       openDirectoryTarget,
       openSessionTarget: vi.fn(),
+      ensureDirectoryTarget,
       closeCurrentExplorer: vi.fn(),
       resumeInTarget: vi.fn(),
       createInTarget: vi.fn(),
@@ -27,11 +29,13 @@ describe("LeafDirectoryRouter", () => {
     expect(setCurrentDirectory).not.toHaveBeenCalled();
     expect(rememberDefaultDirectory).toHaveBeenCalledWith("Projects/Research");
     expect(openDirectoryTarget).toHaveBeenCalledWith("Projects/Research");
+    expect(ensureDirectoryTarget).toHaveBeenCalledWith(project);
   });
 
   it("lets an empty leaf adopt the selected directory", async () => {
     const current = { id: "current" };
     const setCurrentDirectory = vi.fn(async () => undefined);
+    const ensureDirectoryTarget = vi.fn(async () => undefined);
     const router = new LeafDirectoryRouter({
       currentTarget: () => current,
       currentDirectory: () => "Inbox",
@@ -41,6 +45,7 @@ describe("LeafDirectoryRouter", () => {
       rememberDefaultDirectory: vi.fn(),
       openDirectoryTarget: vi.fn(),
       openSessionTarget: vi.fn(),
+      ensureDirectoryTarget,
       closeCurrentExplorer: vi.fn(),
       resumeInTarget: vi.fn(),
       createInTarget: vi.fn(),
@@ -48,6 +53,7 @@ describe("LeafDirectoryRouter", () => {
 
     await expect(router.use("Projects/Research/")).resolves.toBe(current);
     expect(setCurrentDirectory).toHaveBeenCalledWith("Projects/Research");
+    expect(ensureDirectoryTarget).toHaveBeenCalledWith(current);
   });
 
   it("resumes a stored session in the directory-owned target leaf", async () => {
@@ -65,6 +71,7 @@ describe("LeafDirectoryRouter", () => {
       rememberDefaultDirectory: vi.fn(async () => undefined),
       openDirectoryTarget: vi.fn(),
       openSessionTarget,
+      ensureDirectoryTarget: vi.fn(),
       closeCurrentExplorer,
       resumeInTarget,
       createInTarget: vi.fn(),
@@ -95,6 +102,7 @@ describe("LeafDirectoryRouter", () => {
       rememberDefaultDirectory: vi.fn(async () => undefined),
       openDirectoryTarget: vi.fn(),
       openSessionTarget,
+      ensureDirectoryTarget: vi.fn(),
       closeCurrentExplorer,
       resumeInTarget: vi.fn(),
       createInTarget,

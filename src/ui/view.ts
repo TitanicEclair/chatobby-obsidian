@@ -207,6 +207,7 @@ export class ChatobbyView extends ItemView {
       rememberDefaultDirectory: (path) => this.plugin.setActiveVaultDirectory(path),
       openDirectoryTarget: (path) => this.plugin.openDirectoryView(path),
       openSessionTarget: (path, sessionPath) => this.plugin.openSessionView(path, sessionPath),
+      ensureDirectoryTarget: async (target) => { await target.sessions.ensureActiveSessionTarget(); },
       closeCurrentExplorer: () => this.viewNavigation.replace({ mode: "chat" }),
       resumeInTarget: (target, path) => target.handleSessionPickerSelect(path),
       createInTarget: (target) => target.sessions.createSession(),
@@ -1317,7 +1318,6 @@ export class ChatobbyView extends ItemView {
 		this.refreshTabBar();
     this.sessionAgentRail.refresh();
   }
-
 	private synchronizeFrontendFeed(snapshot: FrontendBootstrap): void {
 		syncFrontendFeedProjection(this.getFeedStore(), snapshot, this.plugin.settings.onboardingVersion, this.plugin.configuredProviders().length > 0);
 		this.pendingFeedCatchup = false;

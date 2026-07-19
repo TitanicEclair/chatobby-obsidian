@@ -9,6 +9,7 @@ interface LeafDirectoryRouterOptions<T> {
   rememberDefaultDirectory: (path: string) => Promise<void>;
   openDirectoryTarget: (path: string) => Promise<T>;
   openSessionTarget: (path: string, sessionPath?: string) => Promise<T>;
+  ensureDirectoryTarget: (target: T) => Promise<void>;
   closeCurrentExplorer: () => void;
   resumeInTarget: (target: T, sessionPath: string) => Promise<void>;
   createInTarget: (target: T) => Promise<void>;
@@ -23,10 +24,14 @@ export class LeafDirectoryRouter<T> {
     if (!this.options.isDirectory(path)) throw new Error(`"${rawPath}" is not a directory in this vault.`);
     if (path === this.options.currentDirectory() || !this.options.hasSessions()) {
       await this.options.setCurrentDirectory(path);
-      return this.options.currentTarget();
+      const target = this.options.currentTarget();
+      await this.options.ensureDirectoryTarget(target);
+      return target;
     }
     await this.options.rememberDefaultDirectory(path);
-    return this.options.openDirectoryTarget(path);
+    const target = await this.options.openDirectoryTarget(path);
+    await this.options.ensureDirectoryTarget(target);
+    return target;
   }
 
   async resume(sessionPath: string, directoryPath: string): Promise<void> {

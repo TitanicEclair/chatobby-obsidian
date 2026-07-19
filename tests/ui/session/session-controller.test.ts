@@ -105,6 +105,42 @@ describe("SessionController", () => {
     expect(claimSessionOwnership).toHaveBeenCalled();
   });
 
+  it("replaces a synchronized session whose runtime directory differs from the leaf directory", async () => {
+    const intents: SessionMutationRequest[] = [];
+    const { controller } = harness({
+      synchronize: async (target) => {
+        target.applyRuntimeSession(session("wrong-directory", {
+          recoveryPath: "C:/sessions/wrong-directory.jsonl",
+          workingDirectory: "C:\\Vault\\Projects",
+        }));
+      },
+      dispatch: async (request, target) => {
+        intents.push(request);
+        target.applyRuntimeSession(session("root-directory", {
+          recoveryPath: "C:/sessions/root-directory.jsonl",
+          workingDirectory: "C:\\Vault",
+        }));
+        return true;
+      },
+    });
+    controller.applyRuntimeSession(session("wrong-directory", {
+      recoveryPath: "C:/sessions/wrong-directory.jsonl",
+      workingDirectory: "C:\\Vault\\Projects",
+    }));
+
+    const target = await controller.ensureActiveSessionTarget();
+
+    expect(intents).toEqual([{
+      type: "session.create",
+      payload: {
+        cwdOverride: "C:\\Vault",
+        thinkingLevel: "medium",
+        autoNameStrategy: "truncate",
+      },
+    }]);
+    expect(target.sessionId).toBe("root-directory");
+  });
+
   it("clears transient running state when the backend connection is lost", () => {
     const renderActiveTab = vi.fn();
     const { controller } = harness({ renderActiveTab });
