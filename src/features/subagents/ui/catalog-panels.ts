@@ -34,7 +34,7 @@ export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, a
     meta.createSpan({ text: definition.policy.model ?? "Inherit model" });
     meta.createSpan({ text: definition.policy.executionMode ?? "Automatic executor" });
     meta.createSpan({ text: definition.policy.contextMode ?? "Fresh context" });
-    meta.createSpan({ text: permissionPolicyLabel(state, definition.id) });
+    meta.createSpan({ text: permissionPolicyLabel(state, definition) });
     if (!definition.builtIn) {
       const controls = card.createDiv({ cls: "chatobby-subagents__catalog-actions" });
       const edit = controls.createEl("button", { text: "Edit", attr: { type: "button" } });
@@ -477,11 +477,14 @@ function optionalPositiveNumber(value: string): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function permissionPolicyLabel(state: SubagentViewState, roleId: string): string {
+function permissionPolicyLabel(state: SubagentViewState, definition: AgentDefinition): string {
   const snapshot = state.permissionSnapshot;
-  const assignment = snapshot?.document.agentAssignments[roleId];
-  if (!assignment || assignment.mode === "inherit") return "Inherits permissions";
-  return snapshot?.document.profiles.find((profile) => profile.id === assignment.profileId)?.name ?? "Custom permissions";
+  const assignment = snapshot?.document.agentAssignments[definition.id];
+  const profileId = assignment?.mode === "profile"
+    ? assignment.profileId
+    : definition.policy.permissionProfileId;
+  if (!profileId) return "Inherits permissions";
+  return snapshot?.document.profiles.find((profile) => profile.id === profileId)?.name ?? humanize(profileId);
 }
 
 function assignedPermissionPolicy(state: SubagentViewState, roleId: string | undefined): string {

@@ -63,19 +63,34 @@ describe("SubagentsView", () => {
   it("marks Chatobby-provided roles and does not offer impossible edit or delete actions", () => {
     const store = createStore({
       definitions: [
-        { ...screen({}).definitions[0]!, builtIn: true, scope: "global", scopeId: "default", revision: 0 },
+        {
+          ...screen({}).definitions[0]!,
+          builtIn: true,
+          scope: "global",
+          scopeId: "default",
+          policy: { permissionProfileId: "web-research-read-only" },
+          revision: 0,
+        },
         {
           ...screen({}).definitions[0]!,
           id: "custom-reviewer",
           name: "Custom reviewer",
         },
       ],
+      permissionSnapshot: {
+        document: {
+          profiles: [{ id: "web-research-read-only", name: "Researcher (web, read only)" }],
+          agentAssignments: {},
+        },
+      },
     });
     const element = mount(createView(store));
     Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Roles")?.click();
     const cards = Array.from(element.querySelectorAll<HTMLElement>(".chatobby-subagents__catalog-card"));
 
     expect(cards[0]?.querySelector(".chatobby-subagents__provided-badge")?.textContent).toBe("Chatobby");
+    expect(cards[0]?.textContent).toContain("Researcher (web, read only)");
+    expect(cards[0]?.textContent).not.toContain("Inherits permissions");
     expect(Array.from(cards[0]?.querySelectorAll("button") ?? [])).toHaveLength(0);
     expect(Array.from(cards[1]?.querySelectorAll("button") ?? []).map((button) => button.textContent))
       .toEqual(["Edit", "Delete"]);
