@@ -33,6 +33,7 @@ import {
 import { RuntimeRestartPolicy } from "./restart-policy";
 
 const STARTUP_TIMEOUT_MS = 20_000;
+const AUTHENTICATION_TIMEOUT_MS = 15_000;
 const DESCRIPTOR_POLL_MS = 100;
 const SHUTDOWN_WAIT_MS = 5_000;
 
@@ -55,6 +56,8 @@ export interface RuntimeManagerDeps {
   processLauncher?: ManagedProcessLauncher;
   startupTimeoutMs?: number;
   descriptorPollMs?: number;
+  authenticationTimeoutMs?: number;
+  isProcessAlive?: (pid: number) => boolean;
 }
 
 export interface RuntimeLeaseStoreLike {
@@ -78,6 +81,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
   private readonly leases: RuntimeLeaseStoreLike;
   private readonly control: RuntimeControlClientLike;
   private readonly processes: ManagedProcessLauncher;
+  private readonly isProcessAlive: (pid: number) => boolean;
   private readonly restartPolicy = new RuntimeRestartPolicy();
   private readonly attachmentId = randomUUID();
   private readonly listeners = new Set<RuntimeStateListener>();
@@ -98,6 +102,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     this.leases = deps.leaseStore ?? new RuntimeLeaseStore();
     this.control = deps.controlClient ?? new RuntimeControlClient();
     this.processes = deps.processLauncher ?? new NodeManagedProcessLauncher();
+    this.isProcessAlive = deps.isProcessAlive ?? processIsAlive;
     this.stateValue = { status: "idle", mode: deps.getConfiguration().mode };
   }
 
@@ -283,12 +288,27 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         await this.control.shutdown(existing.descriptor, existing.controlToken).catch(() => {});
         await this.leases.discardStaleDescriptor(vaultId);
       } else {
+        let controlError: unknown = null;
         try {
           await this.control.status(existing.descriptor, existing.controlToken);
-          return await this.authenticateCandidate(existing, mode, generation, null);
-        } catch {
-          await this.leases.discardStaleDescriptor(vaultId);
+        } catch (error) {
+          controlError = error;
         }
+        if (controlError === null) {
+          return await this.authenticateCandidate(existing, mode, generation, null);
+        }
+        if (this.isProcessAlive(existing.descriptor.pid)) {
+          try {
+            return await this.authenticateCandidate(existing, mode, generation, null);
+          } catch (connectionError) {
+            throw new RuntimeStartError(
+              classifyConnectionFailure(connectionError),
+              `The existing Chatobby runtime is still running but did not reconnect: ${errorMessage(connectionError)}. `
+                + `The control probe also failed: ${errorMessage(controlError)}`,
+            );
+          }
+        }
+        await this.leases.discardStaleDescriptor(vaultId);
       }
     }
     if (!existing && expectedFingerprint && this.leases.readLegacyShutdownTarget) {
@@ -341,7 +361,11 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     this.assertCurrent(generation);
     this.emit({ status: "authenticating", mode, endpoint });
     try {
-      await this.deps.connectRuntime(runtime);
+      await promiseWithTimeout(
+        this.deps.connectRuntime(runtime),
+        this.deps.authenticationTimeoutMs ?? AUTHENTICATION_TIMEOUT_MS,
+        "Chatobby runtime authentication timed out",
+      );
     } catch (error) {
       throw new RuntimeStartError(classifyConnectionFailure(error), errorMessage(error));
     }
@@ -597,4 +621,29 @@ function errorMessage(error: unknown): string {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
 }

@@ -172,6 +172,7 @@ describe("DefaultChatobbyRuntimeManager", () => {
       controlClient,
       processLauncher,
       runtimePublicKey: "test-public-key",
+      isProcessAlive: () => false,
       configuration: {
         mode: "managed",
         lifetime: "obsidian-session",
@@ -195,6 +196,67 @@ describe("DefaultChatobbyRuntimeManager", () => {
     expect(launch.args).not.toContain("9222");
     expect(launch.env.CHATOBBY_RUNTIME_PUBLIC_KEY).toBe("test-public-key");
     expect(launch.env.CHATOBBY_SHELL).toBe("bash");
+  });
+
+  it("reattaches through the websocket when a live runtime control probe is transiently unavailable", async () => {
+    const leaseStore = fakeLeaseStore(CANDIDATE);
+    const controlClient = fakeControlClient();
+    vi.mocked(controlClient.status).mockRejectedValue(new Error("control timeout"));
+    const processLauncher = fakeProcessLauncher();
+    const connectRuntime = vi.fn(async () => {});
+    const manager = createManager({
+      leaseStore,
+      controlClient,
+      processLauncher,
+      connectRuntime,
+      isProcessAlive: () => true,
+    });
+
+    await expect(manager.ensureReady({ reason: "view-open" })).resolves.toMatchObject({
+      endpoint: "ws://127.0.0.1:43125",
+    });
+    expect(connectRuntime).toHaveBeenCalledOnce();
+    expect(leaseStore.discardStaleDescriptor).not.toHaveBeenCalled();
+    expect(processLauncher.spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not launch a duplicate while an unresponsive candidate process is still alive", async () => {
+    const leaseStore = fakeLeaseStore(CANDIDATE);
+    const controlClient = fakeControlClient();
+    vi.mocked(controlClient.status).mockRejectedValue(new Error("control timeout"));
+    const processLauncher = fakeProcessLauncher();
+    const manager = createManager({
+      leaseStore,
+      controlClient,
+      processLauncher,
+      connectRuntime: vi.fn(async () => {
+        throw new Error("websocket timeout");
+      }),
+      isProcessAlive: () => true,
+    });
+
+    await expect(manager.ensureReady({ reason: "view-open" })).rejects.toThrow(
+      "still running but did not reconnect",
+    );
+    expect(leaseStore.discardStaleDescriptor).not.toHaveBeenCalled();
+    expect(processLauncher.spawn).not.toHaveBeenCalled();
+  });
+
+  it("bounds frontend authentication so startup cannot remain pending forever", async () => {
+    vi.useFakeTimers();
+    try {
+      const manager = createManager({
+        leaseStore: fakeLeaseStore(CANDIDATE),
+        connectRuntime: vi.fn(() => new Promise<void>(() => {})),
+        authenticationTimeoutMs: 20,
+      });
+
+      const ready = manager.ensureReady({ reason: "view-open" });
+      await vi.advanceTimersByTimeAsync(20);
+      await expect(ready).rejects.toThrow("authentication timed out");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("recovers automatically after three transient start failures", async () => {
@@ -446,6 +508,8 @@ function createManager(overrides: ManagerOverrides = {}) {
     processLauncher: overrides.processLauncher ?? fakeProcessLauncher(),
     startupTimeoutMs: 100,
     descriptorPollMs: 1,
+    authenticationTimeoutMs: overrides.authenticationTimeoutMs,
+    isProcessAlive: overrides.isProcessAlive,
   });
 }
 
@@ -506,4 +570,6 @@ interface ManagerOverrides {
   runtimePublicKey?: string | null;
   managedCommand?: { command: string; args: string[]; runtimePackageFingerprint?: string } | null;
   managedCommandError?: Error;
+  authenticationTimeoutMs?: number;
+  isProcessAlive?: (pid: number) => boolean;
 }
