@@ -59,6 +59,30 @@ describe("FrontendSessionRegistry", () => {
     expect(fake.setRuntime).toHaveBeenCalledWith(replacementRuntime);
     expect(fake.connect).toHaveBeenCalledTimes(2);
   });
+
+  it("removes registrations whose Obsidian leaves no longer exist", async () => {
+    const harness = createHarness();
+    await harness.registry.register("stale-leaf");
+    await harness.registry.register("live-leaf");
+    await harness.registry.bindRuntime(runtime("runtime-1"));
+
+    await harness.registry.reconcile(new Set(["live-leaf"]));
+
+    expect(harness.registry.get("stale-leaf")).toBeNull();
+    expect(harness.transports[0]!.disconnect).toHaveBeenCalledOnce();
+    expect(harness.registry.get("live-leaf")).toBe(harness.transports[1]!.transport);
+  });
+
+  it("does not let a stalled visibility update block runtime readiness", async () => {
+    const harness = createHarness(10);
+    await harness.registry.register("leaf-a");
+    harness.onCreateTransport = (fake) => {
+      fake.setOperatorViewOpen.mockImplementation(() => new Promise<void>(() => {}));
+    };
+
+    await expect(harness.registry.bindRuntime(runtime("runtime-1"))).resolves.toBeUndefined();
+    expect(harness.registry.get("leaf-a")?.isConnected).toBe(true);
+  });
 });
 
 interface FakeTransport {
@@ -73,17 +97,31 @@ interface FakeTransport {
 function createHarness(): {
   registry: FrontendSessionRegistry;
   transports: FakeTransport[];
+  onCreateTransport: ((transport: FakeTransport) => void) | null;
+};
+function createHarness(operatorVisibilityTimeoutMs = 3_000): {
+  registry: FrontendSessionRegistry;
+  transports: FakeTransport[];
+  onCreateTransport: ((transport: FakeTransport) => void) | null;
 } {
   const transports: FakeTransport[] = [];
+  const harness = {
+    registry: null as unknown as FrontendSessionRegistry,
+    transports,
+    onCreateTransport: null as ((transport: FakeTransport) => void) | null,
+  };
   const registry = new FrontendSessionRegistry({
     createTransport: () => {
       const fake = createFakeTransport();
       transports.push(fake);
+      harness.onCreateTransport?.(fake);
       return fake.transport;
     },
     bindTransport: () => () => {},
+    operatorVisibilityTimeoutMs,
   });
-  return { registry, transports };
+  harness.registry = registry;
+  return harness;
 }
 
 function createFakeTransport(): FakeTransport {

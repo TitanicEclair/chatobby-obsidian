@@ -513,6 +513,13 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   private async bindRuntime(runtime: ReadyRuntime): Promise<void> {
+    const liveChannelIds = new Set(
+      this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)
+        .map((leaf) => leaf.view)
+        .filter((view): view is ChatobbyView => view instanceof ChatobbyView)
+        .map((view) => view.runtimeChannelId),
+    );
+    await this.frontendSessions.reconcile(liveChannelIds);
     await this.frontendSessions.bindRuntime(runtime);
   }
 

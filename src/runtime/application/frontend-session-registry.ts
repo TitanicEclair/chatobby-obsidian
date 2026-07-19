@@ -15,7 +15,10 @@ interface FrontendSessionEntry {
 export interface FrontendSessionRegistryDependencies {
   createTransport(runtime: ReadyRuntime): ChatobbyTransport;
   bindTransport(channelId: string, transport: ChatobbyTransport): () => void;
+  operatorVisibilityTimeoutMs?: number;
 }
+
+const DEFAULT_OPERATOR_VISIBILITY_TIMEOUT_MS = 3_000;
 
 /**
  * Owns one authenticated backend runtime channel per Chatobby leaf.
@@ -57,6 +60,15 @@ export class FrontendSessionRegistry {
     entry.transport = null;
     entry.runtimeInstanceId = null;
     entry.connecting = null;
+  }
+
+  /** Drop registrations whose Obsidian leaves no longer exist. */
+  async reconcile(liveChannelIds: ReadonlySet<string>): Promise<void> {
+    await Promise.all(
+      [...this.entries.keys()]
+        .filter((channelId) => !liveChannelIds.has(channelId))
+        .map((channelId) => this.unregister(channelId)),
+    );
   }
 
   get(channelId: string): ChatobbyTransport | null {
@@ -134,7 +146,7 @@ export class FrontendSessionRegistry {
     const entry = this.entries.get(channelId);
     if (!entry) return;
     entry.visible = visible;
-    if (entry.transport?.isConnected) await entry.transport.setOperatorViewOpen(visible);
+    if (entry.transport?.isConnected) await this.synchronizeVisibility(entry.transport, visible);
   }
 
   /** Disconnect runtime sockets while preserving leaf registrations for restart. */
@@ -176,8 +188,16 @@ export class FrontendSessionRegistry {
       throw new Error("Chatobby frontend channel changed while connecting");
     }
     entry.runtimeInstanceId = runtime.identity.instanceId;
-    await entry.transport.setOperatorViewOpen(entry.visible);
+    await this.synchronizeVisibility(entry.transport, entry.visible);
     return entry.transport;
+  }
+
+  private async synchronizeVisibility(transport: ChatobbyTransport, visible: boolean): Promise<void> {
+    const timeoutMs = this.dependencies.operatorVisibilityTimeoutMs ?? DEFAULT_OPERATOR_VISIBILITY_TIMEOUT_MS;
+    await Promise.race([
+      transport.setOperatorViewOpen(visible).catch(() => {}),
+      delay(timeoutMs),
+    ]);
   }
 
   private async releaseUtilityTransport(): Promise<void> {
@@ -186,4 +206,8 @@ export class FrontendSessionRegistry {
     this.utilityRuntimeInstanceId = null;
     await transport?.disconnect().catch(() => {});
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
