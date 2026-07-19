@@ -14,6 +14,7 @@ export function reduceFeedAction(transaction: FeedTransaction, action: FeedActio
   }
   switch (action.type) {
     case "feed.user-prompt-submitted":
+    case "feed.user-prompt-retracted":
     case "feed.local-feedback-appended":
     case "feed.queued-message-appended":
       reduceLocalFeedAction(transaction, action);

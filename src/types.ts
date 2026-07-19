@@ -92,13 +92,17 @@ export type ThinkingDisplay = "hidden" | "collapsed" | "expanded";
 /** Composer-local shortcuts. `Mod` means Ctrl on Windows/Linux and Command on macOS. */
 export interface ComposerKeybindings {
   previousMessage: string;
+  nextMessage: string;
   stashDraft: string;
+  restoreStash: string;
   cancelTurn: string;
 }
 
 export const DEFAULT_COMPOSER_KEYBINDINGS: ComposerKeybindings = {
   previousMessage: "ArrowUp",
+  nextMessage: "ArrowDown",
   stashDraft: "Mod+S",
+  restoreStash: "Mod+Shift+S",
   cancelTurn: "Escape",
 };
 
@@ -454,6 +458,8 @@ export interface UserBlock {
   id: string;
   /** Stable UI-only user message id. */
   messageId: string;
+  /** Local submission correlation used only until the runtime confirms or retracts the prompt. */
+  submissionId?: string;
   /** The user message content. */
   message: UserMessage;
 }

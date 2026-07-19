@@ -261,14 +261,19 @@ export class SessionPickerComponent extends ChatobbyComponent {
       retry.addEventListener("click", () => this.refresh());
       return;
     }
+    if (this.operation === "resuming") {
+      const state = body.createDiv({
+        cls: "chatobby-session-picker__state is-resuming",
+        attr: { role: "status", "aria-live": "polite", "aria-label": "Resuming session" },
+      });
+      state.createSpan({ text: "Resuming session" });
+      state.createSpan({ cls: "chatobby-session-picker__loading-dots", attr: { "aria-hidden": "true" } });
+      return;
+    }
     if (this.operation) {
       body.createDiv({
         cls: "chatobby-session-picker__operation",
-        text: this.operation === "resuming"
-          ? "Resuming session…"
-          : this.operation === "creating"
-            ? "Creating session…"
-            : "Updating session…",
+        text: this.operation === "creating" ? "Creating session…" : "Updating session…",
       });
     }
     const sessions = this.filteredSessions();

@@ -9,7 +9,7 @@ import { buildViewShell, type ViewShell, type ShellHandlers } from "./shell/view
 import { Toolbar } from "./toolbar/toolbar";
 import { FeedRenderer, type FeedHost } from "./feed";
 import { createChatViewFeedHost } from "./feed/chat-view-feed-host";
-import { Composer } from "./composer/composer";
+import { Composer, type PromptSubmissionOutcome } from "./composer/composer";
 import { createComposerContextHost } from "./composer/composer-context-host";
 import { ComposerControls } from "./composer/composer-controls";
 import { promptText } from "./modals/modals";
@@ -60,7 +60,8 @@ import type {
 } from "../vendor/chatobby-client/frontend-contracts.js";
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
-const VIEW_TYPE = "chatobby-view", PROMPT_START_TIMEOUT_MS = 30_000;
+import { PROMPT_START_TIMEOUT_MS, retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
+const VIEW_TYPE = "chatobby-view";
 export class ChatobbyView extends ItemView {
   readonly runtimeChannelId = globalThis.crypto.randomUUID();
   private readonly operations = new OperationCoordinator();
@@ -133,7 +134,8 @@ export class ChatobbyView extends ItemView {
     super(leaf);
     this.scope = new Scope(this.app.scope);
     this.scope.register(null, null, (event) => this.componentsReady && this.viewMode === "chat" && this.composer.handleCapturedKeydown(event) ? false : undefined);
-    this.navigation = true;
+    // Keep this static work surface out of Obsidian's file-navigation targets.
+    this.navigation = false;
     this.viewNavigation = new ViewNavigationController(leaf, VIEW_TYPE, {
       openChat: () => {
         this.prepareExclusiveSurface("chat");
@@ -253,7 +255,7 @@ export class ChatobbyView extends ItemView {
       onChange: () => this.toolbar?.renderStatus(),
     });
     this.slashCommands = new SlashCommandController({
-      sendPrompt: (text, attachments) => this.sendPrompt(text, attachments),
+      sendPrompt: async (text, attachments) => { await this.sendPrompt(text, attachments); },
       sendRawPrompt: (text) => this.sendRawPrompt(text),
       renderFeedback: (input, guidance) => this.getFeedStore().dispatch({ type: "feed.local-feedback-appended", input, guidance }),
       notify: (message) => { new Notice(message); },
@@ -420,7 +422,6 @@ export class ChatobbyView extends ItemView {
       .onClick(() => this.feed?.toggleSourceViewMode()));
   }
   async onOpen(): Promise<void> {
-    this.leaf.setPinned(true);
     this.buildComponents();
     this.componentsReady = true;
     await this.plugin.registerChatView(this);
@@ -649,9 +650,11 @@ export class ChatobbyView extends ItemView {
     this.taskProgress = new TaskProgress(this.shell.taskProgressHostEl);
 
     this.composer = new Composer({
-      send: (msg, att, signal) => this.sendPrompt(msg, att, signal),
+      send: (msg, att, signal, submissionId) => this.sendPrompt(msg, att, signal, submissionId),
       steer: (msg) => this.steerPrompt(msg),
       abort: () => this.turnAbort.request(),
+      retractPrompt: (submissionId, message) =>
+        retractAcceptedPrompt(this.getTransport(), this.getFeedStore(), submissionId, message),
       canAbort: () => this.getTransport()?.isConnected ?? false,
       getSessionState: () => this.sessionState,
       getSessionPreferences: () => this.plugin.getSessionPreferences(),
@@ -800,13 +803,12 @@ export class ChatobbyView extends ItemView {
       this.sessionPickerMode.refresh();
     }
   }
-
-  // ── Actions ─────────────────────────────────────────────────────
   private async sendPrompt(
     message: string,
     attachments?: WsPromptAttachment[],
     signal?: AbortSignal,
-  ): Promise<void> {
+    submissionId?: string,
+  ): Promise<void | PromptSubmissionOutcome> {
     this.closeSlashMenu();
     const transport = await this.ensureConnectedTransport();
     if (!transport) throw new Error("Chatobby runtime is unavailable");
@@ -821,21 +823,20 @@ export class ChatobbyView extends ItemView {
       sessionName: this.activeTab()?.name,
       permissionMode: this.activeTab()?.permissionMode ?? this.plugin.getSessionPreferences().permissionMode,
     };
-    this.getFeedStore().dispatch({
-      type: "feed.user-prompt-submitted",
-      text: message,
-      startRun: true,
-    });
-
     try {
-      await withTimeout(
-        transport.prompt(message, attachments, toPromptContextPacket(this.gatherContext(), workspaceContext)),
-        PROMPT_START_TIMEOUT_MS,
-        "Prompt did not start",
-      );
-		void this.plugin.completeOnboarding()
-			.then(() => removeOnboardingPanel(this.getFeedStore()))
-			.catch((error) => console.error("Chatobby: failed to complete onboarding", error));
+      const outcome = await submitPrompt({
+        transport,
+        feedStore: this.getFeedStore(),
+        message,
+        attachments,
+        context: toPromptContextPacket(this.gatherContext(), workspaceContext),
+        signal,
+        submissionId,
+      });
+      if (outcome) return outcome;
+      void this.plugin.completeOnboarding()
+        .then(() => removeOnboardingPanel(this.getFeedStore()))
+        .catch((error) => console.error("Chatobby: failed to complete onboarding", error));
     } catch (error) {
       this.renderPromptFailure(message, error);
       throw error;
@@ -846,7 +847,6 @@ export class ChatobbyView extends ItemView {
     const draftId = this.sessionState.sessionId ?? `draft-${Date.now()}`;
     return Promise.all(files.map((file) => storeComposerFile(this.app, file, draftId)));
   }
-
   private async sendRawPrompt(message: string, options: { startRun?: boolean } = {}): Promise<void> {
     this.closeSlashMenu();
     const transport = await this.ensureConnectedTransport();

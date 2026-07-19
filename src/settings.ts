@@ -314,9 +314,21 @@ export class ChatobbySettingTab extends PluginSettingTab {
     );
     this.renderComposerKeybinding(
       containerEl,
+      "nextMessage",
+      "Next message",
+      "Move toward newer recalled prompts when the cursor is at the end of the message.",
+    );
+    this.renderComposerKeybinding(
+      containerEl,
       "stashDraft",
       "Stash draft",
       "Temporarily clear the message and restore it after the next message is submitted.",
+    );
+    this.renderComposerKeybinding(
+      containerEl,
+      "restoreStash",
+      "Restore stashed draft",
+      "Restore the stashed draft without sending another message. The composer must be empty.",
     );
     this.renderComposerKeybinding(
       containerEl,

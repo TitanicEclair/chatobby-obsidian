@@ -192,6 +192,13 @@ export class FeedTransaction {
     this.markRuntimeChanged();
   }
 
+  removePendingPromptEcho(text: string): void {
+    const index = this.state.runtime.pendingPromptEchoes.indexOf(text);
+    if (index < 0) return;
+    this.state.runtime.pendingPromptEchoes.splice(index, 1);
+    this.markRuntimeChanged();
+  }
+
   findExtensionPanelByKey(key: string): BlockId | undefined {
     return this.state.indexes.extensionPanelByKey.get(key);
   }

@@ -133,6 +133,8 @@ export class ContextQueriesView extends ChatobbyComponent {
     const row = parent.createDiv({ cls: `chatobby-queries__item${expanded ? " is-expanded" : ""}` });
     const summary = row.createDiv({ cls: "chatobby-queries__summary" });
     const open = summary.createEl("button", { cls: "chatobby-queries__summary-open", attr: { type: "button", "aria-expanded": String(expanded) } });
+    const disclosure = open.createSpan({ cls: "chatobby-queries__disclosure", attr: { "aria-hidden": "true" } });
+    setIcon(disclosure, expanded ? "chevron-down" : "chevron-right");
     const copy = open.createSpan({ cls: "chatobby-queries__summary-copy" });
     copy.createSpan({ cls: "chatobby-queries__item-name", text: item.name });
     copy.createSpan({ cls: "chatobby-queries__item-description", text: item.description || item.timingLabel });

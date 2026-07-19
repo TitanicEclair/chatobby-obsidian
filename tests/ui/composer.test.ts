@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { createFeedStore, feedSelectors } from "../../src/features/feed/public";
 import { EMPTY_SESSION_STATE, DEFAULT_SESSION_PREFERENCES, type SessionState } from "../../src/types";
 import { Composer, type ComposerHost } from "../../src/ui/composer/composer";
+import { turnOutputMarker } from "../../src/ui/composer/turn-output-marker";
 import type { SlashArgumentOption, SlashCommandSpec, SlashParsedCommand, SlashSubmitPlan } from "../../src/ui/composer/slash-command";
 import { fixedWhitespaceArgs, noArgs } from "../../src/ui/composer/slash-parsers";
+import { submitPrompt } from "../../src/ui/controller/prompt-submission-controller";
+import { FeedRenderer } from "../../src/ui/feed";
+import { createMockFeedHostForStore } from "./helpers/mock-host";
 
 function createHost(overrides: Partial<ComposerHost> = {}): ComposerHost {
   return {
@@ -56,6 +61,48 @@ function command(name: string, overrides: Partial<SlashCommandSpec> = {}): Slash
 }
 
 describe("Composer", () => {
+  it("uses tool start and completed output—not partial deltas—as the retraction boundary", () => {
+    const baseline = turnOutputMarker([]);
+    expect(turnOutputMarker([{
+      type: "text",
+      id: "partial",
+      text: "still streaming",
+      phase: "streaming",
+    }])).toBe(baseline);
+    expect(turnOutputMarker([{
+      type: "tools",
+      id: "queued-tool",
+      phase: "streaming",
+      items: [{
+        id: "tool-1",
+        semanticKind: "test",
+        category: "other",
+        phase: "queued",
+        title: "queued",
+        expandable: false,
+      }],
+    }])).toBe(baseline);
+    expect(turnOutputMarker([{
+      type: "tools",
+      id: "running-tool",
+      phase: "streaming",
+      items: [{
+        id: "tool-1",
+        semanticKind: "test",
+        category: "other",
+        phase: "running",
+        title: "running",
+        expandable: false,
+      }],
+    }])).not.toBe(baseline);
+    expect(turnOutputMarker([{
+      type: "text",
+      id: "complete",
+      text: "done",
+      phase: "complete",
+    }])).not.toBe(baseline);
+  });
+
   it("shows send (disabled, empty) and hides stop when idle with no text", () => {
     const { sendBtn, stopBtn } = bindComposer(createHost());
     expect(sendBtn.classList.contains("is-hidden")).toBe(false);
@@ -179,7 +226,7 @@ describe("Composer", () => {
     expect(sendBtn.classList.contains("is-hidden")).toBe(false);
   });
 
-  it("submits a pending draft exactly once and lets cancel preserve it", async () => {
+  it("submits a pending draft exactly once and lets the first Escape preserve it", async () => {
     let signal: AbortSignal | undefined;
     const pending = new Promise<void>(() => {});
     const send = vi.fn((_message: string, _attachments: undefined, pendingSignal?: AbortSignal) => {
@@ -192,7 +239,7 @@ describe("Composer", () => {
 
     composer.send();
     composer.send();
-    composer.stop();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
 
     expect(send).toHaveBeenCalledOnce();
     expect(signal?.aborted).toBe(true);
@@ -243,10 +290,34 @@ describe("Composer", () => {
     expect(input.value).toBe("first prompt");
   });
 
+  it("moves forward through recalled prompts and returns to the original draft at the end", () => {
+    const { composer, input } = bindComposer(createHost({ getPromptHistory: () => ["first prompt", "second prompt"] }));
+    input.value = "current draft";
+    composer.handleInput();
+    input.setSelectionRange(0, 0);
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }));
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }));
+    expect(input.value).toBe("first prompt");
+
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true }));
+    expect(input.value).toBe("second prompt");
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true }));
+    expect(input.value).toBe("current draft");
+  });
+
   it("uses the configured previous-message shortcut instead of a hardcoded key", () => {
     const { composer, input } = bindComposer(createHost({
       getPromptHistory: () => ["remember me"],
-      getComposerKeybindings: () => ({ previousMessage: "Mod+P", stashDraft: "Mod+S", cancelTurn: "Escape" }),
+      getComposerKeybindings: () => ({
+        previousMessage: "Mod+P",
+        nextMessage: "ArrowDown",
+        stashDraft: "Mod+S",
+        restoreStash: "Mod+Shift+S",
+        cancelTurn: "Escape",
+      }),
     }));
     input.setSelectionRange(0, 0);
 
@@ -268,8 +339,24 @@ describe("Composer", () => {
     composer.handleInput();
     composer.send();
 
-    expect(send).toHaveBeenCalledWith("send this first", undefined, expect.any(AbortSignal));
+    expect(send).toHaveBeenCalledWith("send this first", undefined, expect.any(AbortSignal), expect.any(String));
     expect(input.value).toBe("return to this later");
+  });
+
+  it("restores a stashed draft explicitly without submitting another message", () => {
+    const { composer, input } = bindComposer(createHost());
+    input.value = "restore this without sending";
+    composer.handleInput();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, cancelable: true }));
+    expect(input.value).toBe("");
+
+    composer.handleKeydown(new KeyboardEvent("keydown", {
+      key: "s",
+      ctrlKey: true,
+      shiftKey: true,
+      cancelable: true,
+    }));
+    expect(input.value).toBe("restore this without sending");
   });
 
   it("captures the stash shortcut before Obsidian handles its global hotkey", () => {
@@ -289,18 +376,74 @@ describe("Composer", () => {
     expect(composer.handleCapturedKeydown(event)).toBe(false);
   });
 
-  it("restores a just-submitted message when cancellation happens before output", () => {
+  it("recalls an immediate Escape across composer, feed, controls, and transport", async () => {
     const abort = vi.fn();
-    const { composer, input } = bindComposer(createHost({ abort, getTurnOutputMarker: () => "unchanged" }));
+    const prompt = vi.fn(async () => "started" as const);
+    const retractPrompt = vi.fn(async () => ({ retracted: true as const }));
+    const feedStore = createFeedStore();
+    const feedEl = document.createElement("div");
+    new FeedRenderer(createMockFeedHostForStore(() => feedStore)).bind(feedEl);
+    const send: ComposerHost["send"] = (message, attachments, signal, submissionId) => submitPrompt({
+      transport: {
+        isConnected: true,
+        prompt,
+        retractPrompt,
+      },
+      feedStore,
+      message,
+      attachments,
+      signal,
+      submissionId,
+    });
+    const { composer, input, sendBtn, stopBtn } = bindComposer(createHost({
+      abort,
+      send,
+    }));
     input.value = "restore this request";
     composer.handleInput();
     composer.send();
-    expect(input.value).toBe("");
 
-    composer.stop();
+    expect(feedStore.select(feedSelectors.orderedBlockIds)).toHaveLength(1);
+    expect(feedEl.querySelector(".chatobby-user-block")?.textContent).toContain("restore this request");
+    expect(stopBtn.classList.contains("is-hidden")).toBe(false);
+    expect(sendBtn.classList.contains("is-hidden")).toBe(true);
 
-    expect(abort).toHaveBeenCalledOnce();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+
+    await vi.waitFor(() => expect(stopBtn.classList.contains("is-hidden")).toBe(true));
+    expect(prompt).toHaveBeenCalledOnce();
+    expect(retractPrompt).toHaveBeenCalledOnce();
+    expect(abort).not.toHaveBeenCalled();
+    expect(feedStore.select(feedSelectors.orderedBlockIds)).toHaveLength(0);
+    expect(feedEl.querySelector(".chatobby-user-block")).toBeNull();
     expect(input.value).toBe("restore this request");
+    expect(sendBtn.classList.contains("is-hidden")).toBe(false);
+    expect(sendBtn.disabled).toBe(false);
+  });
+
+  it("keeps a started prompt retractable while assistant output is still partial", async () => {
+    const abort = vi.fn();
+    const retractPrompt = vi.fn(async () => ({ retracted: true as const }));
+    let marker = "0:";
+    const { composer, input, sendBtn, stopBtn } = bindComposer(createHost({
+      abort,
+      retractPrompt,
+      getTurnOutputMarker: () => marker,
+    }));
+    input.value = "restore after partial streaming";
+    composer.handleInput();
+    composer.send();
+
+    expect(input.value).toBe("");
+    marker = "0:";
+    composer.observeTurnProgress();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+
+    await vi.waitFor(() => expect(input.value).toBe("restore after partial streaming"));
+    expect(retractPrompt).toHaveBeenCalledOnce();
+    expect(abort).not.toHaveBeenCalled();
+    expect(stopBtn.classList.contains("is-hidden")).toBe(true);
+    expect(sendBtn.classList.contains("is-hidden")).toBe(false);
   });
 
   it("does not restore a submitted message after visible turn output begins", () => {
@@ -507,7 +650,7 @@ describe("Composer", () => {
     composer.send();
 
     expect(submitSlashPlan).not.toHaveBeenCalled();
-    expect(send).toHaveBeenCalledWith("/rod", undefined, expect.any(AbortSignal));
+    expect(send).toHaveBeenCalledWith("/rod", undefined, expect.any(AbortSignal), expect.any(String));
   });
 
   it("escape cancels command recognition until delete-then-type re-enables it", () => {

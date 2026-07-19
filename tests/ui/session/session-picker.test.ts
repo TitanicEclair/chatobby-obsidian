@@ -97,6 +97,39 @@ describe("SessionPickerComponent", () => {
     }
   });
 
+  it("shows an event-bound animated state while a selected session resumes", async () => {
+    let completeResume: (() => void) | null = null;
+    const onSelect = vi.fn(() => new Promise<void>((resolve) => { completeResume = resolve; }));
+    const picker = new SessionPickerComponent({
+      getTransport: async () => ({
+        listSessions: async () => [session({ path: "C:/sessions/one.jsonl", id: "one" })],
+      }),
+      directories,
+      initialDirectoryPath: "",
+      onSelect,
+      onUseDirectory: vi.fn(),
+      onCreateSession: vi.fn(async () => {}),
+      onDelete: vi.fn(async () => {}),
+      onAdvancedAction: vi.fn(async () => {}),
+    });
+    const root = mount(picker);
+    await settle();
+
+    root.querySelector<HTMLButtonElement>(".chatobby-session-picker__item-open")?.click();
+    await Promise.resolve();
+
+    const loading = root.querySelector(".chatobby-session-picker__state.is-resuming");
+    expect(loading?.getAttribute("role")).toBe("status");
+    expect(loading?.getAttribute("aria-label")).toBe("Resuming session");
+    expect(loading?.textContent).toBe("Resuming session");
+    expect(loading?.querySelector(".chatobby-session-picker__loading-dots")).not.toBeNull();
+    expect(root.querySelector(".chatobby-session-picker__item")).toBeNull();
+
+    completeResume?.();
+    await settle();
+    expect(root.querySelector(".chatobby-session-picker__state.is-resuming")).toBeNull();
+  });
+
   it("searches session titles across directories while resetting selection", async () => {
     const props: SessionPickerProps = {
       getTransport: async () => ({

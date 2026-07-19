@@ -22,7 +22,8 @@ export type FeedViewAction =
 
 /** Complete command surface accepted by a feed store. */
 export type FeedAction =
-  | { type: "feed.user-prompt-submitted"; text: string; startRun: boolean }
+  | { type: "feed.user-prompt-submitted"; text: string; startRun: boolean; submissionId?: string }
+  | { type: "feed.user-prompt-retracted"; submissionId: string; text: string }
   | { type: "feed.local-feedback-appended"; input: string; guidance: string }
   | { type: "feed.extension-panel-upserted"; panel: ExtensionPanelInput }
   | { type: "feed.extension-panel-removed"; key: string }

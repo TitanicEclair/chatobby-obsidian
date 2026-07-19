@@ -15,6 +15,105 @@ describe("normalized feed projection", () => {
     expect(store.exportSnapshot().runtime.pendingPromptEchoes).toEqual(["hello"]);
   });
 
+  it("removes only the locally correlated prompt when the runtime confirms retraction", () => {
+    const store = createFeedStore({ now: () => 1_000 });
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "same text",
+      startRun: true,
+      submissionId: "submission-1",
+    });
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "same text",
+      startRun: true,
+      submissionId: "submission-2",
+    });
+
+    store.dispatch({ type: "feed.user-prompt-retracted", submissionId: "submission-2", text: "same text" });
+
+    expect(blocks(store)).toEqual([expect.objectContaining({ submissionId: "submission-1" })]);
+    expect(store.exportSnapshot().runtime.pendingPromptEchoes).toEqual(["same text"]);
+    expect(store.select(feedSelectors.runTiming).runStartedAt).toBeNull();
+  });
+
+  it("keeps an optimistic prompt visible while a runtime projection has not confirmed it", () => {
+    const store = createFeedStore();
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "do not flash",
+      startRun: true,
+      submissionId: "submission-flash",
+    });
+
+    store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: { blocks: [] },
+    });
+
+    expect(blocks(store)).toEqual([
+      expect.objectContaining({ type: "user", submissionId: "submission-flash" }),
+    ]);
+  });
+
+  it("atomically replaces an optimistic prompt with its authoritative runtime block", () => {
+    const store = createFeedStore();
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "one stable bubble",
+      startRun: true,
+      submissionId: "submission-stable",
+    });
+    const observedUserCounts: number[] = [];
+    store.subscribe(() => {
+      observedUserCounts.push(blocks(store).filter((block) => block.type === "user").length);
+    });
+
+    store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: { blocks: [projectedUser("runtime-prompt", "one stable bubble")] },
+    });
+
+    expect(observedUserCounts).toEqual([1]);
+    expect(blocks(store)).toEqual([
+      expect.objectContaining({ type: "user", id: "runtime-prompt" }),
+    ]);
+    expect(store.exportSnapshot().runtime.pendingPromptEchoes).toEqual([]);
+  });
+
+  it("does not mistake an older identical prompt for the current optimistic submission", () => {
+    const store = createFeedStore();
+    store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: { blocks: [projectedUser("historical", "repeat this")] },
+    });
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "repeat this",
+      startRun: true,
+      submissionId: "submission-repeat",
+    });
+
+    store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: { blocks: [projectedUser("historical", "repeat this")] },
+    });
+    expect(blocks(store)).toHaveLength(2);
+    expect(blocks(store)[1]).toMatchObject({ submissionId: "submission-repeat" });
+
+    store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: {
+        blocks: [
+          projectedUser("historical", "repeat this"),
+          projectedUser("current", "repeat this"),
+        ],
+      },
+    });
+    expect(blocks(store).map((block) => block.id)).toEqual(["historical", "current"]);
+    expect(store.exportSnapshot().runtime.pendingPromptEchoes).toEqual([]);
+  });
+
   it("upserts and removes a keyed extension panel without changing its position", () => {
     let now = 10;
     const store = createFeedStore({ now: () => now });
@@ -139,6 +238,15 @@ function projectedConversation(text: string): FeedDocumentProjection {
         status: "complete",
       },
     ],
+  };
+}
+
+function projectedUser(id: string, text: string): Extract<FeedBlock, { type: "user" }> {
+  return {
+    type: "user",
+    id,
+    messageId: id,
+    message: { role: "user", content: text, timestamp: 1 },
   };
 }
 

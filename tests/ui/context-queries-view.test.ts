@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { FrontendContextQueryScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 import {
@@ -30,12 +31,17 @@ describe("ContextQueriesView", () => {
     expect(el.querySelectorAll(".chatobby-queries__header .chatobby-page__icon-button")).toHaveLength(3);
     expect(el.textContent).toContain("Project status");
     expect(el.textContent).toContain("Adds the current project status");
+    expect(el.querySelector(".chatobby-queries__disclosure")?.getAttribute("data-icon")).toBe("chevron-right");
     expect(el.querySelector("textarea")).toBeNull();
 
     el.querySelector<HTMLButtonElement>(".chatobby-queries__summary-open")?.click();
     expect(el.textContent).toContain("Source code is intentionally kept out of this page");
     expect(el.querySelector("textarea")).toBeNull();
     expect(el.textContent).not.toContain("export default");
+
+    const css = readFileSync("src/features/queries/ui/queries.css", "utf8");
+    expect(css).toMatch(/\.chatobby-queries button\.chatobby-queries__summary-open[\s\S]*background: transparent;/u);
+    expect(css).toMatch(/@container \(max-width: 420px\)[\s\S]*chatobby-queries__editor/u);
   });
 
   it("creates metadata only and leaves script scaffolding to the runtime", async () => {

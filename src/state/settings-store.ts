@@ -146,7 +146,9 @@ export class SettingsStore {
 function resolveComposerKeybindings(value: Partial<ComposerKeybindings> | undefined): ComposerKeybindings {
   return {
     previousMessage: validBinding(value?.previousMessage, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.previousMessage),
+    nextMessage: validBinding(value?.nextMessage, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.nextMessage),
     stashDraft: validBinding(value?.stashDraft, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.stashDraft),
+    restoreStash: validBinding(value?.restoreStash, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.restoreStash),
     cancelTurn: validBinding(value?.cancelTurn, DEFAULT_PLUGIN_SETTINGS.composerKeybindings.cancelTurn),
   };
 }

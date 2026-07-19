@@ -40,10 +40,14 @@ export declare class ChatobbyWsClient {
     getFrontendScreen(request: FrontendScreenRequest): Promise<FrontendScreenViewModel>;
     subscribeFrontend(request: FrontendSubscriptionRequest): Promise<FrontendSubscriptionAck>;
     dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult>;
-    prompt(message: string, attachments?: WsPromptAttachment[], context?: WsPromptContextPacket): Promise<void>;
+    prompt(message: string, attachments?: WsPromptAttachment[], context?: WsPromptContextPacket, submissionId?: string): Promise<"started" | "retracted">;
     steer(message: string): Promise<void>;
     followUp(message: string): Promise<void>;
     abort(): Promise<void>;
+    retractPrompt(submissionId: string): Promise<{
+        retracted: boolean;
+        reason?: "not-found" | "output-started" | "drain-timeout" | "prompt-failed";
+    }>;
     listSessions(cwdOverride?: string, includeDescendants?: boolean): Promise<WsSessionInfo[]>;
     deleteSession(sessionPath: string, cwdRoot: string): Promise<{
         sessionId: string;

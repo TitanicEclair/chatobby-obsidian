@@ -31,7 +31,9 @@ describe("ChatobbySettingTab", () => {
         autoScroll: true,
         composerKeybindings: {
           previousMessage: "ArrowUp",
+          nextMessage: "ArrowDown",
           stashDraft: "Mod+S",
+          restoreStash: "Mod+Shift+S",
           cancelTurn: "Escape",
         },
         autoNameStrategy: "truncate",

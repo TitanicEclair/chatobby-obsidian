@@ -310,8 +310,8 @@ var ChatobbyWsClient = class {
   async dispatchFrontendIntent(intent) {
     return resultField(await this.send("frontend_intent", intent), "outcome");
   }
-  async prompt(message, attachments, context) {
-    await this.send("prompt", { message, attachments, context });
+  async prompt(message, attachments, context, submissionId) {
+    return resultField(await this.send("prompt", { message, attachments, context, submissionId }), "status");
   }
   async steer(message) {
     await this.send("steer", { message });
@@ -321,6 +321,13 @@ var ChatobbyWsClient = class {
   }
   async abort() {
     await this.send("abort", {});
+  }
+  async retractPrompt(submissionId) {
+    const result = await this.send("retract_prompt", { submissionId });
+    return {
+      retracted: resultField(result, "retracted"),
+      reason: isRecord2(result) && typeof result.reason === "string" ? result.reason : void 0
+    };
   }
   async listSessions(cwdOverride, includeDescendants = false) {
     return resultField(await this.send("list_sessions", { cwdOverride, includeDescendants }), "sessions");

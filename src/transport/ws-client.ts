@@ -167,9 +167,14 @@ export class ChatobbyTransport {
 
   // ── Prompting ──────────────────────────────────────────────────────
 
-  async prompt(message: string, attachments?: WsPromptAttachment[], context?: WsPromptContextPacket): Promise<void> {
+  async prompt(
+    message: string,
+    attachments?: WsPromptAttachment[],
+    context?: WsPromptContextPacket,
+    submissionId?: string,
+  ): Promise<"started" | "retracted"> {
     const client = this.requireClient();
-    await client.prompt(message, attachments, context);
+    return client.prompt(message, attachments, context, submissionId);
   }
 
   async steer(message: string): Promise<void> {
@@ -185,6 +190,12 @@ export class ChatobbyTransport {
   async abort(): Promise<void> {
     const client = this.requireClient();
     await client.abort();
+  }
+
+  async retractPrompt(
+    submissionId: string,
+  ): Promise<{ retracted: boolean; reason?: "not-found" | "output-started" | "drain-timeout" | "prompt-failed" }> {
+    return this.requireClient().retractPrompt(submissionId);
   }
 
   // ── Session lifecycle ──────────────────────────────────────────────

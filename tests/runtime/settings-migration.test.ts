@@ -72,7 +72,9 @@ describe("runtime settings migration", () => {
 
     expect(settings.composerKeybindings).toEqual({
       previousMessage: "ArrowUp",
+      nextMessage: "ArrowDown",
       stashDraft: "Mod+K",
+      restoreStash: "Mod+Shift+S",
       cancelTurn: "Mod+Escape",
     });
     expect(plugin.saveData).toHaveBeenCalledWith(expect.objectContaining({

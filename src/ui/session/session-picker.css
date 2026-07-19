@@ -349,8 +349,34 @@ button.chatobby-session-picker__item-open {
   color: var(--chatobby-danger);
 }
 
+.chatobby-session-picker__state.is-resuming {
+  flex-direction: row;
+  gap: 0;
+}
+
+.chatobby-session-picker__loading-dots {
+  display: inline-block;
+  width: 1.5em;
+  text-align: left;
+}
+
+.chatobby-session-picker__loading-dots::after {
+  content: ".";
+  animation: chatobby-session-loading-dots 1.2s steps(1, end) infinite;
+}
+
 .chatobby-session-picker__hint {
   color: var(--text-faint);
   font-family: var(--font-monospace-theme);
   font-size: var(--font-ui-smaller);
+}
+
+@keyframes chatobby-session-loading-dots {
+  0%, 32% { content: "."; }
+  33%, 65% { content: ".."; }
+  66%, 100% { content: "..."; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatobby-session-picker__loading-dots::after { content: "..."; animation: none; }
 }

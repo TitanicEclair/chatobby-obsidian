@@ -1,4 +1,4 @@
-import type { FeedBlock, ToolBlock, ToolItem } from "../../../../types";
+import type { FeedBlock, ToolBlock, ToolItem, UserMessage } from "../../../../types";
 import type { FeedBlockEntity, ToolItemEntity } from "../../domain/entities";
 import { assistantCallId, blockId, toolCallId } from "../../domain/ids";
 import type { FeedDocumentProjection } from "../../domain/projections";
@@ -12,7 +12,31 @@ export function reduceDocumentProjection(
   const projectedIds = projection.blocks.map((block) => blockId(block.id));
   const allBlocks = flattenBlocks(projection.blocks);
   assertUniqueIds(allBlocks.map((block) => blockId(block.id)));
-  const expectedIds = new Set(allBlocks.map((block) => blockId(block.id)));
+  const pendingLocalIds = transaction.orderedBlockIds().filter((id) => {
+    const block = transaction.getBlock(id);
+    return block?.type === "user" && block.submissionId !== undefined;
+  });
+  const unmatchedPendingIds = new Set(pendingLocalIds);
+
+  for (const projected of projection.blocks) {
+    if (projected.type !== "user") continue;
+    const projectedId = blockId(projected.id);
+    const existing = transaction.getBlock(projectedId);
+    const projectedText = normalizeUserContent(projected.message.content);
+    const pendingId = pendingLocalIds.find((id) => {
+      if (!unmatchedPendingIds.has(id)) return false;
+      const pending = transaction.getBlock(id);
+      return pending?.type === "user" && normalizeUserContent(pending.message.content) === projectedText;
+    });
+    if (!pendingId || (existing && existing.type === "user" && existing.submissionId === undefined)) continue;
+    unmatchedPendingIds.delete(pendingId);
+    transaction.consumePendingPromptEcho(projectedText);
+  }
+
+  const expectedIds = new Set([
+    ...allBlocks.map((block) => blockId(block.id)),
+    ...unmatchedPendingIds,
+  ]);
 
   for (const block of allBlocks) reconcileBlock(transaction, block);
   for (const block of allBlocks) {
@@ -20,7 +44,7 @@ export function reduceDocumentProjection(
       transaction.setSummaryChildren(blockId(block.id), block.blocks.map((child) => blockId(child.id)));
     }
   }
-  transaction.replaceOrder(projectedIds);
+  transaction.replaceOrder([...projectedIds, ...unmatchedPendingIds]);
 
   const staleIds = transaction.allBlockIds().filter((id) => !expectedIds.has(id));
   for (const id of staleIds.filter((candidate) => transaction.getBlock(candidate)?.type === "summary")) {
@@ -29,6 +53,18 @@ export function reduceDocumentProjection(
   for (const id of staleIds.filter((candidate) => transaction.getBlock(candidate)?.type !== "summary")) {
     transaction.removeBlock(id);
   }
+}
+
+function normalizeUserContent(content: UserMessage["content"]): string {
+  if (typeof content === "string") return normalizeText(content);
+  return normalizeText(content.flatMap((item) => {
+    if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") return [];
+    return [item.text];
+  }).join("\n"));
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\r\n?/g, "\n").trim();
 }
 
 function reconcileBlock(transaction: FeedTransaction, block: FeedDocumentProjection["blocks"][number]): void {
