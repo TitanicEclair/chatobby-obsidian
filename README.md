@@ -3,33 +3,62 @@
 **A full agent workspace inside your vault.**
 
 [![Install Chatobby in Obsidian](https://img.shields.io/badge/Install%20in-Obsidian-7C3AED?style=for-the-badge&logo=obsidian&logoColor=white)](https://obsidian.md/plugins?id=chatobby)
-[![Public alpha](https://img.shields.io/badge/release-public%20alpha-2F81F7?style=for-the-badge)](docs/alpha-guide.md)
+[![Public alpha](https://img.shields.io/badge/release-public%20alpha-2F81F7?style=for-the-badge)](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/alpha-guide.md)
 [![Windows desktop](https://img.shields.io/badge/platform-Windows%20desktop-0078D4?style=for-the-badge&logo=windows&logoColor=white)](#platform-and-alpha-status)
+[![Star Chatobby on GitHub](https://img.shields.io/github/stars/TitanicEclair/chatobby-obsidian?style=for-the-badge&logo=github&label=Star%20Chatobby)](https://github.com/TitanicEclair/chatobby-obsidian)
 
-Chatobby gives you an agent that can understand your notes, use tools, work
-across persistent projects, and coordinate specialist subagents when a task
-grows. The conversation, progress, permissions, supporting context, scheduled
-work, and delegated work all remain visible inside Obsidian.
+**Community:** [GitHub Discussions](https://github.com/TitanicEclair/chatobby-obsidian/discussions) · [Issue tracker](https://github.com/TitanicEclair/chatobby-obsidian/issues) · [Documentation](https://github.com/TitanicEclair/chatobby-obsidian/tree/main/docs)
 
-It is not meant to be another isolated chatbot sidebar. Chatobby is designed as
-a workspace in which an agent can help with real vault work, research, writing,
-planning, coding, and longer-running projects while you retain control over what
-it may do.
+**Chatobby** gives you a completely **local** agent, built with full support for obsidian and coding.
+
+Chatobby can understand your notes, use tools, work across projects,
+recall memory and past sessions, and coordinate subagents when a task grows.
+
+Your conversations, permissions, context, scheduled work, and delegated work all
+remain visible inside Obsidian.
+
+Only **model calls** are sent to a provider of your choosing,
+with continuous updated support for OpenAI, Anthropic, Deepseek, Google Gemini,
+Z.AI, Xiaomi, OpenRouter, Hugging Face, and many more! Just **connect your API key** and
+everything works out of the box. *In our roadmap: We plan to add **local model** support.*
+
+| Provider group | Supported services |
+| --- | --- |
+| Major model APIs | OpenAI, Anthropic, Google Gemini, Azure OpenAI, Google Vertex AI, Amazon Bedrock |
+| Model hubs and gateways | OpenRouter, Vercel AI Gateway, Hugging Face, NVIDIA NIM, Fireworks AI, Together AI, Cloudflare Workers AI, Cloudflare AI Gateway |
+| Additional model providers | DeepSeek, Groq, Cerebras, Mistral, xAI, Z.AI, Xiaomi MiMo, Moonshot AI, MiniMax, Ant Ling |
+| Coding and account-backed access | OpenAI Codex, GitHub Copilot, Kimi Coding, Z.AI Coding Plan, Xiaomi Token Plan, OpenCode Zen, OpenCode Go |
+
+Models change more often than this README. See the maintained
+[providers and models guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/providers-and-models.md)
+for provider variants, setup notes, and how to check the exact models available
+in your installed Chatobby version.
+
+Though it can be, Chatobby is built not just to be another isolated chatbot sidebar.
+Chatobby is designed as a workspace in which an agent can help with real
+vault work, research, writing, planning, coding, Obsidian browser capabilities,
+and longer-running projects while you retain control over what it may do.
 
 > **Public alpha:** Chatobby is free while it is under active development.
-> Back up important vaults and begin with copied test notes. Interfaces,
-> behavior, and storage contracts may change between alpha releases.
+> It is important to practice discipline with backing up important vaults
+> and starting small to learn how to use Chatobby.
+> Interfaces, behavior, and storage contracts may change between alpha releases.
 
 ## Support Chatobby's development
 
-> Please support me to remain unemployed so I can keep working on Chatobby.
-> It's actually so exciting to see its capabilities now and I love doing this
-> <3
+> If you like Chatobby and want to support its development
+> and continuous updates, I would love to hear your feedback!
+>
+> If you love Chatobby, and want to keep our devs (me) unemployed, I
+> would greatly appreciate donations :")
+> It's actually so exciting to see its capabilities now and I love doing this <3
 
 [![Support Chatobby on Patreon](https://img.shields.io/badge/Support%20Chatobby%20on%20Patreon-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/cw/MadelynCruzTan/membership)
 
 Support is completely optional. It does not unlock features or change the free
 alpha experience.
+
+#### **Chatobby is currently ONLY available on Windows. We will soon work on Mac and Linux support.**
 
 <!--
 Optional hero media: place assets/readme/chatobby-overview.gif here.
@@ -38,21 +67,44 @@ Suggested Markdown:
 ![Chatobby completing a vault task with visible progress](assets/readme/chatobby-overview.gif)
 -->
 
+## Contents
+
+- [Support Chatobby's development](#support-chatobbys-development)
+- [What makes Chatobby different](#what-makes-chatobby-different)
+- [The agentic experience](#the-agentic-experience)
+- [Install](#install)
+- [A guided first fifteen minutes](#a-guided-first-fifteen-minutes)
+- [User guides](#user-guides)
+- [Project guidance: `.chatobby.md` and `AGENTS.md`](#project-guidance-chatobbymd-and-agentsmd)
+- [Memory](#memory)
+- [Context Queries](#context-queries)
+- [Skills](#skills)
+- [Tasks, roles, subagents, workflows, and channels](#tasks-roles-subagents-workflows-and-channels)
+- [Events](#events)
+- [Permission policies](#permission-policies)
+- [More things to ask Chatobby](#more-things-to-ask-chatobby)
+- [Platform and alpha status](#platform-and-alpha-status)
+- [Privacy and data flow](#privacy-and-data-flow)
+- [Source and licensing](#source-and-licensing)
+- [Help shape Chatobby](#help-shape-chatobby)
+
 ## What makes Chatobby different
 
-Most AI integrations stop at a chat box. Chatobby is built around the larger
-working experience required when an agent is allowed to do useful work.
+Most AI integrations stop at a chat box or QnA about your vault.
+Chatobby is built around the larger working experience required when
+an agent is allowed to do useful work, and track tasks for you.
 
-| Chatobby capability | What it means for you |
-|---|---|
-| Tool-using agent | Ask for an outcome instead of manually copying every note and instruction into a prompt. |
-| Visible work | Follow reasoning summaries, tool activity, permission requests, tasks, errors, and results in one feed. |
-| Project sessions | Keep each conversation tied to the directory and context it actually belongs to. |
-| Permission policies | Decide which files, commands, tools, channels, and automated actions a session may use. |
-| Memory and context | Retain approved knowledge and inject small pieces of live project data when needed. |
-| Subagents and workflows | Delegate focused work without losing the main conversation or its supervision. |
-| Events | Run bounded one-off or repeating work with an assigned project, agent, policy, and runtime limits. |
-| Extensible runtime | Use providers, models, skills, MCP servers, project instructions, and context queries without turning the Obsidian plugin into an unmaintainable monolith. |
+| Chatobby capability     | What it means for you                                                                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tool-using agent        | Ask for an outcome instead of manually copying every note and instruction into a prompt.                                                                   |
+| Visible work            | Follow Chatobby's thoughts, reasoning summaries, tool activity, permission requests, tasks, errors, and results in one feed.                               |
+| Project sessions        | Keep each conversation tied to the directory and context it actually belongs to, with the default being your vault.                                        |
+| Permission policies     | Decide which files, commands, tools, channels, and automated actions a session may use. Create fully customizable permission presets.                      |
+| Memory and context      | Retain approved knowledge and inject small pieces of live project data when needed.                                                                        |
+| Subagents and workflows | Delegate focused work without losing the main conversation or its supervision.                                                                             |
+| Events                  | Run bounded one-off or repeating work with an assigned project, agent, policy, and runtime limits.                                                         |
+| Extensible runtime      | Use providers, models, skills, MCP servers, project instructions, and context queries without turning the Obsidian plugin into an unmaintainable monolith. |
+| Custom themes           | Chatobby's theme follows your vault's, and fits in to your preferences                                                                                     |
 
 ## The agentic experience
 
@@ -215,16 +267,12 @@ verifies the release descriptor and included files, installs the runtime for the
 current Windows account, and reconnects to it. When a compatible runtime update
 is available, Chatobby can present an update action inside the plugin.
 
-A standalone installer remains available from the
-[latest runtime release](https://github.com/TitanicEclair/chatobby-runtime/releases/latest)
-for recovery and manual installation.
-
 Chatobby itself is free during the public alpha. The model provider you choose
 may require an account, API key, subscription, or usage payment.
 
-For more detail, see the [installation guide](docs/installation.md),
-[alpha guide](docs/alpha-guide.md), and
-[troubleshooting guide](docs/troubleshooting.md).
+For more detail, see the [installation guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/installation.md),
+[alpha guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/alpha-guide.md), and
+[troubleshooting guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/troubleshooting.md).
 
 ## A guided first fifteen minutes
 
@@ -266,6 +314,23 @@ it or connect it to the current note.
 Use the top ribbon to open Sessions, Permissions, Memory, Events, Queries,
 Channels, and Subagents. These pages are part of the same agent workspace; you
 do not need to move configuration into the message composer.
+
+## User guides
+
+These guides explain both the UI workflow and what to ask Chatobby when you want
+the agent to create or manage the feature for you:
+
+| Guide | Use it for |
+|---|---|
+| [Providers and models](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/providers-and-models.md) | Connect a supported provider and check how to find the models available in your installed Chatobby version. |
+| [Context Queries](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/context-queries.md) | Safely compute small typed project data at session start or before a turn, including the complete supported script and SDK contract. |
+| [Subagents](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md) | Launch bounded specialist workers with appropriate roles, policies, limits, communication, and lifecycle handling. |
+| [Workflows](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md) | Design, validate, preview, and supervise reusable dependency-aware multi-agent execution. |
+| [Events](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/events.md) | Create deliberate one-off or repeating automated work with schedules, policies, limits, and inspectable history. |
+
+You can build these features through their pages or describe the outcome to
+Chatobby and ask it to use the dedicated management tools. Chatobby never needs
+to inspect its own product source to use them.
 
 ## Project guidance: `.chatobby.md` and `AGENTS.md`
 
@@ -387,6 +452,8 @@ Poor memory:
 
 ## Context Queries
 
+Full instructions: [Context Queries guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/context-queries.md).
+
 Context Queries are small project-owned scripts that produce typed data for an
 agent session. They are useful when current information should be computed from
 a local or external source instead of saved as memory or repeatedly searched by
@@ -457,6 +524,9 @@ personal assumptions into a skill intended for other users.
 
 ## Tasks, roles, subagents, workflows, and channels
 
+Full instructions: [Subagents guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md) and
+[Workflows guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md).
+
 These surfaces cover different levels of coordination:
 
 | Surface | Purpose |
@@ -482,6 +552,8 @@ The main agent remains the supervisor. Delegation must not be used to bypass
 permissions or conceal work from the user.
 
 ## Events
+
+Full instructions: [Events guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/events.md).
 
 Events are durable triggers for future agent work. Use them when the timing is
 part of the requirement rather than merely another step in the current
@@ -601,8 +673,8 @@ Important limitations:
 
 The reviewable Obsidian connector is source-available under proprietary terms
 and is not open source. The separate runtime is closed source and has its own
-distribution terms. See [LICENSE](LICENSE), [PRIVACY.md](PRIVACY.md), and the
-[responsibility boundaries](docs/responsibility-boundaries.md).
+distribution terms. See [LICENSE](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/LICENSE), [PRIVACY.md](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/PRIVACY.md), and the
+[responsibility boundaries](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/responsibility-boundaries.md).
 
 ## Help shape Chatobby
 
@@ -612,7 +684,7 @@ This is an alpha because feedback still has real influence over the product.
   [issue tracker](https://github.com/TitanicEclair/chatobby-obsidian/issues).
 - Use [GitHub Discussions](https://github.com/TitanicEclair/chatobby-obsidian/discussions)
   for questions, ideas, workflows, polls, and general feedback.
-- For security concerns, follow [SECURITY.md](SECURITY.md).
+- For security concerns, follow [SECURITY.md](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/SECURITY.md).
 - If Chatobby has been useful and you want to support continued development,
   [join the Patreon](https://www.patreon.com/cw/MadelynCruzTan/membership).
 
@@ -645,8 +717,8 @@ maps, and stages exactly `main.js`, `manifest.json`, and `styles.css` under
 `release/`.
 
 Reviewers can also consult the
-[responsibility boundaries](docs/responsibility-boundaries.md),
-[managed runtime lifecycle](docs/architecture/managed-runtime-lifecycle.md),
-and [release boundary](docs/release-boundary.md).
+[responsibility boundaries](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/responsibility-boundaries.md),
+[managed runtime lifecycle](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/architecture/managed-runtime-lifecycle.md),
+and [release boundary](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/release-boundary.md).
 
 </details>
