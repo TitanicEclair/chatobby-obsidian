@@ -182,7 +182,7 @@ export class ComposerControls extends ChatobbyComponent {
     return options.map((option) => ({
       value: option.value,
       label: option.label,
-      description: control.id === "model" ? undefined : option.description,
+      description: control.id === "model" ? option.disabledReason : option.description,
       disabled: option.disabledReason !== undefined,
     }));
   }
@@ -194,7 +194,9 @@ export class ComposerControls extends ChatobbyComponent {
       const value = id === "provider" ? this.providerFilter : id === "model" ? this.selectedModel : control.value;
       const option = control.options.find((candidate) => candidate.value === value);
       setButtonLabel(button, option?.label ?? control.label);
-      button.title = `${control.label}: ${option?.label ?? "Not selected"}`;
+      button.title = option?.disabledReason
+        ? `${control.label}: ${option.label}. ${option.disabledReason}`
+        : `${control.label}: ${option?.label ?? "Not selected"}`;
     }
   }
 

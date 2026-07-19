@@ -173,6 +173,37 @@ describe("ComposerControls", () => {
     controls.destroy();
   });
 
+  it("keeps a removed saved model visible until the user chooses a replacement", () => {
+    const base = composerModel("openai", "openai/gpt-4-retired");
+    const model: FrontendComposerViewModel = {
+      ...base,
+      controls: base.controls.map((candidate) => candidate.id === "model"
+        ? {
+            ...candidate,
+            options: [
+              {
+                value: "openai/gpt-4-retired",
+                label: "GPT-4 Retired (unavailable)",
+                description: "openai",
+                disabledReason: "Not available in the current model catalogue or provider configuration",
+              },
+              ...candidate.options,
+            ],
+          }
+        : candidate),
+    };
+    const { controls, root } = renderControls(makeHost({ getViewModel: () => model }));
+
+    expect(control(root, "Model").textContent).toContain("GPT-4 Retired (unavailable)");
+    expect(control(root, "Model").title).toContain("Not available in the current model catalogue");
+    control(root, "Model").click();
+    const options = Array.from(root.querySelectorAll<HTMLButtonElement>(".chatobby-selection-menu__option"));
+    expect(options.find((option) => option.textContent?.includes("GPT-4 Retired"))?.disabled).toBe(true);
+    expect(root.textContent).toContain("Not available in the current model catalogue");
+    expect(options.find((option) => option.textContent?.includes("GPT-5"))?.disabled).toBe(false);
+    controls.destroy();
+  });
+
   it("dispatches one effort preference intent", async () => {
     const applyControl = vi.fn(async () => {});
     const { controls, root } = renderControls(makeHost({ applyControl }));

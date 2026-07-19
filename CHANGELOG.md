@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added configurable Chatobby-local composer shortcuts, previous-message
+  recall, draft stashing, early-cancel restoration, visible slash-command
+  syntax, and a user-facing `/effort` command.
+- Added searchable, bounded skill selection and persistent role/workflow form
+  drafts with concise contextual help.
+
+### Changed
+
+- Marked Chatobby-provided subagent roles directly in the UI and removed
+  inapplicable edit/delete actions for immutable built-ins.
+
+### Fixed
+
+- Kept a saved model that is no longer available visible and explained in the
+  composer until the user explicitly chooses a replacement.
+- Added transactional same-version runtime repair for a damaged or previously
+  rejected signed package instead of leaving automatic restart permanently
+  paused.
+
 ## [0.1.6] - 2026-07-19
 
 ### Changed
