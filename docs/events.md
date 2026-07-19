@@ -77,4 +77,3 @@ single generic error.
   and daily limit before changing the definition.
 - **A role or project no longer exists:** keep the Event disabled until its
   allocation is repaired and tested.
-

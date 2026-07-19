@@ -153,4 +153,3 @@ override the user's request.
   built-ins, or a relative module stored beside your own query.
 - **The result is not injected:** verify the query is enabled, its trigger is
   correct, and its most recent run did not fail or exceed a limit.
-

@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-07-19
+
+### Added
+
+- Added event-driven early prompt retraction: Escape can return an uncommitted
+  message to the composer and remove it from the feed and active session branch.
+- Added forward message-history navigation and an explicit configurable shortcut
+  for restoring a stashed draft into an empty composer.
+- Added complete user guides for Context Queries, subagents, workflows, Events,
+  and supported providers and models.
+
+### Changed
+
+- Redesigned the Context Queries list as a compact, responsive, theme-native
+  surface with clearer timing, enabled state, and test results.
+- Added an accessible animated session-resume state and hardened Chatobby view
+  restoration when Obsidian replaces or reopens an unpinned leaf.
+- Reworked the public README around normal user workflows, feature discovery,
+  installation, privacy, project guidance, and optional support.
+
+### Fixed
+
+- Replaced timer-based cancel recovery with a submission-scoped runtime
+  acknowledgement, eliminating the send-time flash and stale cancelled bubbles.
+- Kept the stop control, composer draft, feed projection, and durable session
+  branch synchronized across prompt acceptance and cancellation races.
+
+## [0.1.7] - 2026-07-19
+
 ### Added
 
 - Added configurable Chatobby-local composer shortcuts, previous-message

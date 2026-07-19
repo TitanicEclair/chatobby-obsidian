@@ -105,4 +105,3 @@ states and should be handled as such.
   its assignment, and avoid sending the full parent branch unnecessarily.
 - **A child exceeded scope:** revise the role instructions and add measurable
   source, tool, turn, or output limits rather than relying on “keep it concise.”
-

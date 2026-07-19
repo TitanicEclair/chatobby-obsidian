@@ -123,4 +123,3 @@ one-off delegation that the main agent will supervise closely.
   child turn rather than merely persisting a message for a non-polling worker.
 - **The rail is stale:** refresh runtime state and inspect the run's durable
   lifecycle; navigation should not be required to make a new child appear.
-
