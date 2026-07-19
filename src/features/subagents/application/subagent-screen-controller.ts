@@ -10,7 +10,13 @@ import type {
   FrontendSubagentWorkflowDefinition as WorkflowDefinition,
   FrontendSubagentWorkflowNodeDefinition,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
-import type { SubagentScreenActions, SubagentScreenTab, SubagentStartDraft } from "../domain/screen-model";
+import type {
+  SubagentAgentEditorDraft,
+  SubagentScreenActions,
+  SubagentScreenTab,
+  SubagentStartDraft,
+  SubagentWorkflowEditorDraft,
+} from "../domain/screen-model";
 import { SubagentStore } from "../state/subagent-store";
 import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
 import { SubagentsView } from "../ui/subagents-view";
@@ -34,6 +40,8 @@ export class SubagentScreenController {
   private view: SubagentsView | null = null;
   private pendingRunId: string | undefined;
   private pendingNodeId: string | undefined;
+  private readonly agentEditorDrafts = new Map<string, SubagentAgentEditorDraft>();
+  private readonly workflowEditorDrafts = new Map<string, SubagentWorkflowEditorDraft>();
 
   constructor(private readonly options: SubagentScreenControllerOptions) {
     this.store = options.store;
@@ -108,6 +116,22 @@ export class SubagentScreenController {
   private actions(): SubagentScreenActions {
     return {
       openPermissions: () => this.options.openPermissions(),
+      getAgentEditorDraft: (itemId) => cloneDraft(this.agentEditorDrafts.get(this.editorDraftKey("agent", itemId))),
+      setAgentEditorDraft: (itemId, draft) => {
+        this.agentEditorDrafts.set(this.editorDraftKey("agent", itemId), structuredClone(draft));
+      },
+      clearAgentEditorDraft: (itemId) => {
+        this.agentEditorDrafts.delete(this.editorDraftKey("agent", itemId));
+      },
+      getWorkflowEditorDraft: (itemId) => cloneDraft(
+        this.workflowEditorDrafts.get(this.editorDraftKey("workflow", itemId)),
+      ),
+      setWorkflowEditorDraft: (itemId, draft) => {
+        this.workflowEditorDrafts.set(this.editorDraftKey("workflow", itemId), structuredClone(draft));
+      },
+      clearWorkflowEditorDraft: (itemId) => {
+        this.workflowEditorDrafts.delete(this.editorDraftKey("workflow", itemId));
+      },
       refresh: () => this.dispatch({ type: "subagents.refresh", payload: {} }),
       filterRuns: (query) => this.filterRuns(query),
       loadMoreRuns: () => this.dispatch({ type: "subagents.load-more", payload: {} }),
@@ -231,6 +255,15 @@ export class SubagentScreenController {
     if (!snapshot) throw new Error("Chatobby frontend is not initialized");
     return snapshot;
   }
+
+  private editorDraftKey(kind: "agent" | "workflow", itemId: string): string {
+    const snapshot = this.requireSnapshot();
+    return `${snapshot.session?.id ?? snapshot.viewId}:${kind}:${itemId}`;
+  }
+}
+
+function cloneDraft<T>(draft: T | undefined): T | undefined {
+  return draft === undefined ? undefined : structuredClone(draft);
 }
 
 function actionStatus(type: FrontendIntent["type"]): string {

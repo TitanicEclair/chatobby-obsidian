@@ -4,8 +4,10 @@ import { SubagentStore } from "../../src/features/subagents/public";
 import { SubagentsView } from "../../src/features/subagents/ui/subagents-view";
 import type {
   FrontendBootstrap,
+  FrontendSubagentAgentDefinition,
   FrontendSubagentRunViewModel,
   FrontendSubagentScreenViewModel,
+  FrontendSubagentWorkflowDefinition,
 } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 import { mount } from "./helpers/mount";
 import { createMockFeedHostForStore } from "./helpers/mock-host";
@@ -56,6 +58,76 @@ describe("SubagentsView", () => {
 
     expect(element.textContent).toContain("Inbox");
     expect(element.textContent).toContain("Nothing needs your attention");
+  });
+
+  it("marks Chatobby-provided roles and does not offer impossible edit or delete actions", () => {
+    const store = createStore({
+      definitions: [
+        { ...screen({}).definitions[0]!, builtIn: true, scope: "global", scopeId: "default", revision: 0 },
+        {
+          ...screen({}).definitions[0]!,
+          id: "custom-reviewer",
+          name: "Custom reviewer",
+        },
+      ],
+    });
+    const element = mount(createView(store));
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Roles")?.click();
+    const cards = Array.from(element.querySelectorAll<HTMLElement>(".chatobby-subagents__catalog-card"));
+
+    expect(cards[0]?.querySelector(".chatobby-subagents__provided-badge")?.textContent).toBe("Chatobby");
+    expect(Array.from(cards[0]?.querySelectorAll("button") ?? [])).toHaveLength(0);
+    expect(Array.from(cards[1]?.querySelectorAll("button") ?? []).map((button) => button.textContent))
+      .toEqual(["Edit", "Delete"]);
+  });
+
+  it("filters a bounded skill list and supports bulk selection and clearing", () => {
+    const store = createStore({
+      skills: [
+        { name: "source-review", description: "Review primary sources" },
+        { name: "meeting-notes", description: "Structure meeting notes" },
+      ],
+    });
+    const element = mount(createView(store));
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Roles")?.click();
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
+    const search = element.querySelector<HTMLInputElement>(".chatobby-subagents__choice-search");
+    if (!search) throw new Error("skill search missing");
+
+    search.value = "source";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    const choices = Array.from(element.querySelectorAll<HTMLElement>(".chatobby-subagents__choice"));
+    expect(choices[0]?.hasClass("is-hidden")).toBe(false);
+    expect(choices[1]?.hasClass("is-hidden")).toBe(true);
+
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Select all")?.click();
+    expect(element.querySelector(".chatobby-subagents__choice-summary")?.textContent).toBe("1 selected");
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Clear")?.click();
+    expect(element.querySelector(".chatobby-subagents__choice-summary")?.textContent).toBe("None selected");
+  });
+
+  it("restores role drafts after leaving the role editor for another page", () => {
+    const store = createStore();
+    const callbacks = actions();
+    const element = mount(createView(store, callbacks));
+    const openTab = (label: string): void => {
+      Array.from(element.querySelectorAll("button")).find((button) => button.textContent === label)?.click();
+    };
+    openTab("Roles");
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
+    const name = element.querySelector<HTMLInputElement>("input[placeholder='Research assistant']");
+    if (!name) throw new Error("role name missing");
+    name.value = "Careful reviewer";
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Manage policies")?.click();
+    expect(callbacks.openPermissions).toHaveBeenCalledOnce();
+
+    openTab("Runs");
+    openTab("Roles");
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
+
+    expect(element.querySelector<HTMLInputElement>("input[placeholder='Research assistant']")?.value)
+      .toBe("Careful reviewer");
   });
 
   it("uses a single quiet pane when the session has no runs", () => {
@@ -144,6 +216,33 @@ describe("SubagentsView", () => {
 
     const saved = callbacks.saveWorkflow.mock.calls[0]?.[0];
     expect(saved?.nodes.map((node) => node.id)).toEqual(["step-1", "step-3", "step-4"]);
+  });
+
+  it("restores workflow drafts after navigating away from the editor", () => {
+    const store = createStore();
+    const callbacks = actions();
+    const element = mount(createView(store, callbacks));
+    const openTab = (label: string): void => {
+      Array.from(element.querySelectorAll("button")).find((button) => button.textContent === label)?.click();
+    };
+    openTab("Flows");
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
+    const name = element.querySelector<HTMLInputElement>("input[placeholder='Research and review']");
+    const task = element.querySelector<HTMLTextAreaElement>("textarea[placeholder*='What should this agent produce']");
+    if (!name || !task) throw new Error("workflow fields missing");
+    name.value = "Persistent review";
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+    task.value = "Retain this task while I inspect another page.";
+    task.dispatchEvent(new Event("input", { bubbles: true }));
+
+    openTab("Runs");
+    openTab("Flows");
+    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
+
+    expect(element.querySelector<HTMLInputElement>("input[placeholder='Research and review']")?.value)
+      .toBe("Persistent review");
+    expect(element.querySelector<HTMLTextAreaElement>("textarea[placeholder*='What should this agent produce']")?.value)
+      .toBe("Retain this task while I inspect another page.");
   });
 
   it("keeps a workflow editor open and explains a failed save", async () => {
@@ -262,8 +361,24 @@ function createView(store: SubagentStore, callbacks = actions()): SubagentsView 
 }
 
 function actions() {
+  const agentDrafts = new Map<string, {
+    definition: FrontendSubagentAgentDefinition;
+    permissionProfileId: string;
+  }>();
+  const workflowDrafts = new Map<string, { workflow: FrontendSubagentWorkflowDefinition }>();
   return {
     openPermissions: vi.fn(),
+    getAgentEditorDraft: vi.fn((itemId: string) => structuredClone(agentDrafts.get(itemId))),
+    setAgentEditorDraft: vi.fn((itemId: string, draft: {
+      definition: FrontendSubagentAgentDefinition;
+      permissionProfileId: string;
+    }) => agentDrafts.set(itemId, structuredClone(draft))),
+    clearAgentEditorDraft: vi.fn((itemId: string) => agentDrafts.delete(itemId)),
+    getWorkflowEditorDraft: vi.fn((itemId: string) => structuredClone(workflowDrafts.get(itemId))),
+    setWorkflowEditorDraft: vi.fn((itemId: string, draft: { workflow: FrontendSubagentWorkflowDefinition }) => {
+      workflowDrafts.set(itemId, structuredClone(draft));
+    }),
+    clearWorkflowEditorDraft: vi.fn((itemId: string) => workflowDrafts.delete(itemId)),
     refresh: vi.fn(async () => undefined),
     filterRuns: vi.fn(async () => undefined),
     loadMoreRuns: vi.fn(async () => undefined),

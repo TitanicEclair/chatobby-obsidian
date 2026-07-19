@@ -23,15 +23,32 @@ export function renderWorkflowEditor(
 ): void {
   host.empty();
   host.removeClass("is-hidden");
+  const draftId = existing?.id ?? "$new";
+  const storedDraft = actions.getWorkflowEditorDraft(draftId);
+  const initialWorkflow: WorkflowDefinition = storedDraft?.workflow ?? existing ?? {
+    id: "",
+    name: "",
+    description: "",
+    nodes: [newNode(1, null, state.definitions)],
+    maxConcurrency: 3,
+    failFast: true,
+    revision: 0,
+    updatedAt: 0,
+  };
   const form = host.createEl("form", { cls: "chatobby-subagents__workflow-form" });
   form.createDiv({ cls: "chatobby-subagents__editor-title", text: existing ? `Edit ${existing.name}` : "New flow" });
 
-  const name = addTextField(form, "Name", existing?.name ?? "", "Research and review");
-  const description = addTextField(form, "Description", existing?.description ?? "", "Researches and reviews evidence");
-  const workflowId = existing?.id ?? "";
-  const nodes = existing?.nodes.map(copyNode) ?? [newNode(1, null, state.definitions)];
+  const name = addTextField(form, "Name", initialWorkflow.name, "Research and review");
+  const description = addTextField(
+    form,
+    "Description",
+    initialWorkflow.description,
+    "Researches and reviews evidence",
+  );
+  const nodes = initialWorkflow.nodes.map(copyNode);
   const steps = form.createDiv({ cls: "chatobby-subagents__workflow-steps" });
   const error = form.createDiv({ cls: "chatobby-subagents__field-error" });
+  let persistDraft = (): void => undefined;
 
   const renderSteps = (): void => {
     steps.empty();
@@ -42,12 +59,14 @@ export function renderWorkflowEditor(
     add.addEventListener("click", () => {
       nodes.push(newNode(nextNodeIndex(nodes), nodes.at(-1)?.id ?? null, state.definitions));
       renderSteps();
+      persistDraft();
     });
 
     nodes.forEach((node, index) => renderStep(steps, node, index, nodes, state.definitions, () => {
       nodes.splice(index, 1);
       for (const candidate of nodes) candidate.dependsOn = candidate.dependsOn.filter((id) => id !== node.id);
       renderSteps();
+      persistDraft();
     }));
   };
   renderSteps();
@@ -55,36 +74,80 @@ export function renderWorkflowEditor(
   const advanced = form.createEl("details", { cls: "chatobby-subagents__role-advanced chatobby-subagents__workflow-advanced" });
   advanced.createEl("summary", { text: "Advanced workflow controls" });
   const advancedGrid = advanced.createDiv({ cls: "chatobby-subagents__role-advanced-grid" });
-  const id = addTextField(advancedGrid, "Workflow key", workflowId, "Generated from the workflow name");
-  const maxConcurrency = addNumberField(advancedGrid, "Agents working at once", existing?.maxConcurrency ?? 3, 1, 64);
-  const failFast = addToggleField(advancedGrid, "Stop remaining steps after a failure", existing?.failFast ?? true);
+  const id = addTextField(advancedGrid, "Workflow key", initialWorkflow.id, "Generated from the workflow name");
+  const maxConcurrency = addNumberField(
+    advancedGrid,
+    "Agents working at once",
+    initialWorkflow.maxConcurrency ?? 3,
+    1,
+    64,
+  );
+  maxConcurrency.parentElement?.createDiv({
+    cls: "chatobby-subagents__field-help",
+    text: "Limits parallel steps; dependencies still determine when each step can start.",
+  });
+  const failFast = addToggleField(
+    advancedGrid,
+    "Stop remaining steps after a failure",
+    initialWorkflow.failFast ?? true,
+  );
+  failFast.parentElement?.createDiv({
+    cls: "chatobby-subagents__field-help",
+    text: "Turn off only when independent steps should continue after another step fails.",
+  });
+
+  persistDraft = () => {
+    actions.setWorkflowEditorDraft(draftId, {
+      workflow: {
+        ...initialWorkflow,
+        id: id.value,
+        name: name.value,
+        description: description.value,
+        nodes: nodes.map(copyNode),
+        maxConcurrency: Number(maxConcurrency.value),
+        failFast: failFast.checked,
+      },
+    });
+  };
+  form.addEventListener("input", persistDraft);
+  form.addEventListener("change", persistDraft);
+  persistDraft();
 
   const actionsRow = form.createDiv({ cls: "chatobby-subagents__editor-actions" });
   const cancel = actionsRow.createEl("button", { text: "Cancel", attr: { type: "button" } });
-  cancel.addEventListener("click", () => host.addClass("is-hidden"));
+  cancel.addEventListener("click", () => {
+    actions.clearWorkflowEditorDraft(draftId);
+    host.addClass("is-hidden");
+  });
   const save = actionsRow.createEl("button", { cls: "mod-cta", text: "Save", attr: { type: "submit" } });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     error.empty();
-    const issue = validateWorkflow(name.value, nodes);
+    persistDraft();
+    const draft = actions.getWorkflowEditorDraft(draftId);
+    if (!draft) {
+      error.textContent = "Workflow draft is unavailable.";
+      return;
+    }
+    const issue = validateWorkflow(draft.workflow.name, draft.workflow.nodes);
     if (issue) {
       error.textContent = issue;
       return;
     }
     const workflow: WorkflowDefinition = {
-      id: id.value.trim() || slug(name.value),
-      name: name.value.trim(),
-      description: description.value.trim(),
-      nodes: nodes.map(copyNode),
-      maxConcurrency: Number(maxConcurrency.value),
-      failFast: failFast.checked,
-      revision: existing?.revision ?? 0,
-      updatedAt: existing?.updatedAt ?? 0,
+      ...draft.workflow,
+      id: draft.workflow.id.trim() || slug(draft.workflow.name),
+      name: draft.workflow.name.trim(),
+      description: draft.workflow.description.trim(),
+      nodes: draft.workflow.nodes.map(copyNode),
     };
     save.disabled = true;
     save.textContent = "Saving…";
     void actions.saveWorkflow(workflow).then(
-      () => host.addClass("is-hidden"),
+      () => {
+        actions.clearWorkflowEditorDraft(draftId);
+        host.addClass("is-hidden");
+      },
       (reason: unknown) => {
         error.textContent = reason instanceof Error ? reason.message : String(reason);
       },
@@ -124,22 +187,40 @@ function renderStep(
   task.addEventListener("input", () => { node.task = task.value; });
 
   const advanced = card.createEl("details", { cls: "chatobby-subagents__workflow-step-advanced" });
-  advanced.createEl("summary", { text: "Step dependencies and review" });
+  advanced.createEl("summary", { text: "Step order, runtime, and review" });
   const advancedGrid = advanced.createDiv({ cls: "chatobby-subagents__workflow-step-advanced-grid" });
   renderDependencies(advancedGrid, node, nodes);
-  const execution = addSelectField(advancedGrid, "Executor", node.executionMode ?? "inherit", EXECUTION_MODES);
+  const execution = addSelectField(
+    advancedGrid,
+    "Executor",
+    node.executionMode ?? "inherit",
+    EXECUTION_MODES,
+    "Inherit uses the role's executor. Override only when this step needs different isolation.",
+  );
   execution.addEventListener("change", () => {
     node.executionMode = execution.value === "inherit"
       ? undefined
       : execution.value as NonNullable<WorkflowNodeDefinition["executionMode"]>;
   });
-  const context = addSelectField(advancedGrid, "Starting context", node.contextMode ?? "inherit", CONTEXT_MODES);
+  const context = addSelectField(
+    advancedGrid,
+    "Starting context",
+    node.contextMode ?? "inherit",
+    CONTEXT_MODES,
+    "Inherit uses the role. Fresh is smallest; fork is richest; selected and summary keep context bounded.",
+  );
   context.addEventListener("change", () => {
     node.contextMode = context.value === "inherit"
       ? undefined
       : context.value as NonNullable<WorkflowNodeDefinition["contextMode"]>;
   });
-  const acceptance = addSelectField(advancedGrid, "Completion check", node.acceptance?.level ?? "none", ACCEPTANCE_LEVELS);
+  const acceptance = addSelectField(
+    advancedGrid,
+    "Completion check",
+    node.acceptance?.level ?? "none",
+    ACCEPTANCE_LEVELS,
+    "Attested requires the agent to report evidence; checked requires configured verification to pass.",
+  );
   const criteria = addTextAreaField(
     advancedGrid,
     "Acceptance criteria",
@@ -157,6 +238,10 @@ function renderDependencies(
 ): void {
   const field = host.createDiv({ cls: "chatobby-subagents__workflow-dependencies" });
   field.createSpan({ text: "Runs after" });
+  field.createDiv({
+    cls: "chatobby-subagents__field-help",
+    text: "Choose the steps that must finish before this one can start.",
+  });
   const options = field.createDiv({ cls: "chatobby-subagents__workflow-dependency-options" });
   const candidates = nodes.filter((candidate) => candidate.id !== node.id);
   if (candidates.length === 0) {
@@ -215,12 +300,19 @@ function addNumberField(host: HTMLElement, label: string, value: number, min: nu
   return input;
 }
 
-function addSelectField(host: HTMLElement, label: string, value: string, options: readonly string[]): HTMLSelectElement {
+function addSelectField(
+  host: HTMLElement,
+  label: string,
+  value: string,
+  options: readonly string[],
+  help?: string,
+): HTMLSelectElement {
   const row = host.createEl("label", { cls: "chatobby-subagents__field" });
   row.createSpan({ text: label });
   const select = row.createEl("select");
   for (const option of options) select.createEl("option", { text: humanize(option), value: option });
   select.value = value;
+  if (help) row.createDiv({ cls: "chatobby-subagents__field-help", text: help });
   return select;
 }
 

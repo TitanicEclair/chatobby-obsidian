@@ -23,8 +23,23 @@ export interface SubagentStartDraft {
   maxWallTimeMs?: number;
 }
 
+export interface SubagentAgentEditorDraft {
+  definition: AgentDefinition;
+  permissionProfileId: string;
+}
+
+export interface SubagentWorkflowEditorDraft {
+  workflow: WorkflowDefinition;
+}
+
 export interface SubagentScreenActions {
   openPermissions: () => void;
+  getAgentEditorDraft: (itemId: string) => SubagentAgentEditorDraft | undefined;
+  setAgentEditorDraft: (itemId: string, draft: SubagentAgentEditorDraft) => void;
+  clearAgentEditorDraft: (itemId: string) => void;
+  getWorkflowEditorDraft: (itemId: string) => SubagentWorkflowEditorDraft | undefined;
+  setWorkflowEditorDraft: (itemId: string, draft: SubagentWorkflowEditorDraft) => void;
+  clearWorkflowEditorDraft: (itemId: string) => void;
   refresh: () => Promise<void>;
   filterRuns: (query: FrontendSubagentRunFilter) => Promise<void>;
   loadMoreRuns: () => Promise<void>;
