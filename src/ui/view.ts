@@ -59,6 +59,7 @@ import type {
   FrontendNavigationReference,
 } from "../vendor/chatobby-client/frontend-contracts.js";
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
+import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
 const VIEW_TYPE = "chatobby-view";
 const PROMPT_START_TIMEOUT_MS = 30_000;
 export class ChatobbyView extends ItemView {
@@ -90,6 +91,7 @@ export class ChatobbyView extends ItemView {
   private boundTransport: ChatobbyTransport | null = null;
   private readonly runtimeLifecycle: ViewRuntimeController;
   private unsubscribeConnection: (() => void) | null = null;
+  private readonly connectionRestoration: ConnectedViewRestorationController<ChatobbyTransport>;
   private lastRetryNoticeKey: string | null = null;
   private readonly liveStats: LiveStatsController;
   private readonly slashCommands: SlashCommandController;
@@ -319,6 +321,17 @@ export class ChatobbyView extends ItemView {
       onOpened: () => { this.viewMode = "channels"; this.renderViewMode(); },
       onClosed: (renderChat) => this.finishOverlayClose("channels", renderChat),
       openAgentFeed: (reference) => this.openAgentReference(reference),
+    });
+    this.connectionRestoration = new ConnectedViewRestorationController({
+      isCurrent: (transport) => transport === this.boundTransport && transport.isConnected,
+      restoreSession: () => this.activateSessionContext(),
+      synchronizeFrontend: (transport) => this.frontendProtocol.synchronize(transport),
+      synchronizeActiveScreen: () => this.synchronizeActiveScreen(),
+      markRestored: () => this.connectionStatus.markRestored(),
+      reportSessionError: (error) => {
+        console.error("Chatobby: leaf session reconnect failed", error); new Notice(`Could not restore this Chatobby session: ${errorMessage(error)}`);
+      },
+      reportFrontendError: (error) => console.error("Chatobby: frontend bootstrap failed", error),
     });
     this.extensionUi = new ExtensionUiController({
       getFeedStore: () => this.getFeedStore(),
@@ -722,7 +735,6 @@ export class ChatobbyView extends ItemView {
   }
 
   // ── Transport connection ────────────────────────────────────────
-
   private bindCurrentTransport(): void {
     const transport = this.getTransport();
 
@@ -732,6 +744,7 @@ export class ChatobbyView extends ItemView {
 
     this.unsubscribeConnection?.();
     this.unsubscribeConnection = null;
+    this.connectionRestoration.invalidate();
     this.boundTransport = transport;
     this.frontendProtocol.bind(transport);
 
@@ -740,7 +753,6 @@ export class ChatobbyView extends ItemView {
       this.toolbar.renderStatus();
       return;
     }
-
     // Subscribe to connection state changes
     this.unsubscribeConnection = transport.onConnectionChange((state) => {
       this.toolbar.renderStatus();
@@ -749,6 +761,7 @@ export class ChatobbyView extends ItemView {
       if (state.status === "connected") {
         this.synchronizeConnectedTransport(transport);
       } else {
+        this.connectionRestoration.invalidate();
         this.liveStats.stop();
         if (state.status === "disconnected" || state.status === "error") {
           const interruption = this.sessions.markTransportDisconnected();
@@ -764,33 +777,20 @@ export class ChatobbyView extends ItemView {
 
   private synchronizeConnectedTransport(transport: ChatobbyTransport): void {
     if (transport !== this.boundTransport || !transport.isConnected) return;
-    void this.frontendProtocol.synchronize(transport)
-      .then(() => {
-        if (transport !== this.boundTransport || !transport.isConnected) return;
-        if (this.viewMode === "channels") this.channelScreen.synchronize();
-        else if (this.viewMode === "memory") this.overlayScreens.memory.synchronize();
-        else if (this.viewMode === "permissions") this.overlayScreens.permissions.synchronize();
-        else if (this.viewMode === "events") this.overlayScreens.events.synchronize();
-        else if (this.viewMode === "queries") this.overlayScreens.queries.synchronize();
-        else if (this.viewMode === "subagents") this.subagentScreen.synchronize();
-      })
-      .catch((error) => {
-        console.error("Chatobby: frontend bootstrap failed", error);
-      });
-    void this.activateSessionContext()
-			.then(() => {
-				this.connectionStatus.markRestored();
-			})
-      .catch((error) => {
-        console.error("Chatobby: leaf session reconnect failed", error);
-        new Notice(`Could not restore this Chatobby session: ${errorMessage(error)}`);
-    });
+    this.connectionRestoration.synchronize(transport);
     void this.liveStats.refresh();
     this.liveStats.sync();
     this.sessionAgentRail.scheduleRefresh();
     if (this.viewMode === "session-picker") this.sessionPickerMode.refresh();
   }
-
+  private synchronizeActiveScreen(): void {
+    if (this.viewMode === "channels") this.channelScreen.synchronize();
+    else if (this.viewMode === "memory") this.overlayScreens.memory.synchronize();
+    else if (this.viewMode === "permissions") this.overlayScreens.permissions.synchronize();
+    else if (this.viewMode === "events") this.overlayScreens.events.synchronize();
+    else if (this.viewMode === "queries") this.overlayScreens.queries.synchronize();
+    else if (this.viewMode === "subagents") this.subagentScreen.synchronize();
+  }
   private handleRuntimeStateChange(): void {
     this.bindCurrentTransport();
     this.runtimeStatus.render();
