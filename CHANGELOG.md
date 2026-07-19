@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-07-20
+
+### Fixed
+
+- Made **Use selected directory** establish or reuse a runtime session whose
+  actual working directory matches the selected folder, instead of allowing a
+  newly opened leaf to retain a synchronized session from another directory.
+- Added a final working-directory consistency check before prompt submission,
+  while preserving **New session here** as the explicit fresh-session action.
+
 ## [0.1.8] - 2026-07-19
 
 ### Added
