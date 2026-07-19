@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-07-20
+
+### Added
+
+- Added direct left, right, upper, and lower Web Viewer placement and exact URL
+  waiting across redirects.
+
+### Changed
+
+- Exposed stable Web Viewer leaf identities through the same canonical lookup
+  used by workspace management and note-opening operations.
+
+### Fixed
+
+- Waited for the embedded Web Viewer to reach `dom-ready` before navigation,
+  eliminating partial tab creation followed by a misleading operation failure.
+- Preserved safe browser metadata reads while a Web Viewer is attaching,
+  loading, or being replaced.
+
 ## [0.1.9] - 2026-07-20
 
 ### Fixed
