@@ -1,4 +1,4 @@
-import { ItemView, Notice, type Menu, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Scope, type Menu, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
 import type ChatobbyPlugin from "../main";
 import type { ComposerAttachment, ExtensionPanelAction, InteractionState, SessionState, VaultContext, WsPromptAttachment } from "../types";
 import { INITIAL_CONNECTION_STATE } from "../types";
@@ -60,8 +60,7 @@ import type {
 } from "../vendor/chatobby-client/frontend-contracts.js";
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
-const VIEW_TYPE = "chatobby-view";
-const PROMPT_START_TIMEOUT_MS = 30_000;
+const VIEW_TYPE = "chatobby-view", PROMPT_START_TIMEOUT_MS = 30_000;
 export class ChatobbyView extends ItemView {
   readonly runtimeChannelId = globalThis.crypto.randomUUID();
   private readonly operations = new OperationCoordinator();
@@ -111,7 +110,6 @@ export class ChatobbyView extends ItemView {
   private pendingFeedCatchup = false;
 	private frontendApplyTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private readonly handleViewKeydown = (event: KeyboardEvent): void => {
-    if (this.viewMode === "chat" && this.composer.handleCapturedKeydown(event)) { event.stopImmediatePropagation(); return; }
     if (this.viewMode === "session-picker") {
       if (this.sessionPickerMode.handleKeydown(event)) event.stopPropagation();
     } else if (this.viewMode === "permissions") {
@@ -133,6 +131,8 @@ export class ChatobbyView extends ItemView {
   private readonly handleOpenChannels = (event: Event): void => this.navigateTo(channelNavigationState(event));
   constructor(leaf: WorkspaceLeaf, private plugin: ChatobbyPlugin) {
     super(leaf);
+    this.scope = new Scope(this.app.scope);
+    this.scope.register(null, null, (event) => this.componentsReady && this.viewMode === "chat" && this.composer.handleCapturedKeydown(event) ? false : undefined);
     this.navigation = true;
     this.viewNavigation = new ViewNavigationController(leaf, VIEW_TYPE, {
       openChat: () => {

@@ -286,6 +286,7 @@ describe("Composer", () => {
     expect(composer.handleCapturedKeydown(event)).toBe(true);
     expect(event.defaultPrevented).toBe(true);
     expect(input.value).toBe("");
+    expect(composer.handleCapturedKeydown(event)).toBe(false);
   });
 
   it("restores a just-submitted message when cancellation happens before output", () => {

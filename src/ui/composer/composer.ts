@@ -364,6 +364,7 @@ export class Composer extends ChatobbyComponent {
 
   /** Capture modifier shortcuts before Obsidian's global hotkey router consumes them. */
   handleCapturedKeydown(event: KeyboardEvent): boolean {
+    if (event.defaultPrevented) return false;
     if (event.target && event.target !== this.inputEl) return false;
     const bindings = this.host.getComposerKeybindings?.() ?? DEFAULT_COMPOSER_KEYBINDINGS;
     if (!matchesComposerKeybinding(event, bindings.stashDraft)) return false;
