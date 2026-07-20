@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- `/compact <focus>` forwards its argument to the runtime's compaction
+  summarizer so a custom compaction focus actually takes effect.
+
+### Fixed
+
+- The active-note excerpt is no longer an empty stub; the agent receives the
+  real text around the cursor (plus cursor, selection, and headings) each turn.
+
+### Changed
+
+- Vendored `chatobby-client` artifacts synced from runtime 0.1.13.
+
 ## [0.1.11] - 2026-07-20
 
 ### Fixed
