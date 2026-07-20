@@ -61,6 +61,7 @@ import type {
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
 import { PROMPT_START_TIMEOUT_MS, retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
+import { deliverQueuedMessage } from "./controller/queued-message-delivery";
 const VIEW_TYPE = "chatobby-view";
 export class ChatobbyView extends ItemView {
   readonly runtimeChannelId = globalThis.crypto.randomUUID();
@@ -607,8 +608,7 @@ export class ChatobbyView extends ItemView {
     const message = await promptText(this.app, { title: "Queue follow-up message", placeholder: "message…", submitLabel: "Queue", multiline: true });
     if (!message || !message.trim()) return;
     const trimmed = message.trim();
-    this.getFeedStore().dispatch({ type: "feed.queued-message-appended", kind: "followUp", text: trimmed });
-    await transport.followUp(trimmed).catch((e) => console.error("Chatobby: followUp failed", e));
+    await deliverQueuedMessage(this.getFeedStore(), "followUp", trimmed, transport.followUp.bind(transport));
   }
 
   // ── Component wiring ────────────────────────────────────────────
@@ -1034,8 +1034,7 @@ export class ChatobbyView extends ItemView {
   private async steerPrompt(message: string): Promise<void> {
     const transport = this.getTransport();
     if (!transport?.isConnected) return;
-    this.getFeedStore().dispatch({ type: "feed.queued-message-appended", kind: "steer", text: message });
-    await transport.steer(message).catch((e) => console.error("Chatobby: steer failed", e));
+    await deliverQueuedMessage(this.getFeedStore(), "steer", message, transport.steer.bind(transport));
   }
 
   private async executePermissionSystemSlash(parsed: SlashParsedCommand): Promise<void> {

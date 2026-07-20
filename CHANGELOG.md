@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-07-20
+
+### Fixed
+
+- Aligned the connector with Runtime 0.1.11 permission-session and subagent
+  lifecycle fixes, including prompt-free built-in research tools and immediate
+  rail and Stop-state updates under child transcript traffic.
+- Removed stale queued-message rows when an idle runtime promotes steering or
+  follow-up input into a normal prompt.
+- Removed duplicate raw subagent frames from the patch-only frontend transport.
+
 ## [0.1.10] - 2026-07-20
 
 ### Added

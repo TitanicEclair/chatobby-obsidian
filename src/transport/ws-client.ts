@@ -177,14 +177,14 @@ export class ChatobbyTransport {
     return client.prompt(message, attachments, context, submissionId);
   }
 
-  async steer(message: string): Promise<void> {
+  async steer(message: string): Promise<"accepted" | "promoted-to-prompt"> {
     const client = this.requireClient();
-    await client.steer(message);
+    return client.steer(message);
   }
 
-  async followUp(message: string): Promise<void> {
+  async followUp(message: string): Promise<"started" | "promoted-to-prompt"> {
     const client = this.requireClient();
-    await client.followUp(message);
+    return client.followUp(message);
   }
 
   async abort(): Promise<void> {

@@ -17,6 +17,7 @@ export function reduceFeedAction(transaction: FeedTransaction, action: FeedActio
     case "feed.user-prompt-retracted":
     case "feed.local-feedback-appended":
     case "feed.queued-message-appended":
+    case "feed.queued-message-promoted":
       reduceLocalFeedAction(transaction, action);
       return;
     case "feed.document-projection-synchronized":

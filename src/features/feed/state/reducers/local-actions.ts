@@ -3,7 +3,7 @@ import type { FeedAction } from "../actions";
 import type { FeedTransaction } from "../feed-transaction";
 
 type LocalAction = Extract<FeedAction,
-  { type: "feed.user-prompt-submitted" | "feed.user-prompt-retracted" | "feed.local-feedback-appended" | "feed.queued-message-appended" }
+  { type: "feed.user-prompt-submitted" | "feed.user-prompt-retracted" | "feed.local-feedback-appended" | "feed.queued-message-appended" | "feed.queued-message-promoted" }
 >;
 
 /** Reduces locally-originated prompt, feedback, and queue actions. */
@@ -59,6 +59,19 @@ export function reduceLocalFeedAction(transaction: FeedTransaction, action: Loca
         text: action.text,
         status: "pending",
       });
+      return;
+    case "feed.queued-message-promoted": {
+      const ids = transaction.orderedBlockIds();
+      for (let index = ids.length - 1; index >= 0; index -= 1) {
+        const id = ids[index];
+        if (!id) continue;
+        const block = transaction.getBlock(id);
+        if (block?.type === "queued" && block.kind === action.kind && block.text === action.text) {
+          transaction.removeBlock(id);
+          break;
+        }
+      }
+    }
   }
 }
 

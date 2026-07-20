@@ -71,6 +71,8 @@ export type WireSessionEvent = {
     messages: WireMessage[];
     willRetry: boolean;
 } | {
+    type: "agent_settled";
+} | {
     type: "turn_start";
 } | {
     type: "turn_end";

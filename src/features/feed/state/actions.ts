@@ -28,6 +28,7 @@ export type FeedAction =
   | { type: "feed.extension-panel-upserted"; panel: ExtensionPanelInput }
   | { type: "feed.extension-panel-removed"; key: string }
   | { type: "feed.queued-message-appended"; kind: "steer" | "followUp"; text: string }
+  | { type: "feed.queued-message-promoted"; kind: "steer" | "followUp"; text: string }
   | { type: "feed.document-projection-synchronized"; projection: FeedDocumentProjection }
   | { type: "feed.runtime-activity-synchronized"; active: boolean }
   | { type: "feed.transport-interrupted" }

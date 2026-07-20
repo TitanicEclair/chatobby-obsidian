@@ -41,8 +41,8 @@ export declare class ChatobbyWsClient {
     subscribeFrontend(request: FrontendSubscriptionRequest): Promise<FrontendSubscriptionAck>;
     dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult>;
     prompt(message: string, attachments?: WsPromptAttachment[], context?: WsPromptContextPacket, submissionId?: string): Promise<"started" | "retracted">;
-    steer(message: string): Promise<void>;
-    followUp(message: string): Promise<void>;
+    steer(message: string): Promise<"accepted" | "promoted-to-prompt">;
+    followUp(message: string): Promise<"started" | "promoted-to-prompt">;
     abort(): Promise<void>;
     retractPrompt(submissionId: string): Promise<{
         retracted: boolean;

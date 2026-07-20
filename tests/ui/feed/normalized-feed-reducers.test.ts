@@ -37,6 +37,18 @@ describe("normalized feed projection", () => {
     expect(store.select(feedSelectors.runTiming).runStartedAt).toBeNull();
   });
 
+  it("removes the local queued marker when an idle backend promotes it to a prompt", () => {
+    const store = createFeedStore();
+    store.dispatch({ type: "feed.queued-message-appended", kind: "steer", text: "continue normally" });
+    expect(blocks(store)).toEqual([
+      expect.objectContaining({ type: "queued", kind: "steer", text: "continue normally" }),
+    ]);
+
+    store.dispatch({ type: "feed.queued-message-promoted", kind: "steer", text: "continue normally" });
+
+    expect(blocks(store)).toEqual([]);
+  });
+
   it("keeps an optimistic prompt visible while a runtime projection has not confirmed it", () => {
     const store = createFeedStore();
     store.dispatch({

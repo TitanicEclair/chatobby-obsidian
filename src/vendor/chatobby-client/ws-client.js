@@ -314,10 +314,10 @@ var ChatobbyWsClient = class {
     return resultField(await this.send("prompt", { message, attachments, context, submissionId }), "status");
   }
   async steer(message) {
-    await this.send("steer", { message });
+    return resultField(await this.send("steer", { message }), "status");
   }
   async followUp(message) {
-    await this.send("follow_up", { message });
+    return resultField(await this.send("follow_up", { message }), "status");
   }
   async abort() {
     await this.send("abort", {});
