@@ -10,6 +10,9 @@ interface ActiveSessionActionsOptions {
   getTransport: () => ChatobbyTransport | null;
   getActiveTab: () => SessionTab | null;
   getForkOptions: () => readonly { entryId: string; label: string }[];
+  getCurrentSessionPath: () => string | null;
+  getCwd: () => string;
+  openSessionView: (vaultPath: string, sessionPath: string) => Promise<void>;
   dispatchSessionIntent: (request: SessionMutationRequest) => Promise<boolean>;
   runOperation: <T>(descriptor: OperationDescriptor, operation: () => Promise<T>) => Promise<T>;
   runTransition: (label: string, operation: () => Promise<void>) => Promise<void>;
@@ -40,9 +43,15 @@ export class ActiveSessionActions {
   }
 
   async clone(): Promise<void> {
+    const originalPath = this.options.getCurrentSessionPath();
     await this.options.runTransition("Cloning session", async () => {
       await this.options.dispatchSessionIntent({ type: "session.clone", payload: {} });
     });
+    // The clone is now the active session in this view. Open the original in a
+    // new leaf so both are visible side-by-side.
+    if (originalPath) {
+      void this.options.openSessionView(this.options.getCwd(), originalPath);
+    }
   }
 
   async fork(): Promise<void> {
@@ -53,9 +62,13 @@ export class ActiveSessionActions {
     }
     const choice = await pickItem(this.options.app, [...options], (option) => option.label, "Choose a fork point");
     if (!choice) return;
+    const originalPath = this.options.getCurrentSessionPath();
     await this.options.runTransition("Forking session", async () => {
       await this.options.dispatchSessionIntent({ type: "session.fork", payload: { entryId: choice.entryId } });
     });
+    if (originalPath) {
+      void this.options.openSessionView(this.options.getCwd(), originalPath);
+    }
   }
 
   async importJsonl(): Promise<void> {

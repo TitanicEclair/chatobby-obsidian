@@ -274,6 +274,27 @@ export class SessionController {
     this.options.persistLeafState();
   }
 
+  /** Compact the active session's context, optionally with a custom focus.
+   *  Uses `session-maintenance` (not `session-transition`) so concurrent feed
+   *  updates and state polling do not block compaction with an operation-conflict
+   *  error. */
+  async compactContext(customInstructions?: string): Promise<void> {
+    const transport = this.options.getTransport();
+    if (!transport?.isConnected) return;
+    const promise = this.options.runOperation(
+      { key: "session-maintenance", id: "session:compact", label: "Compacting context" },
+      async () => { await transport.compact(customInstructions); },
+    );
+    this.options.refreshTabBar();
+    return promise.catch((error: unknown) => {
+      if (error instanceof OperationConflictError) {
+        new Notice(error.message);
+        return;
+      }
+      throw error;
+    }).finally(() => this.options.refreshTabBar());
+  }
+
   runSessionTransition(label: string, operation: () => Promise<void>): Promise<void> {
     const id = `session:${label.toLocaleLowerCase().replaceAll(" ", "-")}`;
     const promise = this.options.runOperation({ key: "session-transition", id, label }, operation);
