@@ -384,8 +384,8 @@ var ChatobbyWsClient = class {
   async bash(command, excludeFromContext) {
     return resultField(await this.send("bash", { command, excludeFromContext }), "result");
   }
-  async compact() {
-    await this.send("compact", {});
+  async compact(customInstructions) {
+    await this.send("compact", { customInstructions });
   }
   async reload() {
     await this.send("reload", {});

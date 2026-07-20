@@ -466,7 +466,7 @@ export type FrontendSubagentContextMode = "fresh" | "fork" | "selected" | "summa
 export type FrontendSubagentDefinitionScope = "global" | "vault" | "directory" | "session";
 export type FrontendSubagentRunStatus = "created" | "queued" | "running" | "paused" | "waiting" | "completed" | "failed" | "cancelled" | "orphaned";
 export type FrontendSubagentNodeStatus = "blocked" | "queued" | "running" | "waiting" | "paused" | "completed" | "failed" | "cancelled" | "skipped" | "orphaned";
-export type FrontendSubagentControlAction = "cancel" | "pause" | "resume" | "interrupt" | "steer" | "complete" | "retry" | "reprioritize" | "append-step" | "fork" | "clone" | "adopt" | "reconcile-orphan" | "approve-permission" | "deny-permission" | "approve-acceptance" | "reject-acceptance";
+export type FrontendSubagentControlAction = "cancel" | "pause" | "resume" | "interrupt" | "steer" | "complete" | "retry" | "reprioritize" | "append-step" | "fork" | "clone" | "adopt" | "reconcile-orphan" | "approve-permission" | "deny-permission" | "approve-acceptance" | "reject-acceptance" | "extend-budget";
 export interface FrontendSubagentRuntimePolicy {
     executionMode?: FrontendSubagentExecutionMode;
     model?: string;

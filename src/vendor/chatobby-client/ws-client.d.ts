@@ -70,12 +70,13 @@ export declare class ChatobbyWsClient {
     setAutoCompaction(settings: {
         enabled?: boolean;
         thresholdPercent?: number;
+        customInstructions?: string;
     }): Promise<WsAutoCompactionSettings>;
     setAutoNameStrategy(strategy: AutoNameStrategy): Promise<void>;
     setProviderApiKey(provider: string, apiKey: string): Promise<void>;
     removeProviderCredential(provider: string): Promise<void>;
     bash(command: string, excludeFromContext?: boolean): Promise<WsBashResult>;
-    compact(): Promise<void>;
+    compact(customInstructions?: string): Promise<void>;
     reload(): Promise<void>;
     exportHtml(outputPath?: string): Promise<string>;
     exportJsonl(outputPath?: string): Promise<string>;

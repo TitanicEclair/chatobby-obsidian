@@ -1,6 +1,6 @@
 export declare const CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION: 2;
 export declare const CHATOBBY_RUNTIME_PROTOCOL_VERSION: 3;
-export declare const CHATOBBY_RUNTIME_VERSION = "0.1.11";
+export declare const CHATOBBY_RUNTIME_VERSION = "0.1.12";
 export declare const CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS = 5000;
 export declare const CHATOBBY_RUNTIME_REATTACH_GRACE_MS = 15000;
 export declare const RUNTIME_CLOSE_CODES: {

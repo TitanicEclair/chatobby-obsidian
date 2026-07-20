@@ -303,9 +303,9 @@ export class ChatobbyTransport {
 
   // ── Compaction & reload ────────────────────────────────────────────
 
-  async compact(): Promise<void> {
+  async compact(customInstructions?: string): Promise<void> {
     const client = this.requireClient();
-    return client.compact();
+    return client.compact(customInstructions);
   }
 
   async reload(): Promise<void> {

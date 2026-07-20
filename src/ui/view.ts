@@ -530,10 +530,10 @@ export class ChatobbyView extends ItemView {
     this.turnAbort.request();
   }
 
-  /** Trigger context compaction (command palette). */
-  async commandCompact(): Promise<void> {
+  /** Trigger context compaction (command palette), optionally with a custom focus. */
+  async commandCompact(customInstructions?: string): Promise<void> {
     await this.sessions.runSessionTransition("Compacting context", async () => {
-      await this.getTransport()?.compact();
+      await this.getTransport()?.compact(customInstructions);
     });
   }
 
@@ -1162,10 +1162,8 @@ export class ChatobbyView extends ItemView {
   }
 
   private async executeCompactSlash(parsed: SlashParsedCommand): Promise<void> {
-    if (parsed.args[0]?.trim()) {
-      new Notice("Custom compaction prompts are not supported by the current backend WS compact command; using default compaction.");
-    }
-    await this.commandCompact();
+    const focus = parsed.args[0]?.trim();
+    await this.commandCompact(focus || undefined);
   }
 
   private async executeReloadSlash(): Promise<void> { await this.commandReload(); }
