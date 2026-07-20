@@ -223,9 +223,6 @@ export class ChatobbyView extends ItemView {
       getTransport: () => this.getTransport(),
       getActiveTab: () => this.activeTab(),
       getForkOptions: () => this.frontendStore.snapshot?.session?.forkOptions ?? [],
-      getCurrentSessionPath: () => this.activeTab()?.sessionFile ?? null,
-      getCwd: () => this.sessions.workingDirectoryPath(),
-      openSessionView: async (vaultPath, sessionPath) => { await this.plugin.openSessionView(vaultPath, sessionPath); },
       dispatchSessionIntent: (request) => this.dispatchFrontendSessionIntent(request),
       runOperation: (descriptor, operation) => this.runOperation(descriptor, operation),
       runTransition: (label, operation) => this.sessions.runSessionTransition(label, operation),
@@ -535,7 +532,9 @@ export class ChatobbyView extends ItemView {
 
   /** Trigger context compaction (command palette), optionally with a custom focus. */
   async commandCompact(customInstructions?: string): Promise<void> {
-    await this.sessions.compactContext(customInstructions);
+    await this.sessions.runSessionTransition("Compacting context", async () => {
+      await this.getTransport()?.compact(customInstructions);
+    });
   }
 
   /** Rename the active session (set_session_name). */
