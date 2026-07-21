@@ -7,7 +7,6 @@ export interface TurnAbortControllerOptions {
   cancelInteractions: () => void;
   getTransport: () => AbortTransport | null;
   setStopping: (stopping: boolean) => void;
-  setStreaming: (streaming: boolean) => void;
   reportError: (error: unknown) => void;
 }
 
@@ -32,8 +31,9 @@ export class TurnAbortController {
     });
   }
 
-  setStreaming(streaming: boolean): void {
-    if (!streaming) this.pending = false;
-    this.options.setStreaming(streaming);
+  setActivity(active: boolean): void {
+    if (active) return;
+    this.pending = false;
+    this.options.setStopping(false);
   }
 }

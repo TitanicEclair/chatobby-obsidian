@@ -3,7 +3,42 @@
 .workspace-leaf-content[data-type="chatobby-view"],
 .workspace-leaf-content[data-type="chatobby-view"] .view-content,
 .chatobby-view {
+  position: relative;
   background: var(--chatobby-canvas);
+}
+
+.chatobby-session-transition-host {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--chatobby-canvas) 94%, transparent);
+}
+
+.chatobby-session-transition {
+  display: inline-flex;
+  align-items: baseline;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-session-transition__dots::after {
+  content: ".";
+  display: inline-block;
+  width: 1.5em;
+  text-align: left;
+  animation: chatobby-session-transition-dots 1.2s steps(1, end) infinite;
+}
+
+@keyframes chatobby-session-transition-dots {
+  0% { content: "."; }
+  33% { content: ".."; }
+  66%, 100% { content: "..."; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatobby-session-transition__dots::after { content: "..."; animation: none; }
 }
 
 .chatobby-view {

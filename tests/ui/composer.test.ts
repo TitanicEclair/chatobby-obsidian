@@ -611,6 +611,35 @@ describe("Composer", () => {
     expect(submitted?.commands[0]?.spec.name).toBe("reload");
   });
 
+  it("clears an accepted compact command immediately and routes Stop to the active command", async () => {
+    let finishCommand: (() => void) | undefined;
+    const abort = vi.fn();
+    const submitSlashPlan = vi.fn((_plan: SlashSubmitPlan, onAccepted: () => void) => {
+      onAccepted();
+      return new Promise<void>((resolve) => { finishCommand = resolve; });
+    });
+    const compact = command("compact", { argParser: fixedWhitespaceArgs(1) });
+    const { composer, input, stopBtn } = bindComposer(createHost({
+      abort,
+      getSlashCommands: () => [compact],
+      submitSlashPlan,
+    }));
+
+    input.value = "/compact decisions";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    composer.send();
+
+    expect(input.value).toBe("");
+    expect(stopBtn.classList.contains("is-hidden")).toBe(false);
+    expect(stopBtn.getAttribute("aria-label")).toBe("Stop current turn");
+
+    composer.stop();
+    expect(abort).toHaveBeenCalledOnce();
+    finishCommand?.();
+    await Promise.resolve();
+  });
+
   it("submits an exact hidden alias as a command without requiring autocomplete or a trailing space", () => {
     const send = vi.fn();
     const submitSlashPlan = vi.fn();

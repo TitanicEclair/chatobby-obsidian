@@ -13,7 +13,7 @@ function blockToSource(block: FeedBlock): string {
     case "tools": return section("Tools", block.items.map(toolToSource).join("\n\n"));
     case "summary": return section("Summary", [block.text, blocksToSource(block.blocks)].filter(Boolean).join("\n\n"));
     case "queued": return section(block.kind === "steer" ? "Queued steer" : "Queued follow-up", block.text);
-    case "compaction": return section("Compaction", block.errorMessage ?? block.reason ?? block.status);
+    case "divider": return [block.activityLabel, block.detail, block.label].filter(Boolean).join("\n");
     case "subagent": return section("Subagent", [
       block.activity.type,
       block.activity.description,

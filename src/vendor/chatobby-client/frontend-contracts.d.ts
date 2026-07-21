@@ -139,11 +139,15 @@ export type FrontendFeedBlock = {
     readonly text: string;
     readonly phase: "pending" | "queued" | "applied";
 } | {
-    readonly type: "compaction";
+    readonly type: "divider";
     readonly id: string;
-    readonly phase: "active" | "done";
-    readonly startedAt: number;
-    readonly detail?: string;
+    readonly label: string;
+        readonly tone: "active" | "done" | "info" | "error";
+        readonly animated?: boolean;
+        readonly activityStartedAt?: number;
+        readonly activityEndedAt?: number;
+        readonly activityLabel?: string;
+        readonly detail?: string;
 } | {
     readonly type: "agent-activity";
     readonly id: string;

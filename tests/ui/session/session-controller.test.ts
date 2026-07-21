@@ -75,6 +75,15 @@ describe("SessionController", () => {
     expect(renderActiveTab).toHaveBeenCalledOnce();
   });
 
+  it("lets a blank session leaf be reused but preserves a leaf with conversation history", () => {
+    const { controller } = harness();
+    controller.applyRuntimeSession(session("blank", { messageCount: 0 }));
+    expect(controller.canReuseForSessionNavigation()).toBe(true);
+
+    controller.applyRuntimeSession(session("blank", { messageCount: 1 }));
+    expect(controller.canReuseForSessionNavigation()).toBe(false);
+  });
+
   it("preserves the leaf-owned feed while refreshing session metadata", async () => {
     const { controller } = harness({
       synchronize: async (target) => {
@@ -229,6 +238,7 @@ function harness(options: HarnessOptions = {}) {
     claimSessionOwnership,
     dispatchSessionIntent: (request) => options.dispatch?.(request, controller) ?? Promise.resolve(false),
     synchronizeFrontend: () => options.synchronize?.(controller) ?? Promise.resolve(),
+    settlePresentation: () => Promise.resolve(),
   });
   return { controller, renderActiveTab, persistLeafState, claimSessionOwnership };
 }

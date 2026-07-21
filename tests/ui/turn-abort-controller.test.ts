@@ -10,7 +10,6 @@ describe("TurnAbortController", () => {
       cancelInteractions,
       getTransport: () => ({ isConnected: true, abort }),
       setStopping,
-      setStreaming: vi.fn(),
       reportError: vi.fn(),
     });
 
@@ -21,7 +20,8 @@ describe("TurnAbortController", () => {
     expect(abort).toHaveBeenCalledTimes(1);
     expect(setStopping).toHaveBeenCalledWith(true);
 
-    controller.setStreaming(false);
+    controller.setActivity(false);
+    expect(setStopping).toHaveBeenLastCalledWith(false);
     controller.request();
     expect(abort).toHaveBeenCalledTimes(2);
   });
@@ -34,7 +34,6 @@ describe("TurnAbortController", () => {
       cancelInteractions: vi.fn(),
       getTransport: () => ({ isConnected: true, abort: async () => Promise.reject(error) }),
       setStopping,
-      setStreaming: vi.fn(),
       reportError,
     });
 

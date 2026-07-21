@@ -112,6 +112,7 @@ export type WireSessionEvent = {
 } | {
     type: "compaction_start";
     reason: "manual" | "threshold" | "overflow";
+    customInstructions?: string;
 } | {
     type: "session_info_changed";
     name: string | undefined;

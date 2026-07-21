@@ -12,16 +12,17 @@ describe("LeafDirectoryRouter", () => {
     const router = new LeafDirectoryRouter({
       currentTarget: () => current,
       currentDirectory: () => "Inbox",
-      hasSessions: () => true,
+      canReuseCurrentTarget: () => false,
       isDirectory: () => true,
       setCurrentDirectory,
       rememberDefaultDirectory,
       openDirectoryTarget,
       openSessionTarget: vi.fn(),
       ensureDirectoryTarget,
-      closeCurrentExplorer: vi.fn(),
+      closeCurrentExplorer: vi.fn(async () => undefined),
       resumeInTarget: vi.fn(),
       createInTarget: vi.fn(),
+      focusTarget: vi.fn(),
     });
 
     await expect(router.use("Projects/Research")).resolves.toBe(project);
@@ -39,16 +40,17 @@ describe("LeafDirectoryRouter", () => {
     const router = new LeafDirectoryRouter({
       currentTarget: () => current,
       currentDirectory: () => "Inbox",
-      hasSessions: () => false,
+      canReuseCurrentTarget: () => true,
       isDirectory: () => true,
       setCurrentDirectory,
       rememberDefaultDirectory: vi.fn(),
       openDirectoryTarget: vi.fn(),
       openSessionTarget: vi.fn(),
       ensureDirectoryTarget,
-      closeCurrentExplorer: vi.fn(),
+      closeCurrentExplorer: vi.fn(async () => undefined),
       resumeInTarget: vi.fn(),
       createInTarget: vi.fn(),
+      focusTarget: vi.fn(),
     });
 
     await expect(router.use("Projects/Research/")).resolves.toBe(current);
@@ -62,19 +64,27 @@ describe("LeafDirectoryRouter", () => {
     const closeCurrentExplorer = vi.fn();
     const resumeInTarget = vi.fn(async () => undefined);
     const openSessionTarget = vi.fn(async () => project);
+    const order: string[] = [];
     const router = new LeafDirectoryRouter({
       currentTarget: () => current,
       currentDirectory: () => "Inbox",
-      hasSessions: () => true,
+      canReuseCurrentTarget: () => false,
       isDirectory: () => true,
       setCurrentDirectory: vi.fn(),
       rememberDefaultDirectory: vi.fn(async () => undefined),
       openDirectoryTarget: vi.fn(),
-      openSessionTarget,
+      openSessionTarget: vi.fn(async (...args) => {
+        order.push("open");
+        return openSessionTarget(...args);
+      }),
       ensureDirectoryTarget: vi.fn(),
-      closeCurrentExplorer,
+      closeCurrentExplorer: vi.fn(async () => {
+        order.push("close-source");
+        closeCurrentExplorer();
+      }),
       resumeInTarget,
       createInTarget: vi.fn(),
+      focusTarget: vi.fn(() => order.push("focus-target")),
     });
 
     await router.resume("C:/Vault/Projects/Research/session.jsonl", "Projects/Research");
@@ -85,18 +95,46 @@ describe("LeafDirectoryRouter", () => {
       "C:/Vault/Projects/Research/session.jsonl",
     );
     expect(resumeInTarget).toHaveBeenCalledWith(project, "C:/Vault/Projects/Research/session.jsonl");
+    expect(order).toEqual(["close-source", "open", "focus-target"]);
+  });
+
+  it("reuses an empty current leaf when resuming a stored session", async () => {
+    const current = { id: "current" };
+    const resumeInTarget = vi.fn(async () => undefined);
+    const focusTarget = vi.fn();
+    const router = new LeafDirectoryRouter({
+      currentTarget: () => current,
+      currentDirectory: () => "Inbox",
+      canReuseCurrentTarget: () => true,
+      isDirectory: () => true,
+      setCurrentDirectory: vi.fn(async () => undefined),
+      rememberDefaultDirectory: vi.fn(async () => undefined),
+      openDirectoryTarget: vi.fn(),
+      openSessionTarget: vi.fn(),
+      ensureDirectoryTarget: vi.fn(),
+      closeCurrentExplorer: vi.fn(async () => undefined),
+      resumeInTarget,
+      createInTarget: vi.fn(),
+      focusTarget,
+    });
+
+    await router.resume("C:/Vault/Projects/Research/session.jsonl", "Projects/Research");
+
+    expect(resumeInTarget).toHaveBeenCalledWith(current, "C:/Vault/Projects/Research/session.jsonl");
+    expect(focusTarget).toHaveBeenCalledWith(current);
+    expect(router).toBeDefined();
   });
 
   it("creates another session in a separate leaf even when the directory is unchanged", async () => {
     const current = { id: "current" };
     const next = { id: "next" };
     const createInTarget = vi.fn(async () => undefined);
-    const closeCurrentExplorer = vi.fn();
+    const closeCurrentExplorer = vi.fn(async () => undefined);
     const openSessionTarget = vi.fn(async () => next);
     const router = new LeafDirectoryRouter({
       currentTarget: () => current,
       currentDirectory: () => "Projects/Research",
-      hasSessions: () => true,
+      canReuseCurrentTarget: () => false,
       isDirectory: () => true,
       setCurrentDirectory: vi.fn(),
       rememberDefaultDirectory: vi.fn(async () => undefined),
@@ -106,6 +144,7 @@ describe("LeafDirectoryRouter", () => {
       closeCurrentExplorer,
       resumeInTarget: vi.fn(),
       createInTarget,
+      focusTarget: vi.fn(),
     });
 
     await router.create("Projects/Research");

@@ -40,6 +40,7 @@ export interface SessionControllerOptions {
   claimSessionOwnership: () => void;
   dispatchSessionIntent: (request: SessionMutationRequest) => Promise<boolean>;
   synchronizeFrontend: () => Promise<void>;
+  settlePresentation: () => Promise<void>;
 }
 
 /**
@@ -117,7 +118,10 @@ export class SessionController {
   activeTabId(): string | null { return this.tabs.activeTabId(); }
   sessionTransitionLabel(): string | null { return this.options.getActiveOperation()?.label ?? null; }
   setTab(tab: SessionTab): void { this.tabs.reset(tab); this.options.refreshTabBar(); }
-  hasSessions(): boolean { return this.tabs.all().length > 0; }
+  canReuseForSessionNavigation(): boolean {
+    const active = this.activeTab();
+    return !active || this.isReusableBlankSession(active);
+  }
   workingDirectoryPath(): string { return this.workingDirectory.current(); }
 
   restoreWorkingDirectory(rawVaultDirectoryPath: string): void {
@@ -274,9 +278,39 @@ export class SessionController {
     this.options.persistLeafState();
   }
 
+  /** Compact the active session's context, optionally with a custom focus.
+   *  Uses `session-maintenance` (not `session-transition`) so concurrent feed
+   *  updates and state polling do not block compaction. The compaction marker
+   *  and isCompacting flag arrive as patches (compaction_start/compaction_end),
+   *  so no full resync is needed. */
+  async compactContext(customInstructions?: string): Promise<void> {
+    const transport = this.options.getTransport();
+    if (!transport?.isConnected) {
+      new Notice("Chatobby is not connected; cannot compact yet.");
+      return;
+    }
+    const promise = this.options.runOperation(
+      { key: "session-maintenance", id: "session:compact", label: "Compacting context" },
+      async () => {
+        await transport.compact(customInstructions);
+      },
+    );
+    this.options.refreshTabBar();
+    return promise.catch((error: unknown) => {
+      if (error instanceof OperationConflictError) {
+        new Notice(error.message);
+        return;
+      }
+      new Notice(`Compaction: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => this.options.refreshTabBar());
+  }
+
   runSessionTransition(label: string, operation: () => Promise<void>): Promise<void> {
     const id = `session:${label.toLocaleLowerCase().replaceAll(" ", "-")}`;
-    const promise = this.options.runOperation({ key: "session-transition", id, label }, operation);
+    const promise = this.options.runOperation({ key: "session-transition", id, label }, async () => {
+      await operation();
+      await this.options.settlePresentation();
+    });
     this.options.refreshTabBar();
     return promise.catch((error: unknown) => {
       if (error instanceof OperationConflictError) {

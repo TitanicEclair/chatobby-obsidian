@@ -1,99 +1,82 @@
-# Connector Release Boundary
+# Connector release boundary
 
-> Status: signed runtime and reviewable connector candidate verified; public
-> distribution gates remain
->
-> Last verified: 2026-07-16
+> Current public-alpha distribution: Obsidian Community plugin plus the
+> plugin-managed, Ed25519-verified Chatobby runtime.
 
-## Enforced now
+## Reviewable connector
 
-- `boundary-manifest.json` classifies every top-level connector source file and
-  directory, records its authority, excludes local state, and lists private
-  runtime packages that connector source may not import.
-- `npm run check:release-boundary` fails when a new source root is unclassified,
-  a private runtime package is imported, a source path is a symlink, or the
-  official asset set changes.
-- `npm run build:release` compiles with the `release` build constant, disables
-  source maps, minifies JavaScript and CSS, and writes only `main.js`,
-  `manifest.json`, and `styles.css` under `release/`.
-- The release artifact verifier rejects extra files, source-map markers, known
-  development paths, user-profile paths, signing-key configuration, private-key
-  material, and common provider/service token formats.
-- Managed runtime resolution in a release bundle accepts only the
-  installer-owned current runtime path. Environment overrides, plugin-bundled
-  executables, and `PATH` fallback remain development-only.
-- Release builds require an embedded Ed25519 runtime public key. Every managed
-  launch re-verifies the signed package manifest, platform, protocol, plugin
-  compatibility, executable, MCP UI bridge, and parser WASM files.
-- `data.json` and `release/` are ignored and cannot enter the official release
-  directory produced by the release command.
+The public connector is intentionally limited to Obsidian presentation,
+workspace integration, transport, and verified runtime lifecycle handling.
+`boundary-manifest.json` classifies every public source root and prevents the
+connector from importing private runtime packages.
 
-## Build behavior
+`npm run build:release`:
 
-| Behavior | Development build | Release build |
-|---|---|---|
-| Output | Live plugin root | `release/` staging directory |
-| Source map | Inline | Disabled |
-| Minification | Disabled | Enabled |
-| Managed runtime override | Environment, bundled, installed, then `PATH` | Installed pointer only |
-| Boundary scan | Available through checks | Required by build command |
-| Official assets | Not constrained | Exactly three files |
+- compiles with release-only constants;
+- disables source maps;
+- minifies JavaScript and CSS;
+- requires the runtime Ed25519 public key;
+- rejects local paths, private-key material, common credentials, and unexpected
+  files; and
+- emits exactly `main.js`, `manifest.json`, and `styles.css` in `release/`.
 
-## Current candidate
+Release-mode runtime discovery accepts only the installed runtime pointer. The
+environment, plugin-bundled executable, and `PATH` fallbacks are development
+features and are not present in the Community plugin path.
 
-The backend builds a current-source Node SEA executable and packages it
-with a complete signed inventory, checksums, an SPDX SBOM, third-party notices,
-license texts, provenance, and required runtime assets. The connector embeds
-the matching public key, rejects extra files and symlinks, and repeats complete
-package verification before launch. A clean reviewable-source export rebuilds
-the same release `main.js` byte for byte.
+## Runtime trust boundary
 
-The signed package contains 92 components and passed the artifact scan with no
-gaps, failures, or warnings. Its runtime package fingerprint is
-`2ec726d17779301f9ef87160ef25ddbe4c66f5d5395481446e905c9bc572c599`.
-Live Obsidian CLI acceptance proved authenticated replacement after a package
-change. An existing session rendered five durable Thought blocks and three
-completed tool calls. All five feature pages populated on their first
-navigation click, direct state hydration restored Events, Back/Forward
-traversed Events to Memory and forward to Events, and a real prompt completed
-without a stuck working state or captured error.
+The private runtime is published separately as a versioned compressed bundle.
+The connector verifies the signed release descriptor, complete signed package
+manifest, platform, architecture, protocol, plugin compatibility, inventory,
+file sizes, and SHA-256 hashes before activating it. Updates install into a
+new version directory and switch the current pointer only after verification.
 
-The final connector release files are:
+The Ed25519 package signature proves that the runtime package came from the
+Chatobby release key and was not modified. It does not suppress the Windows
+publisher warning that applies to directly launched, unsigned executables;
+that requires a separate Authenticode certificate.
 
-| Asset | Bytes | SHA-256 |
-|---|---:|---|
-| `main.js` | 501,708 | `1237480c5a0ef634084fe22f9a95a51807a94da4b285e834d9f085e7c4914a3e` |
-| `manifest.json` | 229 | `bc9563e9eb135325990023fb797cd119ae0b8cb1a8451b8d5234251e35b2d97a` |
-| `styles.css` | 138,471 | `8c40cecd04152af590d9bfa883ed0920a94e598260fc85fa06a7a9471524df15` |
+## Build modes
 
-The clean reviewable export has no missing publication files, installs with
-zero reported npm vulnerabilities, and reproduces all three assets byte for
-byte.
+| Mode | Intended use | Runtime | Connector |
+|---|---|---|---|
+| Development | Local source work | Source or locally built binary | Unminified local build |
+| Release candidate | Exact pre-publication verification | Public-alpha package | Production connector build |
+| Public alpha | Current official path | Ed25519-signed package | Community plugin assets |
+| Stable signed | Future stable/paid distribution | Ed25519 + Authenticode | Community plugin assets |
 
-Windows installer staging validates the runtime, connector, and key before
-compilation. The resulting
-`Chatobby-0.1.0-private-alpha-win-x64.exe` is 26,949,083 bytes with SHA-256
-`701190c74d3491cf0d1a781a3a5cef6b4a54cd308bbdc5913faeedfb092d058d`.
-The connector remains the minimal three-file Obsidian boundary and may be
-installed privately without Community-plugin publication.
+Standalone and runtime-only installer tooling remains available for controlled
+testing, but installers are not part of the current official public-alpha
+release. Users install the plugin through Obsidian and install or update the
+runtime from Chatobby's in-plugin action.
 
-## Remaining production blockers
+## Release requirements
 
-Public production distribution remains blocked until:
+Every public version must:
 
-- the Windows installer is Authenticode signed; it currently reports
-  `NotSigned`;
-- the runtime signing key is rotated because its private material was exposed
-  in a local build transcript;
-- an Inno Setup license suitable for commercial distribution is used before a
-  paid release; the current compiler identifies itself as non-commercial-use;
-- install, upgrade, rollback, and uninstall are exercised on a clean Windows
-  machine;
-- the reviewable connector is published in its intentional public repository;
-- Obsidian disclosures/pre-clearance are completed for the separately installed
-  closed-source runtime and loopback/network behavior;
-- the private-evaluation and future commercial terms receive qualified legal
-  review.
+1. use the same plugin and runtime version and tag;
+2. pass repository checks and focused lifecycle tests;
+3. produce the runtime package before the connector so the connector embeds the
+   matching public key;
+4. pass runtime package verification and `doctor` from the packaged directory;
+5. pass the connector release-artifact scan;
+6. be installed into a disposable vault before publication;
+7. publish the runtime release before the plugin release; and
+8. verify the uploaded assets and Community-plugin listing after publication.
 
-The current artifacts are suitable for controlled private evaluation, not an
-unqualified public or paid production release.
+Published tags and release assets are immutable. A defect discovered after
+publication is corrected with a new patch version, never by replacing files on
+an existing tag.
+
+## Remaining stable-release gates
+
+These do not block the explicitly labelled public alpha, but they remain gates
+for a stronger stable or paid release claim:
+
+- Authenticode-sign and timestamp the runtime executable if Windows publisher
+  identity is required;
+- exercise update, rollback, and uninstall on a clean Windows account;
+- maintain offline recovery instructions for a failed runtime update;
+- complete qualified legal review of stable/commercial terms; and
+- document signing-key rotation and incident response.

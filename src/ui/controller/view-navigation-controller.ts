@@ -89,25 +89,25 @@ export class ViewNavigationController {
   }
 
   navigate(state: ChatobbyNavigationState): void {
-    this.setState(state, true);
+    void this.setState(state, true);
   }
 
   /** Replace the current Chatobby screen without appending another native history entry. */
-  replace(state: ChatobbyNavigationState): void {
-    this.setState(state, false);
+  replace(state: ChatobbyNavigationState): Promise<void> {
+    return this.setState(state, false);
   }
 
   /** Collapse the current Chatobby route to its main feed and discard stale page routes. */
   reset(): void {
     clearWorkspaceLeafNavigationHistory(this.leaf);
-    this.setState({ mode: "chat" }, false);
+    void this.setState({ mode: "chat" }, false);
   }
 
-  private setState(state: ChatobbyNavigationState, recordHistory: boolean): void {
+  private async setState(state: ChatobbyNavigationState, recordHistory: boolean): Promise<void> {
     if (this.pendingHistoryIntent && sameNavigationState(this.pendingHistoryIntent.state, state)) return;
     if (!this.pendingHistoryIntent && sameNavigationState(this.current, state)) return;
     this.pendingHistoryIntent = { state: { ...state }, record: recordHistory };
-    void this.leaf.setViewState({
+    await this.leaf.setViewState({
       type: this.viewType,
       state: { ...this.handlers.getLeafSessionState?.(), ...state },
       active: true,

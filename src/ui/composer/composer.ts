@@ -86,7 +86,7 @@ export interface ComposerHost {
   currentSlashArgumentOption?(): SlashArgumentOption | null;
   closeSlash?(): void;
   /** Execute activated slash commands and any remaining prompt text. */
-  submitSlashPlan?(plan: SlashSubmitPlan): void | Promise<void>;
+  submitSlashPlan?(plan: SlashSubmitPlan, onAccepted: () => void): void | Promise<void>;
   /** Whether a blocking interaction (select/confirm/input/editor) is active. */
   isInteractionActive?(): boolean;
   /** Forward a keystroke to the active interaction card. Returns true if consumed. */
@@ -116,6 +116,7 @@ export class Composer extends ChatobbyComponent {
 	private isStreaming = false;
 	private isStopping = false;
   private promptInFlight = false;
+  private slashCommandInFlight = false;
   private pendingSendAbort: AbortController | null = null;
   private pendingSendSequence = 0;
   private activePendingSendId: number | null = null;
@@ -257,12 +258,27 @@ export class Composer extends ChatobbyComponent {
     const outputMarker = this.currentTurnOutputMarker();
     try {
       const attachments = this.state.attachments.length > 0 ? this.state.attachments.map((attachment) => attachment.prompt) : undefined;
-      const result = commands.length > 0 && this.host.submitSlashPlan
-        ? this.host.submitSlashPlan({ text: rawText, commands, attachments })
+      const isSlashSubmission = commands.length > 0 && Boolean(this.host.submitSlashPlan);
+      let slashAccepted = false;
+      this.slashCommandInFlight = isSlashSubmission;
+      const acceptSlashSubmission = () => {
+        if (slashAccepted) return;
+        slashAccepted = true;
+        if (this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
+          this.acceptSubmittedDraft(submittedDraft, outputMarker, undefined, false);
+        }
+        this.updateControls();
+      };
+      const result = isSlashSubmission
+        ? this.host.submitSlashPlan?.({ text: rawText, commands, attachments }, acceptSlashSubmission)
         : this.host.send(text, attachments, pendingAbort.signal, submissionId);
       if (isPromiseLike(result)) {
         void Promise.resolve(result).then(
           (outcome) => {
+            if (isSlashSubmission) {
+              this.finishPendingSend(pendingSendId);
+              return;
+            }
             if (pendingAbort.signal.aborted) {
               if (outcome?.retracted !== false) {
                 this.finishPendingSend(pendingSendId);
@@ -285,16 +301,18 @@ export class Composer extends ChatobbyComponent {
           },
         );
       } else {
-        if (!pendingAbort.signal.aborted && this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
+        if (!isSlashSubmission && !pendingAbort.signal.aborted && this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
           this.acceptSubmittedDraft(submittedDraft, outputMarker, submissionId, false);
         }
         this.pendingSendAbort = null;
         this.activePendingSendId = null;
+        this.slashCommandInFlight = false;
         this.setPromptInFlight(false);
       }
     } catch (error) {
       this.pendingSendAbort = null;
       this.activePendingSendId = null;
+      this.slashCommandInFlight = false;
       this.setPromptInFlight(false);
       console.error("Chatobby: pending send failed", error);
     }
@@ -314,7 +332,7 @@ export class Composer extends ChatobbyComponent {
   /** Abort the current generation. */
   stop(): void {
     this.disarmAbortConfirm();
-    if (this.promptInFlight) {
+    if (this.promptInFlight && !this.slashCommandInFlight) {
       this.pendingSendAbort?.abort();
       this.setStopping(true);
       return;
@@ -494,9 +512,10 @@ export class Composer extends ChatobbyComponent {
 				this.stopBtn.addClass("is-confirming");
 				this.stopBtn.removeClass("is-stopping");
 			} else {
-        setIcon(this.stopBtn, this.promptInFlight ? "x" : "square");
-        this.stopBtn.setAttr("aria-label", this.promptInFlight ? "Cancel pending send" : "Stop current turn");
-        this.stopBtn.setAttr("title", this.promptInFlight ? "Cancel pending send" : "Stop current turn");
+        const pendingPrompt = this.promptInFlight && !this.slashCommandInFlight;
+        setIcon(this.stopBtn, pendingPrompt ? "x" : "square");
+        this.stopBtn.setAttr("aria-label", pendingPrompt ? "Cancel pending send" : "Stop current turn");
+        this.stopBtn.setAttr("title", pendingPrompt ? "Cancel pending send" : "Stop current turn");
 				this.stopBtn.removeClass("is-confirming");
 				this.stopBtn.removeClass("is-stopping");
 			}
@@ -542,6 +561,7 @@ export class Composer extends ChatobbyComponent {
     if (this.activePendingSendId !== pendingSendId) return;
     this.pendingSendAbort = null;
     this.activePendingSendId = null;
+    this.slashCommandInFlight = false;
     this.setPromptInFlight(false);
     this.setStopping(false);
   }

@@ -9,21 +9,29 @@ interface ActiveSessionActionsOptions {
   app: App;
   getTransport: () => ChatobbyTransport | null;
   getActiveTab: () => SessionTab | null;
+  getWorkingDirectory: () => string;
   getForkOptions: () => readonly { entryId: string; label: string }[];
+  forkStoredSession: (sessionPath: string, entryId: string) => Promise<{ sessionId: string; sessionPath: string }>;
+  openForkedSession: (workingDirectory: string, sessionPath: string) => Promise<void>;
   dispatchSessionIntent: (request: SessionMutationRequest) => Promise<boolean>;
   runOperation: <T>(descriptor: OperationDescriptor, operation: () => Promise<T>) => Promise<T>;
   runTransition: (label: string, operation: () => Promise<void>) => Promise<void>;
   setTab: (tab: SessionTab) => void;
   refreshTabs: () => void;
+  sessionsChanged: () => void;
 }
 
-/** Advanced actions for the active backend session; stored-session rows use a separate path API. */
+/** Advanced actions for the active session; forks use storage so the current runtime stays attached. */
 export class ActiveSessionActions {
   constructor(private readonly options: ActiveSessionActionsOptions) {}
 
   async rename(): Promise<void> {
     const active = this.options.getActiveTab();
-    if (!this.options.getTransport()?.isConnected || !active) return;
+    if (!this.options.getTransport()?.isConnected) {
+      new Notice("Chatobby is not connected; cannot rename the session yet.");
+      return;
+    }
+    if (!active) return;
     const name = await promptText(this.options.app, {
       title: "Rename session",
       value: active.name ?? "",
@@ -42,10 +50,20 @@ export class ActiveSessionActions {
   async clone(): Promise<void> {
     await this.options.runTransition("Cloning session", async () => {
       await this.options.dispatchSessionIntent({ type: "session.clone", payload: {} });
+      this.options.sessionsChanged();
+    }).catch((error) => {
+      console.error("Chatobby: clone session failed", error);
+      new Notice(`Could not clone session: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 
   async fork(): Promise<void> {
+    const active = this.options.getActiveTab();
+    if (!active?.sessionFile) {
+      new Notice("Save or resume this session before forking it.");
+      return;
+    }
+    const sourceSessionPath = active.sessionFile;
     const options = this.options.getForkOptions();
     if (options.length === 0) {
       new Notice("No fork points available yet.");
@@ -53,9 +71,16 @@ export class ActiveSessionActions {
     }
     const choice = await pickItem(this.options.app, [...options], (option) => option.label, "Choose a fork point");
     if (!choice) return;
-    await this.options.runTransition("Forking session", async () => {
-      await this.options.dispatchSessionIntent({ type: "session.fork", payload: { entryId: choice.entryId } });
-    });
+    try {
+      await this.options.runTransition("Forking session", async () => {
+        const fork = await this.options.forkStoredSession(sourceSessionPath, choice.entryId);
+        this.options.sessionsChanged();
+        await this.options.openForkedSession(this.options.getWorkingDirectory(), fork.sessionPath);
+      });
+    } catch (error) {
+      console.error("Chatobby: fork session failed", error);
+      new Notice(`Could not fork session: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async importJsonl(): Promise<void> {
@@ -75,7 +100,10 @@ export class ActiveSessionActions {
 
   async export(format: "html" | "jsonl"): Promise<void> {
     const transport = this.options.getTransport();
-    if (!transport?.isConnected) return;
+    if (!transport?.isConnected) {
+      new Notice("Chatobby is not connected; cannot export the session yet.");
+      return;
+    }
     const outputPath = await promptText(this.options.app, {
       title: `Export session as ${format.toUpperCase()}`,
       value: `chatobby-export.${format}`,

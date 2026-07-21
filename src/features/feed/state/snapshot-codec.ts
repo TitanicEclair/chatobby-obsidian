@@ -171,7 +171,7 @@ function isFeedSnapshotV2(value: unknown): value is FeedSnapshotV2 {
 
 function isFeedBlock(value: unknown): value is FeedBlockEntity {
   if (!isRecord(value) || typeof value.id !== "string" || typeof value.type !== "string") return false;
-  const supported = ["thinking", "text", "tools", "summary", "user", "system", "queued", "compaction", "subagent", "subagent-communication", "extension-panel"];
+  const supported = ["thinking", "text", "tools", "summary", "user", "system", "queued", "divider", "subagent", "subagent-communication", "extension-panel"];
   if (!supported.includes(value.type)) return false;
   if (value.type === "thinking" || value.type === "text" || value.type === "tools") {
     return typeof value.turnId === "string" && isFiniteNumber(value.startIndex) && isFiniteNumber(value.endIndex);

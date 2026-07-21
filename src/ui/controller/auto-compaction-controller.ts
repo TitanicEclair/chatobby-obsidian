@@ -13,7 +13,10 @@ export interface AutoCompactionActionOptions {
 /** Toggle the active model's compaction policy and reconcile the returned backend state. */
 export async function toggleAutoCompaction(options: AutoCompactionActionOptions): Promise<void> {
   const transport = options.transport;
-  if (!transport?.isConnected) return;
+  if (!transport?.isConnected) {
+    new Notice("Chatobby is not connected; cannot toggle automatic compaction yet.");
+    return;
+  }
   try {
     const settings = await options.runMutation(() => (
       transport.setAutoCompaction({ enabled: !options.settings.enabled })

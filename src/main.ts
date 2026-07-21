@@ -123,6 +123,9 @@ export default class ChatobbyPlugin extends Plugin {
   });
 
   private readonly visibleChatViews = new Set<ChatobbyView>();
+  private _lastChatobbyView: ChatobbyView | null = null;
+  private activeLeafActivation = 0;
+  private vaultDirectoryRefreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private unloading = false;
 
   // ── Lifecycle ────────────────────────────────────────────────────
@@ -133,17 +136,24 @@ export default class ChatobbyPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE_CHATOBBY, (leaf) => new ChatobbyView(leaf, this));
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
+      const activation = ++this.activeLeafActivation;
       if (leaf?.view instanceof ChatobbyView) {
         const view = leaf.view;
+        this._lastChatobbyView = view;
         void view.activateSessionContext()
           .then(() => {
-            if (this.app.workspace.getActiveViewOfType(ChatobbyView) === view) view.focusComposer();
+            if (activation === this.activeLeafActivation && this.app.workspace.getActiveViewOfType(ChatobbyView) === view) {
+              view.focusComposer();
+            }
           })
           .catch((error) => {
             console.error("Chatobby: could not activate leaf session context", error);
           });
       }
     }));
+    this.registerEvent(this.app.vault.on("create", () => this.scheduleVaultDirectoryRefresh()));
+    this.registerEvent(this.app.vault.on("delete", () => this.scheduleVaultDirectoryRefresh()));
+    this.registerEvent(this.app.vault.on("rename", () => this.scheduleVaultDirectoryRefresh()));
     this.addSettingTab(new ChatobbySettingTab(this.app, this));
 
     this.addRibbonIcon("message-circle", "Open Chatobby", () => {
@@ -168,6 +178,8 @@ export default class ChatobbyPlugin extends Plugin {
 
   async onunload(): Promise<void> {
     this.unloading = true;
+    if (this.vaultDirectoryRefreshTimer) globalThis.clearTimeout(this.vaultDirectoryRefreshTimer);
+    this.vaultDirectoryRefreshTimer = null;
     // Plugin reloads must not terminate session-owned work in the backend.
     await this.runtimeManager.detach("plugin-unload").catch(() => {});
     await this.frontendSessions.dispose();
@@ -224,6 +236,10 @@ export default class ChatobbyPlugin extends Plugin {
   getActiveView(): ChatobbyView | null {
     const active = this.app.workspace.getActiveViewOfType(ChatobbyView);
     if (active) return active;
+    // No Chatobby leaf is currently focused — fall back to the most recently
+    // active one tracked via the active-leaf-change event, rather than the
+    // first leaf in DOM order (which may be a different session).
+    if (this._lastChatobbyView) return this._lastChatobbyView;
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY);
     const leaf = leaves[0];
     return leaf ? (leaf.view as ChatobbyView) : null;
@@ -318,7 +334,8 @@ export default class ChatobbyPlugin extends Plugin {
         .filter((view): view is ChatobbyView => view instanceof ChatobbyView)
         .find((view) => view.hasSessionPath(sessionPath));
       if (existing) {
-        this.app.workspace.revealLeaf(existing.leaf);
+        await existing.resumeStoredSession(sessionPath);
+        this.focusChatView(existing);
         return existing;
       }
     }
@@ -327,12 +344,35 @@ export default class ChatobbyPlugin extends Plugin {
     await leaf.setViewState({
       type: VIEW_TYPE_CHATOBBY,
       active: true,
-      state: { mode: "chat", vaultDirectoryPath: normalized },
+      state: { mode: "chat", vaultDirectoryPath: normalized, sessionPath },
     });
-    this.app.workspace.revealLeaf(leaf);
     const view = leaf.view;
     if (!(view instanceof ChatobbyView)) throw new Error("Obsidian did not create the Chatobby session view");
+    if (sessionPath) await view.resumeStoredSession(sessionPath);
+    this.focusChatView(view);
     return view;
+  }
+
+  focusChatView(view: ChatobbyView): void {
+    this._lastChatobbyView = view;
+    this.app.workspace.revealLeaf(view.leaf);
+    requestAnimationFrame(() => {
+      if (this.app.workspace.getActiveViewOfType(ChatobbyView) === view) view.focusComposer();
+    });
+  }
+
+  notifySessionDirectoryChanged(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)) {
+      if (leaf.view instanceof ChatobbyView) leaf.view.refreshSessionDirectoryIfOpen();
+    }
+  }
+
+  private scheduleVaultDirectoryRefresh(): void {
+    if (this.vaultDirectoryRefreshTimer) globalThis.clearTimeout(this.vaultDirectoryRefreshTimer);
+    this.vaultDirectoryRefreshTimer = globalThis.setTimeout(() => {
+      this.vaultDirectoryRefreshTimer = null;
+      this.notifySessionDirectoryChanged();
+    }, 100);
   }
 
   // ── Model / thinking cycling ─────────────────────────────────────

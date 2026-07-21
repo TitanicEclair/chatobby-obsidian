@@ -10,7 +10,7 @@ import {
 } from "../../features/feed/public";
 import { ChatobbyComponent } from "../shared/component";
 import { SCROLL_BOTTOM_THRESHOLD_PX, STREAM_TEXT_DEBOUNCE_MS } from "../shared/constants";
-import { CompactionBlockView } from "./compaction-block";
+import { DividerBlockView } from "./divider-block";
 import { ExtensionPanelBlockView } from "./extension-panel-block";
 import { preserveComposerFocusForFeedControl } from "./feed-focus";
 import { blocksToSource } from "./source-serializer";
@@ -610,7 +610,7 @@ function canReuseView(block: FeedBlock, view: unknown): boolean {
     case "thinking": return view instanceof ThinkingBlockView;
     case "tools": return view instanceof ToolBlockView;
     case "summary": return view instanceof TurnSummaryView;
-    case "compaction": return view instanceof CompactionBlockView;
+    case "divider": return view instanceof DividerBlockView;
     default: return false;
   }
 }
@@ -623,7 +623,7 @@ function updateView(view: unknown, block: FeedBlock): void {
     case "summary": (view as TurnSummaryView).setSummary(block); return;
     case "user":
     case "system": (view as UserBlockView).setMessage(block.message, block.type); return;
-    case "compaction": (view as CompactionBlockView).setBlock(block); return;
+    case "divider": (view as DividerBlockView).setBlock(block); return;
   }
 }
 
@@ -636,7 +636,7 @@ function createView(host: FeedHost, block: FeedBlock): ChatobbyComponent {
     case "tools": return new ToolBlockView(host, block);
     case "summary": return new TurnSummaryView(host, block);
     case "queued": return new QueuedMessageBlockView(block);
-    case "compaction": return new CompactionBlockView(host, block);
+    case "divider": return new DividerBlockView(block);
     case "subagent": return new SubagentBlockView(block);
     case "subagent-communication": return new SubagentCommunicationBlockView(block, host);
     case "extension-panel": return new ExtensionPanelBlockView(host, block);

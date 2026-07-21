@@ -12,7 +12,7 @@
 @import "./settings/settings.css";
 @import "./modals/modals.css";
 @import "./feed/feed.css";
-@import "./feed/compaction.css";
+@import "./feed/divider.css";
 @import "./feed/subagent-messages.css";
 @import "./feed/channel-messages.css";
 @import "./feed/tools/tools.css";

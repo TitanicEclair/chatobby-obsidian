@@ -144,7 +144,7 @@ function toEntity(block: FeedDocumentProjection["blocks"][number]): FeedBlockEnt
     case "user": return { type: "user", id, messageId: block.messageId, message: block.message };
     case "system": return { type: "system", id, messageId: block.messageId, message: block.message };
     case "queued": return { ...block, id };
-    case "compaction": return { ...block, id };
+    case "divider": return { ...block, id };
     case "subagent": return { ...block, id, activity: block.activity };
     case "subagent-communication": return { ...block, id };
     case "extension-panel": return { ...block, id };

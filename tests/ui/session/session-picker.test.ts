@@ -202,6 +202,32 @@ describe("SessionPickerComponent", () => {
     expect(onUseDirectory).toHaveBeenCalledWith(directories[1]);
   });
 
+  it("refreshes the directory tree and sessions without reopening the page", async () => {
+    let liveDirectories = directories;
+    const picker = new SessionPickerComponent({
+      getTransport: async () => ({ listSessions: async () => [] }),
+      getDirectories: () => liveDirectories,
+      initialDirectoryPath: "",
+      onSelect: vi.fn(async () => {}),
+      onUseDirectory: vi.fn(),
+      onCreateSession: vi.fn(async () => {}),
+      onDelete: vi.fn(async () => {}),
+      onAdvancedAction: vi.fn(async () => {}),
+    });
+    const root = mount(picker);
+    await settle();
+    expect(root.textContent).not.toContain("New Folder");
+
+    liveDirectories = [
+      ...directories,
+      { vaultDirectoryPath: "New Folder", cwd: "C:/vault/New Folder", label: "/New Folder" },
+    ];
+    picker.refresh();
+    await settle();
+
+    expect(root.textContent).toContain("New Folder");
+  });
+
   it("deletes a stored session and refreshes directory session indicators", async () => {
     const confirm = vi.fn(() => true);
     vi.stubGlobal("confirm", confirm);

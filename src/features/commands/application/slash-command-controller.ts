@@ -65,7 +65,7 @@ export class SlashCommandController {
     }));
   }
 
-  async submit(plan: SlashSubmitPlan): Promise<void> {
+  async submit(plan: SlashSubmitPlan, onAccepted?: () => void): Promise<void> {
     if (plan.commands.length === 0) {
       await this.options.sendPrompt(plan.text.trim(), plan.attachments);
       return;
@@ -86,6 +86,7 @@ export class SlashCommandController {
         return;
       }
     }
+    onAccepted?.();
     try {
       for (const command of plan.commands) await command.spec.execute?.(command);
     } catch (error) {

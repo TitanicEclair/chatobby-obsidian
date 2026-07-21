@@ -8,7 +8,8 @@ import type { SessionAdvancedAction } from "./session-maintenance";
 
 export interface SessionPickerProps {
   getTransport: () => Promise<Pick<ChatobbyTransport, "listSessions"> | null>;
-  directories: readonly SessionDirectoryOption[];
+  directories?: readonly SessionDirectoryOption[];
+  getDirectories?: () => readonly SessionDirectoryOption[];
   initialDirectoryPath: string;
   onSelect: (path: string, directory: SessionDirectoryOption) => Promise<void>;
   onUseDirectory: (directory: SessionDirectoryOption) => void;
@@ -33,16 +34,18 @@ export class SessionPickerComponent extends ChatobbyComponent {
   private readonly rootCwd: string;
   private operation: "resuming" | "creating" | "maintaining" | null = null;
   private readonly expandedDirectories = new Set<string>();
+  private directories: readonly SessionDirectoryOption[];
 
   constructor(private readonly props: SessionPickerProps) {
     super();
-    const selected = props.directories.find((item) => item.vaultDirectoryPath === props.initialDirectoryPath);
-    this.directory = selected ?? props.directories[0] ?? {
+    this.directories = this.readDirectories();
+    const selected = this.directories.find((item) => item.vaultDirectoryPath === props.initialDirectoryPath);
+    this.directory = selected ?? this.directories[0] ?? {
       vaultDirectoryPath: "",
       cwd: "",
       label: "Vault /",
     };
-    this.rootCwd = props.directories[0]?.cwd ?? this.directory.cwd;
+    this.rootCwd = this.directories[0]?.cwd ?? this.directory.cwd;
     for (const path of ancestorDirectoryPaths(this.directory.vaultDirectoryPath)) {
       this.expandedDirectories.add(path);
     }
@@ -56,6 +59,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
   }
 
   refresh(): void {
+    this.refreshDirectories();
     void this.loadSessions();
   }
 
@@ -107,10 +111,25 @@ export class SessionPickerComponent extends ChatobbyComponent {
     void this.loadSessions();
   }
 
+  private readDirectories(): readonly SessionDirectoryOption[] {
+    return this.props.getDirectories?.() ?? this.props.directories ?? [];
+  }
+
+  private refreshDirectories(): void {
+    const next = this.readDirectories();
+    const selected = next.find((directory) => directory.vaultDirectoryPath === this.directory.vaultDirectoryPath);
+    this.directories = next;
+    this.directory = selected ?? nearestExistingDirectory(next, this.directory.vaultDirectoryPath) ?? next[0] ?? this.directory;
+    for (const path of ancestorDirectoryPaths(this.directory.vaultDirectoryPath)) this.expandedDirectories.add(path);
+    this.renderDirectories();
+  }
+
   private async loadSessions(): Promise<void> {
     const sequence = ++this.loadSequence;
-    this.state = { status: "loading", sessions: [] };
-    this.renderSessions();
+    if (this.state.status !== "ready") {
+      this.state = { status: "loading", sessions: [] };
+      this.renderSessions();
+    }
     try {
       const transport = await this.props.getTransport();
       if (!transport) throw new Error("Chatobby backend is not connected");
@@ -182,7 +201,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
 
   private renderDirectoryTree(host: HTMLElement): void {
     const byParent = new Map<string, SessionDirectoryOption[]>();
-    for (const directory of this.props.directories) {
+    for (const directory of this.directories) {
       const parent = parentDirectoryPath(directory.vaultDirectoryPath);
       byParent.set(parent, [...(byParent.get(parent) ?? []), directory]);
     }
@@ -200,7 +219,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
           cls: "chatobby-session-picker__disclosure clickable-icon",
           attr: {
             type: "button",
-            "aria-label": `${expanded ? "Collapse" : "Expand"} ${directoryName(directory, this.props.directories[0]?.label ?? "Vault")}`,
+            "aria-label": `${expanded ? "Collapse" : "Expand"} ${directoryName(directory, this.directories[0]?.label ?? "Vault")}`,
             "aria-expanded": String(expanded),
           },
         });
@@ -220,7 +239,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
       setIcon(icon, count > 0 ? "folder-clock" : "folder");
       button.createSpan({
         cls: "chatobby-session-picker__directory-name",
-        text: directoryName(directory, this.props.directories[0]?.label ?? "Vault"),
+        text: directoryName(directory, this.directories[0]?.label ?? "Vault"),
       });
       if (count > 0) button.createSpan({ cls: "chatobby-session-picker__directory-count", text: String(count) });
       button.toggleClass("is-active", directory.vaultDirectoryPath === this.directory.vaultDirectoryPath);
@@ -230,7 +249,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
         for (const child of children) renderBranch(child, childrenHost);
       }
     };
-    const root = this.props.directories.find((directory) => directory.vaultDirectoryPath === "");
+    const root = this.directories.find((directory) => directory.vaultDirectoryPath === "");
     if (root) renderBranch(root, host);
     else for (const directory of byParent.get("") ?? []) renderBranch(directory, host);
   }
@@ -379,9 +398,9 @@ export class SessionPickerComponent extends ChatobbyComponent {
 
   private visibleDirectoryPaths(): Set<string> {
     const needle = this.query.trim().toLowerCase();
-    if (!needle) return new Set(this.props.directories.map((directory) => directory.vaultDirectoryPath));
+    if (!needle) return new Set(this.directories.map((directory) => directory.vaultDirectoryPath));
     const visible = new Set<string>();
-    for (const directory of this.props.directories) {
+    for (const directory of this.directories) {
       const directoryMatches = `${directory.label} ${directory.vaultDirectoryPath}`.toLowerCase().includes(needle);
       const sessionMatches = this.sessionsForDirectory(directory)
         .some((session) => sessionTitle(session).toLowerCase().includes(needle));
@@ -393,7 +412,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
 
   private directoryForSession(session: SessionListItem): SessionDirectoryOption | undefined {
     const cwd = normalizeSystemPath(session.cwd);
-    return this.props.directories.find((directory) => normalizeSystemPath(directory.cwd) === cwd);
+    return this.directories.find((directory) => normalizeSystemPath(directory.cwd) === cwd);
   }
 
   private directoryLabelForSession(session: SessionListItem): string {
@@ -473,6 +492,16 @@ function ancestorDirectoryPaths(path: string): string[] {
   const segments = path.split("/").filter(Boolean);
   for (let index = 1; index <= segments.length; index += 1) paths.push(segments.slice(0, index).join("/"));
   return paths;
+}
+
+function nearestExistingDirectory(
+  directories: readonly SessionDirectoryOption[],
+  previousPath: string,
+): SessionDirectoryOption | undefined {
+  const ancestors = ancestorDirectoryPaths(previousPath).reverse();
+  return ancestors
+    .map((path) => directories.find((directory) => directory.vaultDirectoryPath === path))
+    .find((directory) => directory !== undefined);
 }
 
 function normalizeSystemPath(path: string): string {

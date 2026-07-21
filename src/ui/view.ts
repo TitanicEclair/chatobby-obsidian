@@ -21,6 +21,7 @@ import { storeComposerFile } from "../attachments/attachment-store";
 import { normalizeVaultDirectoryInput } from "./session/session-directory";
 import { SessionPickerModeController } from "./session/session-picker-mode-controller";
 import { LeafDirectoryRouter } from "./session/leaf-directory-router";
+import { SessionTransitionCoordinator } from "./session/session-transition-coordinator";
 import { StoredSessionActions } from "./session/stored-session-actions";
 import { ActiveSessionActions } from "./session/active-session-actions";
 import { gatherVaultContext, toPromptContextPacket } from "../prompt";
@@ -50,6 +51,7 @@ import { resolveSubagentPermissionAction } from "./controller/subagent-permissio
 import { TurnAbortController } from "./controller/turn-abort-controller";
 import { FrontendProtocolController } from "../frontend/frontend-protocol-controller";
 import { FrontendStore } from "../frontend/frontend-store";
+import { FrontendSnapshotBatcher, sessionDirectoryProjectionChanged } from "../frontend/frontend-snapshot-batcher";
 import { createFrontendBootstrapRequest } from "./controller/frontend-bootstrap-request";
 import { synchronizeFrontendFeed as syncFrontendFeedProjection } from "./controller/frontend-feed-sync";
 import type {
@@ -78,6 +80,7 @@ export class ChatobbyView extends ItemView {
   private composer!: Composer;
   private composerControls!: ComposerControls;
   private taskProgress!: TaskProgress;
+  private sessionTransition!: SessionTransitionCoordinator;
   private runtimeStatus!: RuntimeStatusController;
   private runtimeStatusMenu!: RuntimeStatusMenu;
   private runtimeUpdate!: RuntimeUpdateController;
@@ -105,12 +108,13 @@ export class ChatobbyView extends ItemView {
   private readonly connectionStatus: ConnectionStatusController;
   private readonly sessionPreferences: SessionPreferenceController;
   private readonly frontendStore = new FrontendStore();
+  private readonly frontendSnapshots = new FrontendSnapshotBatcher(
+    FRONTEND_RENDER_BATCH_MS,
+    (snapshot, previous) => this.applyFrontendSnapshot(snapshot, previous),
+  );
   private readonly frontendProtocol: FrontendProtocolController;
   private unsubscribeFrontendStore: (() => void) | null = null;
-  private pendingFrontendSnapshot: FrontendBootstrap | null = null;
-  private appliedFrontendSnapshot: FrontendBootstrap | null = null;
   private pendingFeedCatchup = false;
-	private frontendApplyTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private readonly handleViewKeydown = (event: KeyboardEvent): void => {
     if (this.viewMode === "session-picker") {
       if (this.sessionPickerMode.handleKeydown(event)) event.stopPropagation();
@@ -193,6 +197,7 @@ export class ChatobbyView extends ItemView {
         const transport = this.getTransport();
         if (transport?.isConnected) await this.frontendProtocol.synchronize(transport);
       },
+      settlePresentation: () => this.sessionTransition.settle(),
     });
     this.storedSessions = new StoredSessionController({
       app: this.app,
@@ -202,7 +207,7 @@ export class ChatobbyView extends ItemView {
     this.directoryRouter = new LeafDirectoryRouter({
       currentTarget: () => this,
       currentDirectory: () => this.sessions.workingDirectoryPath(),
-      hasSessions: () => this.sessions.hasSessions(),
+      canReuseCurrentTarget: () => this.sessions.canReuseForSessionNavigation(),
       isDirectory: (path) => this.sessions.isVaultDirectoryPath(path),
       setCurrentDirectory: (path) => this.sessions.setWorkingDirectory(path),
       rememberDefaultDirectory: (path) => this.plugin.setActiveVaultDirectory(path),
@@ -212,22 +217,30 @@ export class ChatobbyView extends ItemView {
       closeCurrentExplorer: () => this.viewNavigation.replace({ mode: "chat" }),
       resumeInTarget: (target, path) => target.handleSessionPickerSelect(path),
       createInTarget: (target) => target.sessions.createSession(),
+      focusTarget: (target) => this.plugin.focusChatView(target),
     });
     this.storedSessionActions = new StoredSessionActions({
       app: this.app,
       sessions: this.storedSessions,
-      refresh: () => this.sessionPickerMode.refresh(),
+      refresh: () => {
+        this.sessionPickerMode.refresh();
+        this.plugin.notifySessionDirectoryChanged();
+      },
     });
     this.activeSessionActions = new ActiveSessionActions({
       app: this.app,
       getTransport: () => this.getTransport(),
       getActiveTab: () => this.activeTab(),
+      getWorkingDirectory: () => this.sessions.workingDirectoryPath(),
       getForkOptions: () => this.frontendStore.snapshot?.session?.forkOptions ?? [],
+      forkStoredSession: (sessionPath, entryId) => this.storedSessions.fork(sessionPath, entryId),
+      openForkedSession: async (workingDirectory, sessionPath) => (await this.plugin.openSessionView(workingDirectory, sessionPath)).resumeStoredSession(sessionPath),
       dispatchSessionIntent: (request) => this.dispatchFrontendSessionIntent(request),
       runOperation: (descriptor, operation) => this.runOperation(descriptor, operation),
       runTransition: (label, operation) => this.sessions.runSessionTransition(label, operation),
       setTab: (tab) => this.sessions.setTab(tab),
       refreshTabs: () => this.refreshTabBar(),
+      sessionsChanged: () => this.plugin.notifySessionDirectoryChanged(),
     });
     this.sessionPickerMode = new SessionPickerModeController({
       app: this.app,
@@ -240,7 +253,10 @@ export class ChatobbyView extends ItemView {
       useDirectory: async (directory) => { await this.directoryRouter.use(directory.vaultDirectoryPath); },
       resumeSession: (path, directory) => this.directoryRouter.resume(path, directory.vaultDirectoryPath),
       createSession: (directory) => this.directoryRouter.create(directory.vaultDirectoryPath),
-      deleteSession: (path) => this.storedSessions.delete(path),
+      deleteSession: async (path) => {
+        await this.storedSessions.delete(path);
+        this.plugin.notifySessionDirectoryChanged();
+      },
       runAdvancedAction: (path, action) => this.storedSessionActions.run(path, action),
       onOpened: () => { this.viewMode = "session-picker"; this.renderViewMode(); },
       onClosed: () => {
@@ -349,7 +365,6 @@ export class ChatobbyView extends ItemView {
       cancelInteractions: () => this.extensionUi.cancelAll(),
       getTransport: () => this.getTransport(),
       setStopping: (stopping) => this.composer?.setStopping(stopping),
-      setStreaming: (streaming) => this.composer?.setStreaming(streaming),
       reportError: (error) => { new Notice(`Could not stop the current turn: ${String(error)}`); },
     });
     this.connectionStatus = new ConnectionStatusController(() => this.getFeedStore());
@@ -426,6 +441,8 @@ export class ChatobbyView extends ItemView {
   async onOpen(): Promise<void> {
     this.buildComponents();
     this.componentsReady = true;
+    this.sessionTransition.open();
+    this.unsubscribeFrontendStore = this.frontendStore.subscribe((snapshot) => this.frontendSnapshots.schedule(snapshot));
     await this.plugin.registerChatView(this);
     await this.activateSessionContext();
     await this.viewNavigation.apply(this.pendingNavigation);
@@ -433,7 +450,6 @@ export class ChatobbyView extends ItemView {
     this.contentEl.addEventListener("keydown", this.handleViewKeydown, true);
     this.contentEl.addEventListener("chatobby:open-subagents", this.handleOpenSubagents);
     this.contentEl.addEventListener("chatobby:open-channels", this.handleOpenChannels);
-    this.unsubscribeFrontendStore = this.frontendStore.subscribe((snapshot) => this.scheduleFrontendSnapshot(snapshot));
     this.bindCurrentTransport();
     this.runtimeLifecycle.open();
     this.focusComposerSoon();
@@ -450,10 +466,7 @@ export class ChatobbyView extends ItemView {
     this.unsubscribeConnection = null;
     this.unsubscribeFrontendStore?.();
     this.unsubscribeFrontendStore = null;
-    if (this.frontendApplyTimer) globalThis.clearTimeout(this.frontendApplyTimer);
-    this.frontendApplyTimer = null;
-    this.pendingFrontendSnapshot = null;
-    this.appliedFrontendSnapshot = null;
+	this.frontendSnapshots.destroy();
 	this.pendingFeedCatchup = false;
     this.frontendProtocol.destroy();
     this.boundTransport = null;
@@ -471,6 +484,7 @@ export class ChatobbyView extends ItemView {
     this.runtimeStatus.destroy();
     this.runtimeStatusMenu.destroy();
     this.runtimeUpdate.destroy();
+    this.sessionTransition.destroy();
     this.shell.dispose();
     await this.plugin.unregisterChatView(this);
   }
@@ -532,9 +546,7 @@ export class ChatobbyView extends ItemView {
 
   /** Trigger context compaction (command palette), optionally with a custom focus. */
   async commandCompact(customInstructions?: string): Promise<void> {
-    await this.sessions.runSessionTransition("Compacting context", async () => {
-      await this.getTransport()?.compact(customInstructions);
-    });
+    await this.sessions.compactContext(customInstructions);
   }
 
   /** Rename the active session (set_session_name). */
@@ -562,7 +574,7 @@ export class ChatobbyView extends ItemView {
   /** Run a one-off bash command and feed its result into the agent context (bash). */
   async commandBash(): Promise<void> {
     const transport = this.getTransport();
-    if (!transport?.isConnected) return;
+    if (!transport?.isConnected) return void new Notice("Chatobby is not connected; cannot run a command yet.");
     const command = await promptText(this.app, { title: "Run bash command", placeholder: "command…", submitLabel: "Run", multiline: true });
     if (!command || !command.trim()) return;
     try {
@@ -578,7 +590,7 @@ export class ChatobbyView extends ItemView {
   /** Copy the last assistant response to the clipboard (get_last_assistant_text). */
   async commandCopyLastResponse(): Promise<void> {
     const transport = this.getTransport();
-    if (!transport?.isConnected) return;
+    if (!transport?.isConnected) return void new Notice("Chatobby is not connected; cannot copy the last response yet.");
     try {
       const text = await transport.getLastAssistantText();
       if (text) {
@@ -604,7 +616,7 @@ export class ChatobbyView extends ItemView {
   /** Queue a follow-up message for the next turn (follow_up). */
   async commandQueueFollowUp(): Promise<void> {
     const transport = this.getTransport();
-    if (!transport?.isConnected) return;
+    if (!transport?.isConnected) return void new Notice("Chatobby is not connected; cannot queue a follow-up yet.");
     const message = await promptText(this.app, { title: "Queue follow-up message", placeholder: "message…", submitLabel: "Queue", multiline: true });
     if (!message || !message.trim()) return;
     const trimmed = message.trim();
@@ -649,6 +661,11 @@ export class ChatobbyView extends ItemView {
 
     this.feed = new FeedRenderer(this.createFeedHost(() => this.getFeedStore()));
     this.taskProgress = new TaskProgress(this.shell.taskProgressHostEl);
+    this.sessionTransition = new SessionTransitionCoordinator(
+      this.shell.sessionTransitionHostEl,
+      this.operations,
+      () => this.frontendSnapshots.flush(),
+    );
 
     this.composer = new Composer({
       send: (msg, att, signal, submissionId) => this.sendPrompt(msg, att, signal, submissionId),
@@ -668,10 +685,7 @@ export class ChatobbyView extends ItemView {
       currentSlashCommand: () => this.slashMenu?.current() ?? null,
       currentSlashArgumentOption: () => this.slashMenu?.currentArgumentOption() ?? null,
       closeSlash: () => this.closeSlashMenu(),
-      submitSlashPlan: async (plan) => {
-        this.closeSlashMenu();
-        await this.slashCommands.submit(plan);
-      },
+      submitSlashPlan: async (plan, onAccepted) => { this.closeSlashMenu(); await this.slashCommands.submit(plan, onAccepted); },
       isInteractionActive: () => this.extensionUi.isActive(),
       handleInteractionKey: (e) => this.extensionUi.handleKeydown(e),
       updateInteractionText: (text) => this.extensionUi.updateText(text),
@@ -706,7 +720,6 @@ export class ChatobbyView extends ItemView {
       openInstaller: () => this.plugin.openRuntimeInstaller(),
     });
 
-    // 3. Bind components to shell elements
     this.tabBar.render(this.shell.tabBarHostEl);
     this.sessionAgentRail.render(this.shell.subagentRailHostEl);
     this.runtimeStatus.bind(this.shell.runtimeStatusHostEl);
@@ -719,7 +732,6 @@ export class ChatobbyView extends ItemView {
     this.slashMenu = new SlashMenu();
     this.slashMenu.render(this.shell.slashMenuEl);
 
-    // 4. Initial render
     this.feed.renderEmptyState();
     this.composerControls.refresh();
     this.renderViewMode();
@@ -741,7 +753,6 @@ export class ChatobbyView extends ItemView {
   // ── Transport connection ────────────────────────────────────────
   private bindCurrentTransport(): void {
     const transport = this.getTransport();
-
     if (transport === this.boundTransport) {
       return;
     }
@@ -760,7 +771,8 @@ export class ChatobbyView extends ItemView {
     // Subscribe to connection state changes
     this.unsubscribeConnection = transport.onConnectionChange((state) => {
       this.toolbar.renderStatus();
-		this.turnAbort.setStreaming(this.sessionState.isStreaming);
+		this.composer?.setStreaming(this.sessionState.isStreaming);
+		this.turnAbort.setActivity(this.sessionState.isStreaming || this.sessionState.isCompacting);
       this.composerControls.refresh();
       if (state.status === "connected") {
         this.synchronizeConnectedTransport(transport);
@@ -944,40 +956,16 @@ export class ChatobbyView extends ItemView {
     throw new Error(result.notice?.message ?? "Chatobby rejected the session change");
   }
 
-  private scheduleFrontendSnapshot(snapshot: FrontendBootstrap): void {
-    this.pendingFrontendSnapshot = snapshot;
-    const generationCompleted = this.appliedFrontendSnapshot?.session?.streaming === true
-      && snapshot.session?.streaming === false;
-    if (generationCompleted) {
-      if (this.frontendApplyTimer) globalThis.clearTimeout(this.frontendApplyTimer);
-      this.frontendApplyTimer = null;
-      this.flushFrontendSnapshot();
-      return;
-    }
-    if (this.frontendApplyTimer) return;
-    this.frontendApplyTimer = globalThis.setTimeout(() => {
-      this.frontendApplyTimer = null;
-      this.flushFrontendSnapshot();
-    }, FRONTEND_RENDER_BATCH_MS);
-  }
-
-  private flushFrontendSnapshot(): void {
-    const snapshot = this.pendingFrontendSnapshot;
-    this.pendingFrontendSnapshot = null;
-    if (snapshot) this.applyFrontendSnapshot(snapshot);
-  }
-
-  private applyFrontendSnapshot(snapshot: FrontendBootstrap): void {
-    const applied = this.appliedFrontendSnapshot;
+  private applyFrontendSnapshot(snapshot: FrontendBootstrap, applied: FrontendBootstrap | null): void {
     const session = snapshot.session;
     const previous = this.sessionState;
     const sessionChanged = applied?.session !== session;
+    const sessionDirectoryChanged = sessionChanged && sessionDirectoryProjectionChanged(applied?.session, session);
     const feedChanged = applied?.feed !== snapshot.feed;
     const composerChanged = applied?.composer !== snapshot.composer;
     const agentRailChanged = applied?.agentRail !== snapshot.agentRail;
     const commandsChanged = applied?.localCommands !== snapshot.localCommands;
     const taskPlanChanged = applied?.taskPlan !== snapshot.taskPlan;
-    this.appliedFrontendSnapshot = snapshot;
     if (session && sessionChanged) {
       this.sessions.applyRuntimeSession(session);
     }
@@ -996,7 +984,10 @@ export class ChatobbyView extends ItemView {
     if (commandsChanged) this.slashCommands.setRuntimeCommands(snapshot.localCommands);
     if (taskPlanChanged) this.taskProgress.setModel(snapshot.taskPlan);
     if (composerChanged) this.composerControls?.refresh();
-	if (sessionChanged) this.turnAbort.setStreaming(session?.streaming ?? false);
+	if (sessionChanged) {
+		this.composer?.setStreaming(session?.streaming ?? false);
+		this.turnAbort.setActivity(Boolean(session?.streaming || session?.compacting));
+	}
     if (session && sessionChanged) {
       if (!previous.isStreaming && session.streaming) this.liveStats.start();
       if (previous.isStreaming && !session.streaming) {
@@ -1021,6 +1012,7 @@ export class ChatobbyView extends ItemView {
       this.toolbar?.renderFlags();
       this.liveStats.sync();
     }
+    if (sessionDirectoryChanged) this.plugin.notifySessionDirectoryChanged();
   }
 
   /** Public entry point — refresh models and controls after a provider key change. */
@@ -1306,8 +1298,9 @@ export class ChatobbyView extends ItemView {
   private renderViewMode(): void {
     renderShellViewMode(this.shell, this.viewMode, Boolean(this.activeTab()));
 		const chatVisible = this.viewMode === "chat";
-		if (chatVisible && this.pendingFeedCatchup && this.appliedFrontendSnapshot) {
-			this.synchronizeFrontendFeed(this.appliedFrontendSnapshot);
+		const snapshot = this.frontendSnapshots.current();
+		if (chatVisible && this.pendingFeedCatchup && snapshot) {
+			this.synchronizeFrontendFeed(snapshot);
 		}
 		this.feed?.setActive(chatVisible);
 		this.toolbar?.setActive(chatVisible);
@@ -1345,7 +1338,17 @@ export class ChatobbyView extends ItemView {
   }
 
   private async handleSessionPickerSelect(sessionPath: string): Promise<void> {
+    if (this.hasSessionPath(sessionPath)) {
+      await this.sessionTransition.settle();
+      return;
+    }
     await this.sessions.handleSessionPickerSelect(sessionPath);
+  }
+
+  async resumeStoredSession(sessionPath: string): Promise<void> { await this.handleSessionPickerSelect(sessionPath); }
+
+  refreshSessionDirectoryIfOpen(): void {
+    if (this.componentsReady && this.viewMode === "session-picker") this.sessionPickerMode.refresh();
   }
 
   async switchToSession(sessionId: string): Promise<void> {
@@ -1368,12 +1371,12 @@ export class ChatobbyView extends ItemView {
 
   private renderActiveTab(): void {
     this.refreshTabBar();
-    // Stats are cached per-connection, not per-tab; drop the previous session's
-    // value and fetch the active one so the meter never shows stale numbers.
+    // Drop cached per-connection stats before fetching the active session.
     this.liveStats.reset();
     this.toolbar?.renderStatus();
     this.composerControls?.refresh();
-	this.turnAbort.setStreaming(this.sessionState.isStreaming);
+	this.composer?.setStreaming(this.sessionState.isStreaming);
+	this.turnAbort.setActivity(this.sessionState.isStreaming || this.sessionState.isCompacting);
     this.feed?.switchStore(this.getFeedStore());
     this.sessionAgentRail.scheduleRefresh();
     void this.liveStats.refresh();

@@ -130,6 +130,7 @@ export class FuzzySuggestModal<T> {
   constructor(readonly app: unknown) {}
   open(): void {}
   close(): void {}
+  onClose(): void {}
   getItems(): T[] {
     return [];
   }

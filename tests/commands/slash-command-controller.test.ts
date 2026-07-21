@@ -170,4 +170,20 @@ describe("SlashCommandController runtime catalogue", () => {
     expect(options.compact).toHaveBeenCalledOnce();
     expect(options.renderFeedback).toHaveBeenCalledWith("/compact", "Creating session is already in progress.");
   });
+
+  it("commits the composer only after validation and before a local command begins", async () => {
+    const options = createOptions();
+    const order: string[] = [];
+    options.compact = vi.fn(async () => { order.push("execute"); });
+    const controller = new SlashCommandController(options);
+    controller.setRuntimeCommands([command("compact", "compact")]);
+    const spec = controller.catalog()[0]!;
+
+    await controller.submit(
+      { text: "/compact", commands: [parsed(spec)] },
+      () => { order.push("accepted"); },
+    );
+
+    expect(order).toEqual(["accepted", "execute"]);
+  });
 });

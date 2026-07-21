@@ -59,7 +59,7 @@ export class PromptModal extends Modal {
 
 /** Fuzzy-suggest picker that resolves to the chosen item, or null if cancelled. */
 export class PickModal<T> extends FuzzySuggestModal<T> {
-  private done = false;
+  private settled = false;
 
   constructor(
     app: App,
@@ -81,13 +81,21 @@ export class PickModal<T> extends FuzzySuggestModal<T> {
   }
 
   onChooseItem(item: T): void {
-    this.done = true;
-    this.resolve(item);
+    this.settle(item);
   }
 
   onClose(): void {
     super.onClose();
-    if (!this.done) this.resolve(null);
+    // Obsidian closes a FuzzySuggestModal before invoking onChooseItem in some
+    // interaction paths. Defer cancellation until that synchronous selection
+    // callback has had a chance to commit the chosen value.
+    queueMicrotask(() => this.settle(null));
+  }
+
+  private settle(value: T | null): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.resolve(value);
   }
 }
 

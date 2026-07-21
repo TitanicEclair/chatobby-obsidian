@@ -41,7 +41,7 @@ export class SessionPickerModeController {
     this.picker?.destroy();
     this.picker = new SessionPickerComponent({
       getTransport: this.options.getTransport,
-      directories: listSessionDirectories(this.options.app),
+      getDirectories: () => listSessionDirectories(this.options.app),
       initialDirectoryPath: scope.vaultDirectoryPath,
       onSelect: (path, directory) => this.resume(path, directory),
       onUseDirectory: (directory) => { void this.useDirectory(directory); },

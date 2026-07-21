@@ -18,7 +18,7 @@ function committedBlockSignature(block: FrontendFeedBlock): string | null {
     case "user":
     case "system":
     case "queued":
-    case "compaction":
+    case "divider":
     case "agent-activity":
     case "message":
     case "notice":

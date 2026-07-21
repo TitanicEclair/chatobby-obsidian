@@ -515,21 +515,27 @@ export interface QueuedMessageBlock {
   status: "pending" | "queued" | "applied";
 }
 
-/** A compaction block — inline indicator that the server is compacting context.
- *  Driven by the runtime-projected session compaction state.
- *  Appears inline in the feed between turns, updates to "Session compacted" when done. */
-export interface CompactionBlock {
-  type: "compaction";
+/** A divider block — a centered single-line status rule in the feed. Used for
+ *  the compaction marker ("Compacting context…" → "Context compacted.") and for
+ *  fork/clone receipts ("Session forked from …", "Session cloned"). The rule
+ *  stretches edge-to-edge; the label sits centered on it. */
+export interface DividerBlock {
+  type: "divider";
   /** Stable UI-only block id. */
   id: string;
-  /** Why compaction was triggered (manual, threshold, overflow). */
-  reason?: string;
-  /** When compaction started. */
-  startTime: number;
-  /** Whether the server-side compaction marker is still active. */
-  status: "active" | "done";
-  /** Optional error or abort marker from compaction_end. */
-  errorMessage?: string;
+  /** Centered label shown on the rule. */
+  label: string;
+  /** Visual tone: active (animated), done, info, or error. */
+  tone: "active" | "done" | "info" | "error";
+  /** When true, an animated ellipsis follows the label (live compaction). */
+  animated?: boolean;
+  /** Start/end timestamps for a live operation row shown above the divider. */
+  activityStartedAt?: number;
+  activityEndedAt?: number;
+  /** Present-participle operation label, such as "Compacting". */
+  activityLabel?: string;
+  /** Optional user-supplied focus shown faintly below the operation label. */
+  detail?: string;
 }
 
 export type SubagentEventChannel =
@@ -635,7 +641,7 @@ export type FeedBlock =
   | SystemBlock
   | TurnSummary
   | QueuedMessageBlock
-  | CompactionBlock
+  | DividerBlock
   | SubagentBlock
   | SubagentCommunicationBlock
   | ExtensionPanelBlock;

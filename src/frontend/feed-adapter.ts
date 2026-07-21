@@ -71,13 +71,17 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
       }];
     case "queued":
       return [{ type: "queued", id: block.id, kind: block.queueKind, text: block.text, status: block.phase }];
-    case "compaction":
+    case "divider":
       return [{
-        type: "compaction",
+        type: "divider",
         id: block.id,
-        startTime: block.startedAt,
-        status: block.phase,
-        errorMessage: block.detail,
+        label: block.label,
+        tone: block.tone,
+        animated: block.animated,
+        activityStartedAt: block.activityStartedAt,
+        activityEndedAt: block.activityEndedAt,
+        activityLabel: block.activityLabel,
+        detail: block.detail,
       }];
     case "agent-activity":
       return [{

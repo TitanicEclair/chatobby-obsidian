@@ -5,9 +5,9 @@
 //
 // No side effects. No DOM. Fully unit-testable.
 //
-// Note: CompactionBlock is NOT driven by SessionEvent — it's driven by
-// WsSessionState.isCompacting. The view detects isCompacting changes and
-// renders/removes a CompactionBlock in the feed.
+// Note: the compaction divider block is NOT driven by SessionEvent — the
+// runtime projects it as a `divider` feed block via the patch stream (see
+// feed-adapter), so the feed store renders/updates it like any other block.
 
 import type {
   ConnectionState,

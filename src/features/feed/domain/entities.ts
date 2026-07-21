@@ -1,5 +1,5 @@
 import type {
-  CompactionBlock,
+  DividerBlock,
   ExtensionPanelBlock,
   QueuedMessageBlock,
   SubagentActivity,
@@ -39,7 +39,7 @@ export type SummaryBlockEntity = Readonly<Omit<TurnSummary, "id" | "turnId" | "b
 export type UserBlockEntity = Readonly<Omit<UserBlock, "id"> & { id: BlockId }>;
 export type SystemBlockEntity = Readonly<Omit<SystemBlock, "id"> & { id: BlockId }>;
 export type QueuedBlockEntity = Readonly<Omit<QueuedMessageBlock, "id"> & { id: BlockId }>;
-export type CompactionBlockEntity = Readonly<Omit<CompactionBlock, "id"> & { id: BlockId }>;
+export type DividerBlockEntity = Readonly<Omit<DividerBlock, "id"> & { id: BlockId }>;
 export type SubagentBlockEntity = Readonly<Omit<SubagentBlock, "id"> & { id: BlockId; activity: Readonly<SubagentActivity> }>;
 export type SubagentCommunicationBlockEntity = Readonly<Omit<SubagentCommunicationBlock, "id"> & { id: BlockId }>;
 export type ExtensionPanelBlockEntity = Readonly<Omit<ExtensionPanelBlock, "id"> & { id: BlockId }>;
@@ -53,7 +53,7 @@ export type FeedBlockEntity =
   | UserBlockEntity
   | SystemBlockEntity
   | QueuedBlockEntity
-  | CompactionBlockEntity
+  | DividerBlockEntity
   | SubagentBlockEntity
   | SubagentCommunicationBlockEntity
   | ExtensionPanelBlockEntity;
