@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import type { FrontendProtocolController } from "../../../frontend/frontend-protocol-controller";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import { SessionAgentRailController } from "./session-agent-rail-controller";
@@ -6,6 +7,7 @@ import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
 import { SubagentStore } from "../state/subagent-store";
 
 export interface ChatViewSubagentControllersOptions {
+  app: App;
   getHost: () => HTMLElement;
   getFrontendStore: () => FrontendStore;
   getFrontendProtocol: () => FrontendProtocolController;
@@ -31,6 +33,7 @@ export function createChatViewSubagentControllers(
 ): ChatViewSubagentControllers {
   const store = new SubagentStore(options.getFrontendStore());
   const screen = new SubagentScreenController({
+    app: options.app,
     store,
     getFrontendStore: options.getFrontendStore,
     getFrontendProtocol: options.getFrontendProtocol,

@@ -67,6 +67,13 @@ interface LiveCapabilities {
   smartSources: NonNullable<SmartConnectionsEnvironment["smart_sources"]>;
 }
 
+type SmartEmbedFunction = (this: object, query: string) => unknown;
+type SmartNearestFunction = (
+  this: object,
+  vector: number[],
+  options: { limit: number },
+) => unknown;
+
 export class AjsonSemanticAdapter implements SemanticIndexAdapter {
   private sources: Map<string, AjsonSourceRecord> | null = null;
   private loadPromise: Promise<Map<string, AjsonSourceRecord>> | null = null;
@@ -235,18 +242,20 @@ export class SmartConnectionsLiveAdapter implements SemanticIndexAdapter {
   async searchText(query: string, limit: number): Promise<SemanticHit[]> {
     const live = this.capabilities();
     if (!live) throw new Error("Live Smart Connections query embedding is unavailable");
-    const embed = live.smartSources.embed_model?.embed;
-    const nearest = live.smartSources.entities_vector_adapter?.nearest;
-    if (typeof embed !== "function" || typeof nearest !== "function") {
+    const embedModel = live.smartSources.embed_model;
+    const vectorAdapter = live.smartSources.entities_vector_adapter;
+    const embed = embedModel?.embed;
+    const nearest = vectorAdapter?.nearest;
+    if (!embedModel || !vectorAdapter || !isSmartEmbedFunction(embed) || !isSmartNearestFunction(nearest)) {
       throw new Error("Live Smart Connections embed/nearest functions are unavailable");
     }
 
-    const embedded = await withTimeout(Promise.resolve(embed.call(live.smartSources.embed_model, query)));
+    const embedded: unknown = await withTimeout(Promise.resolve(embed.call(embedModel, query)));
     const vector = embedded && typeof embedded === "object" ? (embedded as { vec?: unknown }).vec : undefined;
     if (!Array.isArray(vector) || !vector.every((value) => typeof value === "number")) {
       throw new Error("Smart Connections embedding did not return a numeric vec");
     }
-    const raw = await withTimeout(Promise.resolve(nearest.call(live.smartSources.entities_vector_adapter, vector, { limit })));
+    const raw: unknown = await withTimeout(Promise.resolve(nearest.call(vectorAdapter, vector, { limit })));
     if (!Array.isArray(raw)) throw new Error("Smart Connections nearest result was not an array");
     return normalizeLiveHits(raw, Math.max(1, Math.min(limit, 100)), live.model);
   }
@@ -266,7 +275,7 @@ export class SmartConnectionsLiveAdapter implements SemanticIndexAdapter {
     const smartSources = plugin.env?.smart_sources;
     const embedModel = smartSources?.embed_model;
     if (plugin.env?.state !== "loaded" || !smartSources || !embedModel) return null;
-    if (typeof embedModel.embed !== "function" || typeof smartSources.entities_vector_adapter?.nearest !== "function") return null;
+    if (!isSmartEmbedFunction(embedModel.embed) || !isSmartNearestFunction(smartSources.entities_vector_adapter?.nearest)) return null;
     return {
       smartSources,
       version: typeof plugin.manifest.version === "string" ? plugin.manifest.version : undefined,
@@ -277,6 +286,14 @@ export class SmartConnectionsLiveAdapter implements SemanticIndexAdapter {
           : undefined,
     };
   }
+}
+
+function isSmartEmbedFunction(value: unknown): value is SmartEmbedFunction {
+  return typeof value === "function";
+}
+
+function isSmartNearestFunction(value: unknown): value is SmartNearestFunction {
+  return typeof value === "function";
 }
 
 export function createSmartConnectionsAdapter(app: App, vaultRoot: string): SemanticIndexAdapter {
@@ -309,7 +326,7 @@ function parseEmbeddings(input: unknown, result: AjsonParseResult): Record<strin
       result.modelKey = model;
       result.dimension = vec.length;
     }
-    embeddings[model] = { vec: vec as number[] };
+    embeddings[model] = { vec: vec };
   }
   return embeddings;
 }
@@ -318,7 +335,7 @@ function normalizeLiveHits(values: unknown[], limit: number, model?: string): Se
   const bestByPath = new Map<string, SemanticHit>();
   for (const value of values) {
     if (!value || typeof value !== "object") continue;
-    const hit = normalizeLiveHit(value as SmartConnectionsResult, model);
+    const hit = normalizeLiveHit(value, model);
     if (!hit) continue;
     const existing = bestByPath.get(hit.path);
     if (!existing || hit.score > existing.score) bestByPath.set(hit.path, hit);
@@ -344,12 +361,12 @@ function stripSmartSourcesPrefix(input: string): string {
 
 function withTimeout<T>(promise: Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Smart Connections query timed out after ${LIVE_QUERY_TIMEOUT_MS}ms`)), LIVE_QUERY_TIMEOUT_MS);
+    const timer = window.setTimeout(() => reject(new Error(`Smart Connections query timed out after ${LIVE_QUERY_TIMEOUT_MS}ms`)), LIVE_QUERY_TIMEOUT_MS);
     promise.then((value) => {
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       resolve(value);
     }, (error: unknown) => {
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       reject(error instanceof Error ? error : new Error(String(error)));
     });
   });

@@ -25,3 +25,4 @@
 @import "../features/queries/ui/queries.css";
 @import "../features/channels/ui/channels.css";
 @import "./shared/page-shell.css";
+@import "./shared/motion.css";

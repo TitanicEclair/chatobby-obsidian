@@ -255,11 +255,4 @@ function isPromiseLike(value: void | Promise<void>): value is Promise<void> {
   return Boolean(value && typeof value.then === "function");
 }
 
-function isDomNodeOfType<T extends Node>(
-  node: Node,
-  constructor: { new (): T; prototype: T },
-): node is T {
-  return typeof node.instanceOf === "function"
-    ? node.instanceOf(constructor)
-    : constructor.prototype.isPrototypeOf(node);
-}
+import { isDomNodeOfType } from "../shared/dom";

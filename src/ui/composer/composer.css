@@ -168,16 +168,16 @@
   position: relative;
 }
 
-.chatobby-input,
-.chatobby-input-highlight {
+textarea.chatobby-input,
+div.chatobby-input-highlight {
   display: block;
   width: 100%;
   min-height: var(--size-4-8);
   max-height: var(--chatobby-composer-max-height, 200px);
   margin: 0;
   padding: var(--size-4-3) var(--size-4-4) var(--size-4-2);
-  border: 0 !important;
-  box-shadow: none !important;
+  border: 0;
+  box-shadow: none;
   font-family: var(--font-interface-theme);
   font-size: var(--chatobby-body-size);
   line-height: var(--line-height-normal);
@@ -202,11 +202,11 @@
   color: var(--chatobby-accent);
 }
 
-.chatobby-input {
+textarea.chatobby-input {
   position: relative;
   resize: none;
   overflow-y: hidden;
-  background: transparent !important;
+  background: transparent;
   color: transparent;
   caret-color: var(--text-normal);
 }
@@ -293,13 +293,13 @@
   overscroll-behavior: contain;
 }
 
-.chatobby-selection-menu__option {
-  display: grid !important;
+button.chatobby-selection-menu__option {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) var(--size-4-5);
   width: 100%;
-  height: auto !important;
+  height: auto;
   min-height: var(--size-4-8);
-  max-height: none !important;
+  max-height: none;
   align-items: center;
   gap: var(--size-2-2);
   padding: var(--size-2-1) var(--size-4-2);
@@ -308,7 +308,7 @@
   color: var(--text-normal);
   background: transparent;
   text-align: left;
-  white-space: normal !important;
+  white-space: normal;
   box-shadow: none;
   cursor: pointer;
 }
@@ -520,7 +520,7 @@ button.chatobby-send-btn:hover {
   font-size: var(--chatobby-meta-size);
 }
 /* ── Composer controls: compact triggers for the shared searchable picker ── */
-.chatobby-control-button {
+button.chatobby-control-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -529,11 +529,11 @@ button.chatobby-send-btn:hover {
   height: var(--size-4-7, 28px);
   max-width: 100%;
   margin: 0;
-  padding: 0 var(--size-4-1) !important;
-  border: 0 !important;
+  padding: 0 var(--size-4-1);
+  border: 0;
   border-radius: var(--radius-s);
-  box-shadow: none !important;
-  background: transparent !important;
+  box-shadow: none;
+  background: transparent;
   color: var(--text-muted);
   font-family: var(--font-interface-theme);
   font-size: var(--chatobby-meta-size);
@@ -543,17 +543,17 @@ button.chatobby-send-btn:hover {
   transition: background-color 120ms ease, color 120ms ease;
 }
 
-.chatobby-control-button:hover,
-.chatobby-control-button[aria-expanded="true"] {
-  background: var(--chatobby-surface-hover) !important;
+button.chatobby-control-button:hover,
+button.chatobby-control-button[aria-expanded="true"] {
+  background: var(--chatobby-surface-hover);
   color: var(--text-normal);
 }
 
-.chatobby-control-button:focus-visible {
+button.chatobby-control-button:focus-visible {
   outline: none;
-  background: var(--chatobby-surface-hover) !important;
+  background: var(--chatobby-surface-hover);
   color: var(--text-normal);
-  box-shadow: 0 0 0 var(--border-width) var(--chatobby-accent) inset !important;
+  box-shadow: 0 0 0 var(--border-width) var(--chatobby-accent) inset;
 }
 
 .chatobby-control-button__label {

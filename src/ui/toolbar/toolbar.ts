@@ -38,12 +38,12 @@ export class Toolbar extends ChatobbyComponent {
   private meterEl: HTMLButtonElement | null = null;
   private contextMenuEl: HTMLElement | null = null;
   private emptyEl: HTMLSpanElement | null = null;
-  private elapsedTimer: ReturnType<typeof setInterval> | null = null;
+  private elapsedTimer: number | null = null;
   /** Last rendered connection status — skip class-list churn when unchanged. */
   private lastConnStatus: string | null = null;
   private wasCompacting = false;
   private compactionCompleted = false;
-  private compactionCompletionTimer: ReturnType<typeof setTimeout> | null = null;
+  private compactionCompletionTimer: number | null = null;
   private documentListenersBound = false;
   private active = true;
   private readonly handleDocumentPointerDown = (event: PointerEvent): void => {
@@ -183,8 +183,8 @@ export class Toolbar extends ChatobbyComponent {
   }
 
   destroy(): void {
-    if (this.elapsedTimer) clearInterval(this.elapsedTimer);
-    if (this.compactionCompletionTimer) clearTimeout(this.compactionCompletionTimer);
+    if (this.elapsedTimer) window.clearInterval(this.elapsedTimer);
+    if (this.compactionCompletionTimer) window.clearTimeout(this.compactionCompletionTimer);
     this.elapsedTimer = null;
     this.compactionCompletionTimer = null;
     this.elapsedEl = null;
@@ -204,7 +204,7 @@ export class Toolbar extends ChatobbyComponent {
     if (this.active === active) return;
     this.active = active;
     if (!active) {
-      if (this.elapsedTimer) clearInterval(this.elapsedTimer);
+      if (this.elapsedTimer) window.clearInterval(this.elapsedTimer);
       this.elapsedTimer = null;
       this.closeContextMenu();
       return;
@@ -286,8 +286,8 @@ export class Toolbar extends ChatobbyComponent {
   private syncCompactionStatus(running: boolean): void {
     if (this.wasCompacting && !running) {
       this.compactionCompleted = true;
-      if (this.compactionCompletionTimer) clearTimeout(this.compactionCompletionTimer);
-      this.compactionCompletionTimer = setTimeout(() => {
+      if (this.compactionCompletionTimer) window.clearTimeout(this.compactionCompletionTimer);
+      this.compactionCompletionTimer = window.setTimeout(() => {
         this.compactionCompletionTimer = null;
         this.compactionCompleted = false;
         this.renderStats();
@@ -309,9 +309,9 @@ export class Toolbar extends ChatobbyComponent {
     if (active && !this.elapsedTimer) {
       // Render once so the elapsed element exists immediately when a run starts.
       this.renderStats();
-      this.elapsedTimer = setInterval(() => this.renderStats(), ELAPSED_UPDATE_MS);
+      this.elapsedTimer = window.setInterval(() => this.renderStats(), ELAPSED_UPDATE_MS);
     } else if (!active && this.elapsedTimer) {
-      clearInterval(this.elapsedTimer);
+      window.clearInterval(this.elapsedTimer);
       this.elapsedTimer = null;
     }
   }

@@ -3,10 +3,11 @@
 // in a headless test, so each handler degrades gracefully (returns an "unavailable"
 // result) when the surface is absent, and is otherwise correct in production.
 
-import type { App, TFile } from "obsidian";
+import type { TFile, App } from "obsidian";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 import { editNote } from "./helpers/note-io";
+import { isTFile } from "./helpers/file-types";
 
 // ── Command execution allowlist (defense-in-depth; mirrors the MCP server's
 // command-allowlist.ts so a stale/modified MCP server cannot bypass the gate).
@@ -62,7 +63,7 @@ interface WorkspaceLike {
 }
 
 function getWorkspace(app: App): WorkspaceLike {
-  return app.workspace as unknown as WorkspaceLike;
+  return app.workspace;
 }
 
 function isMarkdownView(view: unknown): view is MarkdownViewLike {
@@ -241,13 +242,12 @@ export const handleEditorFocus: OperationHandler = async (args, _signal, app) =>
   const path = typeof args.path === "string" ? args.path : undefined;
   if (!path) throw new BridgeError("INVALID_INPUT", "editor.focus requires 'path'");
   const file = app.vault.getAbstractFileByPath(path);
-  if (!file || !("stat" in file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
-  const tfile = file as TFile;
+  if (!isTFile(file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
 
   const ws = getWorkspace(app);
   const leaf = ws.getLeaf ? ws.getLeaf(false) : ws.getLeavesOfType("markdown")[0];
   if (!leaf) throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "No workspace leaf available");
-  if (leaf.openFile) await leaf.openFile(tfile);
+  if (leaf.openFile) await leaf.openFile(file);
   if (ws.setActiveLeaf) ws.setActiveLeaf(leaf, { focus: true });
 
   const line = typeof args.line === "number" ? args.line : undefined;
@@ -354,16 +354,16 @@ export const handleWorkspaceManage: OperationHandler = async (args, _signal, app
     case "open": {
       if (!path) throw new BridgeError("INVALID_INPUT", "workspace.manage 'open' requires 'path'");
       const file = app.vault.getAbstractFileByPath(path);
-      if (!file || !("stat" in file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
+      if (!isTFile(file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
       const leaf = ws.getLeaf ? ws.getLeaf("tab") : ws.getLeavesOfType("markdown")[0];
       if (!leaf?.openFile) return { action, path, applied: false, reason: "No available leaf" };
-      await leaf.openFile(file as TFile);
+      await leaf.openFile(file);
       return { action, path, applied: true };
     }
     case "close":
     case "close-others": {
       const target = exactLeaf ?? (path
-        ? ws.getLeavesOfType("markdown").find((l) => isMarkdownView(l.view) && (l.view as MarkdownViewLike).file.path === path)
+        ? ws.getLeavesOfType("markdown").find((l) => isMarkdownView(l.view) && (l.view).file.path === path)
         : ws.activeLeaf ?? undefined);
       if (!target) return { action, path, applied: false, reason: "No matching leaf" };
       if (action === "close-others") {
@@ -378,7 +378,7 @@ export const handleWorkspaceManage: OperationHandler = async (args, _signal, app
     case "pin":
     case "unpin": {
       const target = path
-        ? ws.getLeavesOfType("markdown").find((l) => isMarkdownView(l.view) && (l.view as MarkdownViewLike).file.path === path)
+        ? ws.getLeavesOfType("markdown").find((l) => isMarkdownView(l.view) && (l.view).file.path === path)
         : ws.activeLeaf ?? undefined;
       if (!target?.setPinned) return { action, path, applied: false, reason: "Pinning unavailable" };
       target.setPinned(action === "pin");

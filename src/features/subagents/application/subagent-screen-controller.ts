@@ -1,4 +1,6 @@
+import type { App } from "obsidian";
 import type { FrontendProtocolController } from "../../../frontend/frontend-protocol-controller";
+import { confirmAction } from "../../../ui/modals/modals";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type {
   FrontendIntent,
@@ -22,6 +24,7 @@ import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
 import { SubagentsView } from "../ui/subagents-view";
 
 export interface SubagentScreenControllerOptions {
+  app: App;
   store: SubagentStore;
   getFrontendStore: () => FrontendStore;
   getFrontendProtocol: () => FrontendProtocolController;
@@ -71,7 +74,7 @@ export class SubagentScreenController {
     });
     this.options.onOpened();
     this.view.render(this.options.getHost());
-    requestAnimationFrame(() => this.view?.focusContainer());
+    window.requestAnimationFrame(() => this.view?.focusContainer());
     void this.refresh();
   }
 
@@ -185,7 +188,12 @@ export class SubagentScreenController {
   }
 
   private async deleteSession(): Promise<void> {
-    if (!window.confirm("Delete all subagent runs, messages, transcripts, and artifacts for this Chatobby session?")) return;
+    if (!await confirmAction(this.options.app, {
+      title: "Delete all subagent data?",
+      message: "Delete all subagent runs, messages, transcripts, and artifacts for this Chatobby session?",
+      confirmLabel: "Delete",
+      destructive: true,
+    })) return;
     await this.dispatch({ type: "subagents.delete-session", payload: {} });
   }
 
@@ -207,7 +215,12 @@ export class SubagentScreenController {
   }
 
   private async deleteDefinition(definition: AgentDefinition): Promise<void> {
-    if (!window.confirm(`Delete agent role “${definition.name}”?`)) return;
+    if (!await confirmAction(this.options.app, {
+      title: "Delete agent role?",
+      message: `Delete agent role “${definition.name}”?`,
+      confirmLabel: "Delete",
+      destructive: true,
+    })) return;
     await this.dispatch({
       type: "subagents.delete-definition",
       payload: {
@@ -220,7 +233,12 @@ export class SubagentScreenController {
   }
 
   private async deleteWorkflow(workflow: WorkflowDefinition): Promise<void> {
-    if (!window.confirm(`Delete workflow “${workflow.name}”?`)) return;
+    if (!await confirmAction(this.options.app, {
+      title: "Delete workflow?",
+      message: `Delete workflow “${workflow.name}”?`,
+      confirmLabel: "Delete",
+      destructive: true,
+    })) return;
     await this.dispatch({
       type: "subagents.delete-workflow",
       payload: { workflowId: workflow.id, expectedWorkflowRevision: workflow.revision },

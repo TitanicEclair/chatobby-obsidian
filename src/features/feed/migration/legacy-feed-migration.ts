@@ -83,7 +83,7 @@ export function migrateLegacyFeedState(state: LegacyFeedState): FeedSnapshotV2 {
         return id;
       }
       default:
-        blocks.set(id, { ...block, id } as FeedBlockEntity);
+        blocks.set(id, { ...block, id });
         return id;
     }
   };

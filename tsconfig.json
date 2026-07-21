@@ -5,7 +5,8 @@
     "inlineSources": true,
     "module": "ESNext",
     "target": "ES2022",
-    "allowJs": false,
+    "allowJs": true,
+    "checkJs": false,
     "noImplicitAny": true,
     "strictNullChecks": true,
     "noUncheckedIndexedAccess": true,
@@ -17,9 +18,10 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "lib": ["DOM", "ES2022"],
+    "types": ["node"],
     "paths": {
       "@chatobby/obsidian-protocol": ["src/vendor/@chatobby/obsidian-protocol/index.ts"]
     }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*"]
 }

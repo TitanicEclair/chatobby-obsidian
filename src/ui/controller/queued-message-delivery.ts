@@ -1,7 +1,7 @@
 import type { FeedStore } from "../../features/feed/public";
 
 type QueueKind = "steer" | "followUp";
-type DeliveryStatus = "queued" | "promoted-to-prompt";
+type DeliveryStatus = "accepted" | "queued" | "started" | "promoted-to-prompt";
 
 /** Keeps optimistic queue rows consistent when an idle runtime promotes input to a normal prompt. */
 export async function deliverQueuedMessage(

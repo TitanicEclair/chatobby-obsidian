@@ -165,10 +165,10 @@ export class ContextQueriesView extends ChatobbyComponent {
 
   private renderEditor(parent: HTMLElement, item: FrontendContextQueryViewModel | null): void {
     const form = parent.createDiv({ cls: `chatobby-queries__editor${item ? "" : " is-new"}` });
-    const name = field(form, "Name", "input") as HTMLInputElement;
+    const name = field(form, "Name", "input");
     name.value = item?.name ?? "";
     name.placeholder = "Current project status";
-    const description = field(form, "Description", "input") as HTMLInputElement;
+    const description = field(form, "Description", "input");
     description.value = item?.description ?? "";
     description.placeholder = "What this adds to Chatobby's context";
     const timingLabel = form.createEl("label", { cls: "chatobby-queries__field" });

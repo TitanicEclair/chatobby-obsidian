@@ -18,7 +18,7 @@ export interface ViewRuntimeControllerHost {
 /** Own one view's demand and runtime subscription without owning the runtime lifetime. */
 export class ViewRuntimeController {
   private readonly host: ViewRuntimeControllerHost;
-  private readonly ownerId = globalThis.crypto.randomUUID();
+  private readonly ownerId = window.crypto.randomUUID();
   private visibleDemand: RuntimeDemandHandle | null = null;
   private unsubscribe: (() => void) | null = null;
   private actionSequence = 0;

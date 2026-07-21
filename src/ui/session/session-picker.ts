@@ -1,12 +1,14 @@
-import { Menu, Notice, setIcon } from "obsidian";
+import { type App, Menu, Notice, setIcon } from "obsidian";
 import type { SessionListItem } from "../../types";
 import type { ChatobbyTransport } from "../../transport/ws-client";
 import { errorMessage } from "../../utils";
 import { ChatobbyComponent } from "../shared/component";
+import { confirmAction } from "../modals/modals";
 import type { SessionDirectoryOption } from "./session-directory";
 import type { SessionAdvancedAction } from "./session-maintenance";
 
 export interface SessionPickerProps {
+  app: App;
   getTransport: () => Promise<Pick<ChatobbyTransport, "listSessions"> | null>;
   directories?: readonly SessionDirectoryOption[];
   getDirectories?: () => readonly SessionDirectoryOption[];
@@ -179,7 +181,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
     this.renderDirectoryTree(directories);
     workspace.createDiv({ cls: "chatobby-session-picker__body" });
     container.createDiv({ cls: "chatobby-session-picker__hint", text: "Select a folder to browse its sessions · ↑↓ navigate · ↵ resume · use Obsidian Back to return" });
-    requestAnimationFrame(() => this.searchInput?.focus());
+    window.requestAnimationFrame(() => this.searchInput?.focus());
     this.renderSessions();
   }
 
@@ -426,7 +428,12 @@ export class SessionPickerComponent extends ChatobbyComponent {
   }
 
   private async deleteSession(session: SessionListItem): Promise<void> {
-    if (!window.confirm(`Delete “${sessionTitle(session)}”? This removes its stored conversation and subagent run data.`)) return;
+    if (!await confirmAction(this.props.app, {
+      title: "Delete session?",
+      message: `Delete “${sessionTitle(session)}”? This removes its stored conversation and subagent run data.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    })) return;
     try {
       await this.props.onDelete(session);
       if (this.state.status !== "loading") {
@@ -510,5 +517,5 @@ function normalizeSystemPath(path: string): string {
 }
 
 function scrollActiveItemIntoView(item: HTMLElement): void {
-  requestAnimationFrame(() => item.scrollIntoView({ block: "nearest" }));
+  window.requestAnimationFrame(() => item.scrollIntoView({ block: "nearest" }));
 }

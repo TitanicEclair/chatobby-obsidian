@@ -7,7 +7,10 @@ interface EnvironmentOptions {
 }
 
 type RuntimeApp = App & { version?: unknown };
-type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: unknown };
+type NavigatorWithDeviceInfo = Navigator & {
+  deviceMemory?: unknown;
+  userAgentData?: { platform?: unknown };
+};
 
 export function gatherEnvironmentContext(app: App, options: EnvironmentOptions = {}): VaultEnvironment {
   const now = options.now ?? new Date();
@@ -28,9 +31,12 @@ export function gatherEnvironmentContext(app: App, options: EnvironmentOptions =
       languages: nav.languages?.length ? Array.from(nav.languages) : undefined,
     });
 
-    const deviceMemory = (nav as NavigatorWithDeviceMemory).deviceMemory;
+    const deviceInfo = nav as NavigatorWithDeviceInfo;
+    const deviceMemory = deviceInfo.deviceMemory;
     environment.device = compactObject({
-      platform: nav.platform,
+      platform: typeof deviceInfo.userAgentData?.platform === "string"
+        ? deviceInfo.userAgentData.platform
+        : undefined,
       userAgent: nav.userAgent,
       hardwareConcurrency: nav.hardwareConcurrency,
       deviceMemoryGb: typeof deviceMemory === "number" ? deviceMemory : undefined,

@@ -3,11 +3,12 @@
 //
 // See docs/tooling/bridge-executor.md §8 for the Obsidian API mapping.
 
-import type { App, TFile, TFolder } from "obsidian";
+import type { App, TAbstractFile, TFile, TFolder } from "obsidian";
 import { normalizeVaultFolderPath } from "../../../vendor/@chatobby/obsidian-protocol/vault-paths";
 import { BridgeError } from "../../types";
 import { pageTextLines } from "./paging";
 import { computeDiff, type DiffHunk } from "../../../utils/diff";
+import { isTFile, isTFolder } from "./file-types";
 
 /** ObsidianNoteRef — JSON-serializable note reference (no TFile crosses the wire). */
 export interface ObsidianNoteRef {
@@ -49,18 +50,17 @@ export async function readNote(
   opts: { startLine: number; lineLimit: number; maxChars: number },
 ): Promise<NoteReadResult | null> {
   const file = app.vault.getAbstractFileByPath(path);
-  if (!file || !("stat" in file)) return null;
+  if (!isTFile(file)) return null;
 
-  const tfile = file as TFile;
-  const content = await app.vault.cachedRead(tfile);
+  const content = await app.vault.cachedRead(file);
   const page = pageTextLines(content, opts.startLine, opts.lineLimit, opts.maxChars);
 
   // Get frontmatter from metadata cache
-  const cached = app.metadataCache.getFileCache(tfile);
-  const frontmatter = cached?.frontmatter as Record<string, unknown> | undefined;
+  const cached = app.metadataCache.getFileCache(file);
+  const frontmatter = cached?.frontmatter;
 
   return {
-    note: toNoteRef(tfile),
+    note: toNoteRef(file),
     content: page.content,
     ...(frontmatter ? { frontmatter } : {}),
     startLine: page.startLine + 1,
@@ -111,28 +111,26 @@ export async function editNote(
   expectedMtime?: number,
 ): Promise<{ note: ObsidianNoteRef; changed: boolean; mtime: number; diff?: DiffHunk[] }> {
   const file = app.vault.getAbstractFileByPath(path);
-  if (!file || !("stat" in file)) {
+  if (!isTFile(file)) {
     throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
   }
 
-  const tfile = file as TFile;
-
   // Revision conflict check
-  if (expectedMtime !== undefined && tfile.stat.mtime !== expectedMtime) {
+  if (expectedMtime !== undefined && file.stat.mtime !== expectedMtime) {
     throw new BridgeError(
       "REVISION_CONFLICT",
-      `File was modified since last read (expected mtime ${expectedMtime}, got ${tfile.stat.mtime})`,
+      `File was modified since last read (expected mtime ${expectedMtime}, got ${file.stat.mtime})`,
     );
   }
 
   const mode = edit.mode as string;
   const editContent = edit.content as string | undefined;
   let diff: DiffHunk[] = [];
-  await app.vault.process(tfile, (currentContent) => {
-    if (expectedMtime !== undefined && tfile.stat.mtime !== expectedMtime) {
+  await app.vault.process(file, (currentContent) => {
+    if (expectedMtime !== undefined && file.stat.mtime !== expectedMtime) {
       throw new BridgeError(
         "REVISION_CONFLICT",
-        `File was modified since last read (expected mtime ${expectedMtime}, got ${tfile.stat.mtime})`,
+        `File was modified since last read (expected mtime ${expectedMtime}, got ${file.stat.mtime})`,
       );
     }
 
@@ -170,9 +168,9 @@ export async function editNote(
   });
 
   return {
-    note: toNoteRef(tfile),
+    note: toNoteRef(file),
     changed: true,
-    mtime: tfile.stat.mtime,
+    mtime: file.stat.mtime,
     ...(diff.length > 0 ? { diff } : {}),
   };
 }
@@ -205,7 +203,7 @@ export function resolveNote(
 ): NoteResolveResult {
   const tryPath = (): ObsidianNoteRef | null => {
     const file = app.vault.getAbstractFileByPath(ref);
-    if (file && "stat" in file) return toNoteRef(file as TFile);
+    if (isTFile(file)) return toNoteRef(file);
     return null;
   };
 
@@ -275,13 +273,11 @@ export function listEntries(
     const message = error instanceof Error ? error.message : "Invalid vault folder path.";
     throw new BridgeError("INVALID_INPUT", message);
   }
-  const vaultWithRoot = app.vault as unknown as { getRoot?: () => TFolder };
   const folder = normalizedFolder === ""
-    ? vaultWithRoot.getRoot?.()
+    ? app.vault.getRoot()
     : app.vault.getAbstractFileByPath(normalizedFolder);
-  if (!folder || !("children" in folder)) return null;
+  if (!isTFolder(folder)) return null;
 
-  const tFolder = folder as TFolder;
   const allowedTypes = opts.entryTypes ? new Set(opts.entryTypes) : null;
   const entries: ObsidianEntryRef[] = [];
 
@@ -291,13 +287,13 @@ export function listEntries(
       if (!allowedTypes || allowedTypes.has(entry.type) || (entry.type === "note" && allowedTypes.has("file"))) {
         entries.push(entry);
       }
-      if (opts.recursive && "children" in child) {
-        visit(child as TFolder);
+      if (opts.recursive && isTFolder(child)) {
+        visit(child);
       }
     }
   };
 
-  visit(tFolder);
+  visit(folder);
 
   return { entries };
 }
@@ -332,8 +328,8 @@ function toNoteRef(file: TFile): ObsidianNoteRef {
   };
 }
 
-function toEntryRef(entry: import("obsidian").TAbstractFile): ObsidianEntryRef {
-  if ("children" in entry) {
+function toEntryRef(entry: TAbstractFile): ObsidianEntryRef {
+  if (isTFolder(entry)) {
     return {
       path: entry.path,
       name: entry.name,
@@ -342,15 +338,15 @@ function toEntryRef(entry: import("obsidian").TAbstractFile): ObsidianEntryRef {
     };
   }
 
-  const file = entry as TFile;
-  const extension = file.extension || file.name.split(".").pop() || "";
+  if (!isTFile(entry)) throw new Error(`Unsupported vault entry: ${entry.path}`);
+  const extension = entry.extension || entry.name.split(".").pop() || "";
   return {
-    path: file.path,
-    name: file.name,
-    basename: file.basename,
+    path: entry.path,
+    name: entry.name,
+    basename: entry.basename,
     type: extension === "md" ? "note" : "attachment",
     ...(extension ? { extension } : {}),
-    mtime: file.stat.mtime,
-    ctime: file.stat.ctime,
+    mtime: entry.stat.mtime,
+    ctime: entry.stat.ctime,
   };
 }

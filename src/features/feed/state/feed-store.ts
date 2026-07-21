@@ -180,7 +180,7 @@ class FeedStoreImplementation implements FeedStore {
         } satisfies TurnSummary);
       }
       default:
-        return this.cacheBlock(id, { ...entity, id } as FeedBlock);
+        return this.cacheBlock(id, { ...entity, id });
     }
   }
 

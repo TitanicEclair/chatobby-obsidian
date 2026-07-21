@@ -40,6 +40,7 @@ export class SessionPickerModeController {
     this.options.prepareOpen();
     this.picker?.destroy();
     this.picker = new SessionPickerComponent({
+      app: this.options.app,
       getTransport: this.options.getTransport,
       getDirectories: () => listSessionDirectories(this.options.app),
       initialDirectoryPath: scope.vaultDirectoryPath,

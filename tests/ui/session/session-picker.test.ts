@@ -229,41 +229,36 @@ describe("SessionPickerComponent", () => {
   });
 
   it("deletes a stored session and refreshes directory session indicators", async () => {
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirm);
     const deleteSession = vi.fn(async () => {});
-    try {
-      const picker = new SessionPickerComponent({
-        getTransport: async () => ({
-          listSessions: async () => [session({ path: "C:/sessions/one.jsonl", id: "one" })],
-          deleteSession,
-        }),
-        directories,
-        initialDirectoryPath: "",
-        onSelect: vi.fn(async () => {}),
-        onUseDirectory: vi.fn(),
-        onCreateSession: vi.fn(async () => {}),
-        onDelete: deleteSession,
-        onAdvancedAction: vi.fn(async () => {}),
-      });
-      const root = mount(picker);
-      await settle();
+    const picker = new SessionPickerComponent({
+      getTransport: async () => ({
+        listSessions: async () => [session({ path: "C:/sessions/one.jsonl", id: "one" })],
+        deleteSession,
+      }),
+      directories,
+      initialDirectoryPath: "",
+      onSelect: vi.fn(async () => {}),
+      onUseDirectory: vi.fn(),
+      onCreateSession: vi.fn(async () => {}),
+      onDelete: deleteSession,
+      onAdvancedAction: vi.fn(async () => {}),
+    });
+    const root = mount(picker);
+    await settle();
 
-      root.querySelector<HTMLElement>(".chatobby-session-picker__item")?.dispatchEvent(
-        new MouseEvent("contextmenu", { bubbles: true }),
-      );
-      const testMenu = Menu as unknown as {
-        lastShown: { items: Array<{ title: string; callback: (() => void) | null }> } | null;
-      };
-      testMenu.lastShown?.items.find((item) => item.title === "Delete")?.callback?.();
-      await settle();
+    root.querySelector<HTMLElement>(".chatobby-session-picker__item")?.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true }),
+    );
+    const testMenu = Menu as unknown as {
+      lastShown: { items: Array<{ title: string; callback: (() => void) | null }> } | null;
+    };
+    testMenu.lastShown?.items.find((item) => item.title === "Delete")?.callback?.();
+    document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();
+    await settle();
 
-      expect(deleteSession).toHaveBeenCalledWith(expect.objectContaining({ path: "C:/sessions/one.jsonl" }));
-      expect(root.querySelectorAll(".chatobby-session-picker__item")).toHaveLength(0);
-      expect(root.querySelector(".chatobby-session-picker__directory.has-sessions")).toBeNull();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    expect(deleteSession).toHaveBeenCalledWith(expect.objectContaining({ path: "C:/sessions/one.jsonl" }));
+    expect(root.querySelectorAll(".chatobby-session-picker__item")).toHaveLength(0);
+    expect(root.querySelector(".chatobby-session-picker__directory.has-sessions")).toBeNull();
   });
 
   it("routes advanced operations through the session-row menu", async () => {

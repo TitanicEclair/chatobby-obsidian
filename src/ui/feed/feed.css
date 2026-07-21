@@ -363,9 +363,9 @@
   position: relative;
 }
 
-.chatobby-code-block > .copy-code-button,
-.chatobby-code-block .code-block-flair {
-  display: none !important;
+pre.chatobby-code-block > button.copy-code-button,
+pre.chatobby-code-block .code-block-flair {
+  display: none;
 }
 
 /* Minimal copy button — no border, transparent bg, bottom-right corner. */
@@ -540,10 +540,10 @@
   cursor: pointer;
 }
 
-.chatobby-jump-pill.is-hidden,
-.chatobby-feed__jump-pill.is-hidden,
-.is-hidden {
-  display: none !important;
+.workspace-leaf-content[data-type="chatobby-view"] .chatobby-jump-pill.is-hidden,
+.workspace-leaf-content[data-type="chatobby-view"] .chatobby-feed__jump-pill.is-hidden,
+.workspace-leaf-content[data-type="chatobby-view"] .is-hidden {
+  display: none;
 }
 .chatobby-feed__interactions {
   width: min(100%, 820px);

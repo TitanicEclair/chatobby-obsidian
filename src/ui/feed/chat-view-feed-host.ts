@@ -40,8 +40,8 @@ export function createChatViewFeedHost(
     onCompactionRequest: () => owner.onCompactionRequest(),
     onEmptyPrompt: (prompt) => {
       owner.setComposerText(prompt);
-      requestAnimationFrame(() => owner.focusComposer());
+      window.requestAnimationFrame(() => owner.focusComposer());
     },
-    onFeedEscape: () => requestAnimationFrame(() => owner.focusComposer()),
+    onFeedEscape: () => window.requestAnimationFrame(() => owner.focusComposer()),
   });
 }

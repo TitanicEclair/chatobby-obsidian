@@ -4,7 +4,7 @@ import type { FrontendBootstrap } from "../vendor/chatobby-client/frontend-contr
 export class FrontendSnapshotBatcher {
   private pending: FrontendBootstrap | null = null;
   private applied: FrontendBootstrap | null = null;
-  private timer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private timer: number | null = null;
 
   constructor(
     private readonly delayMs: number,
@@ -24,7 +24,7 @@ export class FrontendSnapshotBatcher {
       return;
     }
     if (this.timer) return;
-    this.timer = globalThis.setTimeout(() => {
+    this.timer = window.setTimeout(() => {
       this.timer = null;
       this.flush();
     }, this.delayMs);
@@ -46,7 +46,7 @@ export class FrontendSnapshotBatcher {
   }
 
   private clearTimer(): void {
-    if (this.timer) globalThis.clearTimeout(this.timer);
+    if (this.timer) window.clearTimeout(this.timer);
     this.timer = null;
   }
 }

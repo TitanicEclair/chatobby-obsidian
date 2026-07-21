@@ -142,12 +142,12 @@ export type FrontendFeedBlock = {
     readonly type: "divider";
     readonly id: string;
     readonly label: string;
-        readonly tone: "active" | "done" | "info" | "error";
-        readonly animated?: boolean;
-        readonly activityStartedAt?: number;
-        readonly activityEndedAt?: number;
-        readonly activityLabel?: string;
-        readonly detail?: string;
+    readonly tone: "active" | "done" | "info" | "error";
+    readonly animated?: boolean;
+    readonly activityStartedAt?: number;
+    readonly activityEndedAt?: number;
+    readonly activityLabel?: string;
+    readonly detail?: string;
 } | {
     readonly type: "agent-activity";
     readonly id: string;
@@ -1328,7 +1328,7 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly type: "subagents.save-definition";
     readonly payload: {
         readonly definition: FrontendSubagentAgentDefinition;
-        readonly permissionProfileId: string | "inherit";
+        readonly permissionProfileId: string;
     };
 }) | (FrontendIntentBase & {
     readonly type: "subagents.delete-definition";

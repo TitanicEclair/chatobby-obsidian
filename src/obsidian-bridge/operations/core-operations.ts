@@ -3,7 +3,7 @@
 //
 // See docs/tooling/bridge-executor.md §8 for the Obsidian API mapping.
 
-import type { TFile, WorkspaceLeaf } from "obsidian";
+import { MarkdownView, type WorkspaceLeaf } from "obsidian";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 import { findLiteralMatches, getFilteredMarkdownFiles, fileToNoteRef } from "./helpers/search";
@@ -15,25 +15,27 @@ import { readNote, writeNote, editNote, resolveNote, listEntries, buildNoteConte
 import { arrayBufferToBase64 } from "./helpers/binary";
 import { CONTEXT_EXCERPT_BEFORE, CONTEXT_EXCERPT_AFTER } from "../../prompt/constants";
 import { gatherEnvironmentContext } from "../../prompt/environment";
+import { isTFile } from "./helpers/file-types";
+
+function isMarkdownView(view: unknown): view is MarkdownView {
+  if (typeof MarkdownView === "function" && view instanceof MarkdownView) return true;
+  if (!isRecord(view) || !isRecord(view.editor)) return false;
+  return "file" in view
+    && typeof view.editor.getCursor === "function"
+    && typeof view.editor.getSelection === "function";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 
 // ── context.get ────────────────────────────────────────────────────────
 
 export const handleContextGet: OperationHandler = async (_args, _signal, app) => {
-  // Prefer the workspace's active leaf (correct when multiple notes are open);
-  // fall back to the first markdown leaf.
-  type LeafLike = { view: unknown };
-  const ws = app.workspace as unknown as {
-    activeLeaf?: LeafLike | null;
-    getLeavesOfType(type: string): LeafLike[];
-  };
-  const activeLeaf = ws.activeLeaf;
-  const activeIsMarkdown =
-    !!activeLeaf?.view && (activeLeaf.view as { getViewType?: () => string }).getViewType?.() === "markdown";
-  const markdownLeaf: LeafLike | undefined = activeIsMarkdown
-    ? activeLeaf!
-    : ws.getLeavesOfType("markdown").find(
-        (leaf) => (leaf.view as { getViewType?: () => string }).getViewType?.() === "markdown",
-      );
+  // Prefer the active markdown view; fall back to the first open markdown leaf.
+  const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+  const markdownLeaf = activeView?.leaf
+    ?? app.workspace.getLeavesOfType("markdown").find((leaf) => isMarkdownView(leaf.view));
 
   if (!markdownLeaf) {
     return {
@@ -43,7 +45,14 @@ export const handleContextGet: OperationHandler = async (_args, _signal, app) =>
     };
   }
 
-  const view = markdownLeaf.view as import("obsidian").MarkdownView;
+  if (!isMarkdownView(markdownLeaf.view)) {
+    return {
+      vault: getVaultIdentity(app),
+      capabilities: [] as string[],
+      warnings: ["NO_ACTIVE_NOTE: No active markdown note"],
+    };
+  }
+  const view = markdownLeaf.view;
   const editor = view.editor;
   const file = view.file;
 
@@ -82,7 +91,8 @@ export const handleContextGet: OperationHandler = async (_args, _signal, app) =>
   // Get open notes
   const openNotes = app.workspace.getLeavesOfType("markdown")
     .map((leaf) => {
-      const v = leaf.view as import("obsidian").MarkdownView;
+      if (!isMarkdownView(leaf.view)) return null;
+      const v = leaf.view;
       const f = v.file;
       if (!f) return null;
       return {
@@ -235,9 +245,7 @@ export const handleAttachmentRead: OperationHandler = async (args, _signal, app)
   const maxBytes = typeof args.maxBytes === "number" ? args.maxBytes : undefined;
 
   const file = app.vault.getAbstractFileByPath(path);
-  if (!file || !("stat" in file)) throw new BridgeError("NOTE_NOT_FOUND", `Attachment not found: ${path}`);
-
-  const tfile = file as TFile;
+  if (!isTFile(file)) throw new BridgeError("NOTE_NOT_FOUND", `Attachment not found: ${path}`);
 
   // Check if it's a supported image type
   const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp|svg)$/i;
@@ -246,16 +254,16 @@ export const handleAttachmentRead: OperationHandler = async (args, _signal, app)
   }
 
   // Enforce maxBytes before reading the file
-  if (maxBytes !== undefined && tfile.stat.size > maxBytes) {
+  if (maxBytes !== undefined && file.stat.size > maxBytes) {
     throw new BridgeError(
       "INVALID_INPUT",
-      `Attachment size (${tfile.stat.size} bytes) exceeds maxBytes limit (${maxBytes})`,
+      `Attachment size (${file.stat.size} bytes) exceeds maxBytes limit (${maxBytes})`,
       false,
-      { sizeBytes: tfile.stat.size, maxBytes },
+      { sizeBytes: file.stat.size, maxBytes },
     );
   }
 
-  const data = await app.vault.readBinary(tfile);
+  const data = await app.vault.readBinary(file);
   const mimeType = getMimeType(path);
 
   // SVG is text-based; for binary images, encode to base64
@@ -326,8 +334,7 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
   const requestedLeafId = typeof args.leafId === "string" ? args.leafId : undefined;
 
   const file = app.vault.getAbstractFileByPath(path);
-  if (!file || !("stat" in file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
-  const tfile = file as TFile;
+  if (!isTFile(file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
 
   // Resolve target to a leaf
   type LeafTarget = "current" | "new-tab" | "split-left" | "split-right" | "split-up" | "split-down" | "new-window";
@@ -351,7 +358,7 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
       leaf = app.workspace.getLeaf("tab");
       break;
     case "split-left": {
-      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      const source = app.workspace.getLeaf(false);
       leaf = app.workspace.createLeafBySplit(source, "vertical", true);
       break;
     }
@@ -359,7 +366,7 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
       leaf = app.workspace.getLeaf("split", "vertical");
       break;
     case "split-up": {
-      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      const source = app.workspace.getLeaf(false);
       leaf = app.workspace.createLeafBySplit(source, "horizontal", true);
       break;
     }
@@ -374,7 +381,7 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
       break;
   }
 
-  await leaf.openFile(tfile);
+  await leaf.openFile(file);
 
   if (focus) {
     app.workspace.setActiveLeaf(leaf, { focus: true });
@@ -382,7 +389,7 @@ export const handleNoteOpen: OperationHandler = async (args, _signal, app) => {
 
   return {
     opened: true,
-    note: { path: tfile.path, basename: tfile.basename, mtime: tfile.stat.mtime, ctime: tfile.stat.ctime },
+    note: { path: file.path, basename: file.basename, mtime: file.stat.mtime, ctime: file.stat.ctime },
     target: requestedLeafId ? "leaf" : target,
     leafId: (leaf as unknown as { id?: string }).id ?? "",
   };

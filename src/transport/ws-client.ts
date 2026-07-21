@@ -39,7 +39,7 @@ export class ChatobbyTransport {
   private client: ChatobbyWsClient | null = null;
   private connectPromise: Promise<void> | null = null;
   private connectionState: ConnectionState = INITIAL_CONNECTION_STATE;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectTimer: number | null = null;
   private connectionListeners: Set<(state: ConnectionState) => void> = new Set();
   private frontendPatchListeners: Set<(patch: FrontendPatch) => void> = new Set();
   private bridgeConfigListeners: Set<(config: WsBridgeConfig) => void> = new Set();
@@ -389,7 +389,7 @@ export class ChatobbyTransport {
     );
 
     this.clearReconnectTimer();
-    this.reconnectTimer = setTimeout(() => {
+    this.reconnectTimer = window.setTimeout(() => {
       this.dispatch({ type: "retry" });
       this.connect().catch(() => {});
     }, delay);
@@ -397,7 +397,7 @@ export class ChatobbyTransport {
 
   private clearReconnectTimer(): void {
     if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
+      window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
   }

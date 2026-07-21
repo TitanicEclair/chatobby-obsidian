@@ -1,8 +1,10 @@
+import { isDomNodeOfType } from "../shared/dom";
+
 function ownsTextInput(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target instanceof HTMLInputElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLSelectElement
+  if (!isDomNodeOfType(target, HTMLElement)) return false;
+  return isDomNodeOfType(target, HTMLInputElement)
+    || isDomNodeOfType(target, HTMLTextAreaElement)
+    || isDomNodeOfType(target, HTMLSelectElement)
     || target.isContentEditable
     || target.closest("[contenteditable='true'], [role='textbox']") !== null;
 }
@@ -24,7 +26,7 @@ export function routePrintableKeyToComposer(event: KeyboardEvent, input: HTMLTex
   // Preserve native Space activation when a keyboard user has focused a control.
   if (
     event.key === " "
-    && event.target instanceof Element
+    && isDomNodeOfType(event.target, Element)
     && event.target.closest("button, a, summary, [role='button'], [role='menuitem']")
   ) return false;
 

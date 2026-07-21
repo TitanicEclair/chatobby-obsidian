@@ -199,7 +199,7 @@ var ChatobbyWsClient = class {
   async connect() {
     if (this.connecting) return this.connecting;
     if (this.connected && this.ws?.readyState === WebSocket.OPEN) return;
-    const WebSocketConstructor = globalThis.WebSocket;
+    const WebSocketConstructor = window.WebSocket;
     if (!WebSocketConstructor) throw new Error("WebSocket is not available in this runtime");
     this.closedByUser = false;
     this.connecting = new Promise((resolve, reject) => {
@@ -207,14 +207,14 @@ var ChatobbyWsClient = class {
       let opened = false;
       let ready = false;
       let helloTimer;
-      const connectTimer = setTimeout(() => {
+      const connectTimer = (0, window.setTimeout)(() => {
         socket.close();
         reject(new Error(`Chatobby runtime connection timed out for ${this.options.url}`));
       }, this.options.connectTimeout ?? 1e4);
       this.ws = socket;
-      const clearConnectTimer = () => clearTimeout(connectTimer);
+      const clearConnectTimer = () => (0, window.clearTimeout)(connectTimer);
       const clearHelloTimer = () => {
-        if (helloTimer) clearTimeout(helloTimer);
+        if (helloTimer) (0, window.clearTimeout)(helloTimer);
         helloTimer = void 0;
       };
       const acceptConnection = () => {
@@ -234,7 +234,7 @@ var ChatobbyWsClient = class {
         }
         const hello = { type: "hello", ...runtime };
         socket.send(JSON.stringify(hello));
-        helloTimer = setTimeout(() => {
+        helloTimer = (0, window.setTimeout)(() => {
           socket.close(RUNTIME_CLOSE_CODES.helloTimeout, "hello timeout");
           reject(new Error(`Chatobby runtime handshake timed out for ${this.options.url}`));
         }, this.options.helloTimeout ?? CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS);
@@ -283,16 +283,16 @@ var ChatobbyWsClient = class {
   async disconnect() {
     this.closedByUser = true;
     this.connected = false;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) (0, window.clearTimeout)(this.reconnectTimer);
     this.reconnectTimer = void 0;
     this.rejectPending(new Error("WebSocket disconnected"));
     const socket = this.ws;
     this.ws = null;
     if (!socket || socket.readyState === WebSocket.CLOSED) return;
     await new Promise((resolve) => {
-      const timer = setTimeout(resolve, this.options.disconnectTimeout ?? 5e3);
+      const timer = (0, window.setTimeout)(resolve, this.options.disconnectTimeout ?? 5e3);
       socket.onclose = () => {
-        clearTimeout(timer);
+        (0, window.clearTimeout)(timer);
         resolve();
       };
       socket.close();
@@ -412,7 +412,7 @@ var ChatobbyWsClient = class {
   }
   scheduleReconnect() {
     if (this.options.autoReconnect === false || this.reconnectBlocked || this.reconnectTimer) return;
-    this.reconnectTimer = setTimeout(() => {
+    this.reconnectTimer = (0, window.setTimeout)(() => {
       this.reconnectTimer = void 0;
       void this.connect().catch(() => this.scheduleReconnect());
     }, this.options.reconnectDelay ?? 2e3);
@@ -428,7 +428,7 @@ var ChatobbyWsClient = class {
       const pending = this.pending.get(parsed.id);
       if (!pending) return;
       this.pending.delete(parsed.id);
-      clearTimeout(pending.timer);
+      (0, window.clearTimeout)(pending.timer);
       if (parsed.type === "error") {
         pending.reject(new Error(parsed.error?.message ?? "Chatobby runtime request failed"));
       } else {
@@ -472,7 +472,7 @@ var ChatobbyWsClient = class {
         return;
       }
       const timeout = this.options.requestTimeout ?? (method === "bash" || method === "compact" ? 13e4 : 3e4);
-      const timer = setTimeout(() => {
+      const timer = (0, window.setTimeout)(() => {
         if (!this.pending.delete(id)) return;
         reject(new Error(`Chatobby runtime request timed out after ${timeout}ms: ${method}`));
       }, timeout);
@@ -481,14 +481,14 @@ var ChatobbyWsClient = class {
         this.sendRaw({ id, method, params });
       } catch (sendError) {
         this.pending.delete(id);
-        clearTimeout(timer);
+        (0, window.clearTimeout)(timer);
         reject(sendError instanceof Error ? sendError : new Error(String(sendError)));
       }
     });
   }
   rejectPending(error) {
     for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
+      (0, window.clearTimeout)(pending.timer);
       pending.reject(error);
     }
     this.pending.clear();

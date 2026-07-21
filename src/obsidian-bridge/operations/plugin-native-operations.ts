@@ -5,7 +5,7 @@
 // All handlers: (args, signal, app) → JSON-serializable result, throwing BridgeError
 // with a correct code on failure. See docs/tooling/operation-catalog.md.
 
-import type { App, TFile } from "obsidian";
+import type { TFile, App } from "obsidian";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 import { getFilteredMarkdownFiles, fileToNoteRef } from "./helpers/search";
@@ -17,14 +17,15 @@ import type { TaskStatus } from "./helpers/tasks";
 import { base64ToArrayBuffer } from "./helpers/binary";
 import { getVaultIdentity } from "./helpers/vault-identity";
 import { collectObsidianCapabilityState } from "../dependency-snapshot";
+import { isTFile } from "./helpers/file-types";
 
 // ── Shared local helpers ───────────────────────────────────────────────
 
 /** Resolve a path to a TFile or throw NOTE_NOT_FOUND. */
 function requireFile(app: App, path: string): TFile {
   const f = app.vault.getAbstractFileByPath(path);
-  if (!f || !("stat" in f)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
-  return f as TFile;
+  if (!isTFile(f)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
+  return f;
 }
 
 /** The subset of CachedMetadata these handlers consume. */
@@ -36,7 +37,7 @@ interface CacheEntry {
 }
 
 function getCache(app: App, file: TFile): CacheEntry | null {
-  return (app.metadataCache.getFileCache(file) as CacheEntry | null | undefined) ?? null;
+  return (app.metadataCache.getFileCache(file)) ?? null;
 }
 
 /** resolvedLinks accessor — may be absent in some environments. */

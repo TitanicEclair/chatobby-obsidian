@@ -42,7 +42,7 @@ export class EventsScreenController {
     });
     this.options.onOpened();
     this.view.render(this.options.getHost());
-    requestAnimationFrame(() => this.view?.focusContainer());
+    window.requestAnimationFrame(() => this.view?.focusContainer());
     void this.refresh();
   }
 

@@ -7,8 +7,9 @@
 // Each function returns a plain object; cli-operations.ts JSON.stringifies it
 // as the tool's stdout.
 
-import type { App, TFile } from "obsidian";
+import { TFile, type App } from "obsidian";
 import { buildAdjacency } from "./retrieval-graph";
+import { isTFile } from "./file-types";
 
 function getMarkdownFiles(app: App): TFile[] {
   return app.vault.getMarkdownFiles();
@@ -28,8 +29,8 @@ interface OutlineHeading {
 
 export function computeOutline(app: App, filePath: string): { headings: OutlineHeading[] } {
   const file = app.vault.getAbstractFileByPath(filePath);
-  if (!file || !("stat" in file)) throw new Error(`File not found: ${filePath}`);
-  const cache = app.metadataCache.getFileCache(file as TFile);
+  if (!isTFile(file)) throw new Error(`File not found: ${filePath}`);
+  const cache = app.metadataCache.getFileCache(file);
   const headings = (cache?.headings ?? []).map((h) => ({
     level: h.level,
     text: h.heading,
@@ -99,8 +100,8 @@ export function computeOrphans(app: App): { orphans: string[] } {
 
 export async function computeWordcount(app: App, filePath: string): Promise<{ path: string; words: number; characters: number; lines: number }> {
   const file = app.vault.getAbstractFileByPath(filePath);
-  if (!file || !("stat" in file)) throw new Error(`File not found: ${filePath}`);
-  const content = await app.vault.cachedRead(file as TFile);
+  if (!isTFile(file)) throw new Error(`File not found: ${filePath}`);
+  const content = await app.vault.cachedRead(file);
   const stripped = content.replace(/^---[\s\S]*?---\s*/, ""); // strip frontmatter
   const words = stripped.trim() === "" ? 0 : stripped.trim().split(/\s+/).length;
   const characters = stripped.length;

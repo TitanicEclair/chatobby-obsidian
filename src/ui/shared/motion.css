@@ -1,0 +1,13 @@
+/* Keep this file last in the bundle so reduced-motion preferences override
+   component animations through ordinary cascade order. */
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-leaf-content[data-type="chatobby-view"] .chatobby-view *,
+  .workspace-leaf-content[data-type="chatobby-view"] .chatobby-view *::before,
+  .workspace-leaf-content[data-type="chatobby-view"] .chatobby-view *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}

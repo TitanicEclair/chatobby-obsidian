@@ -187,7 +187,7 @@ export class RuntimeUpdateManager {
           recoveryError = candidate;
         }
       }
-      const failure = recoveryError
+      const failure: unknown = recoveryError
         ? new Error(`${errorMessage(error)} Automatic rollback could not restore Chatobby: ${errorMessage(recoveryError)}`)
         : error;
       if (failure instanceof Error && failure.name === "AbortError") {

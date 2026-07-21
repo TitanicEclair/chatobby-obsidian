@@ -124,6 +124,10 @@ export class Modal {
     this.titleEl.textContent = title;
     return this;
   }
+  setContent(content: string | DocumentFragment): this {
+    this.contentEl.replaceChildren(content);
+    return this;
+  }
 }
 
 export class FuzzySuggestModal<T> {

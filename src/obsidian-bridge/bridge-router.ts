@@ -77,14 +77,14 @@ async function handleInvoke(
   const abortController = new AbortController();
 
   // Arm local timeout if deadline is in the future
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: number | null = null;
   if (timeoutMs > 0) {
-    timer = setTimeout(() => {
+    timer = window.setTimeout(() => {
       abortController.abort();
     }, timeoutMs);
     // Clear timer if aborted externally (cancel)
     abortController.signal.addEventListener("abort", () => {
-      if (timer !== null) clearTimeout(timer);
+      if (timer !== null) window.clearTimeout(timer);
     }, { once: true });
   } else {
     // Deadline already passed
@@ -93,7 +93,7 @@ async function handleInvoke(
 
   // Register in-flight entry BEFORE execution (so cancel can find it)
   const entry: InFlightRequest = {
-    operation: operation as InFlightRequest["operation"],
+    operation: operation,
     args,
     abortController,
     deadline: deadlineDate,
@@ -115,14 +115,14 @@ async function handleInvoke(
 
     // Race: if abort wins, we reject with DEADLINE_EXCEEDED; if operation wins, we get result
     const result = await Promise.race([
-      executeOperation(operation as InFlightRequest["operation"], args, abortController.signal, app),
+      executeOperation(operation, args, abortController.signal, app),
       abortPromise,
     ]);
 
     // Success — remove in-flight entry
     inFlight.delete(requestId);
     // Clean up timer
-    if (timer !== null) clearTimeout(timer);
+    if (timer !== null) window.clearTimeout(timer);
 
     return {
       outbound: [{ type: "result", requestId, result }],
@@ -131,7 +131,7 @@ async function handleInvoke(
     // Error — remove in-flight entry
     inFlight.delete(requestId);
     // Clean up timer
-    if (timer !== null) clearTimeout(timer);
+    if (timer !== null) window.clearTimeout(timer);
 
     // Check if aborted (either by cancel or local deadline)
     if (abortController.signal.aborted || e instanceof BridgeError && e.code === "DEADLINE_EXCEEDED") {

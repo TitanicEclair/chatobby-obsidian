@@ -51,12 +51,12 @@ export class ConnectedViewRestorationController<Transport> {
     if (!this.options.isCurrent(transport) || this.active?.transport === transport) return;
     const promise = restoreConnectedView({
       isCurrent: () => this.options.isCurrent(transport),
-      restoreSession: this.options.restoreSession,
+      restoreSession: () => this.options.restoreSession(),
       synchronizeFrontend: () => this.options.synchronizeFrontend(transport),
-      synchronizeActiveScreen: this.options.synchronizeActiveScreen,
-      markRestored: this.options.markRestored,
-      reportSessionError: this.options.reportSessionError,
-      reportFrontendError: this.options.reportFrontendError,
+      synchronizeActiveScreen: () => this.options.synchronizeActiveScreen(),
+      markRestored: () => this.options.markRestored(),
+      reportSessionError: (error) => this.options.reportSessionError(error),
+      reportFrontendError: (error) => this.options.reportFrontendError(error),
     });
     const active = { transport, promise };
     this.active = active;

@@ -94,7 +94,7 @@ export class FrontendProtocolController {
         0,
         FRONTEND_RESYNC_MIN_INTERVAL_MS - (Date.now() - this.lastSynchronizeAt),
       );
-      globalThis.setTimeout(() => {
+      window.setTimeout(() => {
         void this.synchronize().catch(this.options.onError);
       }, remainingDelay);
     }

@@ -34,9 +34,9 @@ export class ObsidianBridgeClient {
   private ws: WebSocket | null = null;
   private state: BridgeConnectionState = INITIAL_BRIDGE_STATE;
   private inFlight: Map<string, InFlightRequest> = new Map();
-  private pingTimer: ReturnType<typeof setInterval> | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private capabilityTimer: ReturnType<typeof setInterval> | null = null;
+  private pingTimer: number | null = null;
+  private reconnectTimer: number | null = null;
+  private capabilityTimer: number | null = null;
   private capabilityFingerprint = "";
   private connectionListeners: Set<(state: BridgeConnectionState) => void> = new Set();
 
@@ -46,7 +46,7 @@ export class ObsidianBridgeClient {
     private token: string,
     private appVersion: string,
     private pluginVersion: string,
-    private wsFactory?: { new(url: string, protocols?: string | string[] | undefined): WebSocket } | null,
+    private wsFactory?: { new(url: string, protocols?: string | string[]  ): WebSocket } | null,
   ) {}
 
   // ── Subscriptions ──────────────────────────────────────────────────
@@ -76,7 +76,7 @@ export class ObsidianBridgeClient {
 
         // No hello_ack — readiness inferred from socket staying open.
         // After a brief grace period, transition to ready.
-        setTimeout(() => {
+        window.setTimeout(() => {
           if (this.state.status === "hello_sent") {
             this.dispatch({ type: "ready" });
             this.startPing();
@@ -179,7 +179,7 @@ export class ObsidianBridgeClient {
     const hello: ObsidianBridgeHello = {
       type: "hello",
       authToken: this.token,
-      protocolVersion: OBSIDIAN_BRIDGE_PROTOCOL_VERSION as 1,
+      protocolVersion: OBSIDIAN_BRIDGE_PROTOCOL_VERSION,
       connectionId: crypto.randomUUID(),
       vault,
       appVersion: this.appVersion,
@@ -195,26 +195,26 @@ export class ObsidianBridgeClient {
 
   private startPing(): void {
     this.stopPing();
-    this.pingTimer = setInterval(() => {
+    this.pingTimer = window.setInterval(() => {
       this.sendPing();
     }, BRIDGE_PING_INTERVAL_MS);
   }
 
   private stopPing(): void {
     if (this.pingTimer !== null) {
-      clearInterval(this.pingTimer);
+      window.clearInterval(this.pingTimer);
       this.pingTimer = null;
     }
   }
 
   private startCapabilityWatch(): void {
     this.stopCapabilityWatch();
-    this.capabilityTimer = setInterval(() => this.sendCapabilityChanges(), 2_000);
+    this.capabilityTimer = window.setInterval(() => this.sendCapabilityChanges(), 2_000);
   }
 
   private stopCapabilityWatch(): void {
     if (this.capabilityTimer !== null) {
-      clearInterval(this.capabilityTimer);
+      window.clearInterval(this.capabilityTimer);
       this.capabilityTimer = null;
     }
   }
@@ -280,7 +280,7 @@ export class ObsidianBridgeClient {
     );
 
     this.clearReconnectTimer();
-    this.reconnectTimer = setTimeout(() => {
+    this.reconnectTimer = window.setTimeout(() => {
       this.dispatch({ type: "retry" });
       this.connect().catch(() => {});
     }, delay);
@@ -288,7 +288,7 @@ export class ObsidianBridgeClient {
 
   private clearReconnectTimer(): void {
     if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
+      window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
   }

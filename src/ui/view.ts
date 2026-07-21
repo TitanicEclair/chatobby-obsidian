@@ -66,7 +66,7 @@ import { PROMPT_START_TIMEOUT_MS, retractAcceptedPrompt, submitPrompt } from "./
 import { deliverQueuedMessage } from "./controller/queued-message-delivery";
 const VIEW_TYPE = "chatobby-view";
 export class ChatobbyView extends ItemView {
-  readonly runtimeChannelId = globalThis.crypto.randomUUID();
+  readonly runtimeChannelId = window.crypto.randomUUID();
   private readonly operations = new OperationCoordinator();
   private readonly sessions: SessionController;
   private readonly storedSessions: StoredSessionController;
@@ -188,7 +188,7 @@ export class ChatobbyView extends ItemView {
       refreshTabBar: () => this.refreshTabBar(),
       renderActiveTab: () => this.renderActiveTab(),
       persistLeafState: () => { void this.app.workspace.requestSaveLayout(); },
-      exitSessionPicker: () => this.viewNavigation.replace({ mode: "chat" }),
+      exitSessionPicker: () => { void this.viewNavigation.replace({ mode: "chat" }); },
       runOperation: (descriptor, operation) => this.runOperation(descriptor, operation),
       getActiveOperation: () => this.operations.current("session-transition"),
       claimSessionOwnership: () => this.claimSessionOwnership(),
@@ -265,7 +265,7 @@ export class ChatobbyView extends ItemView {
         this.renderActiveTab();
         this.focusComposerSoon();
       },
-      onComplete: () => this.viewNavigation.replace({ mode: "chat" }),
+      onComplete: () => { void this.viewNavigation.replace({ mode: "chat" }); },
     });
     this.liveStats = new LiveStatsController({
       getTransport: () => this.getTransport(),
@@ -310,6 +310,7 @@ export class ChatobbyView extends ItemView {
       onClosed: (mode, renderChat) => this.finishOverlayClose(mode, renderChat),
     });
     const subagents = createChatViewSubagentControllers({
+      app: this.app,
       getHost: () => this.shell.sessionPickerHostEl,
       getFrontendStore: () => this.frontendStore,
       getFrontendProtocol: () => this.frontendProtocol,
@@ -333,6 +334,7 @@ export class ChatobbyView extends ItemView {
     this.subagentScreen = subagents.screen;
     this.sessionAgentRail = subagents.rail;
     this.channelScreen = new ChannelScreenController({
+      app: this.app,
       getHost: () => this.shell.sessionPickerHostEl,
       getStore: () => this.frontendStore,
       getProtocol: () => this.frontendProtocol,
@@ -431,7 +433,7 @@ export class ChatobbyView extends ItemView {
     if (activateSession) await this.activateSessionContext();
     await this.viewNavigation.apply(navigation);
   }
-  onPaneMenu(menu: Menu, source: "more-options" | "tab-header" | string): void {
+  onPaneMenu(menu: Menu, source: string): void {
     super.onPaneMenu(menu, source);
     menu.addItem((item) => item
       .setTitle("Toggle conversation source view")
@@ -488,9 +490,7 @@ export class ChatobbyView extends ItemView {
     this.shell.dispose();
     await this.plugin.unregisterChatView(this);
   }
-
   // ── Command surface (command palette + obsidian:// URI handler) ──
-
   /** Focus the composer textarea. */
   focusComposer(): void {
     if (this.viewMode === "chat") this.composer.focus();
@@ -620,9 +620,8 @@ export class ChatobbyView extends ItemView {
     const message = await promptText(this.app, { title: "Queue follow-up message", placeholder: "message…", submitLabel: "Queue", multiline: true });
     if (!message || !message.trim()) return;
     const trimmed = message.trim();
-    await deliverQueuedMessage(this.getFeedStore(), "followUp", trimmed, transport.followUp.bind(transport));
+    await deliverQueuedMessage(this.getFeedStore(), "followUp", trimmed, (message) => transport.followUp(message));
   }
-
   // ── Component wiring ────────────────────────────────────────────
 
   private buildComponents(): void {
@@ -707,6 +706,7 @@ export class ChatobbyView extends ItemView {
       install: async (repair) => this.plugin.openRuntimeInstaller(repair),
     });
     this.runtimeStatusMenu = new RuntimeStatusMenu({
+      app: this.app,
       getState: () => this.plugin.getRuntimeState(),
       hasActiveWork: () => this.sessionState.isStreaming || this.sessionState.isCompacting,
       restart: () => this.plugin.restartRuntime(),
@@ -923,7 +923,7 @@ export class ChatobbyView extends ItemView {
         : { permissionProfileId: value || null };
     const result = await this.frontendProtocol.dispatch({
       schemaVersion: FRONTEND_SCHEMA_VERSION,
-      intentId: globalThis.crypto.randomUUID(),
+      intentId: window.crypto.randomUUID(),
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session.id,
       expectedRevision: snapshot.revision,
@@ -945,12 +945,12 @@ export class ChatobbyView extends ItemView {
     if (!snapshot) throw new Error("Chatobby frontend state is unavailable");
     const result = await this.frontendProtocol.dispatch({
       schemaVersion: FRONTEND_SCHEMA_VERSION,
-      intentId: globalThis.crypto.randomUUID(),
+      intentId: window.crypto.randomUUID(),
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session?.id,
       expectedRevision: snapshot.revision,
       ...request,
-    } as FrontendIntent);
+    });
     if (result.status === "completed" || result.status === "accepted") return true;
     if (result.status === "rejected" && result.notice?.level === "info") return false;
     throw new Error(result.notice?.message ?? "Chatobby rejected the session change");
@@ -1026,7 +1026,7 @@ export class ChatobbyView extends ItemView {
   private async steerPrompt(message: string): Promise<void> {
     const transport = this.getTransport();
     if (!transport?.isConnected) return;
-    await deliverQueuedMessage(this.getFeedStore(), "steer", message, transport.steer.bind(transport));
+    await deliverQueuedMessage(this.getFeedStore(), "steer", message, (queuedMessage) => transport.steer(queuedMessage));
   }
 
   private async executePermissionSystemSlash(parsed: SlashParsedCommand): Promise<void> {
@@ -1293,7 +1293,7 @@ export class ChatobbyView extends ItemView {
   }
 
   private focusComposerSoon(): void {
-    requestAnimationFrame(() => { if (this.app.workspace.getActiveViewOfType(ChatobbyView) === this) this.focusComposer(); });
+    window.requestAnimationFrame(() => { if (this.app.workspace.getActiveViewOfType(ChatobbyView) === this) this.focusComposer(); });
   }
   private renderViewMode(): void {
     renderShellViewMode(this.shell, this.viewMode, Boolean(this.activeTab()));

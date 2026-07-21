@@ -99,7 +99,7 @@ export class SelectionMenu extends ChatobbyComponent {
     container.addEventListener("keydown", this.handleKeydown);
     document.addEventListener("pointerdown", this.handleDocumentPointerDown, true);
     this.renderList();
-    requestAnimationFrame(() => this.searchInput?.focus());
+    window.requestAnimationFrame(() => this.searchInput?.focus());
   }
 
   override destroy(): void {
@@ -155,7 +155,7 @@ export class SelectionMenu extends ChatobbyComponent {
       option.addEventListener("click", () => void this.choose(item));
       if (index === this.activeIndex) {
         this.searchInput?.setAttr("aria-activedescendant", optionId);
-        requestAnimationFrame(() => option.scrollIntoView({ block: "nearest" }));
+        window.requestAnimationFrame(() => option.scrollIntoView({ block: "nearest" }));
       }
     });
 

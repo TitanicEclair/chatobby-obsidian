@@ -93,8 +93,8 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
   private desiredRunning = false;
   private generation = 0;
   private launchAttempt = 0;
-  private restartTimer: ReturnType<typeof setTimeout> | null = null;
-  private stabilityTimer: ReturnType<typeof setTimeout> | null = null;
+  private restartTimer: number | null = null;
+  private stabilityTimer: number | null = null;
   private recoveryPromise: Promise<void> | null = null;
 
   constructor(deps: RuntimeManagerDeps) {
@@ -384,7 +384,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     if (handle && runtime.ownership !== "external") this.watchProcess(handle, runtime.ownership);
     this.emit({ status: "ready", runtime, readyAt: Date.now() });
     this.cancelStabilityTimer();
-    this.stabilityTimer = setTimeout(() => {
+    this.stabilityTimer = window.setTimeout(() => {
       this.stabilityTimer = null;
       this.restartPolicy.reset();
       this.launchAttempt = 0;
@@ -529,7 +529,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
 
   private scheduleRestart(delayMs: number, _reason: RuntimeActionReason): void {
     if (this.restartTimer || !this.desiredRunning) return;
-    this.restartTimer = setTimeout(() => {
+    this.restartTimer = window.setTimeout(() => {
       this.restartTimer = null;
       if (!this.desiredRunning || this.ensurePromise) return;
       void this.ensureReady({ reason: "automatic-restart" }).catch(() => {});
@@ -556,13 +556,13 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
   }
 
   private cancelTimers(): void {
-    if (this.restartTimer) clearTimeout(this.restartTimer);
+    if (this.restartTimer) window.clearTimeout(this.restartTimer);
     this.restartTimer = null;
     this.cancelStabilityTimer();
   }
 
   private cancelStabilityTimer(): void {
-    if (this.stabilityTimer) clearTimeout(this.stabilityTimer);
+    if (this.stabilityTimer) window.clearTimeout(this.stabilityTimer);
     this.stabilityTimer = null;
   }
 }
@@ -620,20 +620,20 @@ function errorMessage(error: unknown): string {
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
     promise.then(
       (value) => {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         resolve(value);
       },
       (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
+        window.clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
       },
     );
   });

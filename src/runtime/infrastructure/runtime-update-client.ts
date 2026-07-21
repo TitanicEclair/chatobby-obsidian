@@ -196,9 +196,9 @@ export async function extractRuntimeBundle(
   const extractor = new RuntimeBundleExtractor(destination, descriptor, signal, progress);
   const source = createReadStream(archivePath).pipe(createGunzip());
   try {
-    for await (const chunk of source) {
+    for await (const chunk of source as AsyncIterable<unknown>) {
       throwIfAborted(signal);
-      await extractor.consume(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      await extractor.consume(toBuffer(chunk));
     }
     await extractor.finish();
   } catch (error) {
@@ -333,20 +333,20 @@ class RuntimeBundleExtractor {
 class NodeRuntimeHttpClient implements RuntimeHttpClient {
   async read(url: string, maximumBytes: number, signal?: AbortSignal): Promise<Buffer> {
     const response = await openHttpsResponse(url, signal);
-    const timer = setTimeout(() => response.destroy(new Error("Runtime update request timed out")), DESCRIPTOR_TIMEOUT_MS);
+    const timer = window.setTimeout(() => response.destroy(new Error("Runtime update request timed out")), DESCRIPTOR_TIMEOUT_MS);
     const chunks: Buffer[] = [];
     let size = 0;
     try {
-      for await (const chunk of response) {
+      for await (const chunk of response as AsyncIterable<unknown>) {
         throwIfAborted(signal);
-        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        const bytes = toBuffer(chunk);
         size += bytes.length;
         if (size > maximumBytes) throw new Error("Runtime update response is too large");
         chunks.push(bytes);
       }
       return Buffer.concat(chunks);
     } finally {
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       response.destroy();
     }
   }
@@ -363,13 +363,13 @@ class NodeRuntimeHttpClient implements RuntimeHttpClient {
     await mkdir(dirname(destination), { recursive: true });
     const response = await openHttpsResponse(url, signal);
     const output = createWriteStream(destination, { flags: "wx", mode: 0o600 });
-    const timer = setTimeout(() => response.destroy(new Error("Runtime update download timed out")), BUNDLE_TIMEOUT_MS);
+    const timer = window.setTimeout(() => response.destroy(new Error("Runtime update download timed out")), BUNDLE_TIMEOUT_MS);
     const hash = createHash("sha256");
     let received = 0;
     try {
-      for await (const chunk of response) {
+      for await (const chunk of response as AsyncIterable<unknown>) {
         throwIfAborted(signal);
-        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        const bytes = toBuffer(chunk);
         received += bytes.length;
         if (received > expectedSize) throw new Error("Runtime update download exceeds its signed size");
         hash.update(bytes);
@@ -383,7 +383,7 @@ class NodeRuntimeHttpClient implements RuntimeHttpClient {
       output.destroy();
       throw error;
     } finally {
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       response.destroy();
     }
   }
@@ -538,6 +538,11 @@ function parseVersion(value: string): readonly [number, number, number] | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toBuffer(value: unknown): Buffer<ArrayBufferLike> {
+  if (typeof value === "string" || value instanceof Uint8Array) return Buffer.from(value);
+  throw new Error("Runtime update stream returned an unsupported chunk");
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

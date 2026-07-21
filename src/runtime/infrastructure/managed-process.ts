@@ -96,7 +96,7 @@ async function terminateExactChild(
   if (process.platform !== "win32") child.kill("SIGTERM");
   const stopped = await Promise.race([
     exited.then(() => true),
-    new Promise<false>((resolve) => setTimeout(() => resolve(false), TERMINATE_TIMEOUT_MS)),
+    new Promise<false>((resolve) => window.setTimeout(() => resolve(false), TERMINATE_TIMEOUT_MS)),
   ]);
   if (stopped) return;
 
@@ -107,7 +107,7 @@ async function terminateExactChild(
   }
   await Promise.race([
     exited.then(() => undefined),
-    new Promise<void>((resolve) => setTimeout(resolve, TERMINATE_TIMEOUT_MS)),
+    new Promise<void>((resolve) => window.setTimeout(resolve, TERMINATE_TIMEOUT_MS)),
   ]);
 }
 

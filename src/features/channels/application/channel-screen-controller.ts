@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import type { FrontendProtocolController } from "../../../frontend/frontend-protocol-controller";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type {
@@ -8,6 +9,7 @@ import type {
 import { ChannelsView } from "../ui/channels-view";
 
 export interface ChannelScreenControllerOptions {
+  app: App;
   getHost(): HTMLElement;
   getStore(): FrontendStore;
   getProtocol(): FrontendProtocolController;
@@ -29,6 +31,7 @@ export class ChannelScreenController {
     this.options.prepareOpen();
     this.view?.destroy();
     this.view = new ChannelsView({
+      app: this.options.app,
       getModel: () => this.currentModel(),
       subscribe: (listener) => this.options.getStore().subscribeSelector(
         (snapshot) => snapshot.screenModels.find(
@@ -47,7 +50,7 @@ export class ChannelScreenController {
     });
     this.options.onOpened();
     this.view.render(this.options.getHost());
-    requestAnimationFrame(() => this.view?.focusContainer());
+    window.requestAnimationFrame(() => this.view?.focusContainer());
     void this.refresh();
   }
 

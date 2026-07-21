@@ -48,8 +48,8 @@ export class MemoryScreenController {
     });
     this.options.onOpened();
     this.view.render(this.options.getHost());
-    requestAnimationFrame(() => this.view?.focusContainer());
-    if (runActionId) requestAnimationFrame(() => this.view?.runActionById(runActionId));
+    window.requestAnimationFrame(() => this.view?.focusContainer());
+    if (runActionId) window.requestAnimationFrame(() => this.view?.runActionById(runActionId));
     else void this.refresh();
   }
 

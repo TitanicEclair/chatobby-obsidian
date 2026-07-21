@@ -125,7 +125,7 @@ export default class ChatobbyPlugin extends Plugin {
   private readonly visibleChatViews = new Set<ChatobbyView>();
   private _lastChatobbyView: ChatobbyView | null = null;
   private activeLeafActivation = 0;
-  private vaultDirectoryRefreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private vaultDirectoryRefreshTimer: number | null = null;
   private unloading = false;
 
   // ── Lifecycle ────────────────────────────────────────────────────
@@ -176,10 +176,14 @@ export default class ChatobbyPlugin extends Plugin {
     });
   }
 
-  async onunload(): Promise<void> {
+  onunload(): void {
     this.unloading = true;
-    if (this.vaultDirectoryRefreshTimer) globalThis.clearTimeout(this.vaultDirectoryRefreshTimer);
+    if (this.vaultDirectoryRefreshTimer) window.clearTimeout(this.vaultDirectoryRefreshTimer);
     this.vaultDirectoryRefreshTimer = null;
+    void this.disposePluginResources();
+  }
+
+  private async disposePluginResources(): Promise<void> {
     // Plugin reloads must not terminate session-owned work in the backend.
     await this.runtimeManager.detach("plugin-unload").catch(() => {});
     await this.frontendSessions.dispose();
@@ -279,14 +283,14 @@ export default class ChatobbyPlugin extends Plugin {
   async activateView(): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY);
     if (existing.length > 0) {
-      this.app.workspace.revealLeaf(existing[0]!);
+      await this.app.workspace.revealLeaf(existing[0]!);
       return;
     }
     // Chatobby is a full work surface, not a utility widget. A root tab avoids
     // inheriting an arbitrarily short or narrow right-sidebar split.
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: VIEW_TYPE_CHATOBBY, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
 	/** Always open a new blank Chatobby work surface in an Obsidian tab. */
@@ -298,7 +302,7 @@ export default class ChatobbyPlugin extends Plugin {
 			active: true,
 			state: { mode: "chat", vaultDirectoryPath: normalized },
 		});
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 		if (!(leaf.view instanceof ChatobbyView)) throw new Error("Obsidian did not create the Chatobby view");
 		return leaf.view;
 	}
@@ -311,7 +315,7 @@ export default class ChatobbyPlugin extends Plugin {
       .filter((view): view is ChatobbyView => view instanceof ChatobbyView)
       .find((view) => view.getWorkingDirectoryPath() === normalized);
     if (existing) {
-      this.app.workspace.revealLeaf(existing.leaf);
+      await this.app.workspace.revealLeaf(existing.leaf);
       return existing;
     }
     const leaf = this.app.workspace.getLeaf("tab");
@@ -320,7 +324,7 @@ export default class ChatobbyPlugin extends Plugin {
       active: true,
       state: { mode: "chat", vaultDirectoryPath: normalized },
     });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
     const view = leaf.view;
     if (!(view instanceof ChatobbyView)) throw new Error("Obsidian did not create the Chatobby directory view");
     return view;
@@ -355,8 +359,8 @@ export default class ChatobbyPlugin extends Plugin {
 
   focusChatView(view: ChatobbyView): void {
     this._lastChatobbyView = view;
-    this.app.workspace.revealLeaf(view.leaf);
-    requestAnimationFrame(() => {
+    void this.app.workspace.revealLeaf(view.leaf);
+    window.requestAnimationFrame(() => {
       if (this.app.workspace.getActiveViewOfType(ChatobbyView) === view) view.focusComposer();
     });
   }
@@ -368,8 +372,8 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   private scheduleVaultDirectoryRefresh(): void {
-    if (this.vaultDirectoryRefreshTimer) globalThis.clearTimeout(this.vaultDirectoryRefreshTimer);
-    this.vaultDirectoryRefreshTimer = globalThis.setTimeout(() => {
+    if (this.vaultDirectoryRefreshTimer) window.clearTimeout(this.vaultDirectoryRefreshTimer);
+    this.vaultDirectoryRefreshTimer = window.setTimeout(() => {
       this.vaultDirectoryRefreshTimer = null;
       this.notifySessionDirectoryChanged();
     }, 100);

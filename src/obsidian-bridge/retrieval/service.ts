@@ -1,4 +1,4 @@
-import { type App, type EventRef, type TFile } from "obsidian";
+import type { TFile, App, EventRef } from "obsidian";
 import type {
   ObsidianRetrievalBackendStatus,
   ObsidianRetrievalDiagnostics,
@@ -17,6 +17,7 @@ import { BridgeError } from "../types";
 import { GraphifyIndex, normalizePath } from "./graphify-index";
 import { createSmartConnectionsAdapter } from "./smart-connections-adapter";
 import type { GraphComponent, GraphifySnapshot, SemanticHit, SemanticIndexAdapter } from "./types";
+import { isTFile } from "../operations/helpers/file-types";
 
 export type RetrievalPrimitiveProvider = "graphify" | "smart-connections" | "lexical" | "obsidian-links";
 
@@ -356,7 +357,7 @@ export class VaultRetrievalService {
 
   private resolveFilePath(ref: string): string {
     const byPath = this.app.vault.getAbstractFileByPath(ref);
-    if (byPath && "stat" in byPath) return (byPath as TFile).path;
+    if (isTFile(byPath)) return byPath.path;
     const lower = ref.toLocaleLowerCase();
     const byName = this.app.vault.getMarkdownFiles().find((file) =>
       file.basename.toLocaleLowerCase() === lower || file.name.toLocaleLowerCase() === lower);
@@ -467,7 +468,7 @@ function getResolvedLinks(app: App): Record<string, Record<string, number>> {
 }
 
 function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
 }
 
 function abortedError(): BridgeError {

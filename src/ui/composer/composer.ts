@@ -121,7 +121,7 @@ export class Composer extends ChatobbyComponent {
   private pendingSendSequence = 0;
   private activePendingSendId: number | null = null;
   private abortConfirmArmed = false;
-  private abortConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+  private abortConfirmTimer: number | null = null;
   private activations: SlashActivation[] = [];
   private cancelledToken: { slashStart: number; tokenText: string; deletionSeen: boolean } | null = null;
   private pendingArgumentCompletion: { command: SlashParsedCommand } | null = null;
@@ -258,7 +258,7 @@ export class Composer extends ChatobbyComponent {
     const outputMarker = this.currentTurnOutputMarker();
     try {
       const attachments = this.state.attachments.length > 0 ? this.state.attachments.map((attachment) => attachment.prompt) : undefined;
-      const isSlashSubmission = commands.length > 0 && Boolean(this.host.submitSlashPlan);
+      const isSlashSubmission = commands.length > 0 && this.host.submitSlashPlan !== undefined;
       let slashAccepted = false;
       this.slashCommandInFlight = isSlashSubmission;
       const acceptSlashSubmission = () => {
@@ -529,8 +529,8 @@ export class Composer extends ChatobbyComponent {
       return;
     }
     this.abortConfirmArmed = true;
-    if (this.abortConfirmTimer) clearTimeout(this.abortConfirmTimer);
-    this.abortConfirmTimer = setTimeout(() => {
+    if (this.abortConfirmTimer) window.clearTimeout(this.abortConfirmTimer);
+    this.abortConfirmTimer = window.setTimeout(() => {
       this.abortConfirmTimer = null;
       this.disarmAbortConfirm();
     }, ABORT_CONFIRM_TIMEOUT_MS);
@@ -546,7 +546,7 @@ export class Composer extends ChatobbyComponent {
   private disarmAbortConfirm(): void {
     if (!this.abortConfirmArmed && !this.abortConfirmTimer) return;
     this.abortConfirmArmed = false;
-    if (this.abortConfirmTimer) clearTimeout(this.abortConfirmTimer);
+    if (this.abortConfirmTimer) window.clearTimeout(this.abortConfirmTimer);
     this.abortConfirmTimer = null;
     this.updateControls();
   }
@@ -784,7 +784,7 @@ export class Composer extends ChatobbyComponent {
     this.attachInputEl = card.createEl("input", {
       cls: "chatobby-attachment-input",
       attr: { type: "file", accept: COMPOSER_ATTACHMENT_ACCEPT, multiple: "true", tabindex: "-1" },
-    }) as HTMLInputElement;
+    });
     this.attachBtn = actions.createEl("button", {
       cls: "chatobby-attach-btn",
       attr: { type: "button", "aria-label": "Attach files", title: "Attach files" },

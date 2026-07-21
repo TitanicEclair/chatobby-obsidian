@@ -1,7 +1,9 @@
-import { Menu, Notice } from "obsidian";
+import { type App, Menu, Notice } from "obsidian";
+import { confirmAction } from "../../../ui/modals/modals";
 import type { RuntimeLifecycleState } from "../../../runtime/public";
 
 export interface RuntimeStatusMenuHost {
+  app: App;
   getState(): RuntimeLifecycleState;
   hasActiveWork(): boolean;
   restart(): Promise<void>;
@@ -56,8 +58,13 @@ export class RuntimeStatusMenu {
       menu.addItem((item) => item
         .setTitle("Stop Chatobby")
         .setIcon("square")
-        .onClick(() => {
-          if (this.host.hasActiveWork() && !window.confirm("Chatobby is working. Stop the runtime and interrupt active work?")) return;
+        .onClick(async () => {
+          if (this.host.hasActiveWork() && !await confirmAction(this.host.app, {
+            title: "Stop Chatobby?",
+            message: "Chatobby is working. Stopping the runtime will interrupt active work.",
+            confirmLabel: "Stop Chatobby",
+            destructive: true,
+          })) return;
           void this.host.stop().catch(reportRuntimeActionFailure);
         }));
     }

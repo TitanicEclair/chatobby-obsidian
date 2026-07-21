@@ -1,6 +1,6 @@
 {
   "name": "chatobby-obsidian",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "private": true,
   "scripts": {
     "build": "tsc --noEmit && node esbuild.config.mjs",
@@ -11,15 +11,23 @@
     "check:backend-contract": "node scripts/verify-local-backend.mjs",
     "check:release-boundary": "node scripts/check-reviewable-boundary.mjs",
     "export:reviewable": "node scripts/export-reviewable-source.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint .",
+    "lint:review": "eslint . --max-warnings 0 && node scripts/check-review-source.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "9.39.4",
     "@types/node": "24.13.2",
     "@types/ws": "8.18.1",
     "esbuild": "0.25.12",
+    "eslint": "9.39.4",
+    "eslint-plugin-obsidianmd": "0.4.0",
+    "globals": "17.6.0",
     "happy-dom": "20.10.6",
+    "jiti": "2.6.1",
     "obsidian": "1.13.1",
     "typescript": "5.9.3",
+    "typescript-eslint": "8.59.1",
     "vitest": "4.1.9",
     "ws": "8.21.0"
   }

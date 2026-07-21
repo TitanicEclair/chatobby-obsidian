@@ -12,7 +12,7 @@ export interface LiveStatsControllerOptions {
 /** Coalesces live-stat requests and owns the polling timer for one Chatobby view. */
 export class LiveStatsController {
   private stats: WsSessionStats | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: number | null = null;
   private inFlight = false;
   private queued = false;
   private disposed = false;
@@ -57,12 +57,12 @@ export class LiveStatsController {
   start(): void {
     if (this.disposed || !this.active || this.timer !== null) return;
     void this.refresh();
-    this.timer = setInterval(() => void this.refresh(), LIVE_STATS_POLL_MS);
+    this.timer = window.setInterval(() => void this.refresh(), LIVE_STATS_POLL_MS);
   }
 
   stop(): void {
     if (this.timer === null) return;
-    clearInterval(this.timer);
+    window.clearInterval(this.timer);
     this.timer = null;
   }
 

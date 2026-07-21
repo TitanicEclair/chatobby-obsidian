@@ -10,6 +10,7 @@ import {
 } from "../../features/feed/public";
 import { ChatobbyComponent } from "../shared/component";
 import { SCROLL_BOTTOM_THRESHOLD_PX, STREAM_TEXT_DEBOUNCE_MS } from "../shared/constants";
+import { isDomNodeOfType } from "../shared/dom";
 import { DividerBlockView } from "./divider-block";
 import { ExtensionPanelBlockView } from "./extension-panel-block";
 import { preserveComposerFocusForFeedControl } from "./feed-focus";
@@ -80,7 +81,7 @@ export class FeedRenderer extends ChatobbyComponent {
   private pendingDocumentChanged = false;
   private tickRaf: ReturnType<typeof requestAnimationFrame> | null = null;
   private lastTick = 0;
-  private renderTimer: ReturnType<typeof setInterval> | null = null;
+  private renderTimer: number | null = null;
   private contentDirty = false;
   private lastRenderTime = 0;
   private scrollRaf = 0;
@@ -371,7 +372,9 @@ export class FeedRenderer extends ChatobbyComponent {
   private mountForBlock(block: FeedBlock): BlockMount {
     const existing = this.blockMounts.get(block.id);
     if (existing) return existing;
-    const element = document.createElement("div");
+    if (!this.blocksEl) throw new Error("Feed blocks are not mounted");
+    const element = this.blocksEl.createDiv();
+    element.remove();
     element.className = `chatobby-feed__block chatobby-feed__block--${block.type}`;
     element.setAttr("role", "article");
     element.dataset.blockId = block.id;
@@ -401,7 +404,7 @@ export class FeedRenderer extends ChatobbyComponent {
     if (!this.blocksEl) return;
     const visibleIds = new Set(order);
     for (const element of Array.from(this.blocksEl.children)) {
-      if (!(element instanceof HTMLElement)) continue;
+      if (!isDomNodeOfType(element, HTMLElement)) continue;
       const id = element.dataset.blockId;
       if (id && !visibleIds.has(id)) element.remove();
     }
@@ -445,7 +448,7 @@ export class FeedRenderer extends ChatobbyComponent {
    *  who scrolled up — and coalesce to one scroll per animation frame. */
   private onContentResized(): void {
     if (!this.active || this.pinRaf) return;
-    this.pinRaf = requestAnimationFrame(() => {
+    this.pinRaf = window.requestAnimationFrame(() => {
       this.pinRaf = 0;
       if (!this.scrollEl) return;
       if (this.autoScroll && this.bottomPinned) {
@@ -468,11 +471,12 @@ export class FeedRenderer extends ChatobbyComponent {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0);
-    const common = range.commonAncestorContainer instanceof HTMLElement
+    const common = isDomNodeOfType(range.commonAncestorContainer, HTMLElement)
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
     if (!common || (!this.blocksEl.contains(common) && common !== this.blocksEl)) return;
-    const wrapper = document.createElement("div");
+    const wrapper = this.blocksEl.createDiv();
+    wrapper.remove();
     wrapper.appendChild(range.cloneContents());
     for (const control of Array.from(wrapper.querySelectorAll("button, [aria-hidden='true']"))) control.remove();
     const markdown = htmlToMarkdown(wrapper).trim();
@@ -497,7 +501,7 @@ export class FeedRenderer extends ChatobbyComponent {
 
   private onScroll(): void {
     if (!this.scrollEl || this.scrollRaf) return;
-    this.scrollRaf = requestAnimationFrame(() => {
+    this.scrollRaf = window.requestAnimationFrame(() => {
       this.scrollRaf = 0;
       if (!this.scrollEl) return;
       const { scrollTop, scrollHeight, clientHeight } = this.scrollEl;
@@ -553,7 +557,7 @@ export class FeedRenderer extends ChatobbyComponent {
   private ensureRenderTimer(): void {
     if (!this.active || this.renderTimer) return;
     this.lastRenderTime = Date.now();
-    this.renderTimer = setInterval(() => {
+    this.renderTimer = window.setInterval(() => {
       if (!this.contentDirty) return;
       const now = Date.now();
       if (now - this.lastRenderTime < FIXED_RENDER_INTERVAL_MS) return;
@@ -564,7 +568,7 @@ export class FeedRenderer extends ChatobbyComponent {
   }
 
   private stopRenderTimer(): void {
-    if (this.renderTimer) clearInterval(this.renderTimer);
+    if (this.renderTimer) window.clearInterval(this.renderTimer);
     this.renderTimer = null;
   }
 
@@ -582,7 +586,7 @@ export class FeedRenderer extends ChatobbyComponent {
 
   private scheduleTick(): void {
     if (!this.active) return;
-    this.tickRaf = requestAnimationFrame(() => {
+    this.tickRaf = window.requestAnimationFrame(() => {
       this.tickRaf = null;
       const now = Date.now();
       if (now - this.lastTick >= TICK_THROTTLE_MS) {

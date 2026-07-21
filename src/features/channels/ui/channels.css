@@ -10,7 +10,7 @@
 .chatobby-channels__sidebar { width: auto; min-width: 0; max-width: none; padding: var(--size-4-3); overflow-y: auto; border-right: var(--border-width) solid var(--chatobby-border); background: var(--background-secondary); }
 .chatobby-channels__group + .chatobby-channels__group { margin-top: var(--size-4-3); }
 .chatobby-channels__section-label { margin-bottom: var(--size-2-2); color: var(--text-faint); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); text-transform: uppercase; letter-spacing: 0.04em; }
-.chatobby-channels__channel { display: grid; width: 100%; height: auto !important; min-width: 0; max-height: none !important; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--size-2-2); padding: var(--size-2-2); border: 0; color: var(--text-muted); background: transparent; box-shadow: none; text-align: left; white-space: normal; }
+button.chatobby-channels__channel { display: grid; width: 100%; height: auto; min-width: 0; max-height: none; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--size-2-2); padding: var(--size-2-2); border: 0; color: var(--text-muted); background: transparent; box-shadow: none; text-align: left; white-space: normal; }
 .chatobby-channels__channel:hover, .chatobby-channels__channel.is-active { color: var(--text-normal); background: var(--background-modifier-hover); }
 .chatobby-channels__channel.is-active { box-shadow: inset 2px 0 0 var(--interactive-accent); }
 .chatobby-channels__channel-icon { display: inline-flex; }

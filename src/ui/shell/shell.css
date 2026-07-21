@@ -2,7 +2,7 @@
 
 .workspace-leaf-content[data-type="chatobby-view"],
 .workspace-leaf-content[data-type="chatobby-view"] .view-content,
-.chatobby-view {
+.workspace-leaf-content[data-type="chatobby-view"] .chatobby-view {
   position: relative;
   background: var(--chatobby-canvas);
 }
@@ -46,12 +46,12 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 0 !important;
+  padding: 0;
   color: var(--text-normal);
   font-size: var(--chatobby-body-size);
   font-family: var(--font-interface-theme);
   container-type: inline-size;
-  overflow: hidden !important;
+  overflow: hidden;
 }
 
 .chatobby-view[data-height="shallow"] {

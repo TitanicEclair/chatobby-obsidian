@@ -60,6 +60,10 @@ interface BrowserCursor {
   blockOffset: number;
 }
 
+interface WorkspaceWithRecentLeaf {
+  getMostRecentLeaf?: () => WorkspaceLeaf | null;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -74,6 +78,11 @@ function assertNotAborted(signal: AbortSignal): void {
 
 function getLeafId(leaf: WorkspaceLeaf): string {
   return (leaf as unknown as { id?: string }).id ?? "";
+}
+
+function getCurrentLeaf(app: App): WorkspaceLeaf {
+  const workspace = app.workspace as WorkspaceWithRecentLeaf;
+  return workspace.getMostRecentLeaf?.() ?? app.workspace.getLeaf(false);
 }
 
 function getLeafViewType(leaf: WorkspaceLeaf): string {
@@ -240,7 +249,7 @@ function findAnyLeaf(app: App, leafId: string): WorkspaceLeaf | null {
 function findBrowserLeaf(app: App, leafId?: string): WorkspaceLeaf | null {
   const leaves = listWebViewerLeaves(app);
   if (leafId) return leaves.find((leaf) => getLeafId(leaf) === leafId) ?? null;
-  const active = app.workspace.activeLeaf;
+  const active = getCurrentLeaf(app);
   if (active && isWebViewerLeaf(active)) return active;
   return leaves[0] ?? null;
 }
@@ -266,7 +275,7 @@ async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTab
   return {
     leafId: getLeafId(leaf),
     type: getLeafViewType(leaf),
-    isActive: leaf === app.workspace.activeLeaf,
+    isActive: leaf === getCurrentLeaf(app),
     ...(url ? { url } : {}),
     ...(title ? { title } : {}),
     ...(loading !== undefined ? { loading } : {}),
@@ -282,12 +291,12 @@ function resolveBrowserTarget(app: App, target: unknown): WorkspaceLeaf {
   switch (target) {
     case "current": return app.workspace.getLeaf(false);
     case "split-left": {
-      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      const source = getCurrentLeaf(app);
       return app.workspace.createLeafBySplit(source, "vertical", true);
     }
     case "split-right": return app.workspace.getLeaf("split", "vertical");
     case "split-up": {
-      const source = app.workspace.activeLeaf ?? app.workspace.getLeaf(false);
+      const source = getCurrentLeaf(app);
       return app.workspace.createLeafBySplit(source, "horizontal", true);
     }
     case "split-down": return app.workspace.getLeaf("split", "horizontal");

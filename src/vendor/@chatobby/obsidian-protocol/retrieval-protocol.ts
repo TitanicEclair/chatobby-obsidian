@@ -346,7 +346,7 @@ function parseCandidate(input: unknown): ObsidianRetrievalCandidate {
 
 function parseDiagnostics(input: unknown): ObsidianRetrievalDiagnostics {
 	if (input === null || typeof input !== "object") throw new TypeError("Retrieval diagnostics must be an object");
-	return input as ObsidianRetrievalDiagnostics;
+	return input;
 }
 
 /**

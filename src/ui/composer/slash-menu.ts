@@ -118,7 +118,7 @@ export class SlashMenu extends ChatobbyComponent {
 }
 
 function scrollActiveItemIntoView(item: HTMLElement): void {
-  requestAnimationFrame(() => {
+  window.requestAnimationFrame(() => {
     item.scrollIntoView({ block: "nearest" });
   });
 }

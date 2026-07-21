@@ -14,7 +14,7 @@ export class DividerBlockView extends ChatobbyComponent {
   private activityDetailEl: HTMLElement | null = null;
   private labelTextEl: HTMLElement | null = null;
   private dotsEl: HTMLElement | null = null;
-  private clock: ReturnType<typeof setInterval> | null = null;
+  private clock: number | null = null;
 
   constructor(private block?: DividerBlock) {
     super();
@@ -63,7 +63,7 @@ export class DividerBlockView extends ChatobbyComponent {
     this.stopClock();
     this.renderElapsed(block);
     if (block.activityStartedAt !== undefined && block.activityEndedAt === undefined) {
-      this.clock = setInterval(() => this.renderElapsed(this.block), 1_000);
+      this.clock = window.setInterval(() => this.renderElapsed(this.block), 1_000);
     }
   }
 
@@ -81,7 +81,7 @@ export class DividerBlockView extends ChatobbyComponent {
   }
 
   private stopClock(): void {
-    if (this.clock) clearInterval(this.clock);
+    if (this.clock) window.clearInterval(this.clock);
     this.clock = null;
   }
 

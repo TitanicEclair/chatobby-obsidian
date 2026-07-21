@@ -34,6 +34,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   display(): void {
+    this.renderSettings();
+  }
+
+  private renderSettings(): void {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.addClass("chatobby-settings");
@@ -85,10 +89,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
           .setButtonText(ready ? "Restart" : "Check again")
           .onClick(() => {
             const action = ready ? this.plugin.restartRuntime() : this.plugin.startBackend();
-            action.then(() => this.display()).catch((error: unknown) => {
+            action.then(() => this.renderSettings()).catch((error: unknown) => {
               console.error("Chatobby: runtime action failed", error);
               new Notice(error instanceof Error ? error.message : "Chatobby runtime action failed");
-              this.display();
+              this.renderSettings();
             });
           });
       });
@@ -109,7 +113,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             .setValue(runtimeMode)
             .onChange((value) => {
               this.updateSettings({ runtimeMode: value as PluginSettings["runtimeMode"] })
-                .then(() => this.display())
+                .then(() => this.renderSettings())
                 .catch((error: unknown) => {
                   console.error("Chatobby: failed to update runtime mode", error);
                   new Notice("Failed to update Chatobby runtime mode");
@@ -143,7 +147,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.runtimeLifetime)
             .onChange((value) => {
               this.updateSettings({ runtimeLifetime: value === "background" ? "background" : "obsidian-session" })
-                .then(() => this.display())
+                .then(() => this.renderSettings())
                 .catch((error: unknown) => {
                   console.error("Chatobby: failed to update runtime lifetime", error);
                   new Notice("Failed to update Chatobby runtime lifetime");
@@ -225,7 +229,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             this.updateSettings({ commandShell: value as PluginSettings["commandShell"] })
               .then(() => {
                 new Notice("Command shell saved. Restart Chatobby to apply it.");
-                this.display();
+                this.renderSettings();
               })
               .catch((error: unknown) => {
                 console.error("Chatobby: failed to update command shell", error);
@@ -376,7 +380,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             ...this.plugin.settings.composerKeybindings,
             [action]: DEFAULT_COMPOSER_KEYBINDINGS[action],
           },
-        }).then(() => this.display()).catch((error) => {
+        }).then(() => this.renderSettings()).catch((error) => {
           console.error("Chatobby: failed to reset composer shortcut", error);
           new Notice("Failed to reset composer shortcut");
         });
@@ -401,7 +405,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
         .addButton((button) => button.setButtonText("Try again").onClick(() => {
           this.providerCatalogAttempted = false;
           this.requestProviderCatalog();
-          this.display();
+          this.renderSettings();
         }));
     }
 
@@ -462,14 +466,18 @@ export class ChatobbySettingTab extends PluginSettingTab {
     setting.settingEl.addClass("chatobby-settings__provider");
     setting.settingEl.toggleClass("is-connected", configured);
     if (removable) {
-      setting.addButton((button) => button.setButtonText("Disconnect").setWarning().onClick(() => {
-        this.plugin.removeProviderKey(provider.id)
-          .then(() => this.refreshAfterProviderChange())
-          .catch((error) => {
-            console.error("Chatobby: failed to remove provider key", error);
-            new Notice(`Failed to disconnect ${provider.name}`);
-          });
-      }));
+      setting.addButton((button) => {
+        button.setButtonText("Disconnect");
+        button.buttonEl.addClass("mod-warning");
+        button.onClick(() => {
+          this.plugin.removeProviderKey(provider.id)
+            .then(() => this.refreshAfterProviderChange())
+            .catch((error) => {
+              console.error("Chatobby: failed to remove provider key", error);
+              new Notice(`Failed to disconnect ${provider.name}`);
+            });
+        });
+      });
     }
   }
 
@@ -505,7 +513,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
   ): Promise<void> {
     this.providerCatalogLoading = true;
     this.providerCatalogError = null;
-    if (renderLoading) this.display();
+    if (renderLoading) this.renderSettings();
 
     try {
       if (startBackend) {
@@ -523,7 +531,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
       if (showFailureNotice) new Notice("Could not discover Chatobby providers");
     } finally {
       this.providerCatalogLoading = false;
-      this.display();
+      this.renderSettings();
     }
   }
 
@@ -599,7 +607,7 @@ class ProviderCredentialModal extends Modal {
     cancel.addEventListener("click", () => this.close());
     const connect = actions.createEl("button", { cls: "mod-cta", text: "Connect", attr: { type: "button" } });
     connect.addEventListener("click", () => void this.connect(connect, cancel));
-    requestAnimationFrame(() => keyInput?.focus());
+    window.requestAnimationFrame(() => keyInput?.focus());
   }
 
   private async connect(connect: HTMLButtonElement, cancel: HTMLButtonElement): Promise<void> {

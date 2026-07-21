@@ -1,4 +1,5 @@
-import { setIcon } from "obsidian";
+import { type App, setIcon } from "obsidian";
+import { confirmAction } from "../../../ui/modals/modals";
 import { ChatobbyComponent } from "../../../ui/shared/component";
 import { createPageHeader, createPageIconButton } from "../../../ui/shared/page-shell";
 import type {
@@ -8,6 +9,7 @@ import type {
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 
 export interface ChannelsViewOptions {
+  app: App;
   getModel(): FrontendChannelScreenViewModel | null;
   subscribe(listener: (model: FrontendChannelScreenViewModel | null) => void): () => void;
   onBack(): void;
@@ -130,15 +132,13 @@ export class ChannelsView extends ChatobbyComponent {
         archived ? "Restore channel" : "Archive channel",
       );
       manage.addEventListener("click", () => {
-        if (!archived && !window.confirm(`Archive “${selected.label}”? Its messages remain available under Archived.`)) return;
-        void this.options.onSetArchived(selected.id, !archived);
+        void this.confirmArchive(selected.id, selected.label, archived);
       });
       if (selected.canDelete) {
         const remove = createPageIconButton(actions, "trash-2", "Delete channel permanently");
         remove.addClass("is-danger");
         remove.addEventListener("click", () => {
-          if (!window.confirm(`Permanently delete “${selected.label}” and all of its messages? This cannot be undone.`)) return;
-          void this.options.onDeleteChannel(selected.id);
+          void this.confirmDelete(selected.id, selected.label);
         });
       }
     }
@@ -175,7 +175,7 @@ export class ChannelsView extends ChatobbyComponent {
     row.dataset.messageId = message.id;
     if (message.id === this.options.focusMessageId) {
       row.addClass("is-target");
-      requestAnimationFrame(() => row.scrollIntoView({ block: "center" }));
+      window.requestAnimationFrame(() => row.scrollIntoView({ block: "center" }));
     }
     row.createDiv({ cls: "chatobby-channels__avatar", text: message.senderInitials }).setAttr("aria-hidden", "true");
     const content = row.createDiv({ cls: "chatobby-channels__message-content" });
@@ -198,6 +198,25 @@ export class ChannelsView extends ChatobbyComponent {
       void navigator.clipboard.writeText(message.text);
     });
     if (message.contextLabel) menu.createDiv({ cls: "chatobby-channels__message-context", text: message.contextLabel });
+  }
+
+  private async confirmArchive(id: string, label: string, archived: boolean): Promise<void> {
+    if (!archived && !await confirmAction(this.options.app, {
+      title: "Archive channel?",
+      message: `Archive “${label}”? Its messages remain available under Archived.`,
+      confirmLabel: "Archive",
+    })) return;
+    await this.options.onSetArchived(id, !archived);
+  }
+
+  private async confirmDelete(id: string, label: string): Promise<void> {
+    if (!await confirmAction(this.options.app, {
+      title: "Delete channel permanently?",
+      message: `Permanently delete “${label}” and all of its messages? This cannot be undone.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    })) return;
+    await this.options.onDeleteChannel(id);
   }
 }
 

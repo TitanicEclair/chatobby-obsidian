@@ -21,7 +21,7 @@ function resolveActiveMarkdownView(app: App): MarkdownView | null {
   const activeIsMarkdown =
     !!activeLeaf?.view && (activeLeaf.view as { getViewType?: () => string }).getViewType?.() === "markdown";
   const markdownLeaf: LeafLike | undefined = activeIsMarkdown
-    ? activeLeaf!
+    ? activeLeaf
     : ws.getLeavesOfType("markdown").find(
         (leaf) => (leaf.view as { getViewType?: () => string }).getViewType?.() === "markdown",
       );

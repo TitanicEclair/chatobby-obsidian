@@ -31,7 +31,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
   }
 
   const stateKey = "__chatobbyBrowserPageV1_6f5c9f3b";
-  const globalRecord = globalThis as unknown as Record<string, unknown>;
+  const globalRecord = window as unknown as Record<string, unknown>;
 
   function createDocumentId(): string {
     try {
@@ -72,6 +72,21 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
 
   const state = pageState();
 
+  function isDomNodeOfType<T extends Node>(
+    value: unknown,
+    constructor: { new (): T; prototype: T },
+  ): value is T {
+    if (value === null || typeof value !== "object") return false;
+    const node = value as Node & { instanceOf?: (expected: { new (): T; prototype: T }) => boolean };
+    if (typeof node.instanceOf === "function") return node.instanceOf(constructor);
+    let prototype = Reflect.getPrototypeOf(node);
+    while (prototype) {
+      if (prototype === constructor.prototype) return true;
+      prototype = Reflect.getPrototypeOf(prototype);
+    }
+    return false;
+  }
+
   function clean(value: unknown): string {
     return String(value ?? "").replace(/\s+/g, " ").trim();
   }
@@ -98,7 +113,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
         documentWidth: Math.max(root?.scrollWidth ?? 0, body?.scrollWidth ?? 0),
         documentHeight: Math.max(root?.scrollHeight ?? 0, body?.scrollHeight ?? 0),
       },
-      activeRef: document.activeElement instanceof Element ? refFor(document.activeElement) : undefined,
+      activeRef: isDomNodeOfType(document.activeElement, Element) ? refFor(document.activeElement) : undefined,
     };
   }
 
@@ -185,7 +200,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
     }
     const aria = element.getAttribute("aria-label");
     if (aria) return clean(aria);
-    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+    if (isDomNodeOfType(element, HTMLInputElement) || isDomNodeOfType(element, HTMLTextAreaElement) || isDomNodeOfType(element, HTMLSelectElement)) {
       const labels = Array.from(element.labels ?? []).map((label) => label.textContent ?? "").join(" ");
       if (clean(labels)) return clean(labels);
     }
@@ -311,10 +326,10 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
   function elementSummary(element: Element, includeValue = true): Record<string, unknown> {
     const html = element as HTMLElement;
     const rect = element.getBoundingClientRect();
-    const inputElement = element instanceof HTMLInputElement ? element : null;
+    const inputElement = isDomNodeOfType(element, HTMLInputElement) ? element : null;
     const inputType = inputElement?.type?.toLowerCase() ?? "";
     const sensitive = inputType === "password" || inputType === "hidden";
-    const value = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement
+    const value = isDomNodeOfType(element, HTMLInputElement) || isDomNodeOfType(element, HTMLTextAreaElement) || isDomNodeOfType(element, HTMLSelectElement)
       ? sensitive ? "[redacted]" : String(element.value).slice(0, 160)
       : "";
     return {
@@ -325,7 +340,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
       name: clip(labelledText(element), 240),
       text: clip(html.innerText || element.textContent || "", 320),
       ariaLabel: element.getAttribute("aria-label") || "",
-      href: element instanceof HTMLAnchorElement ? element.href : element.getAttribute("href") || "",
+      href: isDomNodeOfType(element, HTMLAnchorElement) ? element.href : element.getAttribute("href") || "",
       inputType,
       ...(includeValue ? { value } : {}),
       checked: inputElement && typeof inputElement.checked === "boolean" ? inputElement.checked : undefined,
@@ -358,7 +373,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
 
   function inlineMarkdown(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
-    if (!(node instanceof Element)) return "";
+    if (!isDomNodeOfType(node, Element)) return "";
     const tag = node.tagName.toLowerCase();
     if (["script", "style", "noscript", "svg", "canvas", "form"].includes(tag)) return "";
     const content = Array.from(node.childNodes).map(inlineMarkdown).join("");
@@ -377,7 +392,10 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
     const rows = Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => clean(cell.innerText || cell.textContent || "").replace(/\|/g, "\\|")));
     if (rows.length === 0) return "";
     const width = Math.max(...rows.map((row) => row.length));
-    const normalized = rows.map((row) => [...row, ...Array(Math.max(0, width - row.length)).fill("")]);
+    const normalized = rows.map((row) => [
+      ...row,
+      ...Array<string>(Math.max(0, width - row.length)).fill(""),
+    ]);
     const head = normalized[0] as string[];
     return [
       `| ${head.join(" | ")} |`,
@@ -388,7 +406,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
 
   function readableRoot(): Element {
     const requested = targetRoot();
-    if (requested instanceof Element) return requested;
+    if (isDomNodeOfType(requested, Element)) return requested;
     const candidates = Array.from(document.querySelectorAll("main,article,[role=main]"))
       .filter((element) => visible(element))
       .sort((left, right) => clean((right as HTMLElement).innerText || right.textContent).length - clean((left as HTMLElement).innerText || left.textContent).length);
@@ -627,16 +645,16 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
     const clear = input.clear !== false;
     (element as HTMLElement).scrollIntoView({ block: "center", inline: "center" });
     (element as HTMLElement).focus?.();
-    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    if (isDomNodeOfType(element, HTMLInputElement) || isDomNodeOfType(element, HTMLTextAreaElement)) {
       const next = clear ? text : element.value + text;
-      const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-      if (setter) setter.call(element, next);
+      const prototype = isDomNodeOfType(element, HTMLInputElement) ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+      if (typeof descriptor?.set === "function") descriptor.set.call(element, next);
       else element.value = next;
       element.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: text }));
       element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
       element.dispatchEvent(new Event("change", { bubbles: true }));
-    } else if (element instanceof HTMLSelectElement) {
+    } else if (isDomNodeOfType(element, HTMLSelectElement)) {
       element.value = text;
       element.dispatchEvent(new Event("input", { bubbles: true }));
       element.dispatchEvent(new Event("change", { bubbles: true }));
@@ -657,7 +675,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
       filled: true,
       page: pageEnvelope(),
       element: elementSummary(element, false),
-      sensitive: element instanceof HTMLInputElement && element.type.toLowerCase() === "password",
+      sensitive: isDomNodeOfType(element, HTMLInputElement) && element.type.toLowerCase() === "password",
     };
   }
 

@@ -86,7 +86,7 @@ export function getChatobbyPerformanceSnapshot(): ChatobbyPerformanceSnapshot {
 }
 
 if (enabled) {
-  (globalThis as typeof globalThis & ChatobbyPerformanceGlobal).__chatobbyPerformance = getChatobbyPerformanceSnapshot;
+  (window as typeof window & ChatobbyPerformanceGlobal).__chatobbyPerformance = getChatobbyPerformanceSnapshot;
   try {
     const observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {

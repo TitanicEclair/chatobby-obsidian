@@ -269,7 +269,7 @@ function parseInvoke(input: Record<string, unknown>): ObsidianBridgeInvoke {
 		type: "invoke",
 		requestId: input.requestId,
 		operation: input.operation,
-		arguments: input.arguments as Record<string, unknown>,
+		arguments: input.arguments,
 		deadline: input.deadline,
 	};
 }

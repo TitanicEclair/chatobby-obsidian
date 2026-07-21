@@ -4,7 +4,7 @@ import { ChannelsView } from "../../src/features/channels/ui/channels-view";
 import type { FrontendChannelScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 
 describe("ChannelsView", () => {
-  it("renders runtime-projected directory, routing metadata, and live replacement", () => {
+  it("renders runtime-projected directory, routing metadata, and live replacement", async () => {
     let model = channelModel();
     const listeners = new Set<(value: FrontendChannelScreenViewModel | null) => void>();
     const onSetArchived = vi.fn(async () => {});
@@ -44,8 +44,9 @@ describe("ChannelsView", () => {
     expect(host.querySelector(".chatobby-channels__bubble")?.textContent).toContain("Status update");
     expect(host.querySelector(".chatobby-channels__message-context")?.textContent).toContain("Directory: C:\\Vault\\Projects\\Chatobby");
 
-    Object.defineProperty(window, "confirm", { configurable: true, value: vi.fn(() => true) });
     host.querySelector<HTMLButtonElement>('[aria-label="Archive channel"]')?.click();
+    document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();
+    await Promise.resolve();
     expect(onSetArchived).toHaveBeenCalledWith("session-channel", true);
 
 	model = {
@@ -60,6 +61,8 @@ describe("ChannelsView", () => {
 	};
 	for (const listener of listeners) listener(model);
 	host.querySelector<HTMLButtonElement>('[aria-label="Delete channel permanently"]')?.click();
+	document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();
+	await Promise.resolve();
 	expect(onDeleteChannel).toHaveBeenCalledWith("session-channel");
 
     model = { ...model, revision: 3, messages: [...model.messages, {

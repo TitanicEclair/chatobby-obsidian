@@ -38,5 +38,5 @@ export class SessionTransitionCoordinator {
 }
 
 function nextAnimationFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
 }

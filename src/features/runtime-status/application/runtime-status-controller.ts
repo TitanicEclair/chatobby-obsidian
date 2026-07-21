@@ -12,7 +12,7 @@ export interface RuntimeStatusHost {
 export class RuntimeStatusController {
   private readonly host: RuntimeStatusHost;
   private container: HTMLElement | null = null;
-  private showTimer: ReturnType<typeof setTimeout> | null = null;
+  private showTimer: number | null = null;
   private pendingKey: string | null = null;
   private renderedKey: string | null = null;
 
@@ -34,7 +34,7 @@ export class RuntimeStatusController {
     if (state.status === "resolving" || state.status === "spawning" || state.status === "authenticating") {
       this.cancelShowTimer();
       this.pendingKey = key;
-      this.showTimer = setTimeout(() => {
+      this.showTimer = window.setTimeout(() => {
         this.showTimer = null;
         this.pendingKey = null;
         this.renderState(state, key);
@@ -105,7 +105,7 @@ export class RuntimeStatusController {
   }
 
   private cancelShowTimer(): void {
-    if (this.showTimer) clearTimeout(this.showTimer);
+    if (this.showTimer) window.clearTimeout(this.showTimer);
     this.showTimer = null;
     this.pendingKey = null;
   }
