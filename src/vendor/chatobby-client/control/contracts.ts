@@ -1,7 +1,7 @@
 // Generated from packages/chatobby/src/control/contracts.ts. Do not edit.
 export const CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION = 2 as const;
 export const CHATOBBY_RUNTIME_PROTOCOL_VERSION = 3 as const;
-export const CHATOBBY_RUNTIME_VERSION = "0.1.16";
+export const CHATOBBY_RUNTIME_VERSION = "0.2.0";
 export const CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS = 5_000;
 export const CHATOBBY_RUNTIME_REATTACH_GRACE_MS = 15_000;
 
