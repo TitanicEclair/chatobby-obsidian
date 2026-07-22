@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { win32 } from "node:path";
 import { describe, expect, it } from "vitest";
 import { resolveChatobbyPlatformPaths } from "../../src/runtime/infrastructure/platform-paths";
 
@@ -10,8 +10,8 @@ describe("Chatobby platform paths", () => {
       localAppData: "C:\\Users\\tester\\AppData\\Local",
     });
 
-    expect(paths.runtimeInstallRoot).toBe(join("C:\\Users\\tester\\AppData\\Local", "Chatobby", "runtime"));
-    expect(paths.runtimeLeasesRoot).toBe(join("C:\\Users\\tester\\AppData\\Local", "Chatobby", "runtimes"));
+    expect(paths.runtimeInstallRoot).toBe(win32.join("C:\\Users\\tester\\AppData\\Local", "Chatobby", "runtime"));
+    expect(paths.runtimeLeasesRoot).toBe(win32.join("C:\\Users\\tester\\AppData\\Local", "Chatobby", "runtimes"));
     expect(paths.runtimeLogsRoot).toBe(paths.runtimeLeasesRoot);
   });
 
