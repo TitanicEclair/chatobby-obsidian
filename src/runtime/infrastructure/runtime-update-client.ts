@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { once } from "node:events";
 import { createGunzip } from "node:zlib";
 import {
-  CHATOBBY_RUNTIME_UPDATE_DESCRIPTOR_URL,
+  CHATOBBY_RUNTIME_INDEX_URL,
   chatobbyRuntimeBundleUrl,
 } from "../../publication";
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../vendor/chatobby-client/ws-client.js";
@@ -17,7 +17,8 @@ import {
   type RuntimePackageManifest,
 } from "./runtime-installation";
 
-const UPDATE_SCHEMA_VERSION = 1;
+const LEGACY_UPDATE_SCHEMA_VERSION = 1;
+const UPDATE_INDEX_SCHEMA_VERSION = 2;
 const BUNDLE_FORMAT = "chatobby-runtime-bundle-v1";
 const BUNDLE_MAGIC = Buffer.from("CHATOBBY-RUNTIME-BUNDLE/1\n", "utf8");
 const MAX_DESCRIPTOR_BYTES = 128 * 1024;
@@ -30,7 +31,7 @@ const REQUEST_INACTIVITY_TIMEOUT_MS = 30_000;
 const DESCRIPTOR_TIMEOUT_MS = 30_000;
 const BUNDLE_TIMEOUT_MS = 10 * 60_000;
 
-export interface RuntimeUpdateDescriptor {
+export interface LegacyRuntimeUpdateDescriptor {
   schemaVersion: 1;
   product: "Chatobby Runtime";
   version: string;
@@ -49,6 +50,44 @@ export interface RuntimeUpdateDescriptor {
   };
   signatureAlgorithm: "ed25519";
   signature: string;
+}
+
+export interface RuntimeReleaseTarget {
+  platform: "win32" | "darwin";
+  arch: "x64" | "arm64";
+  bundle: LegacyRuntimeUpdateDescriptor["bundle"];
+}
+
+export interface RuntimeReleaseIndex {
+  schemaVersion: 2;
+  product: "Chatobby Runtime";
+  version: string;
+  protocolVersion: number;
+  minimumPluginVersion: string;
+  maximumPluginVersion: string;
+  targets: RuntimeReleaseTarget[];
+  signatureAlgorithm: "ed25519";
+  signature: string;
+}
+
+export interface SelectedRuntimeRelease extends RuntimeReleaseIndex {
+  platform: RuntimeReleaseTarget["platform"];
+  arch: RuntimeReleaseTarget["arch"];
+  bundle: RuntimeReleaseTarget["bundle"];
+}
+
+export type RuntimeUpdateDescriptor = LegacyRuntimeUpdateDescriptor | SelectedRuntimeRelease;
+
+export type RuntimeTargetKey = "win32-x64" | "darwin-arm64" | "darwin-x64";
+
+export class RuntimeUpdateError extends Error {
+  readonly code: "runtime_target_unavailable" | "runtime_architecture_mismatch" | "runtime_package_invalid";
+
+  constructor(code: RuntimeUpdateError["code"], message: string) {
+    super(message);
+    this.name = "RuntimeUpdateError";
+    this.code = code;
+  }
 }
 
 export interface RuntimeUpdateTransferProgress {
@@ -98,12 +137,12 @@ export class RuntimeUpdateClient implements RuntimeUpdateClientLike {
   }
 
   async fetchLatest(pluginVersion: string, signal?: AbortSignal): Promise<RuntimeUpdateDescriptor> {
-    const bytes = await this.http.read(CHATOBBY_RUNTIME_UPDATE_DESCRIPTOR_URL, MAX_DESCRIPTOR_BYTES, signal);
+    const bytes = await this.http.read(CHATOBBY_RUNTIME_INDEX_URL, MAX_DESCRIPTOR_BYTES, signal);
     let value: unknown;
     try {
       value = JSON.parse(bytes.toString("utf8"));
     } catch {
-      throw new Error("Chatobby's runtime update information is not valid JSON");
+      throw new RuntimeUpdateError("runtime_package_invalid", "Chatobby's runtime update information is not valid JSON");
     }
     return verifyRuntimeUpdateDescriptor(value, pluginVersion, this.trustedPublicKey);
   }
@@ -133,7 +172,7 @@ export class RuntimeUpdateClient implements RuntimeUpdateClientLike {
       await extractRuntimeBundle(archivePath, sourceDirectory, verified, signal, (extracted) => {
         progress({ phase: "extracting", completed: extracted, total: verified.bundle.uncompressedSize });
       });
-      const manifest = readRuntimePackageManifest(sourceDirectory);
+      const manifest = await readRuntimePackageManifest(sourceDirectory);
       if (manifest.version !== verified.version || manifest.protocolVersion !== verified.protocolVersion) {
         throw new Error("Runtime update descriptor and package manifest do not match");
       }
@@ -150,28 +189,72 @@ export function verifyRuntimeUpdateDescriptor(
   value: unknown,
   pluginVersion: string,
   trustedPublicKey: string,
+  target: { platform: NodeJS.Platform; arch: string } = { platform: process.platform, arch: process.arch },
 ): RuntimeUpdateDescriptor {
-  if (!isRuntimeUpdateDescriptor(value)) throw new Error("Chatobby's runtime update information has an unsupported shape");
-  if (value.platform !== process.platform || value.arch !== process.arch) {
-    throw new Error(`The available runtime targets ${value.platform}-${value.arch}, not ${process.platform}-${process.arch}`);
+  if (isLegacyRuntimeUpdateDescriptor(value)) {
+    if (value.platform !== target.platform || value.arch !== target.arch) {
+      throw new RuntimeUpdateError(
+        "runtime_architecture_mismatch",
+        `The available runtime targets ${value.platform}-${value.arch}, not ${target.platform}-${target.arch}`,
+      );
+    }
+    validateRuntimeCompatibility(value, pluginVersion);
+    if (!verify(
+      null,
+      Buffer.from(runtimeUpdateSigningPayload(value), "utf8"),
+      trustedPublicKey,
+      Buffer.from(value.signature, "base64"),
+    )) {
+      throw new RuntimeUpdateError("runtime_package_invalid", "Runtime update signature is invalid");
+    }
+    return value;
   }
-  if (value.protocolVersion !== CHATOBBY_RUNTIME_PROTOCOL_VERSION) {
-    throw new Error(`The available runtime uses unsupported protocol ${value.protocolVersion}`);
+
+  if (!isRuntimeReleaseIndex(value)) {
+    throw new RuntimeUpdateError("runtime_package_invalid", "Chatobby's runtime update information has an unsupported shape");
   }
-  if (!isCompatiblePluginVersion(pluginVersion, value.minimumPluginVersion, value.maximumPluginVersion)) {
-    throw new Error(
-      `Runtime ${value.version} supports Chatobby ${value.minimumPluginVersion} through ${value.maximumPluginVersion}`,
-    );
+  validateRuntimeCompatibility(value, pluginVersion);
+  const targetKeys = value.targets.map(runtimeTargetKey);
+  if (new Set(targetKeys).size !== targetKeys.length) {
+    throw new RuntimeUpdateError("runtime_package_invalid", "Runtime release index contains duplicate targets");
+  }
+  if (JSON.stringify(targetKeys) !== JSON.stringify([...targetKeys].sort())) {
+    throw new RuntimeUpdateError("runtime_package_invalid", "Runtime release index targets are not sorted");
   }
   if (!verify(
     null,
-    Buffer.from(runtimeUpdateSigningPayload(value), "utf8"),
+    Buffer.from(runtimeReleaseIndexSigningPayload(value), "utf8"),
     trustedPublicKey,
     Buffer.from(value.signature, "base64"),
   )) {
-    throw new Error("Runtime update signature is invalid");
+    throw new RuntimeUpdateError("runtime_package_invalid", "Runtime release index signature is invalid");
   }
-  return value;
+  const selected = value.targets.find((candidate) => candidate.platform === target.platform && candidate.arch === target.arch);
+  if (!selected) {
+    throw new RuntimeUpdateError(
+      "runtime_target_unavailable",
+      `No Chatobby runtime is available for ${target.platform}-${target.arch}`,
+    );
+  }
+  return { ...value, platform: selected.platform, arch: selected.arch, bundle: selected.bundle };
+}
+
+function validateRuntimeCompatibility(
+  value: Pick<RuntimeUpdateDescriptor, "version" | "protocolVersion" | "minimumPluginVersion" | "maximumPluginVersion">,
+  pluginVersion: string,
+): void {
+  if (value.protocolVersion !== CHATOBBY_RUNTIME_PROTOCOL_VERSION) {
+    throw new RuntimeUpdateError(
+      "runtime_package_invalid",
+      `The available runtime uses unsupported protocol ${value.protocolVersion}`,
+    );
+  }
+  if (!isCompatiblePluginVersion(pluginVersion, value.minimumPluginVersion, value.maximumPluginVersion)) {
+    throw new RuntimeUpdateError(
+      "runtime_package_invalid",
+      `Runtime ${value.version} supports Chatobby ${value.minimumPluginVersion} through ${value.maximumPluginVersion}`,
+    );
+  }
 }
 
 export function compareRuntimeVersions(left: string, right: string): number {
@@ -474,9 +557,32 @@ function runtimeUpdateSigningPayload(value: RuntimeUpdateDescriptor): string {
   });
 }
 
-function isRuntimeUpdateDescriptor(value: unknown): value is RuntimeUpdateDescriptor {
+function runtimeReleaseIndexSigningPayload(value: RuntimeReleaseIndex): string {
+  return JSON.stringify({
+    schemaVersion: value.schemaVersion,
+    product: value.product,
+    version: value.version,
+    protocolVersion: value.protocolVersion,
+    minimumPluginVersion: value.minimumPluginVersion,
+    maximumPluginVersion: value.maximumPluginVersion,
+    targets: value.targets.map((target) => ({
+      platform: target.platform,
+      arch: target.arch,
+      bundle: {
+        format: target.bundle.format,
+        file: target.bundle.file,
+        size: target.bundle.size,
+        sha256: target.bundle.sha256,
+        uncompressedSize: target.bundle.uncompressedSize,
+        entryCount: target.bundle.entryCount,
+      },
+    })),
+  });
+}
+
+function isLegacyRuntimeUpdateDescriptor(value: unknown): value is LegacyRuntimeUpdateDescriptor {
   if (!isRecord(value) || !isRecord(value.bundle)) return false;
-  return value.schemaVersion === UPDATE_SCHEMA_VERSION
+  return value.schemaVersion === LEGACY_UPDATE_SCHEMA_VERSION
     && value.product === "Chatobby Runtime"
     && typeof value.version === "string"
     && /^\d+\.\d+\.\d+$/u.test(value.version)
@@ -504,6 +610,55 @@ function isRuntimeUpdateDescriptor(value: unknown): value is RuntimeUpdateDescri
     && value.bundle.entryCount <= MAX_BUNDLE_ENTRIES
     && value.signatureAlgorithm === "ed25519"
     && typeof value.signature === "string";
+}
+
+function isRuntimeReleaseIndex(value: unknown): value is RuntimeReleaseIndex {
+  return isRecord(value)
+    && value.schemaVersion === UPDATE_INDEX_SCHEMA_VERSION
+    && value.product === "Chatobby Runtime"
+    && typeof value.version === "string"
+    && /^\d+\.\d+\.\d+$/u.test(value.version)
+    && typeof value.protocolVersion === "number"
+    && typeof value.minimumPluginVersion === "string"
+    && typeof value.maximumPluginVersion === "string"
+    && Array.isArray(value.targets)
+    && value.targets.length > 0
+    && value.targets.every(isRuntimeReleaseTarget)
+    && value.signatureAlgorithm === "ed25519"
+    && typeof value.signature === "string";
+}
+
+function isRuntimeReleaseTarget(value: unknown): value is RuntimeReleaseTarget {
+  if (!isRecord(value)) return false;
+  const supportedTarget = (value.platform === "win32" && value.arch === "x64")
+    || (value.platform === "darwin" && (value.arch === "x64" || value.arch === "arm64"));
+  return supportedTarget
+    && isRecord(value.bundle)
+    && isRuntimeBundle(value.bundle);
+}
+
+function isRuntimeBundle(value: Record<string, unknown>): boolean {
+  return value.format === BUNDLE_FORMAT
+    && typeof value.file === "string"
+    && /^[A-Za-z0-9._-]+\.cbr\.gz$/u.test(value.file)
+    && typeof value.size === "number"
+    && Number.isSafeInteger(value.size)
+    && value.size > 0
+    && value.size <= MAX_BUNDLE_BYTES
+    && typeof value.sha256 === "string"
+    && /^[a-f0-9]{64}$/u.test(value.sha256)
+    && typeof value.uncompressedSize === "number"
+    && Number.isSafeInteger(value.uncompressedSize)
+    && value.uncompressedSize > 0
+    && value.uncompressedSize <= MAX_UNCOMPRESSED_BYTES
+    && typeof value.entryCount === "number"
+    && Number.isSafeInteger(value.entryCount)
+    && value.entryCount > 0
+    && value.entryCount <= MAX_BUNDLE_ENTRIES;
+}
+
+function runtimeTargetKey(target: Pick<RuntimeReleaseTarget, "platform" | "arch">): RuntimeTargetKey {
+  return `${target.platform}-${target.arch}` as RuntimeTargetKey;
 }
 
 function validateBundlePath(path: string): void {

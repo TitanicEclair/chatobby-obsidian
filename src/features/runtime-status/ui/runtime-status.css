@@ -76,6 +76,13 @@
   overflow-wrap: anywhere;
 }
 
+.chatobby-runtime-status__diagnostic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-2-2);
+  margin-top: var(--size-2-2);
+}
+
 @keyframes chatobby-runtime-spin {
   to { transform: rotate(360deg); }
 }

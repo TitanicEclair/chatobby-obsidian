@@ -58,7 +58,7 @@ and longer-running projects while you retain control over what it may do.
 Support is completely optional. It does not unlock features or change the free
 alpha experience.
 
-#### **Chatobby is currently ONLY available on Windows. We will soon work on Mac and Linux support.**
+#### **Chatobby is available on Windows and macOS. macOS support is experimental and has not yet been fully tested on physical Mac hardware. Linux is not yet supported.**
 
 ## Contents
 
@@ -613,7 +613,9 @@ credentials or a personal filesystem path.
 
 ## Platform and alpha status
 
-The current alpha supports desktop Obsidian on Windows 10 or 11 x64.
+The current alpha supports desktop Obsidian on Windows 10 or 11 x64 and macOS
+11 or later on Apple Silicon and Intel. macOS support is experimental and has
+not yet been fully tested on physical Mac hardware.
 
 Important limitations:
 

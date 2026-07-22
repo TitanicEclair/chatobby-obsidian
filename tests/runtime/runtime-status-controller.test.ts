@@ -118,7 +118,7 @@ describe("RuntimeStatusController", () => {
     const container = document.body.createDiv();
     controller.bind(container);
 
-    expect(Array.from(container.querySelectorAll("button")).map((button) => button.textContent))
+    expect(Array.from(container.querySelectorAll(".chatobby-runtime-status__action")).map((button) => button.textContent))
       .toEqual(["Retry"]);
   });
 
@@ -144,10 +144,36 @@ describe("RuntimeStatusController", () => {
     controller.bind(container);
 
     expect(container.textContent).toContain("Chatobby needs repair");
-    expect(Array.from(container.querySelectorAll("button")).map((button) => button.textContent))
+    expect(Array.from(container.querySelectorAll(".chatobby-runtime-status__action")).map((button) => button.textContent))
       .toEqual(["Repair Chatobby"]);
-    (container.querySelector("button") as HTMLButtonElement).click();
+    (container.querySelector(".chatobby-runtime-status__action") as HTMLButtonElement).click();
     expect(install).toHaveBeenCalledWith(true);
+  });
+
+  it("explains a macOS security block without bypassing Gatekeeper", () => {
+    const state: RuntimeLifecycleState = {
+      status: "error",
+      mode: "managed",
+      diagnostics: {
+        code: "macos_security_blocked",
+        message: "macOS blocked the ad-hoc signed Chatobby runtime",
+        recentLogs: [],
+        occurredAt: 1,
+      },
+    };
+    const controller = new RuntimeStatusController({
+      getState: () => state,
+      start: vi.fn(),
+      restart: vi.fn(),
+      install: vi.fn(),
+    });
+    const container = document.body.createDiv();
+    controller.bind(container);
+
+    expect(container.textContent).toContain("macOS blocked");
+    expect(Array.from(container.querySelectorAll(".chatobby-runtime-status__action")).map((button) => button.textContent))
+      .toEqual(["Apple instructions"]);
+    expect(container.textContent).not.toContain("xattr");
   });
 });
 

@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
-import { appendFile, rename, rm, stat } from "node:fs/promises";
+import { appendFile, chmod, mkdir, open, rename, rm, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
 import type { Readable } from "node:stream";
 import type {
   ManagedProcessExit,
@@ -19,6 +21,7 @@ export interface ManagedProcessLauncher {
 /** Spawn one exact runtime child and retain only bounded diagnostics in memory. */
 export class NodeManagedProcessLauncher implements ManagedProcessLauncher {
   async spawn(launch: ManagedRuntimeLaunch): Promise<ManagedProcessHandle> {
+    await preparePrivateLog(launch.env.CHATOBBY_RUNTIME_LOG_FILE);
     await rotateLog(launch.env.CHATOBBY_RUNTIME_LOG_FILE);
     const logFile = launch.env.CHATOBBY_RUNTIME_LOG_FILE;
     const logDescriptor = launch.detached && logFile ? openSync(logFile, "a") : undefined;
@@ -80,12 +83,34 @@ function capture(
     const timestamp = new Date().toISOString();
     const lines = chunk.toString("utf8").split(/\r?\n/).filter(Boolean);
     for (const line of lines) {
-      const entry = `${timestamp} ${stream}: ${line}`;
+      const entry = `${timestamp} ${stream}: ${redactDiagnosticLine(line)}`;
       logs.push(entry);
       if (logs.length > LOG_RING_LINES) logs.splice(0, logs.length - LOG_RING_LINES);
       if (logFile) void appendFile(logFile, `${entry}\n`, "utf8").catch(() => {});
     }
   });
+}
+
+async function preparePrivateLog(logFile: string | undefined): Promise<void> {
+  if (!logFile) return;
+  await mkdir(dirname(logFile), { recursive: true, mode: 0o700 });
+  const handle = await open(logFile, "a", 0o600);
+  await handle.close();
+  if (process.platform !== "win32") {
+    await Promise.all([chmod(dirname(logFile), 0o700), chmod(logFile, 0o600)]);
+  }
+}
+
+function redactDiagnosticLine(value: string): string {
+  const home = homedir();
+  const homeVariants = [home, home.replaceAll("\\", "/"), home.replaceAll("/", "\\")]
+    .filter((candidate, index, values) => candidate && values.indexOf(candidate) === index);
+  let redacted = value;
+  for (const candidate of homeVariants) redacted = redacted.replaceAll(candidate, "~");
+  redacted = redacted
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/giu, "Bearer [redacted]")
+    .replace(/\b(api[-_ ]?key|authorization|password|secret|token)\b\s*[:=]\s*\S+/giu, "$1=[redacted]");
+  return redacted.length > 2_000 ? `${redacted.slice(0, 2_000)}…` : redacted;
 }
 
 async function terminateExactChild(

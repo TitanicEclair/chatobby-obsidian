@@ -1,6 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../vendor/chatobby-client/ws-client.js";
 import type {
@@ -9,6 +8,7 @@ import type {
   RuntimeLeaseCandidate,
 } from "../contracts";
 import { RuntimeReadyDescriptorStore } from "./ready-descriptor-store";
+import { runtimeInstancePaths } from "./platform-paths";
 
 export interface LegacyRuntimeShutdownTarget {
   descriptor: { host: "127.0.0.1"; port: number };
@@ -24,17 +24,7 @@ export class RuntimeLeaseStore {
   }
 
   pathsForVault(vaultId: string): RuntimeInstancePaths {
-    const base = process.env.LOCALAPPDATA
-      ? join(process.env.LOCALAPPDATA, "Chatobby", "runtimes")
-      : join(process.env.XDG_RUNTIME_DIR ?? homedir(), ".chatobby", "runtimes");
-    const directory = join(base, vaultId);
-    return {
-      directory,
-      descriptorFile: join(directory, "ready.json"),
-      controlTokenFile: join(directory, "control.token"),
-      sessionTokenFile: join(directory, "session.token"),
-      logFile: join(directory, "runtime.log"),
-    };
+    return runtimeInstancePaths(vaultId);
   }
 
   async readCandidate(vaultId: string): Promise<RuntimeLeaseCandidate | null> {
@@ -76,7 +66,10 @@ export class RuntimeLeaseStore {
 
   async prepare(vaultId: string): Promise<PreparedRuntimeLease> {
     const paths = this.pathsForVault(vaultId);
-    await mkdir(paths.directory, { recursive: true });
+    await Promise.all([
+      mkdir(paths.directory, { recursive: true, mode: 0o700 }),
+      mkdir(join(paths.logFile, ".."), { recursive: true, mode: 0o700 }),
+    ]);
     const lease: PreparedRuntimeLease = {
       instanceId: randomUUID(),
       vaultId,

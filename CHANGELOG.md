@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added exact Apple Silicon and Intel runtime selection through one signed
+  multi-platform release index, with platform-specific diagnostics and a safe
+  link to Apple's documented security approval flow.
+
+### Changed
+
+- Moved managed runtime, lease, and log paths onto a centralized platform
+  contract, including native macOS Application Support and Logs locations.
+- Runtime package verification now streams large files off the Obsidian UI
+  path and assigns fixed private modes instead of trusting archive permissions.
+
 ## [0.1.15] - 2026-07-22
 
 ### Added

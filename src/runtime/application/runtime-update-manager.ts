@@ -4,6 +4,7 @@ import type {
 } from "../infrastructure/runtime-installation";
 import {
   compareRuntimeVersions,
+  RuntimeUpdateError,
   type RuntimeUpdateClientLike,
   type RuntimeUpdateDescriptor,
   type RuntimeUpdateTransferProgress,
@@ -31,7 +32,13 @@ export type RuntimeUpdateState =
     completed: number;
     total: number;
   }
-  | { status: "error"; message: string; descriptor?: RuntimeUpdateDescriptor; kind?: RuntimeUpdateOfferKind };
+  | {
+    status: "error";
+    message: string;
+    code?: RuntimeUpdateError["code"];
+    descriptor?: RuntimeUpdateDescriptor;
+    kind?: RuntimeUpdateOfferKind;
+  };
 
 export interface RuntimeUpdateManagerDeps {
   pluginVersion: string;
@@ -133,7 +140,11 @@ export class RuntimeUpdateManager {
       this.emit({ status: "available", descriptor, installedVersion, kind: installedVersion ? "update" : "install" });
       return descriptor;
     } catch (error) {
-      this.emit({ status: "error", message: errorMessage(error) });
+      this.emit({
+        status: "error",
+        message: errorMessage(error),
+        ...(error instanceof RuntimeUpdateError ? { code: error.code } : {}),
+      });
       throw error;
     }
   }
@@ -193,7 +204,13 @@ export class RuntimeUpdateManager {
       if (failure instanceof Error && failure.name === "AbortError") {
         this.emit({ status: "available", descriptor, installedVersion, kind });
       } else {
-        this.emit({ status: "error", message: errorMessage(failure), descriptor, kind });
+        this.emit({
+          status: "error",
+          message: errorMessage(failure),
+          ...(failure instanceof RuntimeUpdateError ? { code: failure.code } : {}),
+          descriptor,
+          kind,
+        });
       }
       throw failure;
     } finally {

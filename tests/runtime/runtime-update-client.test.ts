@@ -8,6 +8,7 @@ import {
   extractRuntimeBundle,
   verifyRuntimeUpdateDescriptor,
   type RuntimeUpdateDescriptor,
+  type RuntimeReleaseIndex,
 } from "../../src/runtime/infrastructure/runtime-update-client";
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../src/vendor/chatobby-client/ws-client.js";
 
@@ -28,6 +29,29 @@ describe("runtime update client", () => {
       "0.1.2",
       publicKeyPem(keys.publicKey),
     )).toThrow("signature is invalid");
+  });
+
+  it("selects only the exact signed target from a multi-platform index", () => {
+    const keys = generateKeyPairSync("ed25519");
+    const index = signedIndex(keys.privateKey);
+
+    expect(verifyRuntimeUpdateDescriptor(
+      index,
+      "0.1.16",
+      publicKeyPem(keys.publicKey),
+      { platform: "darwin", arch: "arm64" },
+    )).toMatchObject({
+      schemaVersion: 2,
+      platform: "darwin",
+      arch: "arm64",
+      bundle: { file: "chatobby-runtime-0.1.16-darwin-arm64.cbr.gz" },
+    });
+    expect(() => verifyRuntimeUpdateDescriptor(
+      index,
+      "0.1.16",
+      publicKeyPem(keys.publicKey),
+      { platform: "linux", arch: "x64" },
+    )).toThrow("No Chatobby runtime is available for linux-x64");
   });
 
   it("extracts a complete sorted bundle and rejects traversal before writing outside staging", async () => {
@@ -91,6 +115,35 @@ function signedDescriptor(privateKey: KeyObject): RuntimeUpdateDescriptor {
   };
 }
 
+function signedIndex(privateKey: KeyObject): RuntimeReleaseIndex {
+  const target = (platform: "win32" | "darwin", arch: "x64" | "arm64") => ({
+    platform,
+    arch,
+    bundle: {
+      format: "chatobby-runtime-bundle-v1" as const,
+      file: `chatobby-runtime-0.1.16-${platform}-${arch}.cbr.gz`,
+      size: 1,
+      sha256: "a".repeat(64),
+      uncompressedSize: 1,
+      entryCount: 1,
+    },
+  });
+  const unsigned = {
+    schemaVersion: 2 as const,
+    product: "Chatobby Runtime" as const,
+    version: "0.1.16",
+    protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+    minimumPluginVersion: "0.1.0",
+    maximumPluginVersion: "0.1.x",
+    targets: [target("darwin", "arm64"), target("darwin", "x64"), target("win32", "x64")],
+  };
+  return {
+    ...unsigned,
+    signatureAlgorithm: "ed25519",
+    signature: sign(null, Buffer.from(indexSigningPayload(unsigned), "utf8"), privateKey).toString("base64"),
+  };
+}
+
 function descriptorForEntries(entries: readonly BundleEntry[]): RuntimeUpdateDescriptor {
   return {
     schemaVersion: 1,
@@ -143,6 +196,10 @@ function signingPayload(value: RuntimeUpdateDescriptor): string {
     arch: value.arch,
     bundle: value.bundle,
   });
+}
+
+function indexSigningPayload(value: Omit<RuntimeReleaseIndex, "signatureAlgorithm" | "signature">): string {
+  return JSON.stringify(value);
 }
 
 function publicKeyPem(key: KeyObject): string {

@@ -31,6 +31,7 @@ import {
   RuntimeLeaseStore,
 } from "../infrastructure/runtime-lease-store";
 import { RuntimeRestartPolicy } from "./restart-policy";
+import { RuntimePackageValidationError } from "../infrastructure/runtime-installation";
 
 const STARTUP_TIMEOUT_MS = 20_000;
 const AUTHENTICATION_TIMEOUT_MS = 15_000;
@@ -46,7 +47,7 @@ export interface ManagedCommand {
 export interface RuntimeManagerDeps {
   getConfiguration(): RuntimeConfiguration;
   getVaultPaths(): ChatobbyVaultRuntimePaths | null;
-  resolveManagedCommand(): ManagedCommand | null;
+  resolveManagedCommand(): ManagedCommand | null | Promise<ManagedCommand | null>;
   connectRuntime(runtime: ReadyRuntime): Promise<void>;
   disconnectRuntime(): Promise<void>;
   pluginVersion: string;
@@ -216,7 +217,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     } catch (error) {
       const failure = error instanceof RuntimeStartError
         ? error
-        : new RuntimeStartError("connection_failed", errorMessage(error));
+        : new RuntimeStartError(classifyRuntimeFailure(error), errorMessage(error));
       const diagnostics = this.diagnostics(failure.code, failure.message);
       if (this.processHandle) {
         const handle = this.processHandle;
@@ -228,7 +229,15 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         this.emit({ status: "error", mode, diagnostics });
         throw failure;
       }
-      if (failure.code === "runtime_not_installed" || failure.code === "runtime_package_invalid") {
+      if (
+        failure.code === "runtime_not_installed"
+        || failure.code === "runtime_target_unavailable"
+        || failure.code === "runtime_architecture_mismatch"
+        || failure.code === "runtime_executable_permission_invalid"
+        || failure.code === "runtime_package_invalid"
+        || failure.code === "macos_security_blocked"
+        || failure.code === "macos_filesystem_permission_denied"
+      ) {
         this.emit({ status: "error", mode, diagnostics });
         throw failure;
       }
@@ -273,9 +282,12 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     let managedCommand: ManagedCommand | null = null;
     if (mode === "managed") {
       try {
-        managedCommand = this.deps.resolveManagedCommand();
+        managedCommand = await this.deps.resolveManagedCommand();
       } catch (error) {
-        throw new RuntimeStartError("runtime_package_invalid", errorMessage(error));
+        throw new RuntimeStartError(
+          error instanceof RuntimePackageValidationError ? error.code : "runtime_package_invalid",
+          errorMessage(error),
+        );
       }
     }
     if (mode === "managed" && !managedCommand) {
@@ -328,7 +340,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     try {
       handle = await this.processes.spawn(launch);
     } catch (error) {
-      throw new RuntimeStartError("spawn_failed", errorMessage(error));
+      throw new RuntimeStartError(classifySpawnFailure(error), errorMessage(error));
     }
     this.processHandle = handle;
     const candidate = await this.waitForCandidate(prepared, handle, generation);
@@ -429,7 +441,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     const configuration = this.deps.getConfiguration();
     const detached = mode === "managed" && configuration.lifetime === "background";
     const command = mode === "managed"
-      ? managedCommand ?? this.deps.resolveManagedCommand()
+      ? managedCommand
       : { command: configuration.developerCommand, args: [...configuration.developerArgs] };
     if (!command) throw new RuntimeStartError("runtime_not_installed", "The Chatobby runtime is not installed");
     if (!command.command.trim()) {
@@ -613,6 +625,26 @@ function classifyConnectionFailure(error: unknown): RuntimeFailureCode {
   if (message.includes("protocol") || message.includes("version")) return "protocol_incompatible";
   if (message.includes("identity")) return "identity_mismatch";
   return "connection_failed";
+}
+
+function classifySpawnFailure(error: unknown): RuntimeFailureCode {
+  const code = errorCode(error);
+  if (process.platform === "darwin" && (code === "EPERM" || code === "EACCES")) return "macos_security_blocked";
+  if (code === "EACCES") return "runtime_executable_permission_invalid";
+  return "spawn_failed";
+}
+
+function classifyRuntimeFailure(error: unknown): RuntimeFailureCode {
+  if (error instanceof RuntimePackageValidationError) return error.code;
+  const code = errorCode(error);
+  if (process.platform === "darwin" && (code === "EACCES" || code === "EPERM")) {
+    return "macos_filesystem_permission_denied";
+  }
+  return "connection_failed";
+}
+
+function errorCode(error: unknown): string | undefined {
+  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : undefined;
 }
 
 function errorMessage(error: unknown): string {

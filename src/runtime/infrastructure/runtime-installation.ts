@@ -1,11 +1,13 @@
 import { createHash, randomUUID, verify } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
-import { copyFile, mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { constants, createReadStream, existsSync, readFileSync } from "node:fs";
+import { access, chmod, copyFile, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../vendor/chatobby-client/ws-client.js";
 import type { ManagedCommand } from "../application/runtime-manager";
 import type { RuntimeMode } from "../contracts";
+import { runtimeInstallRoot } from "./platform-paths";
+
+export { runtimeInstallRoot } from "./platform-paths";
 
 export const RUNTIME_PACKAGE_MANIFEST_FILE = "runtime.manifest.json";
 
@@ -34,6 +36,21 @@ export interface PendingRuntimePackageInstallation {
   executable: string;
   commit(): Promise<void>;
   rollback(): Promise<void>;
+}
+
+export type RuntimePackageValidationCode =
+  | "runtime_architecture_mismatch"
+  | "runtime_executable_permission_invalid"
+  | "runtime_package_invalid";
+
+export class RuntimePackageValidationError extends Error {
+  readonly code: RuntimePackageValidationCode;
+
+  constructor(code: RuntimePackageValidationCode, message: string) {
+    super(message);
+    this.name = "RuntimePackageValidationError";
+    this.code = code;
+  }
 }
 
 export type ConnectorBuildMode = "development" | "release";
@@ -68,10 +85,10 @@ export class ManagedRuntimeResolver {
     this.trustedPublicKey = trustedPublicKey;
   }
 
-  resolve(): ManagedCommand | null {
+  async resolve(): Promise<ManagedCommand | null> {
     if (this.buildMode === "release") {
       if (!this.trustedPublicKey) throw new Error("The release connector has no trusted Chatobby runtime public key");
-      const installed = resolveInstalledRuntime(this.getInstallRoot(), this.pluginVersion, this.trustedPublicKey);
+      const installed = await resolveInstalledRuntime(this.getInstallRoot(), this.pluginVersion, this.trustedPublicKey);
       if (installed) {
         return {
           command: installed.executable,
@@ -134,29 +151,33 @@ export class RuntimePackageInstaller {
     manifest: RuntimePackageManifest,
     pluginVersion: string,
   ): Promise<PendingRuntimePackageInstallation> {
-    verifyRuntimePackage(sourceDirectory, manifest, pluginVersion, this.trustedPublicKey);
+    await verifyRuntimePackage(sourceDirectory, manifest, pluginVersion, this.trustedPublicKey, false);
     const versionsRoot = join(this.installRoot, "versions");
     const versionDirectory = join(versionsRoot, manifest.version);
     const operationId = randomUUID();
     const stagedDirectory = join(versionsRoot, `.${manifest.version}.${operationId}.staged`);
     const backupDirectory = join(versionsRoot, `.${manifest.version}.${operationId}.backup`);
     const failedDirectory = join(versionsRoot, `.${manifest.version}.${operationId}.failed`);
-    await mkdir(versionsRoot, { recursive: true });
+    await mkdir(versionsRoot, { recursive: true, mode: 0o700 });
+    await setPrivateDirectoryMode(versionsRoot);
     await Promise.all([
       this.removeDirectory(stagedDirectory, { recursive: true, force: true }),
       this.removeDirectory(backupDirectory, { recursive: true, force: true }),
     ]);
-    await mkdir(stagedDirectory, { recursive: true });
+    await mkdir(stagedDirectory, { recursive: true, mode: 0o700 });
+    await setPrivateDirectoryMode(stagedDirectory);
     for (const file of manifest.files) {
       const destination = packagePath(stagedDirectory, file.path);
-      await mkdir(dirname(destination), { recursive: true });
+      await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+      await setPrivateDirectoryMode(dirname(destination));
       await copyFile(packagePath(sourceDirectory, file.path), destination);
+      await setPrivateFileMode(destination, file.kind === "executable" ? 0o700 : 0o600);
     }
     await writeFile(join(stagedDirectory, RUNTIME_PACKAGE_MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`, {
       encoding: "utf8",
       mode: 0o600,
     });
-    verifyRuntimePackage(stagedDirectory, manifest, pluginVersion, this.trustedPublicKey);
+    await verifyRuntimePackage(stagedDirectory, manifest, pluginVersion, this.trustedPublicKey, true);
 
     const current = readPointer(this.installRoot);
     const hadExistingVersion = existsSync(versionDirectory);
@@ -218,8 +239,8 @@ export class RuntimePackageInstaller {
     const current = readPointer(this.installRoot);
     if (!current?.previousVersion) throw new Error("No previous Chatobby runtime is available");
     const versionDirectory = join(this.installRoot, "versions", current.previousVersion);
-    const manifest = readRuntimePackageManifest(versionDirectory);
-    verifyRuntimePackage(versionDirectory, manifest, pluginVersion, this.trustedPublicKey);
+    const manifest = await readRuntimePackageManifest(versionDirectory);
+    await verifyRuntimePackage(versionDirectory, manifest, pluginVersion, this.trustedPublicKey, true);
     await writePointer(this.installRoot, { version: current.previousVersion, previousVersion: current.version });
     return packagePath(versionDirectory, manifest.executable);
   }
@@ -231,21 +252,16 @@ export class RuntimePackageInstaller {
   }
 }
 
-export function runtimeInstallRoot(): string {
-  const base = process.env.LOCALAPPDATA ?? join(process.env.XDG_DATA_HOME ?? homedir(), ".local", "share");
-  return join(base, "Chatobby", "runtime");
-}
-
-function resolveInstalledRuntime(
+async function resolveInstalledRuntime(
   root: string,
   pluginVersion: string,
   trustedPublicKey: string,
-): { executable: string; manifest: RuntimePackageManifest } | null {
+): Promise<{ executable: string; manifest: RuntimePackageManifest } | null> {
   const pointer = readPointer(root);
   if (!pointer) return null;
   const versionDirectory = join(root, "versions", pointer.version);
-  const manifest = readRuntimePackageManifest(versionDirectory);
-  verifyRuntimePackage(versionDirectory, manifest, pluginVersion, trustedPublicKey);
+  const manifest = await readRuntimePackageManifest(versionDirectory);
+  await verifyRuntimePackage(versionDirectory, manifest, pluginVersion, trustedPublicKey, true);
   if (manifest.version !== pointer.version) throw new Error("Runtime pointer and package version do not match");
   return { executable: packagePath(versionDirectory, manifest.executable), manifest };
 }
@@ -257,9 +273,9 @@ function resolveInstalledRuntimeDevelopment(root: string): string | null {
   return existsSync(executable) ? executable : null;
 }
 
-export function readRuntimePackageManifest(versionDirectory: string): RuntimePackageManifest {
+export async function readRuntimePackageManifest(versionDirectory: string): Promise<RuntimePackageManifest> {
   try {
-    const value: unknown = JSON.parse(readFileSync(join(versionDirectory, RUNTIME_PACKAGE_MANIFEST_FILE), "utf8"));
+    const value: unknown = JSON.parse(await readFile(join(versionDirectory, RUNTIME_PACKAGE_MANIFEST_FILE), "utf8"));
     if (!isRuntimePackageManifest(value)) throw new Error("manifest shape is invalid");
     return value;
   } catch (error) {
@@ -272,12 +288,13 @@ export function readInstalledRuntimeVersion(root = runtimeInstallRoot()): string
   return readPointer(root)?.version ?? null;
 }
 
-function verifyRuntimePackage(
+export async function verifyRuntimePackage(
   root: string,
   manifest: RuntimePackageManifest,
   pluginVersion: string,
   trustedPublicKey: string,
-): void {
+  requireExecutableAccess = true,
+): Promise<void> {
   validateManifestTarget(manifest, pluginVersion);
   if (
     !verify(
@@ -287,9 +304,9 @@ function verifyRuntimePackage(
       Buffer.from(manifest.signature, "base64"),
     )
   ) {
-    throw new Error("Runtime package signature is invalid");
+    throw new RuntimePackageValidationError("runtime_package_invalid", "Runtime package signature is invalid");
   }
-  const packagedPaths = runtimePackageFiles(root)
+  const packagedPaths = (await runtimePackageFiles(root))
     .filter((path) => path !== RUNTIME_PACKAGE_MANIFEST_FILE)
     .sort();
   const inventoriedPaths = manifest.files.map((file) => file.path).sort();
@@ -298,17 +315,18 @@ function verifyRuntimePackage(
   }
   for (const file of manifest.files) {
     const path = packagePath(root, file.path);
-    let info: ReturnType<typeof lstatSync>;
+    let info: Awaited<ReturnType<typeof lstat>>;
     try {
-      info = lstatSync(path);
+      info = await lstat(path);
     } catch {
       throw new Error(`Runtime package file is missing: ${file.path}`);
     }
     if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Runtime package file is not regular: ${file.path}`);
     if (info.size !== file.size) throw new Error(`Runtime package file size mismatch: ${file.path}`);
-    const digest = createHash("sha256").update(readFileSync(path)).digest("hex");
+    const digest = await sha256File(path);
     if (digest !== file.sha256) throw new Error(`Runtime package checksum mismatch: ${file.path}`);
   }
+  if (requireExecutableAccess) await verifyExecutableAccess(packagePath(root, manifest.executable));
 }
 
 function validateManifestTarget(manifest: RuntimePackageManifest, pluginVersion: string): void {
@@ -316,7 +334,10 @@ function validateManifestTarget(manifest: RuntimePackageManifest, pluginVersion:
     throw new Error("Runtime package manifest is unsupported");
   }
   if (manifest.platform !== process.platform || manifest.arch !== process.arch) {
-    throw new Error(`Runtime package targets ${manifest.platform}-${manifest.arch}, expected ${process.platform}-${process.arch}`);
+    throw new RuntimePackageValidationError(
+      "runtime_architecture_mismatch",
+      `Runtime package targets ${manifest.platform}-${manifest.arch}, expected ${process.platform}-${process.arch}`,
+    );
   }
   if (manifest.protocolVersion !== CHATOBBY_RUNTIME_PROTOCOL_VERSION) {
     throw new Error(
@@ -389,20 +410,51 @@ function requiredRuntimePackageFiles(): string[] {
   ];
 }
 
-function runtimePackageFiles(root: string): string[] {
+async function runtimePackageFiles(root: string): Promise<string[]> {
   const files: string[] = [];
-  const visit = (directory: string): void => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink()) {
         throw new Error(`Runtime package contains a symbolic link: ${relative(root, path)}`);
       }
-      if (entry.isDirectory()) visit(path);
+      if (entry.isDirectory()) await visit(path);
       else if (entry.isFile()) files.push(relative(root, path).split(sep).join("/"));
     }
   };
-  visit(root);
+  await visit(root);
   return files;
+}
+
+async function sha256File(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path) as AsyncIterable<unknown>) {
+    if (!(chunk instanceof Uint8Array)) throw new Error("Runtime package hash stream returned invalid data");
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+}
+
+async function verifyExecutableAccess(path: string): Promise<void> {
+  if (process.platform === "win32") return;
+  try {
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error("not a regular file");
+    await access(path, constants.X_OK);
+  } catch {
+    throw new RuntimePackageValidationError(
+      "runtime_executable_permission_invalid",
+      "Runtime executable is not a regular executable file",
+    );
+  }
+}
+
+async function setPrivateDirectoryMode(path: string): Promise<void> {
+  if (process.platform !== "win32") await chmod(path, 0o700);
+}
+
+async function setPrivateFileMode(path: string, mode: number): Promise<void> {
+  if (process.platform !== "win32") await chmod(path, mode);
 }
 
 function packagePath(root: string, path: string): string {

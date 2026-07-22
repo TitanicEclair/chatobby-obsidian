@@ -1,6 +1,7 @@
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import {
   CHATOBBY_RUNTIME_RELEASES_URL,
+  CHATOBBY_SUPPORT_URL,
   openChatobbyUrl,
 } from "../../../publication";
 import type { RuntimeUpdateState } from "../../../runtime/public";
@@ -146,10 +147,13 @@ export class RuntimeInstallModal extends Modal {
     this.contentEl.createDiv({ cls: "chatobby-runtime-install__lead", text: state.message });
     this.contentEl.createDiv({
       cls: "chatobby-runtime-install__hint",
-      text: "Your previous runtime remains available if an update cannot be installed.",
+      text: state.code === "runtime_target_unavailable"
+        ? "This release does not contain a runtime for this computer. No other architecture will be attempted."
+        : "Your previous runtime remains available if an update cannot be installed.",
     });
     this.actions([
       { label: "Release page", run: () => openChatobbyUrl(CHATOBBY_RUNTIME_RELEASES_URL) },
+      { label: "Support", run: () => openChatobbyUrl(CHATOBBY_SUPPORT_URL) },
       {
         label: "Try again",
         primary: true,
@@ -162,13 +166,16 @@ export class RuntimeInstallModal extends Modal {
     const summary = this.contentEl.createDiv({ cls: "chatobby-runtime-install__summary" });
     summary.createDiv({ text: `Version ${state.descriptor.version}` });
     summary.createDiv({ text: formatBytes(state.descriptor.bundle.size) });
+    summary.createDiv({ text: formatTarget(state.descriptor.platform, state.descriptor.arch) });
     const details = this.contentEl.createEl("details", { cls: "chatobby-runtime-install__details" });
     details.createEl("summary", { text: "Security and installation details" });
     details.createEl("p", {
       text: "Downloaded from Chatobby's GitHub release, checked against its signed descriptor, then verified file-by-file before activation.",
     });
     details.createEl("p", {
-      text: "Installed for your Windows account. Administrator access is not requested, and the previous version is kept for rollback.",
+      text: process.platform === "darwin"
+        ? "Installed in your macOS user Library. Administrator access and security-setting changes are never requested; the previous version is kept for rollback."
+        : "Installed for your Windows account. Administrator access is not requested, and the previous version is kept for rollback.",
     });
   }
 
@@ -258,4 +265,10 @@ function progressRatio(state: Extract<RuntimeUpdateState, { status: "installing"
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB download`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB download`;
+}
+
+function formatTarget(platform: NodeJS.Platform, arch: string): string {
+  if (platform === "darwin") return arch === "arm64" ? "macOS · Apple Silicon" : "macOS · Intel";
+  if (platform === "win32") return `Windows · ${arch === "x64" ? "64-bit" : arch}`;
+  return `${platform} · ${arch}`;
 }

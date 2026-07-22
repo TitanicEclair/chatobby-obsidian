@@ -1,4 +1,5 @@
-import { setIcon } from "obsidian";
+import { Notice, setIcon } from "obsidian";
+import { CHATOBBY_SUPPORT_URL, openChatobbyUrl } from "../../../publication";
 import type { RuntimeLifecycleState } from "../../../runtime/public";
 
 export interface RuntimeStatusHost {
@@ -74,6 +75,8 @@ export class RuntimeStatusController {
         this.actionButton(container, "Install runtime", () => this.host.install());
       } else if (shouldOfferRuntimeRepair(state)) {
         this.actionButton(container, "Repair Chatobby", () => this.host.install(true));
+      } else if (state.diagnostics.code === "macos_security_blocked") {
+        this.linkButton(container, "Apple instructions", "https://support.apple.com/en-us/102445");
       } else {
         this.actionButton(container, state.status === "crash_loop" ? "Try again" : "Retry", () => this.host.restart());
       }
@@ -83,6 +86,11 @@ export class RuntimeStatusController {
       if (state.diagnostics.recentLogs.length > 0) {
         details.createEl("pre", { text: state.diagnostics.recentLogs.slice(-8).join("\n") });
       }
+      const diagnosticActions = details.createDiv({ cls: "chatobby-runtime-status__diagnostic-actions" });
+      const copy = diagnosticActions.createEl("button", { text: "Copy diagnostics", attr: { type: "button" } });
+      copy.addEventListener("click", () => void copyDiagnostics(state));
+      const support = diagnosticActions.createEl("button", { text: "Support", attr: { type: "button" } });
+      support.addEventListener("click", () => openChatobbyUrl(CHATOBBY_SUPPORT_URL));
     }
   }
 
@@ -104,6 +112,11 @@ export class RuntimeStatusController {
     });
   }
 
+  private linkButton(container: HTMLElement, label: string, url: string): void {
+    const button = container.createEl("button", { cls: "chatobby-runtime-status__action", text: label });
+    button.addEventListener("click", () => openChatobbyUrl(url));
+  }
+
   private cancelShowTimer(): void {
     if (this.showTimer) window.clearTimeout(this.showTimer);
     this.showTimer = null;
@@ -120,7 +133,11 @@ function shouldOfferRuntimeDownload(
 function shouldOfferRuntimeRepair(
   state: Extract<RuntimeLifecycleState, { status: "error" | "crash_loop" }>,
 ): boolean {
-  return state.mode === "managed" && state.diagnostics.code === "runtime_package_invalid";
+  return state.mode === "managed" && (
+    state.diagnostics.code === "runtime_package_invalid"
+    || state.diagnostics.code === "runtime_architecture_mismatch"
+    || state.diagnostics.code === "runtime_executable_permission_invalid"
+  );
 }
 
 const STATUS_REVEAL_DELAY_MS = 250;
@@ -146,7 +163,7 @@ function presentRuntimeState(state: RuntimeLifecycleState): RuntimeStatePresenta
     case "stopping":
       return { title: "Stopping Chatobby", detail: "Finishing runtime cleanup.", icon: "loader-circle", failure: false, loading: true };
     case "error":
-      if (state.mode === "managed" && state.diagnostics.code === "runtime_package_invalid") {
+      if (state.mode === "managed" && shouldOfferRuntimeRepair(state)) {
         return {
           title: "Chatobby needs repair",
           detail: state.diagnostics.message,
@@ -162,6 +179,18 @@ function presentRuntimeState(state: RuntimeLifecycleState): RuntimeStatePresenta
     case "detached":
       return { title: "", detail: "", icon: "circle", failure: false, loading: false };
   }
+}
+
+async function copyDiagnostics(
+  state: Extract<RuntimeLifecycleState, { status: "error" | "crash_loop" }>,
+): Promise<void> {
+  await navigator.clipboard.writeText(JSON.stringify({
+    code: state.diagnostics.code,
+    message: state.diagnostics.message,
+    occurredAt: new Date(state.diagnostics.occurredAt).toISOString(),
+    recentLogs: state.diagnostics.recentLogs.slice(-8),
+  }, null, 2));
+  new Notice("Chatobby diagnostics copied");
 }
 
 function stateKey(state: RuntimeLifecycleState): string {

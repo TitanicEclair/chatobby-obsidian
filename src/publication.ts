@@ -1,6 +1,9 @@
 /** Public locations used by the connector's installation and support surfaces. */
 export const CHATOBBY_CONNECTOR_REPOSITORY_URL = "https://github.com/TitanicEclair/chatobby-obsidian";
 export const CHATOBBY_RUNTIME_RELEASES_URL = "https://github.com/TitanicEclair/chatobby-runtime/releases/latest";
+export const CHATOBBY_RUNTIME_INDEX_URL =
+  "https://github.com/TitanicEclair/chatobby-runtime/releases/latest/download/runtime-index.json";
+/** Retained for 0.1.15 and older Windows connectors. */
 export const CHATOBBY_RUNTIME_UPDATE_DESCRIPTOR_URL =
   "https://github.com/TitanicEclair/chatobby-runtime/releases/latest/download/runtime-update.json";
 export const CHATOBBY_SUPPORT_URL = "https://github.com/TitanicEclair/chatobby-obsidian/issues";

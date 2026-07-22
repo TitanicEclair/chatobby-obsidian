@@ -1,6 +1,6 @@
 import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -38,7 +38,8 @@ describe("runtime installation", () => {
     await writeFile(installed, "installed runtime");
     await writeFile(join(installRoot, "current.json"), JSON.stringify({ version: "0.1.0" }));
 
-    expect(new ManagedRuntimeResolver(() => pluginRoot, () => installRoot).resolve()).toEqual({ command: executable, args: [] });
+    await expect(new ManagedRuntimeResolver(() => pluginRoot, () => installRoot).resolve())
+      .resolves.toEqual({ command: executable, args: [] });
   });
 
   it("uses the machine-local runtime without release verification in development", async () => {
@@ -49,7 +50,7 @@ describe("runtime installation", () => {
     await writeFile(executable, "installed runtime");
     await writeFile(join(installRoot, "current.json"), JSON.stringify({ version: "0.1.0" }));
 
-    expect(new ManagedRuntimeResolver(() => pluginRoot, () => installRoot).resolve()).toEqual({
+    await expect(new ManagedRuntimeResolver(() => pluginRoot, () => installRoot).resolve()).resolves.toEqual({
       command: executable,
       args: [],
     });
@@ -64,7 +65,7 @@ describe("runtime installation", () => {
     await writeManifest(versionDirectory, manifest);
     await writeFile(join(installRoot, "current.json"), JSON.stringify({ version: "0.1.0" }));
 
-    expect(
+    await expect(
       new ManagedRuntimeResolver(
         () => pluginRoot,
         () => installRoot,
@@ -72,7 +73,7 @@ describe("runtime installation", () => {
         "0.1.0",
         publicKeyPem(keys.publicKey),
       ).resolve(),
-    ).toEqual({
+    ).resolves.toEqual({
       command: join(versionDirectory, executableName()),
       args: [],
       runtimePackageFingerprint: packageFingerprint(manifest),
@@ -88,7 +89,7 @@ describe("runtime installation", () => {
     await writeFile(join(installRoot, "current.json"), JSON.stringify({ version: "0.1.0" }));
     await writeFile(join(versionDirectory, executableName()), "tampered");
 
-    expect(() =>
+    await expect(
       new ManagedRuntimeResolver(
         () => null,
         () => installRoot,
@@ -96,26 +97,26 @@ describe("runtime installation", () => {
         "0.1.0",
         publicKeyPem(keys.publicKey),
       ).resolve(),
-    ).toThrow(/size mismatch|checksum mismatch/);
+    ).rejects.toThrow(/size mismatch|checksum mismatch/);
   });
 
   it("fails closed when a release build has no trust anchor", async () => {
     const installRoot = await temporaryDirectory();
-    expect(() => new ManagedRuntimeResolver(() => null, () => installRoot, "release", "0.1.0", null).resolve())
-      .toThrow("no trusted Chatobby runtime public key");
+    await expect(new ManagedRuntimeResolver(() => null, () => installRoot, "release", "0.1.0", null).resolve())
+      .rejects.toThrow("no trusted Chatobby runtime public key");
   });
 
   it("reports an absent release runtime without treating it as a corrupt package", async () => {
     const installRoot = await temporaryDirectory();
     const keys = generateKeyPairSync("ed25519");
 
-    expect(new ManagedRuntimeResolver(
+    await expect(new ManagedRuntimeResolver(
       () => null,
       () => installRoot,
       "release",
       "0.1.0",
       publicKeyPem(keys.publicKey),
-    ).resolve()).toBeNull();
+    ).resolve()).resolves.toBeNull();
   });
 
   it("installs complete signed packages and atomically rolls the pointer back", async () => {
@@ -133,6 +134,22 @@ describe("runtime installation", () => {
     expect(first).toContain(join("versions", "1.0.0"));
     expect(second).toContain(join("versions", "1.1.0"));
     expect(rolledBack).toContain(join("versions", "1.0.0"));
+  });
+
+  it.runIf(process.platform !== "win32")("assigns private fixed modes instead of trusting source modes", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const manifest = await writeRuntimePackage(source, "1.0.0", "runtime", keys.privateKey);
+    const installer = new RuntimePackageInstaller(installRoot, publicKeyPem(keys.publicKey));
+
+    const executable = await installer.install(source, manifest, "0.1.0");
+    const versionRoot = join(installRoot, "versions", "1.0.0");
+
+    expect((await stat(versionRoot)).mode & 0o777).toBe(0o700);
+    expect((await stat(executable)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(versionRoot, "assets", "app-bridge.bundle.js"))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(versionRoot, RUNTIME_PACKAGE_MANIFEST_FILE))).mode & 0o777).toBe(0o600);
   });
 
   it("does not report a committed same-version replacement as failed when its running backup is locked", async () => {
