@@ -1,5 +1,6 @@
 node_modules/
 main.js
+styles.css
 /release/
 data.json
 .DS_Store

@@ -13,6 +13,7 @@ export default defineConfig(
     "vitest.config.ts",
     "src/vendor/@chatobby/obsidian-protocol/**/*.d.ts",
     "src/vendor/@chatobby/obsidian-protocol/**/*.js",
+    "src/vendor/chatobby-client/**/*.d.ts",
     "esbuild.config.mjs",
     "version-bump.mjs",
     "versions.json",

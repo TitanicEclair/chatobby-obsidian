@@ -59,6 +59,12 @@ describe("ChatobbySettingTab", () => {
     } as unknown as ChatobbyPlugin;
     const tab = new ChatobbySettingTab({} as never, plugin);
 
+    expect(tab.getSettingDefinitions()).toMatchObject([{ type: "group", items: [{
+      name: "Chatobby settings",
+      aliases: expect.arrayContaining(["install runtime", "API key", "auto-scroll", "composer shortcuts"]),
+      render: expect.any(Function),
+    }] }]);
+
     tab.display();
 
     expect(tab.containerEl.textContent).toContain("Finding available providers");

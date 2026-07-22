@@ -2,6 +2,12 @@
   max-width: 720px;
 }
 
+.chatobby-settings__definition-host {
+  display: block;
+  padding: 0;
+  border: 0;
+}
+
 .chatobby-settings__intro {
   margin-block-end: var(--size-4-6);
   color: var(--text-muted);

@@ -122,7 +122,8 @@ export class TextBlockView extends ChatobbyComponent {
     if (!this.contentEl || !this.block) return;
     const revision = ++this.renderRevision;
     const isFinal = this.block.status !== "streaming";
-    const staging = this.contentEl.ownerDocument.createElement("div");
+    const staging = this.contentEl.createDiv();
+    staging.remove();
     const startedAt = performance.now();
     let rendered: void | Promise<void>;
     try {

@@ -27,6 +27,11 @@ if (typeof manifest.description !== "string" || !/[.!?]$/.test(manifest.descript
   failures.push("manifest.json: description must end with punctuation");
 }
 
+const readme = await readFile(new URL("README.md", root), "utf8");
+if (/optional (?:hero )?media:|place assets\/readme\//i.test(readme)) {
+  failures.push("README.md: remove unfilled media placeholders before review");
+}
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exitCode = 1;

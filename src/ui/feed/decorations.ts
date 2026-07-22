@@ -139,26 +139,28 @@ function replaceTextRefs(node: Text, decorators: LinkDecorators): void {
   const refs = findPlainRefs(text);
   if (refs.length === 0) return;
 
-  const ownerDocument = node.ownerDocument;
-  const fragment = ownerDocument.createDocumentFragment();
+  const parent = node.parentElement;
+  if (!parent) return;
+  const staging = parent.createSpan();
+  staging.remove();
   let cursor = 0;
   for (const ref of refs) {
-    if (ref.start > cursor) fragment.appendChild(ownerDocument.createTextNode(text.slice(cursor, ref.start)));
-    const link = ownerDocument.createElement("a");
-    link.className = ref.kind === "vault" ? "internal-link chatobby-vault-link" : "external-link chatobby-system-path-link";
-    link.textContent = ref.label;
-    link.href = ref.kind === "vault" ? ref.target : `file:///${ref.target.replace(/\\/g, "/")}`;
+    if (ref.start > cursor) staging.createSpan({ text: text.slice(cursor, ref.start) });
+    const link = staging.createEl("a", {
+      cls: ref.kind === "vault" ? "internal-link chatobby-vault-link" : "external-link chatobby-system-path-link",
+      text: ref.label,
+      attr: { href: ref.kind === "vault" ? ref.target : `file:///${ref.target.replace(/\\/g, "/")}` },
+    });
     link.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       if (ref.kind === "vault") decorators.openVaultLink(ref.target);
       else decorators.openSystemPath(ref.target);
     });
-    fragment.appendChild(link);
     cursor = ref.end;
   }
-  if (cursor < text.length) fragment.appendChild(ownerDocument.createTextNode(text.slice(cursor)));
-  node.parentNode?.replaceChild(fragment, node);
+  if (cursor < text.length) staging.createSpan({ text: text.slice(cursor) });
+  node.replaceWith(...Array.from(staging.childNodes));
 }
 
 function findPlainRefs(text: string): PlainRef[] {

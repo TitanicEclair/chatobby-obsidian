@@ -1,4 +1,4 @@
-import { Modal, Notice, PluginSettingTab, Setting, type App } from "obsidian";
+import { Modal, Notice, PluginSettingTab, Setting, type App, type SettingDefinitionItem } from "obsidian";
 import type ChatobbyPlugin from "./main";
 import {
   DEFAULT_COMPOSER_KEYBINDINGS,
@@ -22,23 +22,60 @@ import {
 } from "./ui/composer/keybindings";
 
 const THINKING_DISPLAY_OPTIONS: ThinkingDisplay[] = ["hidden", "collapsed", "expanded"];
+const SETTINGS_SEARCH_ALIASES = [
+  "runtime",
+  "install runtime",
+  "runtime mode",
+  "runtime lifetime",
+  "command shell",
+  "external server",
+  "developer command",
+  "model providers",
+  "API key",
+  "thinking blocks",
+  "auto-scroll",
+  "auto-name sessions",
+  "composer shortcuts",
+  "documentation",
+  "support",
+  "Patreon",
+];
 
 export class ChatobbySettingTab extends PluginSettingTab {
   private providerCatalog: WsProviderInfo[] | null = null;
   private providerCatalogLoading = false;
   private providerCatalogError: string | null = null;
   private providerCatalogAttempted = false;
+  private settingsHost: HTMLElement | null = null;
 
   constructor(app: App, private readonly plugin: ChatobbyPlugin) {
     super(app, plugin);
   }
 
-  display(): void {
-    this.renderSettings();
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    return [{
+      type: "group",
+      cls: "chatobby-settings",
+      items: [{
+        name: "Chatobby settings",
+        desc: "Runtime, model providers, conversation preferences, shortcuts, and support.",
+        aliases: SETTINGS_SEARCH_ALIASES,
+        render: (setting) => {
+          setting.settingEl.empty();
+          setting.settingEl.addClass("chatobby-settings__definition-host");
+          this.settingsHost = setting.settingEl;
+          this.renderSettings(setting.settingEl);
+        },
+      }],
+    }];
   }
 
-  private renderSettings(): void {
-    const { containerEl } = this;
+  display(): void {
+    this.settingsHost = this.containerEl;
+    this.renderSettings(this.containerEl);
+  }
+
+  private renderSettings(containerEl: HTMLElement): void {
     containerEl.empty();
     containerEl.addClass("chatobby-settings");
 
@@ -89,10 +126,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
           .setButtonText(ready ? "Restart" : "Check again")
           .onClick(() => {
             const action = ready ? this.plugin.restartRuntime() : this.plugin.startBackend();
-            action.then(() => this.renderSettings()).catch((error: unknown) => {
+            action.then(() => this.refreshSettingsSurface()).catch((error: unknown) => {
               console.error("Chatobby: runtime action failed", error);
               new Notice(error instanceof Error ? error.message : "Chatobby runtime action failed");
-              this.renderSettings();
+              this.refreshSettingsSurface();
             });
           });
       });
@@ -113,7 +150,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             .setValue(runtimeMode)
             .onChange((value) => {
               this.updateSettings({ runtimeMode: value as PluginSettings["runtimeMode"] })
-                .then(() => this.renderSettings())
+                .then(() => this.refreshSettingsSurface())
                 .catch((error: unknown) => {
                   console.error("Chatobby: failed to update runtime mode", error);
                   new Notice("Failed to update Chatobby runtime mode");
@@ -147,7 +184,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.runtimeLifetime)
             .onChange((value) => {
               this.updateSettings({ runtimeLifetime: value === "background" ? "background" : "obsidian-session" })
-                .then(() => this.renderSettings())
+                .then(() => this.refreshSettingsSurface())
                 .catch((error: unknown) => {
                   console.error("Chatobby: failed to update runtime lifetime", error);
                   new Notice("Failed to update Chatobby runtime lifetime");
@@ -229,7 +266,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             this.updateSettings({ commandShell: value as PluginSettings["commandShell"] })
               .then(() => {
                 new Notice("Command shell saved. Restart Chatobby to apply it.");
-                this.renderSettings();
+                this.refreshSettingsSurface();
               })
               .catch((error: unknown) => {
                 console.error("Chatobby: failed to update command shell", error);
@@ -380,7 +417,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
             ...this.plugin.settings.composerKeybindings,
             [action]: DEFAULT_COMPOSER_KEYBINDINGS[action],
           },
-        }).then(() => this.renderSettings()).catch((error) => {
+        }).then(() => this.refreshSettingsSurface()).catch((error) => {
           console.error("Chatobby: failed to reset composer shortcut", error);
           new Notice("Failed to reset composer shortcut");
         });
@@ -405,7 +442,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
         .addButton((button) => button.setButtonText("Try again").onClick(() => {
           this.providerCatalogAttempted = false;
           this.requestProviderCatalog();
-          this.renderSettings();
+          this.refreshSettingsSurface();
         }));
     }
 
@@ -500,6 +537,11 @@ export class ChatobbySettingTab extends PluginSettingTab {
     return this.plugin.updateSettings(patch);
   }
 
+  private refreshSettingsSurface(): void {
+    const host = this.settingsHost?.isConnected ? this.settingsHost : this.containerEl;
+    this.renderSettings(host);
+  }
+
   private requestProviderCatalog(): void {
     if (this.providerCatalog || this.providerCatalogLoading || this.providerCatalogAttempted) return;
     this.providerCatalogAttempted = true;
@@ -513,7 +555,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
   ): Promise<void> {
     this.providerCatalogLoading = true;
     this.providerCatalogError = null;
-    if (renderLoading) this.renderSettings();
+    if (renderLoading) this.refreshSettingsSurface();
 
     try {
       if (startBackend) {
@@ -531,7 +573,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
       if (showFailureNotice) new Notice("Could not discover Chatobby providers");
     } finally {
       this.providerCatalogLoading = false;
-      this.renderSettings();
+      this.refreshSettingsSurface();
     }
   }
 

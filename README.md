@@ -60,13 +60,6 @@ alpha experience.
 
 #### **Chatobby is currently ONLY available on Windows. We will soon work on Mac and Linux support.**
 
-<!--
-Optional hero media: place assets/readme/chatobby-overview.gif here.
-Show one complete workflow: user request -> visible tool work -> useful result.
-Suggested Markdown:
-![Chatobby completing a vault task with visible progress](assets/readme/chatobby-overview.gif)
--->
-
 ## Contents
 
 - [Support Chatobby's development](#support-chatobbys-development)
@@ -134,12 +127,6 @@ collapses away instead of permanently occupying the interface.
 You can stop a turn, inspect what the agent used, copy a full Markdown response,
 or select only the portion you need.
 
-<!--
-Optional media: place assets/readme/visible-work.png after this comment.
-Capture a response with streaming Markdown, two compact tool rows, and a small
-permission or task surface. Do not capture a wall of internal metadata.
--->
-
 ### Work with images and documents
 
 Paste an image into the composer or attach a supported document. Chatobby keeps
@@ -194,12 +181,6 @@ fan-out or fan-in when appropriate.
 Channels provide a durable, inspectable place for agent-to-agent communication.
 They are separate from user-facing session messages, so operational
 communication does not have to overwhelm the main conversation.
-
-<!--
-Optional media: place assets/readme/subagents-and-workflows.gif here.
-Show the main agent launching two small subagents, the rail updating, and the
-user switching into one subagent feed. Keep the recording under 25 seconds.
--->
 
 ### Keep useful continuity without hiding it
 
@@ -500,7 +481,6 @@ requires project trust and visible confirmation. Output is bounded and injected
 as untrusted contextual data, not as a system instruction.
 
 <!--
-Optional media: place assets/readme/context-queries.png here.
 Show the minimal Queries list with a useful name, description, session-start
 trigger, and successful test state. Do not show raw script code.
 -->
@@ -574,7 +554,6 @@ Do not use an Event as an invisible permission escalation. Scheduled work uses
 its assigned policy and remains visible in run history.
 
 <!--
-Optional media: place assets/readme/events.png here.
 Show a readable repeating schedule, assigned project/policy, and one successful
 history entry.
 -->
@@ -601,7 +580,6 @@ output, or an agent message. The Permissions page and permission tools are the
 authority-bearing surfaces.
 
 <!--
-Optional media: place assets/readme/permissions.png here.
 Show one readable policy and a visible ask/allow/deny decision without exposing
 credentials or a personal filesystem path.
 -->

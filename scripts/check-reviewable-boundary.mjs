@@ -87,11 +87,15 @@ if (JSON.stringify(actualVendorRoots) !== JSON.stringify(expectedVendorRoots)) {
 const publicClientRoot = join(vendorRoot, "chatobby-client");
 const expectedPublicClientFiles = [
 	"connector-types.d.ts",
+	"connector-types.ts",
 	"control/contracts.d.ts",
+	"control/contracts.ts",
 	"frontend-contracts.d.ts",
+	"frontend-contracts.ts",
 	"wire-types.d.ts",
+	"wire-types.ts",
 	"ws-client.d.ts",
-	"ws-client.js",
+	"ws-client.ts",
 ];
 const actualPublicClientFiles = sourceFiles(publicClientRoot)
 	.map((path) => relative(publicClientRoot, path).replaceAll("\\", "/"))

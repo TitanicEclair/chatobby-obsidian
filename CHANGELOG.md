@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-07-22
+
 ### Added
 
 - `/compact <focus>` forwards its argument to the runtime's compaction
@@ -11,10 +13,15 @@
 
 - The active-note excerpt is no longer an empty stub; the agent receives the
   real text around the cursor (plus cursor, selection, and headings) each turn.
+- Removed generated-source, stale stylesheet, README placeholder, and direct
+  DOM-construction findings from the Community review surface.
+- Added searchable Obsidian 1.13 setting definitions while retaining the
+  imperative settings fallback required by Obsidian 1.8 through 1.12.
 
 ### Changed
 
-- Vendored `chatobby-client` artifacts synced from runtime 0.1.13.
+- Vendored the runtime 0.1.15 browser client as deterministic typed source so
+  Community review retains its protocol validation types.
 
 ## [0.1.11] - 2026-07-20
 
