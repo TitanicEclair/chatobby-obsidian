@@ -72,6 +72,20 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
 
   const state = pageState();
 
+  function assertReferenceVersion(): void {
+    const expectedDocumentId = typeof input.documentId === "string" ? input.documentId : undefined;
+    const expectedRevision = typeof input.revision === "number" ? input.revision : undefined;
+    if (!expectedDocumentId || expectedRevision === undefined) {
+      throw new Error("Browser refs require documentId and revision from the same snapshot");
+    }
+    if (expectedDocumentId !== state.documentId) {
+      throw new Error(`Stale page document: expected ${expectedDocumentId}, current ${state.documentId}`);
+    }
+    if (expectedRevision !== state.revision) {
+      throw new Error(`Stale page revision: expected ${expectedRevision}, current ${state.revision}`);
+    }
+  }
+
   function isDomNodeOfType<T extends Node>(
     value: unknown,
     constructor: { new (): T; prototype: T },
@@ -236,6 +250,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
   function targetRoot(): ParentNode {
     const ref = typeof input.ref === "string" ? input.ref : undefined;
     if (ref) {
+      assertReferenceVersion();
       const element = state.refElements.get(ref);
       if (!element?.isConnected) throw new Error(`Stale page reference: ${ref}`);
       return element;
@@ -270,11 +285,8 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
   }
 
   function resolveElements(): Element[] {
-    const expectedDocumentId = typeof input.documentId === "string" ? input.documentId : undefined;
-    if (expectedDocumentId && expectedDocumentId !== state.documentId) {
-      throw new Error(`Stale page document: expected ${expectedDocumentId}, current ${state.documentId}`);
-    }
     if (typeof input.ref === "string") {
+      assertReferenceVersion();
       const element = state.refElements.get(input.ref);
       if (!element?.isConnected) throw new Error(`Stale page reference: ${input.ref}`);
       return [element];
@@ -488,6 +500,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
 
   function scopeElement(): Element {
     if (typeof input.ref === "string") {
+      assertReferenceVersion();
       const element = state.refElements.get(input.ref);
       if (!element?.isConnected) throw new Error(`Stale page reference: ${input.ref}`);
       return element;

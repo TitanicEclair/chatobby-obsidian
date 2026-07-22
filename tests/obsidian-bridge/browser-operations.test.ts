@@ -318,6 +318,61 @@ describe("browser operations", () => {
     expect(webview.goBack).toHaveBeenCalledOnce();
   });
 
+  it("rejects ref interactions and read cursors after the page revision changes", async () => {
+    const app = createBrowserApp();
+    await executeOperation("browser.open", { url: "https://example.com" }, signal, app);
+
+    const snapshot = await executeOperation(
+      "browser.snapshot",
+      { leafId: "leaf-1", maxElements: 10 },
+      signal,
+      app,
+    ) as {
+      page: { documentId: string; revision: number };
+      elements: Array<Record<string, unknown>>;
+    };
+    const button = snapshot.elements.find((element) => element.role === "button");
+    expect(button?.ref).toBeTypeOf("string");
+    await executeOperation(
+      "browser.click",
+      {
+        leafId: "leaf-1",
+        ref: button?.ref,
+        documentId: snapshot.page.documentId,
+        revision: snapshot.page.revision,
+      },
+      signal,
+      app,
+    );
+
+    const firstRead = await executeOperation(
+      "browser.read",
+      { leafId: "leaf-1", maxChars: 3 },
+      signal,
+      app,
+    ) as { nextCursor: string };
+    document.body.createEl("p", { text: "A later mutation" });
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
+    await expect(executeOperation(
+      "browser.click",
+      {
+        leafId: "leaf-1",
+        ref: button?.ref,
+        documentId: snapshot.page.documentId,
+        revision: snapshot.page.revision,
+      },
+      signal,
+      app,
+    )).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+    await expect(executeOperation(
+      "browser.read",
+      { leafId: "leaf-1", maxChars: 3, cursor: firstRead.nextCursor },
+      signal,
+      app,
+    )).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+  });
+
   it("redacts password values and sanitizes page HTML", async () => {
     const app = createBrowserApp();
     await executeOperation("browser.open", { url: "https://example.com" }, signal, app);

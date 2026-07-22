@@ -339,7 +339,9 @@ async function runPageOperation(
     return result;
   } catch (error) {
     if (error instanceof BridgeError) throw error;
-    throw new BridgeError("OBSIDIAN_OPERATION_FAILED", error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith("Stale page ")) throw new BridgeError("REVISION_CONFLICT", message);
+    throw new BridgeError("OBSIDIAN_OPERATION_FAILED", message);
   }
 }
 
@@ -376,6 +378,7 @@ function targetArguments(args: Record<string, unknown>): Record<string, unknown>
     index: args.index,
     strict: args.strict,
     documentId: args.documentId,
+    revision: args.revision,
   };
 }
 
@@ -390,6 +393,7 @@ function destinationArguments(args: Record<string, unknown>): Record<string, unk
     exact: args.exact,
     strict: args.strict,
     documentId: args.documentId,
+    revision: args.revision,
   };
 }
 
@@ -541,6 +545,8 @@ export const handleBrowserSnapshot: OperationHandler = async (args, signal, app)
     mode: args.mode,
     scopeSelector: args.scopeSelector,
     ref: args.ref,
+    documentId: args.documentId,
+    revision: args.revision,
     maxElements: args.maxElements,
     maxTextChars: args.maxTextChars,
     includeHidden: args.includeHidden,
@@ -560,6 +566,8 @@ export const handleBrowserRead: OperationHandler = async (args, signal, app) => 
   const data = await runPageOperation(webview, "read", {
     scopeSelector: args.scopeSelector,
     ref: args.ref,
+    documentId: args.documentId,
+    revision: args.revision,
   });
   assertNotAborted(signal);
   const page = asRecord(data.page);
@@ -575,7 +583,9 @@ export const handleBrowserRead: OperationHandler = async (args, signal, app) => 
   }
   const decoded = decodeCursor(args.cursor);
   if (args.cursor !== undefined && !decoded) throw new BridgeError("INVALID_INPUT", "browser.read cursor is invalid");
-  if (decoded && decoded.documentId !== documentId) throw new BridgeError("REVISION_CONFLICT", "Browser page changed; obtain a fresh read cursor");
+  if (decoded && (decoded.documentId !== documentId || decoded.revision !== revision)) {
+    throw new BridgeError("REVISION_CONFLICT", "Browser page changed; obtain a fresh read cursor");
+  }
   const initial: BrowserCursor = decoded ?? { documentId, revision, blockIndex: 0, blockOffset: 0 };
   const blocks = pageBlocks(data);
   const legacyText = legacyStartIndex === undefined
@@ -600,6 +610,8 @@ export const handleBrowserRead: OperationHandler = async (args, signal, app) => 
       operation: "html",
       cssSelector: args.scopeSelector,
       ref: args.ref,
+      documentId: args.documentId,
+      revision: args.revision,
       maxChars,
     });
   }
@@ -631,6 +643,8 @@ export const handleBrowserDom: OperationHandler = async (args, signal, app) => {
     operation: args.action,
     cssSelector: args.cssSelector,
     ref: args.ref,
+    documentId: args.documentId,
+    revision: args.revision,
     limit: args.limit,
     maxChars: args.maxChars,
   });
