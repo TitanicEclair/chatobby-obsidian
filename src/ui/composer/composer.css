@@ -563,15 +563,9 @@ button.chatobby-control-button:focus-visible {
   white-space: nowrap;
 }
 
-.chatobby-control-button__leading,
 .chatobby-control-button__chevron {
   display: inline-flex;
   flex: 0 0 auto;
-}
-
-.chatobby-control-button__leading svg {
-  width: var(--size-4-4);
-  height: var(--size-4-4);
 }
 
 .chatobby-control-button__chevron svg {

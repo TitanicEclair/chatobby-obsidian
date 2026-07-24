@@ -17,6 +17,7 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
@@ -52,6 +53,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           notes_file="RELEASE_NOTES_${GITHUB_REF_NAME}.md"
           test -f "$notes_file"
           gh release create "$GITHUB_REF_NAME" \
@@ -62,3 +64,40 @@ jobs:
             --verify-tag \
             --title "Chatobby ${GITHUB_REF_NAME}" \
             --notes-file "$notes_file"
+
+      - name: Verify published release before promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" = "$GITHUB_REF_NAME"
+          test "$(gh release view "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = "false"
+          test "$(gh release view "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)" = "false"
+          test "$(gh release view "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '[.assets[].name] | sort | join(",")')" = "main.js,manifest.json,styles.css"
+
+      # The Community catalogue reads manifest.json from the default branch.
+      # Advancing it before the matching GitHub release exists can remove the
+      # entire plugin from in-app discovery.
+      - name: Promote verified release to public main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_main="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if test "$current_main" != "$GITHUB_SHA"; then
+            git fetch --no-tags origin \
+              "${current_main}:refs/remotes/origin/public-main"
+            git merge-base --is-ancestor "$current_main" "$GITHUB_SHA"
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" \
+              -f sha="$GITHUB_SHA" \
+              -F force=false >/dev/null
+          fi
+          test "$(gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"

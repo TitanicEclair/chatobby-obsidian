@@ -790,16 +790,22 @@ export class Composer extends ChatobbyComponent {
 
   private bindAttachmentPicker(card: HTMLElement): void {
     const actions = this.sendBtn?.closest<HTMLElement>(".chatobby-composer-actions") ?? this.sendBtn?.parentElement ?? card;
+    const bar = actions.closest<HTMLElement>(".chatobby-composer-bar");
+    const attachmentHost = bar ?? actions;
     this.attachInputEl = card.createEl("input", {
       cls: "chatobby-attachment-input",
       attr: { type: "file", accept: COMPOSER_ATTACHMENT_ACCEPT, multiple: "true", tabindex: "-1" },
     });
-    this.attachBtn = actions.createEl("button", {
+    this.attachBtn = attachmentHost.createEl("button", {
       cls: "chatobby-attach-btn",
       attr: { type: "button", "aria-label": "Attach files", title: "Attach files" },
     });
     setIcon(this.attachBtn, "plus");
-    if (this.sendBtn) actions.insertBefore(this.attachBtn, this.sendBtn);
+    if (bar) {
+      bar.insertBefore(this.attachBtn, bar.firstElementChild);
+    } else if (this.sendBtn) {
+      actions.insertBefore(this.attachBtn, this.sendBtn);
+    }
     this.attachBtn.disabled = !this.host.storeFiles;
     this.attachBtn.addEventListener("click", () => this.attachInputEl?.click());
     this.attachInputEl.addEventListener("change", () => {

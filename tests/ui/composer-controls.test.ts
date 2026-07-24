@@ -80,6 +80,7 @@ describe("ComposerControls", () => {
     expect(control(root, "Provider").textContent).toContain("Deepseek");
     expect(control(root, "Model").textContent).toContain("DeepSeek Chat");
     expect(control(root, "Effort").textContent).toContain("Medium");
+    expect(control(root, "Permission policy").querySelector(".chatobby-control-button__leading")).toBeNull();
     expect(root.querySelectorAll("select")).toHaveLength(0);
     controls.destroy();
   });

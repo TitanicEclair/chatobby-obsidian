@@ -43,7 +43,10 @@ function bindComposer(host: ComposerHost): {
   card.addClass("chatobby-composer-card");
   const inputWrap = card.createDiv({ cls: "chatobby-input-wrap" });
   inputWrap.append(highlight, input);
-  card.append(sendBtn, stopBtn);
+  const bar = card.createDiv({ cls: "chatobby-composer-bar" });
+  bar.createDiv({ cls: "chatobby-composer-controls-host" });
+  const actions = bar.createDiv({ cls: "chatobby-composer-actions" });
+  actions.append(sendBtn, stopBtn);
 
   composer.bind(input, sendBtn, stopBtn, highlight);
   return { composer, input, highlight, card, sendBtn, stopBtn };
@@ -118,11 +121,11 @@ describe("Composer", () => {
   });
 
   it("opens a native file picker from a compact attachment action", () => {
-    const { card, sendBtn } = bindComposer(createHost({ storeFiles: vi.fn(async () => []) }));
+    const { card } = bindComposer(createHost({ storeFiles: vi.fn(async () => []) }));
     const attachBtn = card.querySelector<HTMLButtonElement>(".chatobby-attach-btn");
     const fileInput = card.querySelector<HTMLInputElement>(".chatobby-attachment-input");
     expect(attachBtn?.getAttribute("aria-label")).toBe("Attach files");
-    expect(attachBtn?.nextElementSibling).toBe(sendBtn);
+    expect(card.querySelector(".chatobby-composer-bar")?.firstElementChild).toBe(attachBtn);
     expect(fileInput?.multiple).toBe(true);
     expect(fileInput?.accept).toContain(".pdf");
     expect(fileInput?.accept).toContain(".docx");

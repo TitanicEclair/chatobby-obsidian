@@ -43,7 +43,7 @@ export class ComposerControls extends ChatobbyComponent {
     for (const id of ["permission", "provider", "model", "effort"] as const) {
       const control = findControl(model, id);
       if (!control) continue;
-      const button = this.buildPickerButton(container, control, id === "permission" ? "shield-check" : undefined);
+      const button = this.buildPickerButton(container, control);
       button.addEventListener("click", () => this.togglePicker(id));
       this.buttons.set(id, button);
     }
@@ -224,7 +224,6 @@ export class ComposerControls extends ChatobbyComponent {
   private buildPickerButton(
     container: HTMLElement,
     control: FrontendChoiceControl,
-    leadingIcon?: string,
   ): HTMLButtonElement {
     const button = container.createEl("button", {
       cls: `chatobby-control chatobby-control-button chatobby-control--${control.id}`,
@@ -236,7 +235,6 @@ export class ComposerControls extends ChatobbyComponent {
         title: control.label,
       },
     });
-    if (leadingIcon) setIcon(button.createSpan({ cls: "chatobby-control-button__leading" }), leadingIcon);
     button.createSpan({ cls: "chatobby-control-button__label", text: control.label });
     setIcon(button.createSpan({ cls: "chatobby-control-button__chevron", attr: { "aria-hidden": "true" } }), "chevron-down");
     return button;
