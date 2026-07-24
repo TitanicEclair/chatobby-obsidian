@@ -307,7 +307,7 @@ function renderNodeInspector(
     facts,
     "Model",
     node.model ?? modelFromRuntime(node.attempts.at(-1)?.runtimeFingerprint) ?? node.runtimePolicy?.model ?? "Resolving",
-    node.runtimePolicy?.model ? undefined : "Inherited from the parent or role policy",
+    node.runtimePolicy?.model ? undefined : "Uses the parent or role setting",
   );
   addFact(facts, "Turns", String(node.turns));
   addFact(facts, "Tokens", formatTokens(node.tokens));

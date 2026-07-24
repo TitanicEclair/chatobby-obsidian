@@ -1,9 +1,8 @@
 import { ChatobbyComponent } from "../../../ui/shared/component";
 import {
-  createPageHeader,
   createPageIconButton,
-  createPageTab,
-  createPageTabs,
+  createPageState,
+  PageShell,
 } from "../../../ui/shared/page-shell";
 import type { SubagentScreenActions, SubagentScreenTab, SubagentStartDraft } from "../domain/screen-model";
 import type { SubagentStore, SubagentViewState } from "../state/subagent-store";
@@ -25,15 +24,14 @@ export interface SubagentsViewProps {
 }
 
 export class SubagentsView extends ChatobbyComponent {
-  private body: HTMLElement | null = null;
-  private status: HTMLElement | null = null;
   private tab: SubagentScreenTab = "runs";
   private unsubscribe: (() => void) | null = null;
   private startExpanded = false;
   private actionStatus: string | null = null;
   private feedOnly: boolean;
-  private titleMain: HTMLElement | null = null;
   private conversation: AgentConversationView | null = null;
+  private shell: PageShell | null = null;
+  private startButton: HTMLButtonElement | null = null;
 
   constructor(private readonly props: SubagentsViewProps) {
     super();
@@ -48,10 +46,18 @@ export class SubagentsView extends ChatobbyComponent {
   protected onRender(container: HTMLElement): void {
     container.tabIndex = -1;
     container.toggleClass("is-feed-only", this.feedOnly);
-    this.renderHeader(container);
-    this.renderTabs(container);
-    this.status = container.createDiv({ cls: "chatobby-subagents__notice is-hidden", attr: { role: "status", "aria-live": "polite" } });
-    this.body = container.createDiv({ cls: "chatobby-page__body chatobby-subagents__body" });
+    this.shell = new PageShell(container, {
+      title: "Subagents",
+      width: "wide",
+      headerClass: "chatobby-subagents__header",
+      titleClass: "chatobby-subagents__title-main",
+      actionsClass: "chatobby-subagents__header-actions",
+      tabsClass: "chatobby-subagents__tabs",
+      bodyClass: "chatobby-subagents__body",
+      containedBody: this.feedOnly,
+    });
+    this.renderHeaderActions();
+    this.renderTabs();
     this.unsubscribe = this.props.store.subscribe(() => this.renderBody());
     this.renderBody();
   }
@@ -81,15 +87,9 @@ export class SubagentsView extends ChatobbyComponent {
     super.destroy();
   }
 
-  private renderHeader(container: HTMLElement): void {
-    const { title, actions } = createPageHeader(container, {
-      title: "Subagents",
-      headerClass: "chatobby-subagents__header",
-      titleClass: "chatobby-subagents__title-main",
-      actionsClass: "chatobby-subagents__header-actions",
-    });
-    this.titleMain = title;
-    this.renderTitle();
+  private renderHeaderActions(): void {
+    const actions = this.shell?.actions;
+    if (!actions) return;
     if (this.feedOnly) {
       const supervisor = createPageIconButton(actions, "arrow-left", "Back to subagents", {
         className: "chatobby-subagents__icon-button",
@@ -102,9 +102,11 @@ export class SubagentsView extends ChatobbyComponent {
     const start = createPageIconButton(actions, "plus", "New run", {
       className: "chatobby-subagents__icon-button",
     });
+    this.startButton = start;
     start.setAttr("aria-pressed", String(this.startExpanded));
     start.addEventListener("click", () => {
       this.startExpanded = !this.startExpanded;
+      this.startButton?.setAttr("aria-pressed", String(this.startExpanded));
       this.renderBody();
     });
     const refresh = createPageIconButton(actions, "refresh-cw", "Refresh subagents", {
@@ -120,11 +122,13 @@ export class SubagentsView extends ChatobbyComponent {
     }).addEventListener("click", this.props.onBack);
   }
 
-  private renderTabs(container: HTMLElement): void {
-    const tabs = createPageTabs(
-      container,
-      `chatobby-subagents__tabs${this.feedOnly ? " is-hidden" : ""}`,
-    );
+  private renderTabs(): void {
+    const shell = this.shell;
+    if (!shell) return;
+    if (this.feedOnly) {
+      shell.setTabs([]);
+      return;
+    }
     const labels: ReadonlyArray<[SubagentScreenTab, string]> = [
       ["runs", "Runs"],
       ["inbox", "Inbox"],
@@ -132,80 +136,65 @@ export class SubagentsView extends ChatobbyComponent {
       ["workflows", "Flows"],
       ["settings", "Settings"],
     ];
-    const buttons: HTMLButtonElement[] = [];
-    const activate = (tab: SubagentScreenTab, button: HTMLButtonElement, focus: boolean): void => {
-      this.tab = tab;
-      for (const item of buttons) {
-        const selected = item === button;
-        item.toggleClass("is-active", selected);
-        item.setAttr("aria-selected", String(selected));
-        item.tabIndex = selected ? 0 : -1;
-      }
-      if (focus) button.focus();
-      this.renderBody();
-    };
-    for (const [tab, label] of labels) {
-      const button = createPageTab(tabs, {
-        label,
-        active: this.tab === tab,
-        className: "chatobby-subagents__tab",
-      });
-      button.tabIndex = this.tab === tab ? 0 : -1;
-      buttons.push(button);
-      button.addEventListener("click", () => activate(tab, button, false));
-      button.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
-        event.preventDefault();
-        const currentIndex = buttons.indexOf(button);
-        const nextIndex = event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? buttons.length - 1
-            : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
-        const next = buttons[nextIndex];
-        const nextTab = labels[nextIndex]?.[0];
-        if (next && nextTab) activate(nextTab, next, true);
-      });
-    }
+    shell.setTabs(labels.map(([tab, label]) => ({
+      id: tab,
+      label,
+      active: this.tab === tab,
+      onSelect: () => {
+        if (this.tab === tab) return;
+        this.tab = tab;
+        this.renderTabs();
+        this.renderBody();
+      },
+    })));
   }
 
   private renderBody(): void {
-    if (!this.body) return;
+    const shell = this.shell;
+    if (!shell) return;
     const state = this.props.store.getSnapshot();
     this.renderStatus(state);
     this.renderTitle(state);
     if (this.feedOnly) {
       if (!this.conversation) {
-        this.body.empty();
         this.conversation = new AgentConversationView({
           actions: this.props.actions,
           createFeedHost: this.props.createFeedHost,
         });
-        this.conversation.render(this.body);
+        this.conversation.render(shell.body);
       }
       this.conversation.update(state);
       return;
     }
     this.conversation?.destroy();
     this.conversation = null;
-    this.body.empty();
-    if (this.startExpanded) this.renderStartForm(this.body, state);
-    if (state.syncStatus === "loading" && state.runtimeId === null) {
-      this.body.createDiv({ cls: "chatobby-subagents__loading", text: "Loading supervisor snapshot…" });
-      return;
-    }
-    if (state.syncStatus === "error" && state.runtimeId === null) {
-      this.body.createDiv({ cls: "chatobby-subagents__empty", text: state.error ?? "Subagent supervisor unavailable." });
-      return;
-    }
-    if (this.tab === "runs") {
-      this.renderOverview(this.body, state);
-      renderRunWorkspace(this.body, state, this.props.actions);
-    }
-    else if (this.tab === "inbox") renderInboxPanel(this.body, state, this.props.actions);
-    else if (this.tab === "agents") renderAgentsPanel(this.body, state, this.props.actions);
-    else if (this.tab === "workflows") renderWorkflowsPanel(this.body, state, this.props.actions);
-    else renderSettingsPanel(this.body, state, this.props.actions);
+    shell.updateBody(`subagents:${this.tab}`, (body) => {
+      if (this.startExpanded) this.renderStartForm(body, state);
+      if (state.syncStatus === "loading" && state.runtimeId === null) {
+        createPageState(body, {
+          kind: "loading",
+          title: "Loading subagents",
+          description: "Reading runs, roles, workflows, and messages.",
+        });
+        return;
+      }
+      if (state.syncStatus === "error" && state.runtimeId === null) {
+        createPageState(body, {
+          kind: "error",
+          title: "Subagents are unavailable",
+          description: state.error ?? "The supervisor could not be reached.",
+        });
+        return;
+      }
+      if (this.tab === "runs") {
+        this.renderOverview(body, state);
+        renderRunWorkspace(body, state, this.props.actions);
+      }
+      else if (this.tab === "inbox") renderInboxPanel(body, state, this.props.actions);
+      else if (this.tab === "agents") renderAgentsPanel(body, state, this.props.actions);
+      else if (this.tab === "workflows") renderWorkflowsPanel(body, state, this.props.actions);
+      else renderSettingsPanel(body, state, this.props.actions);
+    });
   }
 
   private renderTitle(state = this.props.store.getSnapshot()): void {
@@ -213,7 +202,7 @@ export class SubagentsView extends ChatobbyComponent {
     const node = run && state.selectedNodeId ? run.nodes[state.selectedNodeId] : undefined;
     const agentName = node?.agentName?.trim()
       || node?.agentId.split(/[-_]/u).filter(Boolean).map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(" ");
-    if (this.titleMain) this.titleMain.textContent = this.feedOnly ? agentName ?? "Agent feed" : "Subagents";
+    this.shell?.setTitle(this.feedOnly ? agentName ?? "Agent feed" : "Subagents");
   }
 
   private renderOverview(host: HTMLElement, state: SubagentViewState): void {
@@ -239,14 +228,16 @@ export class SubagentsView extends ChatobbyComponent {
   }
 
   private renderStatus(state: SubagentViewState): void {
-    if (!this.status) return;
     const message = this.actionStatus
 	  ?? state.statusMessage
-      ?? (state.syncStatus === "gap" ? "Live event gap detected. Refreshing the authoritative snapshot…" : null)
+      ?? (state.syncStatus === "gap" ? "Some live updates were missed. Refreshing subagent activity…" : null)
       ?? (state.syncStatus === "error" ? state.error : null);
-    this.status.textContent = message ?? "";
-    this.status.toggleClass("is-hidden", !message);
-    this.status.toggleClass("is-error", state.syncStatus === "error");
+    this.shell?.setStatus(message
+      ? {
+          tone: state.syncStatus === "error" ? "error" : "info",
+          message,
+        }
+      : null);
   }
 
   private renderStartForm(host: HTMLElement, state: SubagentViewState): void {
@@ -254,27 +245,28 @@ export class SubagentsView extends ChatobbyComponent {
     const heading = form.createDiv({ cls: "chatobby-subagents__start-heading" });
     heading.createDiv({ cls: "chatobby-subagents__editor-title", text: "New run" });
     const grid = form.createDiv({ cls: "chatobby-subagents__start-grid" });
-    const description = addInput(grid, "Name", "Research migration options");
-    const task = addTextArea(grid, "Task", "Outcome, constraints, and evidence needed");
+    const description = addInput(grid, "Name", "Research migration options", "subagent:start:name");
+    const task = addTextArea(grid, "Task", "Outcome, constraints, and evidence needed", "subagent:start:task");
     const roleOptions = state.definitions.filter((item) => item.enabled).map((item): readonly [string, string] => [item.id, item.name]);
     if (!roleOptions.some(([id]) => id === "general-purpose")) roleOptions.unshift(["general-purpose", "General purpose"]);
-    const role = addSelect(grid, "Role", roleOptions);
+    const role = addSelect(grid, "Role", roleOptions, "subagent:start:role");
     const advanced = form.createEl("details", { cls: "chatobby-subagents__role-advanced" });
     advanced.createEl("summary", { text: "Advanced runtime options" });
     const advancedGrid = advanced.createDiv({ cls: "chatobby-subagents__role-advanced-grid" });
-    const executor = addSelect(advancedGrid, "Executor", [["auto", "Automatic"], ["in-process", "In process"], ["worker-process", "Worker process"]]);
-    const context = addSelect(advancedGrid, "Starting context", [["fresh", "Fresh"], ["fork", "Parent conversation"]]);
-    const workspace = addSelect(advancedGrid, "Workspace", [["shared", "Shared working directory"], ["worktree", "Isolated worktree"]]);
-    const priority = addInput(advancedGrid, "Priority", "0");
+    const executor = addSelect(advancedGrid, "Executor", [["auto", "Automatic"], ["in-process", "In process"], ["worker-process", "Worker process"]], "subagent:start:executor");
+    const context = addSelect(advancedGrid, "Starting context", [["fresh", "Fresh"], ["fork", "Parent conversation"]], "subagent:start:context");
+    const workspace = addSelect(advancedGrid, "Workspace", [["shared", "Shared working directory"], ["worktree", "Isolated worktree"]], "subagent:start:workspace");
+    const priority = addInput(advancedGrid, "Priority", "0", "subagent:start:priority");
     priority.type = "number";
     priority.value = "0";
-    const maxTurns = numberInput(advancedGrid, "Turn limit", "Inherited");
-    const maxTokens = numberInput(advancedGrid, "Total token budget", "Inherited");
-    const maxWallTime = numberInput(advancedGrid, "Time budget (minutes)", "Inherited");
+    const maxTurns = numberInput(advancedGrid, "Turn limit", "Uses role default", "subagent:start:max-turns");
+    const maxTokens = numberInput(advancedGrid, "Total token budget", "Uses role default", "subagent:start:max-tokens");
+    const maxWallTime = numberInput(advancedGrid, "Time budget (minutes)", "Uses role default", "subagent:start:max-time");
     const controls = form.createDiv({ cls: "chatobby-subagents__start-actions" });
     const cancel = controls.createEl("button", { text: "Cancel", attr: { type: "button" } });
     cancel.addEventListener("click", () => {
       this.startExpanded = false;
+      this.startButton?.setAttr("aria-pressed", "false");
       this.renderBody();
     });
     controls.createEl("button", { cls: "mod-cta", text: "Start", attr: { type: "submit" } });
@@ -302,8 +294,8 @@ export class SubagentsView extends ChatobbyComponent {
   }
 }
 
-function numberInput(host: HTMLElement, label: string, placeholder: string): HTMLInputElement {
-  const input = addInput(host, label, placeholder);
+function numberInput(host: HTMLElement, label: string, placeholder: string, stateKey: string): HTMLInputElement {
+  const input = addInput(host, label, placeholder, stateKey);
   input.type = "number";
   input.min = "0";
   return input;
@@ -319,22 +311,27 @@ function minutesToMilliseconds(value: string): number | undefined {
   return minutes === undefined ? undefined : minutes * MILLISECONDS_PER_MINUTE;
 }
 
-function addInput(host: HTMLElement, label: string, placeholder: string): HTMLInputElement {
+function addInput(host: HTMLElement, label: string, placeholder: string, stateKey: string): HTMLInputElement {
   const field = host.createEl("label", { cls: "chatobby-subagents__field" });
   field.createSpan({ text: label });
-  return field.createEl("input", { attr: { type: "text", placeholder } });
+  return field.createEl("input", { attr: { type: "text", placeholder, "data-page-state-key": stateKey } });
 }
 
-function addTextArea(host: HTMLElement, label: string, placeholder: string): HTMLTextAreaElement {
+function addTextArea(host: HTMLElement, label: string, placeholder: string, stateKey: string): HTMLTextAreaElement {
   const field = host.createEl("label", { cls: "chatobby-subagents__field is-wide" });
   field.createSpan({ text: label });
-  return field.createEl("textarea", { attr: { placeholder } });
+  return field.createEl("textarea", { attr: { placeholder, "data-page-state-key": stateKey } });
 }
 
-function addSelect(host: HTMLElement, label: string, options: ReadonlyArray<readonly [string, string]>): HTMLSelectElement {
+function addSelect(
+  host: HTMLElement,
+  label: string,
+  options: ReadonlyArray<readonly [string, string]>,
+  stateKey: string,
+): HTMLSelectElement {
   const field = host.createEl("label", { cls: "chatobby-subagents__field" });
   field.createSpan({ text: label });
-  const select = field.createEl("select");
+  const select = field.createEl("select", { attr: { "data-page-state-key": stateKey } });
   for (const [value, text] of options) select.createEl("option", { text, attr: { value } });
   return select;
 }

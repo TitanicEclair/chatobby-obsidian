@@ -27,6 +27,8 @@
   background: transparent;
   box-shadow: none;
   color: var(--text-muted);
+  font-family: inherit;
+  line-height: var(--line-height-tight);
   text-align: left;
 }
 
@@ -36,11 +38,22 @@
   color: var(--text-normal);
 }
 
+.chatobby-task-progress-host .chatobby-task-progress__toggle:focus-visible {
+  outline: 2px solid var(--chatobby-focus-ring);
+  outline-offset: 2px;
+}
+
+.chatobby-task-progress-host .chatobby-task-progress__toggle:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .chatobby-task-progress__preview {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   min-width: 0;
-  gap: var(--size-4-1) var(--size-4-3);
+  gap: var(--size-4-2);
+  overflow: hidden;
 }
 
 .chatobby-task-progress__preview-item,
@@ -51,13 +64,36 @@
   gap: var(--size-4-2);
 }
 
-.chatobby-task-progress__preview-text,
+.chatobby-task-progress__preview-item {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.chatobby-task-progress__preview-item.is-blocked {
+  color: var(--chatobby-warning);
+}
+
 .chatobby-task-progress__item-text,
 .chatobby-task-progress__note {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chatobby-task-progress__preview-text {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  line-height: var(--line-height-tight);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chatobby-task-progress__active-count {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
 }
 
 .chatobby-task-progress__step {
@@ -74,12 +110,21 @@
   color: var(--text-faint);
 }
 
+.chatobby-task-progress__summary {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .chatobby-task-progress__chevron,
 .chatobby-task-progress__status-icon {
   display: inline-flex;
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
+}
+
+.chatobby-task-progress__chevron.is-hidden {
+  visibility: hidden;
 }
 
 .chatobby-task-progress__chevron svg,
@@ -104,6 +149,8 @@
   padding: 0 0 var(--size-4-2);
 }
 
+.chatobby-task-progress__list.is-hidden { display: none; }
+
 @container (max-width: 440px) {
   .chatobby-task-progress__toggle {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -112,10 +159,6 @@
 
   .chatobby-task-progress__summary {
     display: none;
-  }
-
-  .chatobby-task-progress__preview {
-    flex-wrap: nowrap;
   }
 
   .chatobby-task-progress__preview-text {
@@ -177,7 +220,7 @@
 @media (prefers-reduced-motion: reduce) {
   .chatobby-task-progress__spinner,
   .chatobby-task-progress__status-icon.is-spinning {
-    animation-duration: 2s;
+    animation: none;
   }
 }
 

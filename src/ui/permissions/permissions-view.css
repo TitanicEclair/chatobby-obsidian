@@ -1,25 +1,10 @@
 .chatobby-permissions-view {
-  display: flex;
-  flex-direction: column;
   height: 100%;
   min-height: 0;
-  overflow-y: auto;
-  padding: var(--size-4-3) var(--chatobby-edge-padding) var(--size-4-8);
-  gap: var(--size-4-4);
-  background: var(--chatobby-canvas);
 }
 
 .chatobby-permissions-view:focus { outline: none; }
 
-.chatobby-permissions__header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--size-4-8);
-  align-items: center;
-  gap: var(--size-2-3);
-  flex: 0 0 auto;
-}
-
-.chatobby-permissions__reload,
 .chatobby-permissions__icon-btn {
   display: inline-flex;
   align-items: center;
@@ -34,24 +19,11 @@
   cursor: pointer;
 }
 
-.chatobby-permissions__reload:hover,
 .chatobby-permissions__icon-btn:hover {
   background: var(--chatobby-surface-hover);
   color: var(--text-normal);
 }
 
-.chatobby-permissions__heading { min-width: 0; }
-
-.chatobby-permissions__title {
-  overflow: hidden;
-  color: var(--text-normal);
-  font-size: var(--font-ui-medium);
-  font-weight: var(--font-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chatobby-permissions__subtitle,
 .chatobby-permissions__section-description,
 .chatobby-permissions__profile-description,
 .chatobby-permissions__rule-description {
@@ -60,40 +32,14 @@
   line-height: var(--line-height-normal);
 }
 
-.chatobby-permissions-view .chatobby-permissions__body {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: calc(840px + 2 * var(--chatobby-edge-padding));
-  margin: 0 auto;
-  gap: var(--size-4-6);
-}
-
 .chatobby-permissions__body.is-saving .chatobby-permissions__decision {
   cursor: progress;
 }
-
-.chatobby-permissions__state {
-  display: grid;
-  place-items: center;
-  min-height: 180px;
-  gap: var(--size-4-3);
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.chatobby-permissions__state.is-error { color: var(--text-error); }
 
 .chatobby-permissions__section {
   display: flex;
   flex-direction: column;
   gap: var(--size-2-3);
-}
-
-.chatobby-permissions__section-title {
-  color: var(--text-normal);
-  font-size: var(--font-ui-small);
-  font-weight: var(--font-semibold);
 }
 
 .chatobby-permissions__profile-toolbar {
@@ -135,7 +81,7 @@
 .chatobby-permissions__active-label {
   padding: var(--size-2-1) var(--size-2-3);
   border-radius: 999px;
-  color: var(--text-accent);
+  color: var(--chatobby-accent);
   background: color-mix(in srgb, var(--chatobby-accent) 12%, transparent);
   font-size: var(--font-ui-smaller);
 }
@@ -162,10 +108,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--size-2-2);
-  padding: var(--size-4-3);
-  border: var(--border-width) solid var(--chatobby-border);
-  border-radius: var(--radius-m);
-  background: var(--chatobby-surface-muted);
+  padding-block: var(--size-4-3);
+  border-block: var(--border-width) solid var(--chatobby-border);
+  background: transparent;
 }
 
 .chatobby-permissions__profile-summary {
@@ -179,7 +124,6 @@
 .chatobby-permissions__profile-name { font-weight: var(--font-semibold); }
 
 .chatobby-permissions__profile-note,
-.chatobby-permissions__inherited,
 .chatobby-permissions__assignment-id,
 .chatobby-permissions__empty,
 .chatobby-permissions__storage {
@@ -257,13 +201,6 @@
   overflow: hidden;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.chatobby-permissions__live-agent-detail {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: var(--font-ui-smaller);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -375,7 +312,7 @@
 .chatobby-permissions__storage {
   border: var(--border-width) solid var(--chatobby-border);
   border-radius: var(--radius-m);
-  background: var(--chatobby-surface-muted);
+  background: transparent;
 }
 
 .chatobby-permissions__capability > summary,
@@ -465,18 +402,17 @@
 .chatobby-permissions__storage { padding: 0 var(--size-4-3) var(--size-4-3); overflow-wrap: anywhere; }
 .chatobby-permissions__storage > summary { margin: 0 calc(var(--size-4-3) * -1); }
 
-.chatobby-permissions__reload:focus-visible,
 .chatobby-permissions__icon-btn:focus-visible,
 .chatobby-permissions__secondary-btn:focus-visible,
 .chatobby-permissions__decision:focus-visible,
 .chatobby-permissions__add-btn:focus-visible,
 .chatobby-permissions-view input:focus,
 .chatobby-permissions-view select:focus {
-  outline: 2px solid var(--chatobby-accent);
+  outline: 2px solid var(--chatobby-focus-ring);
   outline-offset: 2px;
 }
 
-@media (max-width: 620px) {
+@container chatobby-page (max-width: 620px) {
   .chatobby-permissions__body { gap: var(--size-4-5); }
   .chatobby-permissions__profile-summary,
   .chatobby-permissions__profile-editor { grid-template-columns: 1fr; }
@@ -508,7 +444,7 @@
   padding: var(--size-4-3);
   border: var(--border-width) solid var(--chatobby-border);
   border-radius: var(--radius-m);
-  background: var(--chatobby-surface-raised);
+  background: transparent;
 }
 
 .chatobby-permissions__channel-copy { min-width: 0; }
@@ -519,11 +455,11 @@
 .chatobby-permissions__channel-empty { padding: var(--size-4-3); color: var(--text-faint); text-align: center; }
 .chatobby-permissions__add-channel { display: flex; justify-content: flex-end; gap: var(--size-2-2); padding-top: var(--size-2-2); }
 
-@media (max-width: 760px) {
+@container chatobby-page (max-width: 760px) {
   .chatobby-permissions__channel { grid-template-columns: 1fr auto; }
   .chatobby-permissions__channel-actions { grid-column: 1 / -1; }
 }
 
-@media (max-width: 520px) {
+@container chatobby-page (max-width: 520px) {
   .chatobby-permissions__channel-actions { grid-template-columns: 1fr; }
 }

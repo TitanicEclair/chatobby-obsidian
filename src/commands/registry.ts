@@ -33,8 +33,8 @@ export interface ChatobbyServices {
   getTransport(): ChatobbyTransport | null;
   /** Prepare the configured runtime and return its connected transport. */
   ensureTransport(): Promise<ChatobbyTransport>;
-  /** Backend controller (start/stop). */
-  readonly backend: { start(): Promise<void>; stop(): Promise<void> };
+  /** Runtime controller (start/stop/restart). */
+  readonly backend: { start(): Promise<void>; stop(): Promise<void>; restart(): Promise<void> };
   /** Cycle the active session's model and refresh UI. */
   cycleModel(): Promise<void>;
   /** Cycle the active session's thinking level, persist it, refresh UI. */

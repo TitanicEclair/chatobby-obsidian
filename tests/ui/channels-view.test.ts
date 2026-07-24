@@ -83,11 +83,12 @@ describe("ChannelsView", () => {
 
   it("uses pane-width container breakpoints instead of window-width media queries", () => {
     const css = readFileSync("src/features/channels/ui/channels.css", "utf8");
+    const shellCss = readFileSync("src/ui/shared/page-shell.css", "utf8");
     const hostCss = readFileSync("src/ui/session/session-picker.css", "utf8");
 
-    expect(css).toContain("container: chatobby-channels / inline-size");
+    expect(shellCss).toContain("container: chatobby-page / inline-size");
     expect(css).toContain("max-width: none");
-    expect(css).toContain("@container chatobby-channels (max-width: 700px)");
+    expect(css).toContain("@container chatobby-page (max-width: 760px)");
     expect(css).not.toContain("@media (max-width: 620px)");
     expect(hostCss).toMatch(/\.chatobby-session-picker-host\s*\{[^}]*display:\s*flex;/su);
     expect(hostCss).toMatch(/\.chatobby-session-picker-host\s*\{[^}]*flex-direction:\s*column;/su);

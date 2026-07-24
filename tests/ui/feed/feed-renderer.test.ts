@@ -36,9 +36,9 @@ describe("FeedRenderer", () => {
     expect(el.querySelector(".chatobby-feed__empty-title")?.textContent).toBe("Chatobby");
     expect(el.querySelector(".chatobby-feed__empty-mark")).toBeNull();
     const suggestion = [...el.querySelectorAll<HTMLButtonElement>(".chatobby-feed__empty-capabilities button")]
-      .find((button) => button.textContent === "Understand this note");
+      .find((button) => button.textContent === "Summarize the note I’m viewing and list any next actions.");
     suggestion?.click();
-    expect(host.onEmptyPrompt).toHaveBeenCalledWith("Understand this note");
+    expect(host.onEmptyPrompt).toHaveBeenCalledWith("Summarize the note I’m viewing and list any next actions.");
   });
 
   it("releases bottom pinning immediately when the user scrolls upward", () => {

@@ -35,7 +35,7 @@ describe("ContextQueriesView", () => {
     expect(el.querySelector("textarea")).toBeNull();
 
     el.querySelector<HTMLButtonElement>(".chatobby-queries__summary-open")?.click();
-    expect(el.textContent).toContain("Source code is intentionally kept out of this page");
+    expect(el.textContent).toContain("The query's code stays in this project's .chatobby folder");
     expect(el.querySelector("textarea")).toBeNull();
     expect(el.textContent).not.toContain("export default");
 
@@ -66,6 +66,34 @@ describe("ContextQueriesView", () => {
         expectedQueryRevision: undefined,
       },
     }));
+  });
+
+  it("preserves a new-query draft across live model updates", () => {
+    let model = queryModel();
+    const listeners = new Set<(next: FrontendContextQueryScreenViewModel | null) => void>();
+    const view = new ContextQueriesView({
+      getModel: () => model,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      onBack: vi.fn(),
+      onRefresh: vi.fn(async () => {}),
+      onIntent: vi.fn(async () => {}),
+    });
+    const el = mount(view);
+    el.querySelector<HTMLButtonElement>('button[aria-label="Add context query"]')?.click();
+    const name = el.querySelector<HTMLInputElement>('input[data-page-state-key="query:new:name"]');
+    if (!name) throw new Error("query name field missing");
+    name.value = "Unsaved project facts";
+    name.focus();
+
+    model = { ...model, revision: 2, statusMessage: "Queries refreshed." };
+    for (const listener of listeners) listener(model);
+
+    expect(el.querySelector<HTMLInputElement>('input[data-page-state-key="query:new:name"]')?.value)
+      .toBe("Unsaved project facts");
+    expect(document.activeElement?.getAttribute("data-page-state-key")).toBe("query:new:name");
   });
 });
 

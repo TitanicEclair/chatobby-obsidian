@@ -12,7 +12,7 @@ export const modelActions: ChatobbyAction[] = [
   },
   {
     id: "cycle-thinking",
-    name: "Cycle thinking level",
+    name: "Cycle effort",
     group: "model",
     run: (services) => services.cycleThinking(),
   },

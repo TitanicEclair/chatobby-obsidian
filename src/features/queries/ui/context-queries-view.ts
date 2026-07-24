@@ -4,7 +4,13 @@ import type {
   FrontendContextQueryViewModel,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../../../ui/shared/component";
-import { createPageHeader, createPageIconButton } from "../../../ui/shared/page-shell";
+import {
+  createPageActionRow,
+  createPageIconButton,
+  createPageSection,
+  createPageState,
+  PageShell,
+} from "../../../ui/shared/page-shell";
 
 export type ContextQueryViewIntent =
   | { readonly type: "queries.save"; readonly payload: {
@@ -41,6 +47,9 @@ export class ContextQueriesView extends ChatobbyComponent {
   private deleteConfirmId: string | null = null;
   private localError: string | null = null;
   private busy = false;
+  private shell: PageShell | null = null;
+  private addButton: HTMLButtonElement | null = null;
+  private refreshButton: HTMLButtonElement | null = null;
 
   constructor(private readonly props: ContextQueriesViewProps) {
     super();
@@ -52,6 +61,23 @@ export class ContextQueriesView extends ChatobbyComponent {
 
   protected onRender(container: HTMLElement): void {
     container.tabIndex = -1;
+    this.shell = new PageShell(container, {
+      title: "Queries",
+      width: "wide",
+      headerClass: "chatobby-queries__header",
+      titleClass: "chatobby-queries__title-main",
+      actionsClass: "chatobby-queries__header-actions",
+      bodyClass: "chatobby-queries__body",
+    });
+    this.addButton = createPageIconButton(this.shell.actions, "plus", "Add context query");
+    this.addButton.addEventListener("click", () => {
+      this.creating = true;
+      this.expandedId = null;
+      this.renderState(this.props.getModel());
+    });
+    this.refreshButton = createPageIconButton(this.shell.actions, "refresh-cw", "Refresh queries");
+    this.refreshButton.addEventListener("click", () => void this.refresh());
+    createPageIconButton(this.shell.actions, "x", "Close queries").addEventListener("click", () => this.props.onBack());
     this.unsubscribe = this.props.subscribe((model) => this.renderState(model));
     this.renderState(this.props.getModel());
   }
@@ -84,48 +110,49 @@ export class ContextQueriesView extends ChatobbyComponent {
   }
 
   private renderState(model: FrontendContextQueryScreenViewModel | null): void {
-    const container = this.container;
-    if (!container) return;
-    container.empty();
-    this.renderHeader(container, model);
-    const body = container.createDiv({ cls: "chatobby-page__body chatobby-queries__body" });
+    const shell = this.shell;
+    if (!shell) return;
     const error = this.localError ?? model?.error;
-    if (error) renderNotice(body, error, true);
-    if (!model) {
-      renderEmpty(body, error ? "alert-circle" : "loader-circle", error ? "Project queries are unavailable." : "Loading project queries…");
-      return;
-    }
-    if (model.statusMessage) renderNotice(body, model.statusMessage, false);
-    body.createDiv({ cls: "chatobby-queries__project", text: model.projectDirectory });
-    if (!model.trusted) renderNotice(body, "Trust this project before enabling or running query scripts.", true);
-    if (this.creating) this.renderEditor(body, null);
-    const list = body.createDiv({ cls: "chatobby-queries__list" });
-    if (model.items.length === 0 && !this.creating) {
-      renderEmpty(list, "braces", "No context queries in this project yet.");
-      return;
-    }
-    for (const item of model.items) this.renderItem(list, item);
-  }
-
-  private renderHeader(container: HTMLElement, model: FrontendContextQueryScreenViewModel | null): void {
-    const { actions } = createPageHeader(container, {
-      title: "Queries",
-      headerClass: "chatobby-queries__header",
-      titleClass: "chatobby-queries__title-main",
-      actionsClass: "chatobby-queries__header-actions",
+    shell.setTitle("Queries", model?.projectDirectory);
+    shell.setBusy(this.busy);
+    if (this.addButton) this.addButton.disabled = !model || this.busy;
+    this.refreshButton?.toggleClass("is-loading", model?.loading ?? false);
+    this.refreshButton?.setAttr("aria-busy", String(model?.loading ?? false));
+    shell.setStatus(
+      error
+        ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.refresh() }
+        : model?.statusMessage
+          ? { tone: "success", message: model.statusMessage }
+          : model && !model.trusted
+            ? { tone: "warning", message: "Trust this project before enabling or running query scripts." }
+            : null,
+    );
+    shell.updateBody("queries", (body) => {
+      if (!model) {
+        createPageState(body, {
+          kind: error ? "error" : "loading",
+          title: error ? "Project queries are unavailable" : "Loading project queries",
+          description: error ? "Check the runtime connection and try again." : "Reading this project's query definitions.",
+        });
+        return;
+      }
+      if (this.creating) this.renderEditor(body, null);
+      const section = createPageSection(body, {
+        title: "Context queries",
+        description: "Project-local data that can be added at session start or before each turn.",
+        surface: "divided",
+      });
+      const list = section.content.createDiv({ cls: "chatobby-queries__list" });
+      if (model.items.length === 0 && !this.creating) {
+        createPageState(list, {
+          kind: "empty",
+          title: "No context queries yet",
+          description: "Create one to add safe, project-specific context when Chatobby works.",
+        });
+        return;
+      }
+      for (const item of model.items) this.renderItem(list, item);
     });
-    const add = createPageIconButton(actions, "plus", "Add context query");
-    add.disabled = !model || this.busy;
-    add.addEventListener("click", () => {
-      this.creating = true;
-      this.expandedId = null;
-      this.renderState(this.props.getModel());
-    });
-    const refresh = createPageIconButton(actions, "refresh-cw", "Refresh queries");
-    refresh.toggleClass("is-loading", model?.loading ?? false);
-    refresh.setAttr("aria-busy", String(model?.loading ?? false));
-    refresh.addEventListener("click", () => void this.refresh());
-    createPageIconButton(actions, "x", "Close queries").addEventListener("click", () => this.props.onBack());
   }
 
   private renderItem(parent: HTMLElement, item: FrontendContextQueryViewModel): void {
@@ -164,26 +191,34 @@ export class ContextQueriesView extends ChatobbyComponent {
   }
 
   private renderEditor(parent: HTMLElement, item: FrontendContextQueryViewModel | null): void {
-    const form = parent.createDiv({ cls: `chatobby-queries__editor${item ? "" : " is-new"}` });
-    const name = field(form, "Name", "input");
+    const section = item
+      ? null
+      : createPageSection(parent, {
+          title: "New context query",
+          description: "Name the information and choose when Chatobby should receive it.",
+          surface: "inset",
+        });
+    const form = (section?.content ?? parent).createDiv({ cls: `chatobby-queries__editor${item ? "" : " is-new"}` });
+    const statePrefix = `query:${item?.id ?? "new"}`;
+    const name = field(form, "Name", `${statePrefix}:name`);
     name.value = item?.name ?? "";
     name.placeholder = "Current project status";
-    const description = field(form, "Description", "input");
+    const description = field(form, "Description", `${statePrefix}:description`);
     description.value = item?.description ?? "";
     description.placeholder = "What this adds to Chatobby's context";
     const timingLabel = form.createEl("label", { cls: "chatobby-queries__field" });
     timingLabel.createSpan({ text: "When to include it" });
-    const timing = timingLabel.createEl("select");
+    const timing = timingLabel.createEl("select", { attr: { "data-page-state-key": `${statePrefix}:trigger` } });
     timing.createEl("option", { value: "session_start", text: "At the start of a new session" });
     timing.createEl("option", { value: "every_turn", text: "Before every turn" });
     timing.value = item?.trigger ?? "session_start";
     form.createDiv({
       cls: "chatobby-queries__script-note",
       text: item
-        ? "The script is stored in this project's query scripts folder. Source code is intentionally kept out of this page."
-        : "Chatobby will create a project-local script folder with a main file. Source code is intentionally kept out of this page.",
+        ? "The query's code stays in this project's .chatobby folder and is not shown here."
+        : "Chatobby will create the query in this project's .chatobby folder. Its code is not shown here.",
     });
-    const actions = form.createDiv({ cls: "chatobby-queries__actions" });
+    const actions = createPageActionRow(form, "chatobby-queries__actions");
     actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => {
       if (item) this.expandedId = null;
       else this.creating = false;
@@ -271,22 +306,10 @@ export class ContextQueriesView extends ChatobbyComponent {
   }
 }
 
-function field(parent: HTMLElement, label: string, type: "input"): HTMLInputElement {
+function field(parent: HTMLElement, label: string, key: string): HTMLInputElement {
   const wrapper = parent.createEl("label", { cls: "chatobby-queries__field" });
   wrapper.createSpan({ text: label });
-  return wrapper.createEl(type);
-}
-
-function renderNotice(parent: HTMLElement, text: string, error: boolean): void {
-  const notice = parent.createDiv({ cls: `chatobby-queries__notice${error ? " is-error" : ""}` });
-  setIcon(notice.createSpan(), error ? "triangle-alert" : "check-circle-2");
-  notice.createSpan({ text });
-}
-
-function renderEmpty(parent: HTMLElement, icon: string, text: string): void {
-  const empty = parent.createDiv({ cls: "chatobby-queries__empty" });
-  setIcon(empty.createDiv(), icon);
-  empty.createDiv({ text });
+  return wrapper.createEl("input", { attr: { "data-page-state-key": key } });
 }
 
 function errorMessage(error: unknown): string {

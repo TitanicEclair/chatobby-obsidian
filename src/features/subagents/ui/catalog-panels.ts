@@ -73,7 +73,7 @@ export function renderWorkflowsPanel(host: HTMLElement, state: SubagentViewState
 export function renderSettingsPanel(host: HTMLElement, state: SubagentViewState, actions: SubagentScreenActions): void {
   const resolved = state.settings;
   if (!resolved) {
-    host.createDiv({ cls: "chatobby-subagents__empty", text: "Supervisor settings are unavailable until the backend snapshot loads." });
+    host.createDiv({ cls: "chatobby-subagents__empty", text: "Subagent settings are still loading." });
     return;
   }
   const form = host.createEl("form", { cls: "chatobby-subagents__settings" });
@@ -205,7 +205,7 @@ function renderAgentEditor(
   const maxDepth = addOptionalNumberField(advancedGrid, "Delegation depth limit", initialDefinition.policy.maxDepth);
   maxDepth.parentElement?.createDiv({
     cls: "chatobby-subagents__field-help",
-    text: "Leave inherited unless this role should be prevented from creating deeper subagents.",
+    text: "Use the role default unless this role should be prevented from creating deeper subagents.",
   });
   const enabled = addToggleField(advancedGrid, "Role enabled", initialDefinition.enabled);
   persistDraft = () => {
@@ -442,7 +442,7 @@ function addNumberField(host: HTMLElement, label: string, value: number, min: nu
 }
 
 function addOptionalNumberField(host: HTMLElement, label: string, value: number | undefined): HTMLInputElement {
-  const input = addTextField(host, label, value === undefined ? "" : String(value), "Inherited");
+  const input = addTextField(host, label, value === undefined ? "" : String(value), "Uses default");
   input.type = "number";
   input.min = "0";
   return input;

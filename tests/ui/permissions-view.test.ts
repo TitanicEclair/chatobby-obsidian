@@ -4,6 +4,30 @@ import { PermissionsView, type PermissionViewIntent } from "../../src/ui/permiss
 import { mount } from "./helpers/mount";
 
 describe("PermissionsView", () => {
+  it("renders a mixed-version permission model with omitted collection fields", () => {
+    const current = permissionModel();
+    const {
+      liveAgents: _liveAgents,
+      channels: _channels,
+      availableChannels: _availableChannels,
+      storageLines: _storageLines,
+      ...legacy
+    } = current;
+    const model = legacy as unknown as FrontendPermissionScreenViewModel;
+    const view = new PermissionsView({
+      getModel: () => model,
+      subscribe: () => () => {},
+      onRefresh: vi.fn(async () => {}),
+      onIntent: vi.fn(async () => {}),
+      onBack: vi.fn(),
+    });
+
+    const root = mount(view);
+
+    expect(root.textContent).toContain("Permission policy");
+    expect(root.textContent).toContain("This policy does not have access to any channels.");
+  });
+
   it("keeps disclosures open while dispatching runtime-owned capability decisions", async () => {
     let model = permissionModel();
     const listeners = new Set<(value: FrontendPermissionScreenViewModel | null) => void>();

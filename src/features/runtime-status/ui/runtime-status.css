@@ -125,7 +125,7 @@
 }
 
 .chatobby-runtime-update.is-error .chatobby-runtime-update__icon {
-  color: var(--text-error);
+  color: var(--chatobby-danger);
 }
 
 .chatobby-runtime-update__label {
@@ -141,13 +141,13 @@
   border: 0;
   background: transparent;
   box-shadow: none;
-  color: var(--text-accent);
+  color: var(--chatobby-accent);
   font-size: inherit;
 }
 
 .chatobby-runtime-update__action:hover,
 .chatobby-runtime-update__action:focus-visible {
-  background: var(--background-modifier-hover);
+  background: var(--chatobby-surface-hover);
 }
 
 .chatobby-runtime-install-modal {
@@ -161,7 +161,7 @@
 .chatobby-runtime-install__icon {
   display: inline-flex;
   margin: var(--size-4-2) 0 var(--size-4-3);
-  color: var(--text-accent);
+  color: var(--chatobby-accent);
 }
 
 .chatobby-runtime-install__icon svg {
@@ -184,7 +184,7 @@
 }
 
 .chatobby-runtime-install__notice {
-  color: var(--text-warning);
+  color: var(--chatobby-warning);
 }
 
 .chatobby-runtime-install__summary {
@@ -211,13 +211,13 @@
   margin-top: var(--size-4-4);
   overflow: hidden;
   border-radius: var(--radius-s);
-  background: var(--background-modifier-border);
+  background: var(--chatobby-border);
 }
 
 .chatobby-runtime-install__progress-value {
   height: 100%;
   border-radius: inherit;
-  background: var(--interactive-accent);
+  background: var(--chatobby-accent);
   transition: width 120ms linear;
 }
 

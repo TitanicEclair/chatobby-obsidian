@@ -332,7 +332,7 @@ describe("Composer", () => {
     const { composer, input } = bindComposer(createHost({ send }));
     input.value = "return to this later";
     composer.handleInput();
-    composer.handleKeydown(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, cancelable: true }));
+    composer.stashDraft();
     expect(input.value).toBe("");
 
     input.value = "send this first";
@@ -347,19 +347,14 @@ describe("Composer", () => {
     const { composer, input } = bindComposer(createHost());
     input.value = "restore this without sending";
     composer.handleInput();
-    composer.handleKeydown(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, cancelable: true }));
+    composer.stashDraft();
     expect(input.value).toBe("");
 
-    composer.handleKeydown(new KeyboardEvent("keydown", {
-      key: "s",
-      ctrlKey: true,
-      shiftKey: true,
-      cancelable: true,
-    }));
+    composer.restoreStash();
     expect(input.value).toBe("restore this without sending");
   });
 
-  it("captures the stash shortcut before Obsidian handles its global hotkey", () => {
+  it("leaves global modifier shortcuts for Obsidian commands", () => {
     const { composer, input } = bindComposer(createHost());
     input.value = "capture this draft";
     composer.handleInput();
@@ -368,12 +363,10 @@ describe("Composer", () => {
       ctrlKey: true,
       cancelable: true,
     });
-    Object.defineProperty(event, "target", { value: input });
+    composer.handleKeydown(event);
 
-    expect(composer.handleCapturedKeydown(event)).toBe(true);
-    expect(event.defaultPrevented).toBe(true);
-    expect(input.value).toBe("");
-    expect(composer.handleCapturedKeydown(event)).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+    expect(input.value).toBe("capture this draft");
   });
 
   it("recalls an immediate Escape across composer, feed, controls, and transport", async () => {

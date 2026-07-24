@@ -1,4 +1,4 @@
-/* Shared shell for full-view ribbon pages. Page-specific styles begin below the shell. */
+/* Stable, Obsidian-native structure shared by every full-page Chatobby surface. */
 
 .chatobby-page {
   display: flex;
@@ -8,11 +8,11 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 0;
   padding: 0;
   overflow: hidden;
   color: var(--text-normal);
   background: var(--chatobby-canvas);
+  container: chatobby-page / inline-size;
 }
 
 .chatobby-page:focus { outline: none; }
@@ -22,19 +22,22 @@
 .chatobby-page__header {
   display: grid;
   width: 100%;
-  height: var(--size-4-10);
   min-width: 0;
-  flex: 0 0 var(--size-4-10);
+  min-height: var(--chatobby-page-header-height);
+  flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--size-4-3);
-  padding: var(--size-2-1) var(--chatobby-edge-padding);
+  padding: var(--size-2-2) var(--chatobby-page-inline-padding);
   border-bottom: var(--border-width) solid var(--chatobby-border);
   background: var(--chatobby-canvas);
 }
 
+.chatobby-page__heading { min-width: 0; }
+
 .chatobby-page__title {
   min-width: 0;
+  margin: 0;
   overflow: hidden;
   color: var(--text-normal);
   font-size: var(--font-ui-medium);
@@ -44,7 +47,19 @@
   white-space: nowrap;
 }
 
-.chatobby-page__header-actions {
+.chatobby-page__subtitle {
+  min-width: 0;
+  margin-top: var(--size-2-1);
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  line-height: var(--line-height-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-page__header-actions,
+.chatobby-page__section-actions {
   display: flex;
   min-width: 0;
   flex: 0 0 auto;
@@ -55,11 +70,11 @@
 
 .chatobby-page button.chatobby-page__icon-button {
   display: inline-flex;
-  width: var(--size-4-7);
-  height: var(--size-4-7);
-  min-width: var(--size-4-7);
-  min-height: var(--size-4-7);
-  flex: 0 0 var(--size-4-7);
+  width: var(--chatobby-page-action-size);
+  height: var(--chatobby-page-action-size);
+  min-width: var(--chatobby-page-action-size);
+  min-height: var(--chatobby-page-action-size);
+  flex: 0 0 var(--chatobby-page-action-size);
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -80,9 +95,15 @@
 }
 
 .chatobby-page button.chatobby-page__icon-button.is-danger { color: var(--chatobby-danger); }
-.chatobby-page button.chatobby-page__icon-button.is-loading svg { animation: chatobby-page-spin 0.8s linear infinite; }
+.chatobby-page button.chatobby-page__icon-button.is-loading svg,
+.chatobby-page__state.is-loading .chatobby-page__state-icon svg {
+  animation: chatobby-page-spin 0.8s linear infinite;
+}
+
 .chatobby-page button.chatobby-page__icon-button:focus-visible,
-.chatobby-page button.chatobby-page__tab:focus-visible {
+.chatobby-page button.chatobby-page__tab:focus-visible,
+.chatobby-page__status-action:focus-visible,
+.chatobby-page__disclosure > summary:focus-visible {
   outline: 2px solid var(--chatobby-focus-ring);
   outline-offset: 1px;
 }
@@ -90,12 +111,12 @@
 .chatobby-page__tabs {
   display: flex;
   width: 100%;
-  height: var(--size-4-10);
   min-width: 0;
-  flex: 0 0 var(--size-4-10);
+  min-height: var(--chatobby-page-tabs-height);
+  flex: 0 0 auto;
   align-items: stretch;
   gap: var(--size-2-1);
-  padding: 0 var(--chatobby-edge-padding);
+  padding: 0 var(--chatobby-page-inline-padding);
   overflow-x: auto;
   overflow-y: hidden;
   border-bottom: var(--border-width) solid var(--chatobby-border);
@@ -103,10 +124,11 @@
   scrollbar-width: thin;
 }
 
+.chatobby-page__tabs.is-hidden { display: none; }
+
 .chatobby-page button.chatobby-page__tab {
   display: inline-flex;
-  height: var(--size-4-10);
-  min-height: var(--size-4-10);
+  min-height: var(--chatobby-page-tabs-height);
   flex: 0 0 auto;
   align-items: center;
   gap: var(--size-2-2);
@@ -134,6 +156,7 @@
 .chatobby-page button.chatobby-page__tab.is-active {
   border-bottom-color: var(--text-normal);
   color: var(--text-normal);
+  font-weight: var(--font-medium);
 }
 
 .chatobby-page__tab-count {
@@ -143,14 +166,34 @@
   color: var(--text-muted);
   background: var(--chatobby-surface-muted);
   font-size: var(--font-ui-smaller);
+  font-weight: var(--font-normal);
   line-height: 18px;
   text-align: center;
 }
 
-.chatobby-page button.chatobby-page__tab.is-active .chatobby-page__tab-count {
+.chatobby-page__status {
+  display: grid;
+  min-width: 0;
+  flex: 0 0 auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--size-2-2);
+  margin: var(--size-2-2) var(--chatobby-page-inline-padding) 0;
+  padding: var(--size-2-2) var(--size-4-3);
+  border-inline-start: 2px solid var(--chatobby-accent);
   color: var(--text-muted);
   background: var(--chatobby-surface-muted);
+  font-size: var(--font-ui-smaller);
 }
+
+.chatobby-page__status.is-hidden { display: none; }
+.chatobby-page__status.is-success { border-inline-start-color: var(--chatobby-success); }
+.chatobby-page__status.is-warning { border-inline-start-color: var(--chatobby-warning); }
+.chatobby-page__status.is-error { border-inline-start-color: var(--chatobby-danger); color: var(--chatobby-danger); }
+.chatobby-page__status-icon { display: inline-flex; width: 14px; height: 14px; }
+.chatobby-page__status-icon svg { width: 14px; height: 14px; }
+.chatobby-page__status-message { min-width: 0; overflow-wrap: anywhere; }
+.chatobby-page__status-action { color: var(--text-normal); background: transparent; box-shadow: none; }
 
 .chatobby-page__body {
   display: flex;
@@ -159,18 +202,177 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--size-4-4);
-  padding: var(--size-4-4) var(--chatobby-edge-padding) var(--size-4-8);
+  gap: var(--chatobby-page-section-gap);
+  margin: 0 auto;
+  padding: var(--size-4-4) var(--chatobby-page-inline-padding) var(--size-4-8);
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
-@container (max-width: 620px) {
+.chatobby-page[data-page-width="reading"] .chatobby-page__body { max-width: var(--chatobby-page-reading-width); }
+.chatobby-page[data-page-width="form"] .chatobby-page__body { max-width: var(--chatobby-page-form-width); }
+.chatobby-page[data-page-width="wide"] .chatobby-page__body { max-width: var(--chatobby-page-wide-width); }
+.chatobby-page[data-page-width="full"] .chatobby-page__body { max-width: none; }
+.chatobby-page__body.is-contained {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.chatobby-page__body.is-busy { cursor: progress; }
+
+.chatobby-page__section {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--size-4-3);
+}
+
+.chatobby-page__section.is-divided > .chatobby-page__section-content {
+  border-block: var(--border-width) solid var(--chatobby-border);
+}
+
+.chatobby-page__section.is-inset {
+  padding: var(--size-4-3);
+  border: var(--border-width) solid var(--chatobby-border);
+  border-radius: var(--radius-m);
+  background: var(--chatobby-surface-muted);
+}
+
+.chatobby-page__section-header {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--size-4-3);
+}
+
+.chatobby-page__section-copy { min-width: 0; }
+.chatobby-page__section-title {
+  margin: 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.chatobby-page__section-description {
+  margin-top: var(--size-2-1);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: var(--line-height-normal);
+}
+
+.chatobby-page__section-content { min-width: 0; }
+
+.chatobby-page__toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--size-2-2);
+}
+
+.chatobby-page__toolbar > :first-child { flex: 1 1 240px; min-width: 0; }
+
+.chatobby-page__action-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--size-2-2);
+}
+
+.chatobby-page__action-row > .is-danger,
+.chatobby-page__action-row > .mod-warning { margin-inline-end: auto; }
+
+.chatobby-page__disclosure {
+  min-width: 0;
+  border-block-start: var(--border-width) solid var(--chatobby-border);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-page__disclosure > summary {
+  padding: var(--size-4-3) 0;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chatobby-page__state {
+  display: grid;
+  min-height: 120px;
+  grid-template-columns: auto minmax(0, auto);
+  place-content: center;
+  align-items: center;
+  gap: var(--size-4-3);
+  padding: var(--size-4-6);
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.chatobby-page__state.is-error { color: var(--chatobby-danger); }
+.chatobby-page__state-icon { display: inline-flex; width: 22px; height: 22px; }
+.chatobby-page__state-icon svg { width: 22px; height: 22px; }
+.chatobby-page__state-copy { min-width: 0; }
+.chatobby-page__state-title { color: currentColor; font-size: var(--font-ui-small); font-weight: var(--font-medium); }
+.chatobby-page__state-description { margin-top: var(--size-2-1); color: var(--text-faint); font-size: var(--font-ui-smaller); }
+.chatobby-page__state > button { grid-column: 2; justify-self: start; }
+
+.chatobby-page__master-detail {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+}
+
+.chatobby-page__master,
+.chatobby-page__detail { min-width: 0; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.chatobby-page__master {
+  max-width: none;
+  border-inline-end: var(--border-width) solid var(--chatobby-border);
+  background: var(--chatobby-surface-muted);
+}
+
+@container chatobby-page (max-width: 760px) {
+  .chatobby-page__master-detail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .chatobby-page__master {
+    display: flex;
+    max-height: 35cqh;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-inline-end: 0;
+    border-block-end: var(--border-width) solid var(--chatobby-border);
+  }
+}
+
+@container chatobby-page (max-width: 480px) {
   .chatobby-page__header,
   .chatobby-page__tabs,
-  .chatobby-page__body { padding-inline: var(--size-4-3); }
+  .chatobby-page__body { --chatobby-page-inline-padding: var(--size-4-3); }
+
+  .chatobby-page__section-header { grid-template-columns: minmax(0, 1fr); }
+  .chatobby-page__section-actions { justify-content: flex-start; }
+  .chatobby-page__action-row > button { flex: 1 1 auto; }
+  .chatobby-page__state { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+  .chatobby-page__state > button { grid-column: 1; justify-self: center; }
 }
 
 @keyframes chatobby-page-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .chatobby-page button.chatobby-page__icon-button.is-loading svg,
+  .chatobby-page__state.is-loading .chatobby-page__state-icon svg {
+    animation-duration: 2s;
+  }
+}

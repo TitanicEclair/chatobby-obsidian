@@ -59,6 +59,7 @@ import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/cons
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
 import { PROMPT_START_TIMEOUT_MS, retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
 import { deliverQueuedMessage } from "./controller/queued-message-delivery";
+import { focusPageNavigation, movePageNavigation } from "./shared/page-shell";
 const VIEW_TYPE = "chatobby-view";
 export class ChatobbyView extends ItemView {
   readonly runtimeChannelId = window.crypto.randomUUID();
@@ -111,19 +112,16 @@ export class ChatobbyView extends ItemView {
   private unsubscribeFrontendStore: (() => void) | null = null;
   private pendingFeedCatchup = false;
   private readonly handleViewKeydown = (event: KeyboardEvent): void => {
-    if (this.viewMode === "session-picker") {
-      if (this.sessionPickerMode.handleKeydown(event)) event.stopPropagation();
-    } else if (this.viewMode === "permissions") {
-      if (this.overlayScreens.permissions.handleKeydown(event)) event.stopPropagation();
-    } else if (this.viewMode === "memory") {
-      if (this.overlayScreens.memory.handleKeydown(event)) event.stopPropagation();
-    } else if (this.viewMode === "events") {
-      if (this.overlayScreens.events.handleKeydown(event)) event.stopPropagation();
-    } else if (this.viewMode === "queries") {
-      if (this.overlayScreens.queries.handleKeydown(event)) event.stopPropagation();
-    } else if (this.viewMode === "subagents") {
-      if (this.subagentScreen.handleKeydown(event)) event.stopPropagation();
-    } else if (this.viewMode === "chat" && this.composer.handleViewKeydown(event)) event.stopPropagation();
+    if (event.defaultPrevented) return;
+    let handled = false;
+    if (this.viewMode === "session-picker") handled = this.sessionPickerMode.handleKeydown(event);
+    else if (this.viewMode === "permissions") handled = this.overlayScreens.permissions.handleKeydown(event);
+    else if (this.viewMode === "memory") handled = this.overlayScreens.memory.handleKeydown(event);
+    else if (this.viewMode === "events") handled = this.overlayScreens.events.handleKeydown(event);
+    else if (this.viewMode === "queries") handled = this.overlayScreens.queries.handleKeydown(event);
+    else if (this.viewMode === "subagents") handled = this.subagentScreen.handleKeydown(event);
+    else if (this.viewMode === "chat") handled = this.composer.handleViewKeydown(event);
+    if (handled) event.stopPropagation();
   };
   private readonly handleOpenSubagents = (event: Event): void => {
     const detail = (event as CustomEvent<{ runId?: string; nodeId?: string; feedOnly?: boolean }>).detail;
@@ -133,8 +131,7 @@ export class ChatobbyView extends ItemView {
   constructor(leaf: WorkspaceLeaf, private plugin: ChatobbyPlugin) {
     super(leaf);
     this.scope = new Scope(this.app.scope);
-    this.scope.register(null, null, (event) => this.componentsReady && this.viewMode === "chat" && this.composer.handleCapturedKeydown(event) ? false : undefined);
-    // Keep this static work surface out of Obsidian's file-navigation targets.
+    this.scope.register(null, null, (event) => this.componentsReady && this.composer.handleScopedKeydown(event, this.viewMode === "chat") ? false : undefined);
     this.navigation = false;
     this.viewNavigation = new ViewNavigationController(leaf, VIEW_TYPE, {
       openChat: () => {
@@ -452,7 +449,6 @@ export class ChatobbyView extends ItemView {
     this.runtimeLifecycle.open();
     this.focusComposerSoon();
   }
-
   async onClose(): Promise<void> {
     this.componentsReady = false;
     this.plugin.setChatViewVisible(this, false);
@@ -477,6 +473,7 @@ export class ChatobbyView extends ItemView {
     this.subagentScreen.destroy();
     this.channelScreen.destroy();
     this.sessionAgentRail.destroy();
+    this.taskProgress.destroy();
     this.feed?.clear();
     this.composerControls.destroy();
     this.runtimeStatus.destroy();
@@ -487,27 +484,29 @@ export class ChatobbyView extends ItemView {
     await this.plugin.unregisterChatView(this);
   }
   // ── Command surface (command palette + obsidian:// URI handler) ──
-  /** Focus the composer textarea. */
   focusComposer(): void {
     if (this.viewMode === "chat") this.composer.focus();
     else if (this.viewMode === "subagents") this.subagentScreen.focusComposer();
   }
-  /** Replace the composer text (used by the obsidian:// prompt handler). */
   setComposerText(text: string): void {
     this.composer.setText(text);
   }
-  /** Re-render the composer controls after a preference/model change. */
   refreshPreferences(): void {
     this.composerControls.refresh();
   }
   async cycleModel(): Promise<void> { await this.sessionPreferences.cycleModel(); }
   async cycleThinking(): Promise<void> { await this.sessionPreferences.cycleThinking(); }
-
   /** Apply plugin-level feed display settings without requiring a view reload. */
   refreshDisplaySettings(): void {
     this.feed?.refreshDisplaySettings();
   }
-  /** Create a fresh session (command palette). */
+  commandOpenPage(mode: ChatobbyViewMode): void { this.navigateTo({ mode }); }
+  commandFocusPageNavigation(): void { focusPageNavigation(this.contentEl); }
+  commandMovePageSection(delta: 1 | -1): void { movePageNavigation(this.contentEl, delta); }
+  commandStashDraft(): void { this.composer.stashDraft(); }
+  commandRestoreStashedDraft(): void { this.composer.restoreStash(); }
+  commandPreviousComposerMessage(): void { this.composer.recallPrevious(); }
+  commandNextComposerMessage(): void { this.composer.recallNext(); }
   async commandNewSession(): Promise<void> {
 		await this.plugin.openBlankView(this.sessions.workingDirectoryPath());
   }

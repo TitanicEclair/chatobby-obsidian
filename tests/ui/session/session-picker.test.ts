@@ -48,7 +48,7 @@ describe("SessionPickerComponent", () => {
     const root = mount(picker);
     await settle();
 
-    expect(root.textContent).toContain("Chatobby backend is not connected");
+    expect(root.textContent).toContain("Chatobby is not connected");
     root.querySelector<HTMLButtonElement>(".chatobby-session-picker__state button")?.click();
     await settle();
 
@@ -350,5 +350,8 @@ describe("SessionPickerComponent", () => {
     expect(css).toMatch(/@container chatobby-session-list \(max-width: 320px\)[\s\S]*item-meta-created/u);
     expect(css).toMatch(/@container chatobby-session-list \(max-width: 220px\)[\s\S]*item-meta \{ display: none; \}/u);
     expect(css).not.toMatch(/item-title[^}]*display:\s*none/u);
+    expect(css).toMatch(/@container chatobby-page \(max-width: 760px\)[\s\S]*grid-template-columns: minmax\(0, 1fr\);/u);
+    expect(css).toMatch(/@container chatobby-page \(max-width: 760px\)[\s\S]*chatobby-session-picker__directories[\s\S]*display: block;[\s\S]*overflow-x: hidden;/u);
+    expect(css).not.toContain("@container chatobby-page (max-width: 680px)");
   });
 });

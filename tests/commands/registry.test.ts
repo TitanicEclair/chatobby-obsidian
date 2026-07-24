@@ -3,6 +3,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { CommandRegistry, type ChatobbyAction, type ChatobbyServices } from "../../src/commands/registry";
+import { buildAllActions } from "../../src/commands/actions";
 
 interface CapturedCommand {
   id: string;
@@ -26,7 +27,12 @@ function makeServices(overrides: Partial<ChatobbyServices> = {}): ChatobbyServic
     activateView: vi.fn(async () => {}),
     withView: vi.fn(async () => {}),
     getTransport: vi.fn(() => null),
-    backend: { start: vi.fn(async () => {}), stop: vi.fn(async () => {}) },
+    ensureTransport: vi.fn(async () => { throw new Error("not connected"); }),
+    backend: {
+      start: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      restart: vi.fn(async () => {}),
+    },
     cycleModel: vi.fn(async () => {}),
     cycleThinking: vi.fn(async () => {}),
     focusActiveEditor: vi.fn(),
@@ -77,6 +83,27 @@ describe("CommandRegistry", () => {
     expect(commands).toEqual([]);
     await registry.run("export-jsonl");
     expect(run).toHaveBeenCalledOnce();
+  });
+
+  it("exposes user actions through Obsidian while keeping internal transport commands hidden", () => {
+    const { plugin, commands } = makePlugin();
+    const registry = new CommandRegistry(plugin as never, makeServices());
+    registry.registerAll(buildAllActions());
+    registry.registerAsObsidianCommands();
+    const ids = commands.map((command) => command.id);
+
+    expect(ids).toEqual(expect.arrayContaining([
+      "open-permissions",
+      "open-events",
+      "focus-page-navigation",
+      "next-page-section",
+      "stash-draft",
+      "restore-stashed-draft",
+      "restart-backend",
+      "export-jsonl",
+    ]));
+    expect(ids).not.toContain("bash");
+    expect(ids).not.toContain("reload");
   });
 
   it("invokes the action body when the Obsidian callback fires", async () => {

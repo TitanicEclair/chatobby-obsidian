@@ -23,6 +23,14 @@
   --chatobby-edge-padding: clamp(var(--size-4-3), 3cqi, var(--size-4-8));
   --chatobby-content-max-width: min(920px, 100%);
   --chatobby-surface-soft: var(--chatobby-surface-muted);
+  --chatobby-page-header-height: var(--size-4-10);
+  --chatobby-page-tabs-height: var(--size-4-10);
+  --chatobby-page-action-size: var(--size-4-8);
+  --chatobby-page-inline-padding: var(--chatobby-edge-padding);
+  --chatobby-page-section-gap: var(--size-4-5);
+  --chatobby-page-reading-width: min(720px, 100%);
+  --chatobby-page-form-width: min(840px, 100%);
+  --chatobby-page-wide-width: min(920px, 100%);
 }
 
 .chatobby-tab-bar__tab,

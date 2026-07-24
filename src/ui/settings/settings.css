@@ -1,5 +1,8 @@
 .chatobby-settings {
-  max-width: 720px;
+  width: 100%;
+  max-width: var(--chatobby-page-form-width);
+  margin-inline: auto;
+  padding-inline: var(--chatobby-page-inline-padding);
 }
 
 .chatobby-settings__definition-host {
@@ -15,7 +18,7 @@
 }
 
 .chatobby-settings > .setting-item-heading {
-  margin-block: var(--size-4-8) var(--size-4-2);
+  margin-block: var(--chatobby-page-section-gap) var(--size-4-2);
   padding-block-end: var(--size-2-2);
   border-bottom: var(--border-width) solid var(--chatobby-border);
 }
@@ -53,6 +56,7 @@
 }
 
 @media (max-width: 520px) {
+  .chatobby-settings { padding-inline: var(--size-4-3); }
   .chatobby-settings__provider .setting-item-control {
     flex-wrap: wrap;
   }

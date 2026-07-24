@@ -25,6 +25,12 @@ experimental macOS.
   races and unified channel communication.
 - Fixed project guidance loading from the active session directory and rejected
   stale Web Viewer element references after page transitions.
+- Standardized feature-page hierarchy, navigation, responsive layout, focus
+  preservation, loading states, task progress, and the live agent rail.
+- Improved permission grouping and session-directory layouts, and made feed
+  tables wrap within the available view width instead of scrolling sideways.
+- Kept private tool-contract guidance out of deferred discovery results while
+  preserving the minimal invocation structure required to use a capability.
 
 Chatobby remains public-alpha software. Back up important vaults and begin with
 the minimum permissions needed for the task.

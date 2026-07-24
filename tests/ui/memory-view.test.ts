@@ -46,6 +46,8 @@ describe("MemoryView", () => {
     expect(el.matches(".chatobby-memory-view.chatobby-page")).toBe(true);
     expect(el.querySelector(".chatobby-memory__header.chatobby-page__header")).not.toBeNull();
     expect(el.querySelector(".chatobby-memory__tabs.chatobby-page__tabs")?.nextElementSibling)
+      .toBe(el.querySelector(".chatobby-page__status"));
+    expect(el.querySelector(".chatobby-page__status")?.nextElementSibling)
       .toBe(el.querySelector(".chatobby-memory__body.chatobby-page__body"));
     expect(el.querySelectorAll(".chatobby-memory__header .chatobby-page__icon-button")).toHaveLength(2);
     expect(el.textContent).toContain("Loading memory");

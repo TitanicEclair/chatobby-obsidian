@@ -25,8 +25,6 @@ import { ToolBlockView } from "./tools/tool-block";
 import { TurnSummaryView } from "./turn-summary";
 import { UserBlockView } from "./user-block";
 import { hasLiveTiming, isInteractiveTarget, isTickable, renderKeyForCommit } from "./feed-render-policy";
-
-/** Narrow presentation commands exposed to feed block views. */
 export interface FeedViewActions {
   setScroll(isAtBottom: boolean, scrollTop: number): void;
   setThinkingDisplay(blockIdValue: string, mode: ThinkingDisplayMode): void;
@@ -208,10 +206,14 @@ export class FeedRenderer extends ChatobbyComponent {
     empty.createDiv({ cls: "chatobby-feed__empty-title", text: "Chatobby" });
     empty.createDiv({
       cls: "chatobby-feed__empty-copy",
-      text: "Chatobby can reason across your vault, help shape a plan, and carry the work through with you.",
+      text: "Start with a note, folder, or outcome.",
     });
-    const capabilities = empty.createDiv({ cls: "chatobby-feed__empty-capabilities", attr: { "aria-label": "Example capabilities" } });
-    for (const prompt of ["Understand this note", "Plan vault work", "Continue a project"]) {
+    const capabilities = empty.createDiv({ cls: "chatobby-feed__empty-capabilities", attr: { "aria-label": "Starter prompts" } });
+    for (const prompt of [
+      "Summarize the note I’m viewing and list any next actions.",
+      "Find related notes and explain how they connect.",
+      "Review this project folder and suggest the next three steps.",
+    ]) {
       const button = capabilities.createEl("button", { text: prompt, attr: { type: "button" } });
       button.addEventListener("click", () => this.host.onEmptyPrompt?.(prompt));
     }
@@ -630,7 +632,6 @@ function updateView(view: unknown, block: FeedBlock): void {
     case "divider": (view as DividerBlockView).setBlock(block); return;
   }
 }
-
 function createView(host: FeedHost, block: FeedBlock): ChatobbyComponent {
   switch (block.type) {
     case "user":

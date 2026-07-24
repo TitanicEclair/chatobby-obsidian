@@ -7,10 +7,11 @@ import type {
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../../../ui/shared/component";
 import {
-  createPageHeader,
+  createPageActionRow,
   createPageIconButton,
-  createPageTab,
-  createPageTabs,
+  createPageSection,
+  createPageState,
+  PageShell,
 } from "../../../ui/shared/page-shell";
 
 type EventsTab = "automations" | "history";
@@ -97,6 +98,8 @@ export class EventsView extends ChatobbyComponent {
   private busy = false;
   private editorKey: string | null = null;
   private draft: EditorDraft | null = null;
+  private shell: PageShell | null = null;
+  private refreshButton: HTMLButtonElement | null = null;
 
   constructor(private readonly props: EventsViewProps) {
     super();
@@ -108,6 +111,17 @@ export class EventsView extends ChatobbyComponent {
 
   protected onRender(container: HTMLElement): void {
     container.tabIndex = -1;
+    this.shell = new PageShell(container, {
+      title: "Events",
+      width: "wide",
+      headerClass: "chatobby-events__header",
+      actionsClass: "chatobby-events__header-actions",
+      tabsClass: "chatobby-events__tabs",
+      bodyClass: "chatobby-events__body",
+    });
+    this.refreshButton = createPageIconButton(this.shell.actions, "refresh-cw", "Refresh events");
+    this.refreshButton.addEventListener("click", () => void this.refresh());
+    createPageIconButton(this.shell.actions, "x", "Close events").addEventListener("click", () => this.props.onBack());
     this.unsubscribe = this.props.subscribe((model) => this.renderState(model));
     this.renderState(this.props.getModel());
   }
@@ -144,68 +158,78 @@ export class EventsView extends ChatobbyComponent {
   }
 
   private renderState(model: FrontendEventScreenViewModel | null): void {
-    const container = this.container;
-    if (!container) return;
+    const shell = this.shell;
+    if (!shell) return;
     if (model && !model.editor) this.clearDraft();
-    container.empty();
-    const { actions } = createPageHeader(container, {
-      title: "Events",
-      headerClass: "chatobby-events__header",
-      titleClass: "chatobby-events__title",
-      actionsClass: "chatobby-events__header-actions",
-    });
-    const refresh = createPageIconButton(actions, "refresh-cw", "Refresh events");
-    refresh.toggleClass("is-loading", model?.loading ?? false);
-    refresh.addEventListener("click", () => void this.refresh());
-    createPageIconButton(actions, "x", "Close events").addEventListener("click", () => this.props.onBack());
-
-    const tabs = createPageTabs(container, "chatobby-events__tabs");
-    this.renderTab(tabs, "automations", "Automations");
-    this.renderTab(tabs, "history", "History", model?.pendingApprovalCount ?? 0);
     const error = this.localError ?? model?.error;
-    if (error) container.createDiv({ cls: "chatobby-events__notice is-error", text: error });
-    else if (model?.statusMessage) container.createDiv({ cls: "chatobby-events__notice", text: model.statusMessage });
-    const body = container.createDiv({ cls: "chatobby-page__body chatobby-events__body" });
-    if (!model) {
-      body.createDiv({ cls: "chatobby-events__empty", text: error ? "Events are unavailable." : "Loading events…" });
-      return;
-    }
-    if (model.editor) this.renderEditor(body, model.editor);
-    else if (this.tab === "automations") this.renderDefinitions(body, model);
-    else this.renderHistory(body, model);
+    shell.setBusy(this.busy || Boolean(model?.loading));
+    this.refreshButton?.toggleClass("is-loading", model?.loading ?? false);
+    this.refreshButton?.setAttr("aria-busy", String(model?.loading ?? false));
+    shell.setTabs([
+      {
+        id: "automations",
+        label: "Automations",
+        active: this.tab === "automations",
+        onSelect: () => this.selectTab("automations"),
+      },
+      {
+        id: "history",
+        label: "History",
+        active: this.tab === "history",
+        count: model?.pendingApprovalCount ?? 0,
+        onSelect: () => this.selectTab("history"),
+      },
+    ]);
+    shell.setStatus(
+      error
+        ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.refresh() }
+        : model?.statusMessage
+          ? { tone: "success", message: model.statusMessage }
+          : null,
+    );
+    const scope = model?.editor
+      ? `events:editor:${model.editor.definitionId ?? "new"}`
+      : `events:${this.tab}`;
+    shell.updateBody(scope, (body) => {
+      if (!model) {
+        createPageState(body, {
+          kind: error ? "error" : "loading",
+          title: error ? "Events are unavailable" : "Loading events",
+          description: error ? "Check the runtime connection and try again." : "Reading automations and recent activity.",
+        });
+        return;
+      }
+      if (model.editor) this.renderEditor(body, model.editor);
+      else if (this.tab === "automations") this.renderDefinitions(body, model);
+      else this.renderHistory(body, model);
+    });
   }
 
-  private renderTab(parent: HTMLElement, id: EventsTab, label: string, count = 0): void {
-    const active = this.tab === id;
-    const button = createPageTab(parent, {
-      label,
-      active,
-      className: "chatobby-events__tab",
-      count,
-      countClass: "chatobby-events__count",
-    });
-    button.addEventListener("click", () => {
-      this.tab = id;
-      this.renderState(this.props.getModel());
-    });
+  private selectTab(tab: EventsTab): void {
+    if (this.tab === tab) return;
+    this.tab = tab;
+    this.renderState(this.props.getModel());
   }
 
   private renderDefinitions(body: HTMLElement, model: FrontendEventScreenViewModel): void {
-    const intro = body.createDiv({ cls: "chatobby-events__intro" });
-    const copy = intro.createDiv();
-    copy.createEl("strong", { text: "Automation that remains understandable" });
-    copy.createDiv({ text: "Each event has a project, agent, permission policy, trigger, execution budget, and inspectable history." });
-    intro.createEl("button", { cls: "mod-cta", text: "New event", attr: { type: "button" } }).addEventListener("click", () => {
+    const intro = createPageSection(body, {
+      title: "Automations",
+      description: "Schedule work, choose which agent handles it, and review every run.",
+    });
+    intro.actions?.createEl("button", { cls: "mod-cta", text: "New event", attr: { type: "button" } }).addEventListener("click", () => {
       void this.runIntent({ type: "events.begin-edit", payload: {} });
     });
     if (model.definitions.length === 0) {
-      const empty = body.createDiv({ cls: "chatobby-events__empty" });
-      setIcon(empty.createSpan(), "calendar-clock");
-      empty.createEl("strong", { text: "No events yet" });
-      empty.createDiv({ text: "Create a schedule, watch a vault path, or expose a named command trigger." });
+      createPageState(intro.content, {
+        kind: "empty",
+        title: "No events yet",
+        description: "Create a schedule, watch a vault path, or expose a named command trigger.",
+        actionLabel: "Create event",
+        onAction: () => void this.runIntent({ type: "events.begin-edit", payload: {} }),
+      });
       return;
     }
-    const list = body.createDiv({ cls: "chatobby-events__list" });
+    const list = intro.content.createDiv({ cls: "chatobby-events__list" });
     for (const definition of model.definitions) this.renderDefinition(list, definition);
   }
 
@@ -237,10 +261,11 @@ export class EventsView extends ChatobbyComponent {
 
   private renderHistory(body: HTMLElement, model: FrontendEventScreenViewModel): void {
     if (model.occurrences.length === 0) {
-      const empty = body.createDiv({ cls: "chatobby-events__empty" });
-      setIcon(empty.createSpan(), "history");
-      empty.createEl("strong", { text: "No event activity yet" });
-      empty.createDiv({ text: "Scheduled, file-triggered, and manual occurrences will appear here." });
+      createPageState(body, {
+        kind: "empty",
+        title: "No event activity yet",
+        description: "Scheduled, file-triggered, and manual occurrences will appear here.",
+      });
       return;
     }
     const list = body.createDiv({ cls: "chatobby-events__history" });
@@ -314,7 +339,7 @@ export class EventsView extends ChatobbyComponent {
     bindText(prompt, (value) => { draft.prompt = value; });
     const requireApproval = fieldCheckbox(form, "Ask before every run", "Recommended while refining a new automation.", draft.requireApproval);
     requireApproval.input.addEventListener("change", () => { draft.requireApproval = requireApproval.input.checked; });
-    const background = fieldCheckbox(form, "Allow when no Chatobby view is open", "The backend may begin this work while Obsidian remains open in the background.", draft.allowWhenViewClosed);
+    const background = fieldCheckbox(form, "Allow when no Chatobby view is open", "Chatobby may start this work while Obsidian remains open.", draft.allowWhenViewClosed);
     background.input.addEventListener("change", () => {
       draft.allowWhenViewClosed = background.input.checked;
       this.renderState(this.props.getModel());
@@ -327,7 +352,7 @@ export class EventsView extends ChatobbyComponent {
     maxRuns.addEventListener("input", () => { draft.maxRunsPerDay = maxRuns.valueAsNumber; });
     const maxMinutes = fieldNumber(form, "Maximum runtime (minutes)", draft.maxRuntimeMinutes, 1, 1_440);
     maxMinutes.addEventListener("input", () => { draft.maxRuntimeMinutes = maxMinutes.valueAsNumber; });
-    const actions = form.createDiv({ cls: "chatobby-events__editor-actions" });
+    const actions = createPageActionRow(form, "chatobby-events__editor-actions");
     if (draft.definitionId && draft.expectedRevision !== undefined) {
       const remove = actions.createEl("button", { cls: "mod-warning", text: this.deleteConfirmId === draft.definitionId ? "Confirm delete" : "Delete", attr: { type: "button" } });
       remove.addEventListener("click", () => {

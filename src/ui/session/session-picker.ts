@@ -3,6 +3,12 @@ import type { SessionListItem } from "../../types";
 import type { ChatobbyTransport } from "../../transport/ws-client";
 import { errorMessage } from "../../utils";
 import { ChatobbyComponent } from "../shared/component";
+import {
+  createPageIconButton,
+  createPageMasterDetail,
+  createPageState,
+  PageShell,
+} from "../shared/page-shell";
 import { confirmAction } from "../modals/modals";
 import type { SessionDirectoryOption } from "./session-directory";
 import type { SessionAdvancedAction } from "./session-maintenance";
@@ -37,6 +43,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
   private operation: "resuming" | "creating" | "maintaining" | null = null;
   private readonly expandedDirectories = new Set<string>();
   private directories: readonly SessionDirectoryOption[];
+  private shell: PageShell | null = null;
 
   constructor(private readonly props: SessionPickerProps) {
     super();
@@ -105,7 +112,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
   }
 
   protected componentClass(): string {
-    return "chatobby-session-picker";
+    return "chatobby-page chatobby-session-picker";
   }
 
   protected onRender(container: HTMLElement): void {
@@ -134,7 +141,7 @@ export class SessionPickerComponent extends ChatobbyComponent {
     }
     try {
       const transport = await this.props.getTransport();
-      if (!transport) throw new Error("Chatobby backend is not connected");
+      if (!transport) throw new Error("Chatobby is not connected");
       const sessions = await transport.listSessions(this.rootCwd, true);
       if (sequence !== this.loadSequence) return;
       this.state = { status: "ready", sessions };
@@ -149,25 +156,35 @@ export class SessionPickerComponent extends ChatobbyComponent {
 
   private renderShell(container: HTMLElement): void {
     container.empty();
-    const header = container.createDiv({ cls: "chatobby-session-picker__header" });
-    header.createDiv({ cls: "chatobby-session-picker__title", text: "Sessions" });
-    const directoryActions = header.createDiv({ cls: "chatobby-session-picker__directory-actions" });
-    const useDirectory = directoryActions.createEl("button", {
-      cls: "clickable-icon",
-      attr: { type: "button", "aria-label": "Use selected working directory", title: "Use selected working directory" },
+    this.shell = new PageShell(container, {
+      title: "Sessions",
+      width: "full",
+      containedBody: true,
+      headerClass: "chatobby-session-picker__header",
+      actionsClass: "chatobby-session-picker__directory-actions",
+      bodyClass: "chatobby-session-picker__content",
     });
-    setIcon(useDirectory, "folder-check");
+    const useDirectory = createPageIconButton(
+      this.shell.actions,
+      "folder-check",
+      "Use selected working directory",
+    );
     useDirectory.addEventListener("click", () => this.props.onUseDirectory(this.directory));
-    const create = directoryActions.createEl("button", {
-      cls: "clickable-icon",
-      attr: { type: "button", "aria-label": "New session in selected directory", title: "New session here" },
-    });
-    setIcon(create, "message-square-plus");
+    const create = createPageIconButton(
+      this.shell.actions,
+      "message-square-plus",
+      "New session in selected directory",
+    );
     create.addEventListener("click", () => void this.createSession());
 
-    this.searchInput = container.createEl("input", {
+    this.searchInput = this.shell.body.createEl("input", {
       cls: "chatobby-session-picker__search",
-      attr: { type: "search", placeholder: "Search folders and sessions", "aria-label": "Search folders and sessions" },
+      attr: {
+        type: "search",
+        placeholder: "Search folders and sessions",
+        "aria-label": "Search folders and sessions",
+        "data-page-state-key": "session-search",
+      },
     });
     this.searchInput.addEventListener("input", () => {
       this.query = this.searchInput?.value ?? "";
@@ -176,11 +193,16 @@ export class SessionPickerComponent extends ChatobbyComponent {
       this.renderSessions();
     });
 
-    const workspace = container.createDiv({ cls: "chatobby-session-picker__workspace" });
-    const directories = workspace.createDiv({ cls: "chatobby-session-picker__directories", attr: { "aria-label": "Working directories" } });
+    const workspace = createPageMasterDetail(this.shell.body, {
+      className: "chatobby-session-picker__workspace",
+      masterLabel: "Working directories",
+      detailLabel: "Stored sessions",
+    });
+    const directories = workspace.master;
+    directories.addClass("chatobby-session-picker__directories");
     this.renderDirectoryTree(directories);
-    workspace.createDiv({ cls: "chatobby-session-picker__body" });
-    container.createDiv({ cls: "chatobby-session-picker__hint", text: "Select a folder to browse its sessions · ↑↓ navigate · ↵ resume · use Obsidian Back to return" });
+    workspace.detail.addClass("chatobby-session-picker__body");
+    this.shell.body.createDiv({ cls: "chatobby-session-picker__hint", text: "Select a folder to browse its sessions · ↑↓ navigate · ↵ resume · use Obsidian Back to return" });
     window.requestAnimationFrame(() => this.searchInput?.focus());
     this.renderSessions();
   }
@@ -272,23 +294,30 @@ export class SessionPickerComponent extends ChatobbyComponent {
       text: searching ? `Search results for “${this.query.trim()}”` : this.directory.label,
     });
     if (this.state.status === "loading") {
-      body.createDiv({ cls: "chatobby-session-picker__state is-loading", text: "Loading sessions" });
+      createPageState(body, { kind: "loading", title: "Loading sessions" })
+        .addClass("chatobby-session-picker__state");
       return;
     }
     if (this.state.status === "error") {
-      const state = body.createDiv({ cls: "chatobby-session-picker__state is-error" });
-      state.createDiv({ text: `Could not load sessions: ${this.state.message}` });
-      const retry = state.createEl("button", { text: "Retry connection", attr: { type: "button" } });
-      retry.addEventListener("click", () => this.refresh());
+      createPageState(body, {
+        kind: "error",
+        title: "Could not load sessions",
+        description: this.state.message,
+        actionLabel: "Retry connection",
+        onAction: () => this.refresh(),
+      }).addClass("chatobby-session-picker__state");
       return;
     }
     if (this.operation === "resuming") {
-      const state = body.createDiv({
-        cls: "chatobby-session-picker__state is-resuming",
-        attr: { role: "status", "aria-live": "polite", "aria-label": "Resuming session" },
+      const state = createPageState(body, { kind: "loading", title: "Resuming session" });
+      state.addClass("chatobby-session-picker__state");
+      state.addClass("is-resuming");
+      state.setAttr("aria-label", "Resuming session");
+      const title = state.querySelector<HTMLElement>(".chatobby-page__state-title");
+      title?.createSpan({
+        cls: "chatobby-session-picker__loading-dots",
+        attr: { "aria-hidden": "true" },
       });
-      state.createSpan({ text: "Resuming session" });
-      state.createSpan({ cls: "chatobby-session-picker__loading-dots", attr: { "aria-hidden": "true" } });
       return;
     }
     if (this.operation) {
@@ -299,10 +328,10 @@ export class SessionPickerComponent extends ChatobbyComponent {
     }
     const sessions = this.filteredSessions();
     if (sessions.length === 0) {
-      body.createDiv({
-        cls: "chatobby-session-picker__state is-empty",
-        text: searching ? "No matching folders or sessions" : "No stored sessions in this directory",
-      });
+      createPageState(body, {
+        kind: searching ? "no-results" : "empty",
+        title: searching ? "No matching folders or sessions" : "No stored sessions in this directory",
+      }).addClass("chatobby-session-picker__state");
       return;
     }
     const list = body.createDiv({ cls: "chatobby-session-picker__list" });

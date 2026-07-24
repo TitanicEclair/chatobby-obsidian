@@ -44,6 +44,7 @@ import { FrontendSessionRegistry } from "./runtime/application/frontend-session-
 import { RuntimeUpdateClient } from "./runtime/infrastructure/runtime-update-client";
 import { RuntimeUpdateManager, type RuntimeUpdateState } from "./runtime/public";
 import { RuntimeInstallModal } from "./features/runtime-status/public";
+import { selectChatobbyCommandTarget } from "./ui/controller/view-targeting";
 
 export default class ChatobbyPlugin extends Plugin {
   // ── Persisted settings (public; read by SettingTab, mutated via store) ──
@@ -124,6 +125,7 @@ export default class ChatobbyPlugin extends Plugin {
 
   private readonly visibleChatViews = new Set<ChatobbyView>();
   private _lastChatobbyView: ChatobbyView | null = null;
+  private _lastMarkdownView: MarkdownView | null = null;
   private activeLeafActivation = 0;
   private vaultDirectoryRefreshTimer: number | null = null;
   private unloading = false;
@@ -149,6 +151,8 @@ export default class ChatobbyPlugin extends Plugin {
           .catch((error) => {
             console.error("Chatobby: could not activate leaf session context", error);
           });
+      } else if (leaf?.view instanceof MarkdownView) {
+        this._lastMarkdownView = leaf.view;
       }
     }));
     this.registerEvent(this.app.vault.on("create", () => this.scheduleVaultDirectoryRefresh()));
@@ -218,11 +222,17 @@ export default class ChatobbyPlugin extends Plugin {
       backend: {
         start: () => this.startBackend(),
         stop: () => this.stopBackend(),
+        restart: () => this.restartRuntime(),
       },
       cycleModel: () => this.cycleModel(),
       cycleThinking: () => this.cycleThinking(),
       focusActiveEditor: () => {
-        this.app.workspace.getActiveViewOfType(MarkdownView)?.editor?.focus();
+        const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const open = this.app.workspace.getLeavesOfType("markdown").map((leaf) => leaf.view);
+        const target = active ?? (this._lastMarkdownView && open.includes(this._lastMarkdownView)
+          ? this._lastMarkdownView
+          : null);
+        if (target) void this.app.workspace.revealLeaf(target.leaf).then(() => target.editor?.focus());
       },
     };
   }
@@ -231,22 +241,23 @@ export default class ChatobbyPlugin extends Plugin {
 
   /** Ensure the view is open, then run an action against it. */
   private async withView(fn: (view: ChatobbyView) => void | Promise<void>): Promise<void> {
-    await this.activateView();
-    const view = this.getActiveView();
+    let view = this.getActiveView();
+    if (!view) {
+      await this.activateView();
+      view = this.getActiveView();
+    } else {
+      await this.app.workspace.revealLeaf(view.leaf);
+    }
     if (view) await fn(view);
   }
 
   /** The active ChatobbyView, if one is open. */
   getActiveView(): ChatobbyView | null {
-    const active = this.app.workspace.getActiveViewOfType(ChatobbyView);
-    if (active) return active;
-    // No Chatobby leaf is currently focused — fall back to the most recently
-    // active one tracked via the active-leaf-change event, rather than the
-    // first leaf in DOM order (which may be a different session).
-    if (this._lastChatobbyView) return this._lastChatobbyView;
-    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY);
-    const leaf = leaves[0];
-    return leaf ? (leaf.view as ChatobbyView) : null;
+    return selectChatobbyCommandTarget(
+      this.app.workspace.getActiveViewOfType(ChatobbyView),
+      this._lastChatobbyView,
+      this.chatobbyViews(),
+    );
   }
 
   /** Active leaf transport, falling back to another live frontend or utility channel. */
@@ -281,9 +292,9 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   async activateView(): Promise<void> {
-    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY);
-    if (existing.length > 0) {
-      await this.app.workspace.revealLeaf(existing[0]!);
+    const target = this.getActiveView();
+    if (target) {
+      await this.app.workspace.revealLeaf(target.leaf);
       return;
     }
     // Chatobby is a full work surface, not a utility widget. A root tab avoids
@@ -291,6 +302,12 @@ export default class ChatobbyPlugin extends Plugin {
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: VIEW_TYPE_CHATOBBY, active: true });
     await this.app.workspace.revealLeaf(leaf);
+  }
+
+  private chatobbyViews(): ChatobbyView[] {
+    return this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)
+      .map((leaf) => leaf.view)
+      .filter((view): view is ChatobbyView => view instanceof ChatobbyView);
   }
 
 	/** Always open a new blank Chatobby work surface in an Obsidian tab. */

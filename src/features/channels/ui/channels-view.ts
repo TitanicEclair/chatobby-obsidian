@@ -1,7 +1,12 @@
 import { type App, setIcon } from "obsidian";
 import { confirmAction } from "../../../ui/modals/modals";
 import { ChatobbyComponent } from "../../../ui/shared/component";
-import { createPageHeader, createPageIconButton } from "../../../ui/shared/page-shell";
+import {
+  createPageIconButton,
+  createPageMasterDetail,
+  createPageState,
+  PageShell,
+} from "../../../ui/shared/page-shell";
 import type {
   FrontendChannelMessageViewModel,
   FrontendChannelScreenViewModel,
@@ -26,6 +31,8 @@ export interface ChannelsViewOptions {
 export class ChannelsView extends ChatobbyComponent {
   private unsubscribe: (() => void) | null = null;
   private localError: string | null = null;
+  private shell: PageShell | null = null;
+  private refreshButton: HTMLButtonElement | null = null;
 
   constructor(private readonly options: ChannelsViewOptions) {
     super();
@@ -37,6 +44,18 @@ export class ChannelsView extends ChatobbyComponent {
 
   protected onRender(container: HTMLElement): void {
     container.setAttr("tabindex", "-1");
+    this.shell = new PageShell(container, {
+      title: "Channels",
+      width: "full",
+      containedBody: true,
+      headerClass: "chatobby-channels__header",
+      actionsClass: "chatobby-channels__header-actions",
+      bodyClass: "chatobby-channels__body",
+    });
+    this.refreshButton = createPageIconButton(this.shell.actions, "refresh-cw", "Refresh channels");
+    this.refreshButton.addEventListener("click", () => void this.options.onRefresh());
+    createPageIconButton(this.shell.actions, "x", "Close channels")
+      .addEventListener("click", () => this.options.onBack());
     this.unsubscribe = this.options.subscribe((model) => this.renderState(model));
     this.renderState(this.options.getModel());
   }
@@ -57,44 +76,45 @@ export class ChannelsView extends ChatobbyComponent {
   }
 
   private renderState(model: FrontendChannelScreenViewModel | null): void {
-    const container = this.container;
-    if (!container) return;
-    const previousMessages = container.querySelector<HTMLElement>(".chatobby-channels__messages");
+    const shell = this.shell;
+    if (!shell) return;
+    const previousMessages = shell.body.querySelector<HTMLElement>(".chatobby-channels__messages");
     const previousScroll = previousMessages ? {
       pinned: previousMessages.scrollHeight - previousMessages.scrollTop - previousMessages.clientHeight < 24,
       top: previousMessages.scrollTop,
     } : null;
-    container.empty();
-    const { actions } = createPageHeader(container, {
-      title: "Channels",
-      headerClass: "chatobby-channels__header",
-      actionsClass: "chatobby-channels__header-actions",
-    });
-    const refresh = createPageIconButton(actions, "refresh-cw", "Refresh channels");
-    refresh.toggleClass("is-loading", model?.loading ?? false);
-    refresh.setAttr("aria-busy", String(model?.loading ?? false));
-    refresh.addEventListener("click", () => void this.options.onRefresh());
-    const back = createPageIconButton(actions, "x", "Close channels");
-    back.addEventListener("click", () => this.options.onBack());
-
     const error = this.localError ?? model?.error;
-    if (error) container.createDiv({ cls: "chatobby-channels__notice is-error", text: error });
-    const layout = container.createDiv({ cls: "chatobby-channels__layout" });
-    this.renderSidebar(layout, model);
-    this.renderConversation(layout, model);
-    const nextMessages = container.querySelector<HTMLElement>(".chatobby-channels__messages");
+    shell.setBusy(Boolean(model?.loading));
+    this.refreshButton?.toggleClass("is-loading", model?.loading ?? false);
+    this.refreshButton?.setAttr("aria-busy", String(model?.loading ?? false));
+    shell.setStatus(
+      error
+        ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.options.onRefresh() }
+        : null,
+    );
+    shell.updateBody(`channels:${model?.selectedChannelId ?? "none"}`, (body) => {
+      const layout = createPageMasterDetail(body, {
+        className: "chatobby-channels__layout",
+        masterLabel: "Channel list",
+        detailLabel: model?.heading ?? "Channel conversation",
+      });
+      layout.master.addClass("chatobby-channels__sidebar");
+      layout.detail.addClass("chatobby-channels__conversation");
+      this.renderSidebar(layout.master, model);
+      this.renderConversation(layout.detail, model);
+    });
+    const nextMessages = shell.body.querySelector<HTMLElement>(".chatobby-channels__messages");
     if (nextMessages && previousScroll) {
       nextMessages.scrollTop = previousScroll.pinned ? nextMessages.scrollHeight : previousScroll.top;
     }
   }
 
-  private renderSidebar(layout: HTMLElement, model: FrontendChannelScreenViewModel | null): void {
-    const sidebar = layout.createEl("aside", { cls: "chatobby-channels__sidebar", attr: { "aria-label": "Channel list" } });
+  private renderSidebar(sidebar: HTMLElement, model: FrontendChannelScreenViewModel | null): void {
     if (!model || model.groups.length === 0) {
-      sidebar.createDiv({
-			cls: "chatobby-channels__empty",
-			text: this.localError ? "Unavailable" : model?.loading || !model ? "Loading…" : "No channels",
-		});
+      createPageState(sidebar, {
+        kind: this.localError ? "error" : model?.loading || !model ? "loading" : "empty",
+        title: this.localError ? "Channels unavailable" : model?.loading || !model ? "Loading channels" : "No channels",
+      });
       return;
     }
     for (const groupModel of model.groups) {
@@ -116,8 +136,7 @@ export class ChannelsView extends ChatobbyComponent {
     }
   }
 
-  private renderConversation(layout: HTMLElement, model: FrontendChannelScreenViewModel | null): void {
-    const conversation = layout.createDiv({ cls: "chatobby-channels__conversation" });
+  private renderConversation(conversation: HTMLElement, model: FrontendChannelScreenViewModel | null): void {
     const heading = conversation.createDiv({ cls: "chatobby-channels__conversation-heading" });
     const headingCopy = heading.createDiv({ cls: "chatobby-channels__conversation-heading-copy" });
     headingCopy.createEl("strong", { text: model?.heading ?? "Select a channel" });
@@ -142,7 +161,14 @@ export class ChannelsView extends ChatobbyComponent {
         });
       }
     }
-    const messages = conversation.createDiv({ cls: "chatobby-channels__messages", attr: { role: "log", "aria-live": "polite" } });
+    const messages = conversation.createDiv({
+      cls: "chatobby-channels__messages",
+      attr: {
+        role: "log",
+        "aria-live": "polite",
+        "data-page-scroll-key": `messages:${model?.selectedChannelId ?? "none"}`,
+      },
+    });
     if (model?.nextCursor) {
       const cursor = model.nextCursor;
       const earlier = messages.createEl("button", {
@@ -153,18 +179,22 @@ export class ChannelsView extends ChatobbyComponent {
       earlier.addEventListener("click", () => void this.options.onLoadEarlier(cursor));
     }
     if (!model || model.loading) {
-      messages.createDiv({
-			cls: "chatobby-channels__empty",
-			text: this.localError ? "Channel messages are unavailable." : "Loading messages…",
-		});
+      createPageState(messages, {
+        kind: this.localError ? "error" : "loading",
+        title: this.localError ? "Channel messages are unavailable" : "Loading messages",
+      });
       return;
     }
     if (!model.selectedChannelId) {
-      messages.createDiv({ cls: "chatobby-channels__empty", text: "Choose a channel to inspect its communication." });
+      createPageState(messages, {
+        kind: "empty",
+        title: "Choose a channel",
+        description: "Select a channel to read its messages.",
+      });
       return;
     }
     if (model.messages.length === 0) {
-      messages.createDiv({ cls: "chatobby-channels__empty", text: "No messages in this channel yet." });
+      createPageState(messages, { kind: "empty", title: "No messages in this channel yet" });
       return;
     }
     for (const message of model.messages) this.renderMessage(messages, message);

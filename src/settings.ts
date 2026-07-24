@@ -345,8 +345,8 @@ export class ChatobbySettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Composer shortcuts")
-      .setDesc("These shortcuts apply only while the Chatobby message box is focused.");
+      .setName("Message box keys")
+      .setDesc("These keys depend on the cursor position, so they apply only while the Chatobby message box is focused.");
     this.renderComposerKeybinding(
       containerEl,
       "previousMessage",
@@ -361,22 +361,13 @@ export class ChatobbySettingTab extends PluginSettingTab {
     );
     this.renderComposerKeybinding(
       containerEl,
-      "stashDraft",
-      "Stash draft",
-      "Temporarily clear the message and restore it after the next message is submitted.",
-    );
-    this.renderComposerKeybinding(
-      containerEl,
-      "restoreStash",
-      "Restore stashed draft",
-      "Restore the stashed draft without sending another message. The composer must be empty.",
-    );
-    this.renderComposerKeybinding(
-      containerEl,
       "cancelTurn",
       "Cancel turn",
       "Arm and confirm cancellation without affecting other Obsidian editors.",
     );
+    new Setting(containerEl)
+      .setName("Other Chatobby shortcuts")
+      .setDesc("Use Obsidian Settings → Hotkeys and search for Chatobby to bind page navigation, session actions, draft stashing, exports, and runtime controls.");
   }
 
   private renderComposerKeybinding(

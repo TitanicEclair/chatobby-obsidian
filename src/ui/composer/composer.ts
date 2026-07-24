@@ -379,7 +379,6 @@ export class Composer extends ChatobbyComponent {
     }
 
     const bindings = this.host.getComposerKeybindings?.() ?? DEFAULT_COMPOSER_KEYBINDINGS;
-    if (this.handleCapturedKeydown(e)) return;
     if (matchesComposerKeybinding(e, bindings.previousMessage) && this.recallPreviousMessage()) {
       e.preventDefault();
       return;
@@ -408,32 +407,42 @@ export class Composer extends ChatobbyComponent {
         if (this.canRetractOnFirstEscape()) this.stop();
         else this.confirmAbortWithEscape();
       } else if (this.state.text) {
+        e.preventDefault();
         this.clear();
       }
     }
   }
 
-  /** Capture modifier shortcuts before Obsidian's global hotkey router consumes them. */
-  handleCapturedKeydown(event: KeyboardEvent): boolean {
-    if (event.defaultPrevented) return false;
-    if (event.target && event.target !== this.inputEl) return false;
-    const bindings = this.host.getComposerKeybindings?.() ?? DEFAULT_COMPOSER_KEYBINDINGS;
-    if (matchesComposerKeybinding(event, bindings.restoreStash)) {
-      event.preventDefault();
-      this.restoreStashExplicitly();
-      return true;
-    }
-    if (matchesComposerKeybinding(event, bindings.stashDraft)) {
-      event.preventDefault();
-      this.stashCurrentDraft();
-      return true;
-    }
-    return false;
-  }
-
   /** Capture ordinary typing that began elsewhere in the visible chat surface. */
   handleViewKeydown(event: KeyboardEvent): boolean {
     return this.inputEl ? routePrintableKeyToComposer(event, this.inputEl) : false;
+  }
+
+  handleScopedKeydown(event: KeyboardEvent, applyComposerAction: boolean): boolean {
+    const bindings = this.host.getComposerKeybindings?.() ?? DEFAULT_COMPOSER_KEYBINDINGS;
+    if (!matchesComposerKeybinding(event, bindings.cancelTurn)
+      && !matchesComposerKeybinding(event, DEFAULT_COMPOSER_KEYBINDINGS.cancelTurn)) return false;
+    if (applyComposerAction) this.handleKeydown(event);
+    event.preventDefault();
+    return true;
+  }
+
+  stashDraft(): void {
+    this.stashCurrentDraft();
+  }
+
+  restoreStash(): void {
+    this.restoreStashExplicitly();
+  }
+
+  recallPrevious(): boolean {
+    this.focus();
+    return this.recallPreviousMessage();
+  }
+
+  recallNext(): boolean {
+    this.focus();
+    return this.recallNextMessage();
   }
 
   /** Handle input events (text change). */

@@ -4,7 +4,13 @@ import type {
   FrontendPermissionScreenViewModel,
 } from "../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../shared/component";
-import { createPageHeader, createPageIconButton } from "../shared/page-shell";
+import {
+  createPageDisclosure,
+  createPageIconButton,
+  createPageSection,
+  createPageState,
+  PageShell,
+} from "../shared/page-shell";
 
 const DECISIONS: readonly FrontendPermissionDecision[] = ["allow", "ask", "deny"];
 
@@ -43,7 +49,8 @@ export class PermissionsView extends ChatobbyComponent {
   private saving = false;
   private editingProfileId: string | null = null;
   private deletingProfileId: string | null = null;
-  private readonly openDisclosures = new Set<string>();
+  private shell: PageShell | null = null;
+  private reloadButton: HTMLButtonElement | null = null;
 
   constructor(private readonly props: PermissionsViewProps) {
     super();
@@ -68,6 +75,17 @@ export class PermissionsView extends ChatobbyComponent {
 
   protected onRender(container: HTMLElement): void {
     container.tabIndex = -1;
+    this.shell = new PageShell(container, {
+      title: "Permissions",
+      width: "form",
+      headerClass: "chatobby-permissions__header",
+      titleClass: "chatobby-permissions__title",
+      actionsClass: "chatobby-permissions__header-actions",
+      bodyClass: "chatobby-permissions__body",
+    });
+    this.reloadButton = iconButton(this.shell.actions, "refresh-cw", "Reload permissions");
+    this.reloadButton.addEventListener("click", () => void this.refresh());
+    iconButton(this.shell.actions, "x", "Close permissions").addEventListener("click", () => this.props.onBack());
     this.unsubscribe = this.props.subscribe((model) => this.renderState(model));
     this.renderState(this.props.getModel());
   }
@@ -79,56 +97,56 @@ export class PermissionsView extends ChatobbyComponent {
   }
 
   private renderState(model: FrontendPermissionScreenViewModel | null): void {
-    const container = this.container;
-    if (!container) return;
-    const scrollTop = container.querySelector<HTMLElement>(".chatobby-permissions__body")?.scrollTop ?? 0;
-    container.empty();
-    const { actions } = createPageHeader(container, {
-      title: "Permissions",
-      headerClass: "chatobby-permissions__header",
-      titleClass: "chatobby-permissions__title",
-      actionsClass: "chatobby-permissions__header-actions",
-    });
-    const reload = iconButton(actions, "refresh-cw", "Reload permissions");
-    reload.toggleClass("is-loading", model?.loading ?? false);
-    reload.addEventListener("click", () => void this.refresh());
-    iconButton(actions, "x", "Close permissions").addEventListener("click", () => this.props.onBack());
-    const body = container.createDiv({ cls: "chatobby-page__body chatobby-permissions__body" });
-    body.toggleClass("is-saving", this.saving);
-    body.setAttr("aria-busy", String(this.saving));
+    const shell = this.shell;
+    if (!shell) return;
     const error = this.localError ?? model?.error;
-    if (error) body.createDiv({ cls: "chatobby-permissions__state is-error", text: error });
-    if (!model) {
-      body.createDiv({ cls: "chatobby-permissions__state", text: error ? "Permission profiles are unavailable." : "Loading permission profiles…" });
-      body.scrollTop = scrollTop;
-      return;
-    }
-    if (model.statusMessage) body.createDiv({ cls: "chatobby-permissions__notice", text: model.statusMessage });
-    this.renderProfiles(body, model);
-    this.renderLiveAgents(body, model);
-    this.renderCapabilities(body, model);
-    this.renderChannels(body, model);
-    this.renderAdvanced(body, model);
-    const storage = body.createEl("details", { cls: "chatobby-permissions__storage" });
-    this.restoreDisclosure(storage, "policy-storage");
-    storage.createEl("summary", { text: "Policy storage" });
-    for (const line of model.storageLines) storage.createDiv({ text: line });
-    body.scrollTop = scrollTop;
+    shell.setBusy(this.saving);
+    this.reloadButton?.toggleClass("is-loading", model?.loading ?? false);
+    this.reloadButton?.setAttr("aria-busy", String(model?.loading ?? false));
+    shell.setStatus(
+      error
+        ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.refresh() }
+        : model?.statusMessage
+          ? { tone: "success", message: model.statusMessage }
+          : null,
+    );
+    shell.updateBody(`permissions:${model?.selectedProfileId ?? "loading"}`, (body) => {
+      if (!model) {
+        createPageState(body, {
+          kind: error ? "error" : "loading",
+          title: error ? "Permission profiles are unavailable" : "Loading permission profiles",
+          description: error ? "Check the runtime connection and try again." : "Reading policies and current assignments.",
+        });
+        return;
+      }
+      this.renderProfiles(body, model);
+      this.renderLiveAgents(body, model);
+      this.renderCapabilities(body, model);
+      this.renderChannels(body, model);
+      this.renderAdvanced(body, model);
+      const storage = createPageDisclosure(body, "policy-storage", "Technical details");
+      storage.addClass("chatobby-permissions__storage");
+      for (const line of model.storageLines ?? []) storage.createDiv({ text: line });
+    });
   }
 
   private renderLiveAgents(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    if (model.liveAgents.length === 0) return;
+    const liveAgents = model.liveAgents ?? [];
+    if (liveAgents.length === 0) return;
     const section = this.section(
       body,
       "Active agents",
-      "Change the policy used by a currently running main agent, subagent, or event session.",
+      "Choose which policy each active agent uses.",
     );
     const list = section.createDiv({ cls: "chatobby-permissions__live-agents" });
-    for (const agent of model.liveAgents) {
+    for (const agent of liveAgents) {
       const row = list.createDiv({ cls: "chatobby-permissions__live-agent" });
       const copy = row.createDiv({ cls: "chatobby-permissions__live-agent-copy" });
-      copy.createDiv({ cls: "chatobby-permissions__live-agent-name", text: agent.label });
-      copy.createDiv({ cls: "chatobby-permissions__live-agent-detail", text: agent.detail });
+      copy.createDiv({
+        cls: "chatobby-permissions__live-agent-name",
+        text: agent.label,
+        attr: { title: agent.detail },
+      });
       const select = row.createEl("select", {
         cls: "chatobby-permissions__live-agent-policy",
         attr: { "aria-label": `${agent.label} permission policy` },
@@ -153,10 +171,13 @@ export class PermissionsView extends ChatobbyComponent {
   }
 
   private renderProfiles(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const section = this.section(body, "Permission policy", "Choose a reusable policy for the main agent. Assign subagent policies from each role's editor.");
+    const section = this.section(body, "Permission policy", "Choose a reusable set of permissions. Agent roles can use their own policy.");
     const toolbar = section.createDiv({ cls: "chatobby-permissions__profile-toolbar" });
     const picker = toolbar.createDiv({ cls: "chatobby-permissions__profile-picker" });
-    const select = picker.createEl("select", { cls: "chatobby-permissions__profile-select", attr: { "aria-label": "Selected permission profile" } });
+    const select = picker.createEl("select", {
+      cls: "chatobby-permissions__profile-select",
+      attr: { "aria-label": "Selected permission profile", "data-page-state-key": "permissions:selected-profile" },
+    });
 	for (const profile of model.profiles) {
 		select.createEl("option", { text: profile.name, attr: { value: profile.id } }).selected = profile.selected;
 	}
@@ -167,7 +188,7 @@ export class PermissionsView extends ChatobbyComponent {
       void this.runIntent({ type: "permissions.select-profile", payload: { profileId: select.value } });
     });
     const profile = model.selectedProfile;
-    if (profile.activeForMain) toolbar.createSpan({ cls: "chatobby-permissions__active-label", text: "Active for Main" });
+    if (profile.activeForMain) toolbar.createSpan({ cls: "chatobby-permissions__active-label", text: "Used by Main" });
     else if (profile.canActivate) {
       toolbar.createEl("button", { cls: "chatobby-permissions__secondary-btn", text: "Use for Main", attr: { type: "button" } })
         .addEventListener("click", () => void this.runIntent({ type: "permissions.activate-profile", payload: { profileId: profile.id } }));
@@ -195,7 +216,7 @@ export class PermissionsView extends ChatobbyComponent {
         });
     }
     if (profile.builtIn) {
-      card.createDiv({ cls: "chatobby-permissions__profile-note", text: "Built-in profile. Choose Customize to make an editable copy." });
+      card.createDiv({ cls: "chatobby-permissions__profile-note", text: "This policy is built in. Select Customize to make an editable copy." });
       return;
     }
     if (this.deletingProfileId === profile.id) {
@@ -206,10 +227,21 @@ export class PermissionsView extends ChatobbyComponent {
     const editor = card.createDiv({ cls: "chatobby-permissions__profile-editor" });
     const nameLabel = editor.createEl("label", { cls: "chatobby-permissions__profile-field" });
     nameLabel.createSpan({ text: "Policy name" });
-    const name = nameLabel.createEl("input", { cls: "chatobby-permissions__profile-name-input", value: profile.name, attr: { "aria-label": "Profile name" } });
+    const name = nameLabel.createEl("input", {
+      cls: "chatobby-permissions__profile-name-input",
+      value: profile.name,
+      attr: { "aria-label": "Profile name", "data-page-state-key": `permissions:${profile.id}:name` },
+    });
     const descriptionLabel = editor.createEl("label", { cls: "chatobby-permissions__profile-field" });
     descriptionLabel.createSpan({ text: "Description" });
-    const description = descriptionLabel.createEl("textarea", { cls: "chatobby-permissions__profile-description-input", attr: { "aria-label": "Profile description", placeholder: "When should this profile be used?" } });
+    const description = descriptionLabel.createEl("textarea", {
+      cls: "chatobby-permissions__profile-description-input",
+      attr: {
+        "aria-label": "Profile description",
+        placeholder: "When should this profile be used?",
+        "data-page-state-key": `permissions:${profile.id}:description`,
+      },
+    });
     description.value = profile.description;
     const editorActions = editor.createDiv({ cls: "chatobby-permissions__profile-editor-actions" });
     editorActions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => {
@@ -278,12 +310,14 @@ export class PermissionsView extends ChatobbyComponent {
 
   private renderCapabilities(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
     const section = this.section(body, "Capabilities", model.capabilityDescription);
-    section.createDiv({ cls: "chatobby-permissions__connection-note", text: "Chatobby's tool discovery and its Obsidian connection stay available. These controls govern the actions those tools may perform." });
+    section.createDiv({ cls: "chatobby-permissions__connection-note", text: "These settings control what each tool may do without disconnecting Chatobby from Obsidian." });
     if (model.inventoryWarning) section.createDiv({ cls: "chatobby-permissions__inventory-warning", text: model.inventoryWarning });
     const groups = section.createDiv({ cls: "chatobby-permissions__capabilities" });
-    for (const group of model.capabilities) {
-      const details = groups.createEl("details", { cls: "chatobby-permissions__capability" });
-      this.restoreDisclosure(details, `capability:${group.id}`);
+    for (const group of model.capabilities ?? []) {
+      const details = groups.createEl("details", {
+        cls: "chatobby-permissions__capability",
+        attr: { "data-page-state-key": `capability:${group.id}` },
+      });
       const summary = details.createEl("summary", { cls: "chatobby-permissions__capability-summary" });
       const copy = summary.createDiv({ cls: "chatobby-permissions__capability-copy" });
       copy.createDiv({ cls: "chatobby-permissions__capability-name", text: group.label });
@@ -306,12 +340,13 @@ export class PermissionsView extends ChatobbyComponent {
   private renderChannels(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
     const section = this.section(body, "Channel access", model.channelDescription);
     const list = section.createDiv({ cls: "chatobby-permissions__channel-list" });
-    if (model.channels.length === 0) list.createDiv({ cls: "chatobby-permissions__channel-empty", text: "No channels are available to this policy." });
-    for (const channel of model.channels) {
+    const channels = model.channels ?? [];
+    const availableChannels = model.availableChannels ?? [];
+    if (channels.length === 0) list.createDiv({ cls: "chatobby-permissions__channel-empty", text: "This policy does not have access to any channels." });
+    for (const channel of channels) {
       const row = list.createDiv({ cls: "chatobby-permissions__channel" });
       const copy = row.createDiv({ cls: "chatobby-permissions__channel-copy" });
       copy.createDiv({ cls: "chatobby-permissions__channel-name", text: channel.label });
-      copy.createDiv({ cls: "chatobby-permissions__channel-id", text: channel.channelId });
       const actions = row.createDiv({ cls: "chatobby-permissions__channel-actions" });
       for (const action of ["connect", "read", "send"] as const) {
         const control = actions.createDiv({ cls: "chatobby-permissions__channel-action" });
@@ -338,10 +373,10 @@ export class PermissionsView extends ChatobbyComponent {
         type: "permissions.duplicate-profile",
         payload: { profileId: model.selectedProfileId },
       }));
-    } else if (model.availableChannels.length > 0) {
+    } else if (availableChannels.length > 0) {
       const addRow = list.createDiv({ cls: "chatobby-permissions__add-channel" });
       const select = addRow.createEl("select", { attr: { "aria-label": "Channel to add" } });
-      for (const option of model.availableChannels) {
+      for (const option of availableChannels) {
         select.createEl("option", { text: option.label, attr: { value: option.value } });
       }
       addRow.createEl("button", { cls: "chatobby-permissions__add-btn", text: "Add channel", attr: { type: "button" } }).addEventListener("click", () => {
@@ -351,11 +386,13 @@ export class PermissionsView extends ChatobbyComponent {
   }
 
   private renderAdvanced(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const details = body.createEl("details", { cls: "chatobby-permissions__advanced" });
-    this.restoreDisclosure(details, "advanced-rules");
-    details.createEl("summary", { text: "Advanced path, shell, and skill rules" });
+    const details = body.createEl("details", {
+      cls: "chatobby-permissions__advanced",
+      attr: { "data-page-state-key": "advanced-rules" },
+    });
+    details.createEl("summary", { text: "Advanced rules" });
     details.createDiv({ cls: "chatobby-permissions__section-description", text: model.advancedDescription });
-    for (const group of model.advancedGroups) {
+    for (const group of model.advancedGroups ?? []) {
       const section = details.createDiv({ cls: "chatobby-permissions__advanced-section" });
       section.createDiv({ cls: "chatobby-permissions__advanced-title", text: group.label });
       const list = section.createDiv({ cls: "chatobby-permissions__rules" });
@@ -405,7 +442,7 @@ export class PermissionsView extends ChatobbyComponent {
     const copy = row.createDiv({ cls: "chatobby-permissions__rule-copy" });
     const label = copy.createDiv({ cls: "chatobby-permissions__rule-label", text: labelText });
     if (source) label.createSpan({ cls: "chatobby-permissions__source", text: source });
-    if (inherited) label.createSpan({ cls: "chatobby-permissions__inherited", text: " inherited" });
+    if (inherited) label.setAttr("title", "Uses the setting selected for this group.");
     if (description) copy.createDiv({ cls: "chatobby-permissions__rule-description", text: description });
     this.renderDecisionControls(row, labelText, current, disabled, onDecision);
   }
@@ -435,18 +472,11 @@ export class PermissionsView extends ChatobbyComponent {
   }
 
   private section(body: HTMLElement, title: string, description: string): HTMLElement {
-    const section = body.createDiv({ cls: "chatobby-permissions__section" });
-    section.createDiv({ cls: "chatobby-permissions__section-title", text: title });
-    section.createDiv({ cls: "chatobby-permissions__section-description", text: description });
-    return section;
-  }
-
-  private restoreDisclosure(details: HTMLDetailsElement, key: string): void {
-    details.open = this.openDisclosures.has(key);
-    details.addEventListener("toggle", () => {
-      if (details.open) this.openDisclosures.add(key);
-      else this.openDisclosures.delete(key);
-    });
+    return createPageSection(body, {
+      title,
+      description,
+      className: "chatobby-permissions__section",
+    }).content;
   }
 
   private async refresh(): Promise<void> {

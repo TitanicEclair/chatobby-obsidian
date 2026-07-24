@@ -420,14 +420,17 @@ pre.chatobby-code-block .code-block-flair {
 }
 
 .chatobby-markdown-table-wrap {
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   margin: var(--size-4-2) 0;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .chatobby-markdown-table {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
   border-collapse: collapse;
   border: var(--border-width) solid var(--chatobby-line);
   font-size: var(--chatobby-body-size);
@@ -438,6 +441,13 @@ pre.chatobby-code-block .code-block-flair {
   padding: var(--size-2-2) var(--size-4-2);
   border: var(--border-width) solid var(--chatobby-line);
   vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.chatobby-markdown-table :is(code, a) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .chatobby-markdown-table th {
@@ -1115,7 +1125,7 @@ pre.chatobby-code-block .code-block-flair {
   padding: 0;
   border: 0;
   border-radius: var(--radius-s);
-  color: var(--text-accent);
+  color: var(--chatobby-accent);
   background: transparent;
   box-shadow: none;
 }
@@ -1152,7 +1162,7 @@ pre.chatobby-code-block .code-block-flair {
 .chatobby-subagent-communication__icon {
   display: inline-flex;
   flex: 0 0 auto;
-  color: var(--text-accent);
+  color: var(--chatobby-accent);
 }
 
 .chatobby-subagent-communication__icon svg {
@@ -1219,7 +1229,7 @@ pre.chatobby-code-block .code-block-flair {
 .chatobby-subagent-communication__open {
   margin-top: var(--size-2-2);
   padding: var(--size-2-1) var(--size-4-3);
-  color: var(--text-accent);
+  color: var(--chatobby-accent);
   background: transparent;
   box-shadow: none;
 }

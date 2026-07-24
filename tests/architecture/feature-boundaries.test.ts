@@ -81,7 +81,7 @@ describe("frontend feature boundaries", () => {
   it("keeps semantic theme variables centralized in the token layer", () => {
     const tokenPath = join(sourceRoot, "ui", "shared", "tokens.css");
     const violations: string[] = [];
-    for (const path of filesWithExtension(join(sourceRoot, "ui"), ".css")) {
+    for (const path of filesWithExtension(sourceRoot, ".css")) {
       if (path === tokenPath) continue;
       const source = readFileSync(path, "utf8");
       const rawVariables = [...source.matchAll(/var\(--(?:background-|interactive-|text-(?:accent|error|warning)|color-)[^)]+\)/g)];
@@ -92,22 +92,54 @@ describe("frontend feature boundaries", () => {
 
   it("keeps the memory screen on one vertical scroll owner with responsive tabs", () => {
     const css = readFileSync(join(sourceRoot, "ui", "memory", "memory-view.css"), "utf8");
-    expect(css).toMatch(/\.chatobby-memory-view\s*\{[^}]*overflow:\s*hidden;/s);
-    expect(css).toMatch(/\.chatobby-memory__body\s*\{[^}]*overflow-y:\s*auto;/s);
-    expect(css).toMatch(/\.chatobby-memory__tabs\s*\{[^}]*overflow-x:\s*auto;/s);
+    const shellCss = readFileSync(join(sourceRoot, "ui", "shared", "page-shell.css"), "utf8");
+    expect(shellCss).toMatch(/\.chatobby-page\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(shellCss).toMatch(/\.chatobby-page__body\s*\{[^}]*overflow-y:\s*auto;/s);
+    expect(shellCss).toMatch(/\.chatobby-page__tabs\s*\{[^}]*overflow-x:\s*auto;/s);
     expect(css).toMatch(/\.chatobby-memory__record-summary\s*\{[^}]*height:\s*auto;/s);
     expect(css).toMatch(/\.chatobby-memory__record-content\s*\{[^}]*-webkit-line-clamp:\s*2;/s);
     expect(css).toMatch(/\.chatobby-memory__records\s*\{[^}]*display:\s*grid;[^}]*gap:/s);
-    expect(css).toContain('.chatobby-view[data-layout="compact"] .chatobby-memory__setting-row');
+    expect(css).toContain("@container chatobby-page (max-width: 620px)");
   });
 
   it("keeps the subagent screen on one vertical scroll owner with responsive management panes", () => {
     const css = readFileSync(join(sourceRoot, "features", "subagents", "ui", "subagents.css"), "utf8");
-    expect(css).toMatch(/\.chatobby-subagents\s*\{[^}]*overflow:\s*hidden;/s);
-    expect(css).toMatch(/\.chatobby-subagents__body\s*\{[^}]*overflow-y:\s*auto;/s);
+    const shellCss = readFileSync(join(sourceRoot, "ui", "shared", "page-shell.css"), "utf8");
+    expect(shellCss).toMatch(/\.chatobby-page\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(shellCss).toMatch(/\.chatobby-page__body\s*\{[^}]*overflow-y:\s*auto;/s);
     expect(css).toContain('.chatobby-view[data-layout="compact"] .chatobby-subagents__run-layout');
     expect(css).toContain("grid-template-columns: 1fr;");
     expect(css).toMatch(/\.chatobby-subagents__run-filters\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+  });
+
+  it("keeps full-screen feature pages on the shared stable page shell", () => {
+    const pages = [
+      ["features", "queries", "ui", "context-queries-view.ts"],
+      ["ui", "memory", "memory-view.ts"],
+      ["ui", "permissions", "permissions-view.ts"],
+      ["features", "events", "ui", "events-view.ts"],
+      ["features", "channels", "ui", "channels-view.ts"],
+      ["features", "subagents", "ui", "subagents-view.ts"],
+      ["ui", "session", "session-picker.ts"],
+    ];
+    for (const segments of pages) {
+      expect(readFileSync(join(sourceRoot, ...segments), "utf8")).toContain("new PageShell(");
+    }
+  });
+
+  it("keeps shared page hierarchy styling out of page-specific stylesheets", () => {
+    const sharedShellPath = join(sourceRoot, "ui", "shared", "page-shell.css");
+    const violations: string[] = [];
+    for (const path of filesWithExtension(sourceRoot, ".css")) {
+      if (path === sharedShellPath) continue;
+      const source = readFileSync(path, "utf8");
+      for (const match of source.matchAll(
+        /\.chatobby-page__(?:header|title|tabs|status|body|section(?:-[a-z-]+)?)(?![a-z-])/gu,
+      )) {
+        violations.push(`${relative(repositoryRoot, path)}: ${match[0]}`);
+      }
+    }
+    expect(violations).toEqual([]);
   });
 
   it("keeps focused reducers and extracted controllers within reviewable size limits", () => {

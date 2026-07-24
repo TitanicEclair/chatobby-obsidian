@@ -48,6 +48,33 @@ describe("SubagentsView", () => {
     expect(callbacks.startRun).not.toHaveBeenCalled();
   });
 
+  it("preserves a new-run draft across live subagent updates", () => {
+    const frontend = new FrontendStore();
+    frontend.replace(bootstrap(screen({})));
+    const element = mount(createView(new SubagentStore(frontend)));
+    element.querySelector<HTMLButtonElement>("button[aria-label='New run']")?.click();
+    const name = element.querySelector<HTMLInputElement>(
+      'input[data-page-state-key="subagent:start:name"]',
+    );
+    const task = element.querySelector<HTMLTextAreaElement>(
+      'textarea[data-page-state-key="subagent:start:task"]',
+    );
+    if (!name || !task) throw new Error("new-run fields missing");
+    name.value = "Careful reviewer";
+    task.value = "Review the current project without losing this draft.";
+    task.focus();
+
+    frontend.replace(bootstrap(screen({ revision: 2, sequence: 3, statusMessage: "Runs refreshed." })));
+
+    expect(element.querySelector<HTMLInputElement>(
+      'input[data-page-state-key="subagent:start:name"]',
+    )?.value).toBe("Careful reviewer");
+    expect(element.querySelector<HTMLTextAreaElement>(
+      'textarea[data-page-state-key="subagent:start:task"]',
+    )?.value).toBe("Review the current project without losing this draft.");
+    expect(document.activeElement?.getAttribute("data-page-state-key")).toBe("subagent:start:task");
+  });
+
   it("provides a dedicated empty operator inbox", () => {
     const store = createStore();
     const view = createView(store);
@@ -391,7 +418,7 @@ describe("SubagentsView", () => {
     const element = mount(createView(store));
 
     expect(element.textContent).toContain("deepseek/deepseek-v4-pro");
-    expect(element.textContent).toContain("Inherited from the parent or role policy");
+    expect(element.textContent).toContain("Uses the parent or role setting");
     expect(element.textContent).not.toContain("Message this agent");
     expect(element.textContent).not.toContain("child.jsonl");
     expect(element.textContent).not.toContain("Cost budget");

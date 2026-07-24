@@ -6,10 +6,13 @@ import type {
 } from "../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../shared/component";
 import {
-  createPageHeader,
+  createPageActionRow,
+  createPageDisclosure,
   createPageIconButton,
-  createPageTab,
-  createPageTabs,
+  createPageSection,
+  createPageState,
+  createPageToolbar,
+  PageShell,
 } from "../shared/page-shell";
 
 /** Compatibility action emitted by older extension panels. */
@@ -54,6 +57,8 @@ export class MemoryView extends ChatobbyComponent {
   private deleteConfirmId: string | null = null;
   private localError: string | null = null;
   private busy = false;
+  private shell: PageShell | null = null;
+  private refreshButton: HTMLButtonElement | null = null;
 
   constructor(private readonly props: MemoryViewProps) {
     super();
@@ -65,6 +70,18 @@ export class MemoryView extends ChatobbyComponent {
 
   protected onRender(container: HTMLElement): void {
     container.tabIndex = -1;
+    this.shell = new PageShell(container, {
+      title: "Memory",
+      width: "wide",
+      headerClass: "chatobby-memory__header",
+      titleClass: "chatobby-memory__title-main",
+      actionsClass: "chatobby-memory__header-actions",
+      tabsClass: "chatobby-memory__tabs",
+      bodyClass: "chatobby-memory__body",
+    });
+    this.refreshButton = createPageIconButton(this.shell.actions, "refresh-cw", "Refresh memory");
+    this.refreshButton.addEventListener("click", () => void this.refresh());
+    createPageIconButton(this.shell.actions, "x", "Close memory").addEventListener("click", () => this.props.onBack());
     this.unsubscribe = this.props.subscribe((model) => this.renderState(model));
     this.renderState(this.props.getModel());
   }
@@ -121,72 +138,53 @@ export class MemoryView extends ChatobbyComponent {
   }
 
   private renderState(model: FrontendMemoryScreenViewModel | null): void {
-    const container = this.container;
-    if (!container) return;
-    const previousBody = container.querySelector<HTMLElement>(".chatobby-memory__body");
-    const previousScrollTop = previousBody?.dataset.memoryTab === this.tab ? previousBody.scrollTop : null;
-    container.empty();
-    this.renderHeader(container, model);
-    this.renderTabs(container, model);
-    const body = container.createDiv({ cls: "chatobby-page__body chatobby-memory__body" });
-    body.dataset.memoryTab = this.tab;
+    const shell = this.shell;
+    if (!shell) return;
     const error = this.localError ?? model?.error;
-    if (error) renderNotice(body, error, true);
-    if (!model) {
-      renderState(body, this.localError ? "alert-circle" : "loader-circle", this.localError ? "Memory is unavailable." : "Loading memory…", Boolean(this.localError));
-      if (previousScrollTop !== null) body.scrollTop = previousScrollTop;
-      return;
-    }
-    if (model.statusMessage) renderNotice(body, model.statusMessage, false);
-    this.ensureSelection(model.records);
-    if (this.tab === "memories") this.renderMemories(body, model);
-    else if (this.tab === "suggestions") this.renderSuggestions(body, model);
-    else this.renderSettings(body, model);
-    if (previousScrollTop !== null) body.scrollTop = previousScrollTop;
-  }
-
-  private renderHeader(container: HTMLElement, model: FrontendMemoryScreenViewModel | null): void {
-    const { actions } = createPageHeader(container, {
-      title: "Memory",
-      headerClass: "chatobby-memory__header",
-      titleClass: "chatobby-memory__title-main",
-      actionsClass: "chatobby-memory__header-actions",
+    shell.setBusy(this.busy);
+    this.refreshButton?.toggleClass("is-loading", model?.loading ?? false);
+    this.refreshButton?.setAttr("aria-busy", String(model?.loading ?? false));
+    shell.setStatus(
+      error
+        ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.refresh() }
+        : model?.statusMessage
+          ? { tone: "success", message: model.statusMessage }
+          : null,
+    );
+    shell.setTabs([
+      { id: "memories", label: "Memories", active: this.tab === "memories", onSelect: () => this.selectTab("memories") },
+      {
+        id: "suggestions",
+        label: "Suggestions",
+        active: this.tab === "suggestions",
+        count: model?.candidates.length,
+        onSelect: () => this.selectTab("suggestions"),
+      },
+      { id: "settings", label: "Settings", active: this.tab === "settings", onSelect: () => this.selectTab("settings") },
+    ]);
+    shell.updateBody(`memory:${this.tab}`, (body) => {
+      if (!model) {
+        createPageState(body, {
+          kind: error ? "error" : "loading",
+          title: error ? "Memory is unavailable" : "Loading memory",
+          description: error ? "Check the memory service and try again." : "Reading saved memories and suggestions.",
+        });
+        return;
+      }
+      this.ensureSelection(model.records);
+      if (this.tab === "memories") this.renderMemories(body, model);
+      else if (this.tab === "suggestions") this.renderSuggestions(body, model);
+      else this.renderSettings(body, model);
     });
-    const refresh = createPageIconButton(actions, "refresh-cw", "Refresh memory");
-    refresh.toggleClass("is-loading", model?.loading ?? false);
-    refresh.setAttr("aria-busy", String(model?.loading ?? false));
-    refresh.addEventListener("click", () => void this.refresh());
-    createPageIconButton(actions, "x", "Close memory").addEventListener("click", () => this.props.onBack());
-  }
-
-  private renderTabs(parent: HTMLElement, model: FrontendMemoryScreenViewModel | null): void {
-    const tabs = createPageTabs(parent, "chatobby-memory__tabs");
-    const options: readonly { id: MemoryTab; label: string; count?: number }[] = [
-      { id: "memories", label: "Memories" },
-      { id: "suggestions", label: "Suggestions", count: model?.candidates.length },
-      { id: "settings", label: "Settings" },
-    ];
-    for (const option of options) {
-      const button = createPageTab(tabs, {
-        label: option.label,
-        active: this.tab === option.id,
-        count: option.count,
-        countClass: "chatobby-memory__tab-count",
-      });
-      button.addEventListener("click", () => {
-        this.tab = option.id;
-        this.renderState(this.props.getModel());
-      });
-    }
   }
 
   private renderMemories(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
-    const toolbar = parent.createDiv({ cls: "chatobby-memory__toolbar" });
+    const toolbar = createPageToolbar(parent, "chatobby-memory__toolbar");
     const search = toolbar.createDiv({ cls: "chatobby-memory__search" });
     setIcon(search.createSpan(), "search");
     const input = search.createEl("input", {
       cls: "chatobby-memory__search-input",
-      attr: { type: "search", placeholder: "Search memory", "aria-label": "Search memory" },
+      attr: { type: "search", placeholder: "Search memory", "aria-label": "Search memory", "data-page-state-key": "memory:search" },
     });
     input.value = model.query;
     input.addEventListener("keydown", (event) => {
@@ -219,22 +217,35 @@ export class MemoryView extends ChatobbyComponent {
     if (model.searchResultCount !== undefined) {
       parent.createDiv({ cls: "chatobby-memory__result-summary", text: `Search results · ${model.searchResultCount}` });
     }
-    this.renderRecords(parent, model);
+    const section = createPageSection(parent, {
+      title: "Saved memory",
+      description: "Information Chatobby can remember for you in the selected area.",
+      surface: "divided",
+    });
+    this.renderRecords(section.content, model);
   }
 
   private renderCreate(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
-    const form = parent.createDiv({ cls: "chatobby-memory__create" });
-    form.createDiv({ cls: "chatobby-memory__form-title", text: "Add something worth remembering" });
-    const target = form.createEl("select", { attr: { "aria-label": "Memory location" } });
+    const section = createPageSection(parent, {
+      title: "Add something worth remembering",
+      description: "Save a durable preference, fact, convention, or lesson.",
+      surface: "inset",
+    });
+    const form = section.content.createDiv({ cls: "chatobby-memory__create" });
+    const target = form.createEl("select", { attr: { "aria-label": "Memory location", "data-page-state-key": "memory:create:target" } });
     for (const option of model.createTargets) {
       const element = target.createEl("option", { value: option.value, text: option.label });
       element.disabled = Boolean(option.disabledReason);
       if (option.disabledReason) element.title = option.disabledReason;
     }
     const content = form.createEl("textarea", {
-      attr: { placeholder: "A durable preference, fact, convention, or lesson…", "aria-label": "Memory content" },
+      attr: {
+        placeholder: "A durable preference, fact, convention, or lesson…",
+        "aria-label": "Memory content",
+        "data-page-state-key": "memory:create:content",
+      },
     });
-    const actions = form.createDiv({ cls: "chatobby-memory__form-actions" });
+    const actions = createPageActionRow(form, "chatobby-memory__form-actions");
     actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => {
       this.creating = false;
       this.renderState(this.props.getModel());
@@ -252,7 +263,7 @@ export class MemoryView extends ChatobbyComponent {
   private renderRecords(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
     const list = parent.createDiv({ cls: "chatobby-memory__records", attr: { role: "list" } });
     if (model.records.length === 0) {
-      list.createDiv({ cls: "chatobby-memory__empty", text: model.filter === "archived" ? "No archived memories in this boundary." : "No matching memories yet." });
+      list.createDiv({ cls: "chatobby-memory__empty", text: model.filter === "archived" ? "No archived memories in this area." : "No matching memories yet." });
       return;
     }
     model.records.forEach((record, index) => {
@@ -297,13 +308,16 @@ export class MemoryView extends ChatobbyComponent {
 
     if (this.deleteConfirmId === record.id) this.renderDeleteConfirmation(detail, record);
     else this.renderRecordActions(detail, record);
-    const advanced = detail.createEl("details", { cls: "chatobby-memory__advanced" });
-    advanced.createEl("summary", { text: "History and technical details" });
+    const advanced = createPageDisclosure(detail, `memory:${record.id}:technical`, "History and technical details");
+    advanced.addClass("chatobby-memory__advanced");
     for (const line of record.technicalLines) advanced.createDiv({ text: line });
   }
 
   private renderEditor(parent: HTMLElement, record: FrontendMemoryRecordViewModel): void {
-    const editor = parent.createEl("textarea", { cls: "chatobby-memory__editor", attr: { "aria-label": "Edit memory" } });
+    const editor = parent.createEl("textarea", {
+      cls: "chatobby-memory__editor",
+      attr: { "aria-label": "Edit memory", "data-page-state-key": `memory:${record.id}:editor` },
+    });
     editor.value = record.content;
     const save = parent.createEl("button", { cls: "mod-cta", text: "Save changes", attr: { type: "button" } });
     save.disabled = this.busy;
@@ -314,7 +328,7 @@ export class MemoryView extends ChatobbyComponent {
   }
 
   private renderRecordActions(parent: HTMLElement, record: FrontendMemoryRecordViewModel): void {
-    const actions = parent.createDiv({ cls: "chatobby-memory__detail-actions" });
+    const actions = createPageActionRow(parent, "chatobby-memory__detail-actions");
     if (record.availableActions.includes("edit")) {
       actions.createEl("button", { text: "Edit", attr: { type: "button" } }).addEventListener("click", () => {
         this.editing = true;
@@ -349,7 +363,7 @@ export class MemoryView extends ChatobbyComponent {
     const confirmation = parent.createDiv({ cls: "chatobby-memory__delete-confirm" });
     confirmation.createDiv({ cls: "chatobby-memory__delete-title", text: "Delete this memory permanently?" });
     confirmation.createDiv({ text: "This erases memory-owned copies and cannot be undone. Original chat transcripts are not changed." });
-    const actions = confirmation.createDiv({ cls: "chatobby-memory__form-actions" });
+    const actions = createPageActionRow(confirmation, "chatobby-memory__form-actions");
     actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => {
       this.deleteConfirmId = null;
       this.renderState(this.props.getModel());
@@ -366,20 +380,26 @@ export class MemoryView extends ChatobbyComponent {
   }
 
   private renderSuggestions(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
-    const intro = parent.createDiv({ cls: "chatobby-memory__section-intro" });
-    intro.createDiv({ cls: "chatobby-memory__section-title", text: "Review before Chatobby remembers" });
-    intro.createDiv({ text: "Suggestions are inferred from conversations and remain inactive until approved." });
+    const section = createPageSection(parent, {
+      title: "Review before Chatobby remembers",
+      description: "Suggestions are inferred from conversations and remain inactive until approved.",
+      surface: "divided",
+    });
     if (model.candidates.length === 0) {
-      parent.createDiv({ cls: "chatobby-memory__empty-card", text: "No memory suggestions are waiting for review." });
+      createPageState(section.content, {
+        kind: "empty",
+        title: "No suggestions waiting",
+        description: "New suggestions will remain here until you approve or dismiss them.",
+      });
       return;
     }
-    const list = parent.createDiv({ cls: "chatobby-memory__suggestions" });
+    const list = section.content.createDiv({ cls: "chatobby-memory__suggestions" });
     for (const candidate of model.candidates) {
       const card = list.createDiv({ cls: "chatobby-memory__suggestion" });
       card.createDiv({ cls: "chatobby-memory__suggestion-label", text: candidate.actionLabel });
       card.createDiv({ cls: "chatobby-memory__suggestion-content", text: candidate.content });
       if (candidate.reason) card.createDiv({ cls: "chatobby-memory__suggestion-reason", text: candidate.reason });
-      const actions = card.createDiv({ cls: "chatobby-memory__form-actions" });
+      const actions = createPageActionRow(card, "chatobby-memory__form-actions");
       actions.createEl("button", { text: "Dismiss", attr: { type: "button" } }).addEventListener("click", () => void this.runIntent({
         type: "memory.decide-candidate",
         payload: { candidateId: candidate.id, decision: "reject" },
@@ -392,14 +412,21 @@ export class MemoryView extends ChatobbyComponent {
   }
 
   private renderSettings(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
-    const boundary = parent.createDiv({ cls: "chatobby-memory__settings-card" });
-    boundary.createDiv({ cls: "chatobby-memory__settings-title", text: "Project boundary" });
-    boundary.createDiv({ cls: "chatobby-memory__settings-copy", text: model.projectBoundary.description });
-    const boundaryRow = boundary.createDiv({ cls: "chatobby-memory__setting-row" });
+    const boundary = createPageSection(parent, {
+      title: "Project memory",
+      description: model.projectBoundary.description,
+      surface: "divided",
+    });
+    const boundaryRow = boundary.content.createDiv({ cls: "chatobby-memory__setting-row" });
     const boundaryCopy = boundaryRow.createDiv({ cls: "chatobby-memory__setting-copy" });
     boundaryCopy.createDiv({ cls: "chatobby-memory__setting-label", text: "Isolate this project" });
-    boundaryCopy.createDiv({ cls: "chatobby-memory__setting-description", text: "Vault profile and vault memory remain available." });
-    const toggle = boundaryRow.createEl("input", { attr: { type: "checkbox", "aria-label": "Isolate this project" } });
+    boundaryCopy.createDiv({ cls: "chatobby-memory__setting-description", text: "Keep this project's memories separate while retaining your vault-wide preferences." });
+    const toggle = boundaryRow.createEl("input", {
+      attr: {
+        type: "checkbox",
+        "aria-label": "Isolate this project",
+      },
+    });
     toggle.checked = model.projectBoundary.checked;
     toggle.disabled = Boolean(model.projectBoundary.disabledReason) || this.busy;
     if (model.projectBoundary.disabledReason) toggle.title = model.projectBoundary.disabledReason;
@@ -408,15 +435,21 @@ export class MemoryView extends ChatobbyComponent {
       payload: { isolateCurrentProject: toggle.checked },
     }));
 
-    const learning = parent.createDiv({ cls: "chatobby-memory__settings-card" });
-    learning.createDiv({ cls: "chatobby-memory__settings-title", text: "Learning" });
-    learning.createDiv({ cls: "chatobby-memory__settings-copy", text: "Choose when Chatobby may learn from conversations. Suggestions remain reviewable before they become active memory." });
+    const learning = createPageSection(parent, {
+      title: "Learning",
+      description: "Choose when Chatobby may learn from conversations. Suggestions remain reviewable before they become active memory.",
+      surface: "divided",
+    });
     for (const setting of model.learningSettings) {
-      const row = learning.createDiv({ cls: "chatobby-memory__setting-row" });
+      const row = learning.content.createDiv({ cls: "chatobby-memory__setting-row" });
       const copy = row.createDiv({ cls: "chatobby-memory__setting-copy" });
       copy.createDiv({ cls: "chatobby-memory__setting-label", text: setting.title });
       copy.createDiv({ cls: "chatobby-memory__setting-description", text: setting.description });
-      const select = row.createEl("select", { attr: { "aria-label": setting.title } });
+      const select = row.createEl("select", {
+        attr: {
+          "aria-label": setting.title,
+        },
+      });
       for (const option of setting.options) {
         const element = select.createEl("option", { value: option.value, text: option.label });
         element.disabled = Boolean(option.disabledReason);
@@ -426,19 +459,20 @@ export class MemoryView extends ChatobbyComponent {
       select.addEventListener("change", () => void this.updateLearningSetting(setting.id, select.value));
     }
 
-    const storage = parent.createDiv({ cls: "chatobby-memory__settings-card" });
-    storage.createDiv({ cls: "chatobby-memory__settings-title", text: "Storage and Markdown" });
-    storage.createDiv({ cls: "chatobby-memory__settings-copy", text: model.storage.description });
-    const storageActions = storage.createDiv({ cls: "chatobby-memory__storage-actions" });
+    const storage = createPageSection(parent, {
+      title: "Storage and Markdown",
+      description: model.storage.description,
+      surface: "divided",
+    });
+    const storageActions = createPageActionRow(storage.content, "chatobby-memory__storage-actions");
     storageActions.createEl("button", { text: "Import Markdown changes", attr: { type: "button" } }).addEventListener("click", () => void this.runIntent({ type: "memory.import-markdown", payload: {} }));
     storageActions.createEl("button", { text: "Refresh Markdown copy", attr: { type: "button" } }).addEventListener("click", () => void this.runIntent({ type: "memory.export-markdown", payload: {} }));
-    const paths = storage.createEl("details", { cls: "chatobby-memory__advanced" });
-    paths.createEl("summary", { text: "Where memory is stored" });
+    const paths = createPageDisclosure(storage.content, "memory:storage", "Where memory is stored");
+    paths.addClass("chatobby-memory__advanced");
     for (const line of model.storage.technicalLines) paths.createDiv({ text: line });
 
-    const help = parent.createDiv({ cls: "chatobby-memory__settings-card" });
-    help.createDiv({ cls: "chatobby-memory__settings-title", text: "How memory behaves" });
-    const list = help.createEl("ul", { cls: "chatobby-memory__help-list" });
+    const help = createPageSection(parent, { title: "How memory behaves" });
+    const list = help.content.createEl("ul", { cls: "chatobby-memory__help-list" });
     for (const item of model.helpItems) list.createEl("li", { text: item });
   }
 
@@ -455,6 +489,12 @@ export class MemoryView extends ChatobbyComponent {
       type: "memory.update-policy",
       payload: id === "backgroundLearning" ? { backgroundLearning: value } : { correctionLearning: value },
     });
+  }
+
+  private selectTab(tab: MemoryTab): void {
+    if (this.tab === tab) return;
+    this.tab = tab;
+    this.renderState(this.props.getModel());
   }
 
   private async runIntent(intent: MemoryViewIntent, onSuccess?: () => void): Promise<void> {
@@ -482,18 +522,6 @@ export class MemoryView extends ChatobbyComponent {
     if (existing >= 0) this.selectedIndex = existing;
     else this.selectedRecordId = null;
   }
-}
-
-function renderState(parent: HTMLElement, iconName: string, text: string, error = false): void {
-  const state = parent.createDiv({ cls: `chatobby-memory__state${error ? " is-error" : ""}` });
-  setIcon(state.createDiv(), iconName);
-  state.createDiv({ text });
-}
-
-function renderNotice(parent: HTMLElement, text: string, error: boolean): void {
-  const notice = parent.createDiv({ cls: `chatobby-memory__notice${error ? " is-error" : ""}` });
-  setIcon(notice.createSpan(), error ? "triangle-alert" : "check-circle-2");
-  notice.createSpan({ text });
 }
 
 function isMemoryTarget(value: string): value is "user" | "memory" | "project" | "failure" {
