@@ -12,6 +12,14 @@ export type PermissionViewIntent =
   | { readonly type: "permissions.select-profile"; readonly payload: { readonly profileId: string } }
   | { readonly type: "permissions.activate-profile" | "permissions.duplicate-profile"; readonly payload: { readonly profileId: string } }
   | { readonly type: "permissions.delete-profile"; readonly payload: { readonly profileId: string; readonly replacementProfileId?: string } }
+  | {
+      readonly type: "permissions.set-live-agent-profile";
+      readonly payload: {
+        readonly authority: FrontendPermissionScreenViewModel["liveAgents"][number]["authority"];
+        readonly profileId: string;
+        readonly expectedBindingRevision: number;
+      };
+    }
   | { readonly type: "permissions.update-profile"; readonly payload: { readonly profileId: string; readonly name: string; readonly description: string } }
   | { readonly type: "permissions.set-capability"; readonly payload: { readonly profileId: string; readonly capabilityId: string; readonly decision: FrontendPermissionDecision } }
   | { readonly type: "permissions.set-target"; readonly payload: { readonly profileId: string; readonly keys: readonly string[]; readonly decision: FrontendPermissionDecision } }
@@ -97,6 +105,7 @@ export class PermissionsView extends ChatobbyComponent {
     }
     if (model.statusMessage) body.createDiv({ cls: "chatobby-permissions__notice", text: model.statusMessage });
     this.renderProfiles(body, model);
+    this.renderLiveAgents(body, model);
     this.renderCapabilities(body, model);
     this.renderChannels(body, model);
     this.renderAdvanced(body, model);
@@ -105,6 +114,42 @@ export class PermissionsView extends ChatobbyComponent {
     storage.createEl("summary", { text: "Policy storage" });
     for (const line of model.storageLines) storage.createDiv({ text: line });
     body.scrollTop = scrollTop;
+  }
+
+  private renderLiveAgents(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
+    if (model.liveAgents.length === 0) return;
+    const section = this.section(
+      body,
+      "Active agents",
+      "Change the policy used by a currently running main agent, subagent, or event session.",
+    );
+    const list = section.createDiv({ cls: "chatobby-permissions__live-agents" });
+    for (const agent of model.liveAgents) {
+      const row = list.createDiv({ cls: "chatobby-permissions__live-agent" });
+      const copy = row.createDiv({ cls: "chatobby-permissions__live-agent-copy" });
+      copy.createDiv({ cls: "chatobby-permissions__live-agent-name", text: agent.label });
+      copy.createDiv({ cls: "chatobby-permissions__live-agent-detail", text: agent.detail });
+      const select = row.createEl("select", {
+        cls: "chatobby-permissions__live-agent-policy",
+        attr: { "aria-label": `${agent.label} permission policy` },
+      });
+      for (const profile of model.profiles) {
+        select.createEl("option", { text: profile.name, attr: { value: profile.id } }).selected =
+          profile.id === agent.profileId;
+      }
+      select.disabled = this.saving;
+      select.addEventListener("change", () => {
+        if (select.value === agent.profileId) return;
+        void this.runIntent({
+          type: "permissions.set-live-agent-profile",
+          payload: {
+            authority: agent.authority,
+            profileId: select.value,
+            expectedBindingRevision: agent.bindingRevision,
+          },
+        });
+      });
+    }
   }
 
   private renderProfiles(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {

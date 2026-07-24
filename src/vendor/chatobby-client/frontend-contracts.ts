@@ -487,6 +487,30 @@ export interface FrontendPermissionProfileViewModel {
 	readonly duplicateLabel: string;
 }
 
+export type FrontendPermissionAuthority =
+	| { readonly kind: "main"; readonly mainSessionId: string }
+	| {
+			readonly kind: "subagent";
+			readonly mainSessionId: string;
+			readonly runId: string;
+			readonly nodeId: string;
+	  }
+	| {
+			readonly kind: "event";
+			readonly eventId: string;
+			readonly eventSessionId: string;
+			readonly mainSessionId?: string;
+	  };
+
+export interface FrontendPermissionLiveAgentViewModel {
+	readonly authority: FrontendPermissionAuthority;
+	readonly label: string;
+	readonly detail: string;
+	readonly audience: "main" | "child" | "background";
+	readonly profileId: string;
+	readonly bindingRevision: number;
+}
+
 export interface FrontendPermissionChannelGrantViewModel {
 	readonly channelId: string;
 	readonly label: string;
@@ -512,6 +536,7 @@ export interface FrontendPermissionScreenViewModel {
 	readonly selectedProfileId: string;
 	readonly profiles: readonly FrontendPermissionProfileViewModel[];
 	readonly selectedProfile: FrontendPermissionProfileViewModel;
+	readonly liveAgents: readonly FrontendPermissionLiveAgentViewModel[];
 	readonly capabilityDescription: string;
 	readonly inventoryWarning?: string;
 	readonly capabilities: readonly FrontendPermissionCapabilityGroupViewModel[];
@@ -1429,6 +1454,14 @@ export type FrontendIntent =
 			};
 	  })
 	| (FrontendIntentBase & {
+			readonly type: "permissions.set-live-agent-profile";
+			readonly payload: FrontendPermissionRevisionPayload & {
+				readonly authority: FrontendPermissionAuthority;
+				readonly profileId: string;
+				readonly expectedBindingRevision: number;
+			};
+	  })
+	| (FrontendIntentBase & {
 			readonly type: "permissions.update-profile";
 			readonly payload: FrontendPermissionRevisionPayload & {
 				readonly profileId: string;
@@ -1909,6 +1942,21 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			payload: {
 				profileId: requireString(payload.profileId, "payload.profileId"),
 				replacementProfileId: optionalString(payload.replacementProfileId, "payload.replacementProfileId"),
+				expectedProfileRevision: permissionProfileRevision(payload),
+			},
+		};
+	}
+	if (input.type === "permissions.set-live-agent-profile") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				authority: requirePermissionAuthority(payload.authority),
+				profileId: requireString(payload.profileId, "payload.profileId"),
+				expectedBindingRevision: requireSafeInteger(
+					payload.expectedBindingRevision,
+					"payload.expectedBindingRevision",
+				),
 				expectedProfileRevision: permissionProfileRevision(payload),
 			},
 		};
@@ -2555,6 +2603,34 @@ function optionalPromptRouting(value: unknown): "off" | "profile-project" | "hyb
 function requirePermissionDecision(value: unknown): FrontendPermissionDecision {
 	if (value === "allow" || value === "ask" || value === "deny") return value;
 	throw new Error("payload.decision is invalid");
+}
+
+function requirePermissionAuthority(value: unknown): FrontendPermissionAuthority {
+	const authority = requireRecord(value, "payload.authority");
+	if (authority.kind === "main") {
+		return {
+			kind: "main",
+			mainSessionId: requireString(authority.mainSessionId, "payload.authority.mainSessionId"),
+		};
+	}
+	if (authority.kind === "subagent") {
+		return {
+			kind: "subagent",
+			mainSessionId: requireString(authority.mainSessionId, "payload.authority.mainSessionId"),
+			runId: requireString(authority.runId, "payload.authority.runId"),
+			nodeId: requireString(authority.nodeId, "payload.authority.nodeId"),
+		};
+	}
+	if (authority.kind === "event") {
+		const mainSessionId = optionalString(authority.mainSessionId, "payload.authority.mainSessionId");
+		return {
+			kind: "event",
+			eventId: requireString(authority.eventId, "payload.authority.eventId"),
+			eventSessionId: requireString(authority.eventSessionId, "payload.authority.eventSessionId"),
+			...(mainSessionId ? { mainSessionId } : {}),
+		};
+	}
+	throw new Error("payload.authority.kind is invalid");
 }
 
 function requirePermissionRuleSection(value: unknown): "path" | "external_directory" | "bash" | "skill" {

@@ -92,6 +92,53 @@ describe("PermissionsView", () => {
     expect(root.querySelector<HTMLElement>(".chatobby-permissions__body")?.scrollTop).toBe(420);
   });
 
+  it("changes one active agent policy with its exact binding revision", async () => {
+    const base = permissionModel();
+    const model: FrontendPermissionScreenViewModel = {
+      ...base,
+      liveAgents: [{
+        authority: {
+          kind: "subagent",
+          mainSessionId: "main-1",
+          runId: "run-1",
+          nodeId: "node-1",
+        },
+        label: "Subagent node-1",
+        detail: "Run run-1",
+        audience: "child",
+        profileId: "custom",
+        bindingRevision: 7,
+      }],
+    };
+    const onIntent = vi.fn(async () => {});
+    const view = new PermissionsView({
+      getModel: () => model,
+      subscribe: () => () => {},
+      onRefresh: vi.fn(async () => {}),
+      onIntent,
+      onBack: vi.fn(),
+    });
+    const root = mount(view);
+    const select = root.querySelector<HTMLSelectElement>('select[aria-label="Subagent node-1 permission policy"]');
+    if (!select) throw new Error("live agent policy selector missing");
+    select.value = "standard";
+    select.dispatchEvent(new Event("change"));
+
+    await vi.waitFor(() => expect(onIntent).toHaveBeenCalledWith({
+      type: "permissions.set-live-agent-profile",
+      payload: {
+        authority: {
+          kind: "subagent",
+          mainSessionId: "main-1",
+          runId: "run-1",
+          nodeId: "node-1",
+        },
+        profileId: "standard",
+        expectedBindingRevision: 7,
+      },
+    }));
+  });
+
 	it("deletes an active custom policy only after choosing its replacement", async () => {
 		const model = permissionModel();
 		const onIntent = vi.fn(async () => {});
@@ -159,8 +206,9 @@ function permissionModel(): FrontendPermissionScreenViewModel {
 	profileRevision: 1,
     loading: false,
     selectedProfileId: "custom",
-	profiles: [profile, standard],
+    profiles: [profile, standard],
     selectedProfile: profile,
+    liveAgents: [],
     capabilityDescription: "Capability groups",
     capabilities: [{
       id: "read",

@@ -238,6 +238,37 @@
   gap: var(--size-2-2);
 }
 
+.chatobby-permissions__live-agents {
+  border-block: var(--border-width) solid var(--chatobby-border);
+}
+
+.chatobby-permissions__live-agent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 280px);
+  align-items: center;
+  gap: var(--size-4-3);
+  padding: var(--size-2-3) 0;
+  border-bottom: var(--border-width) solid var(--chatobby-border);
+}
+
+.chatobby-permissions__live-agent:last-child { border-bottom: 0; }
+.chatobby-permissions__live-agent-copy { min-width: 0; }
+.chatobby-permissions__live-agent-name {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chatobby-permissions__live-agent-detail {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chatobby-permissions__live-agent-policy { width: 100%; min-width: 0; }
+
 .chatobby-permissions__rules,
 .chatobby-permissions__assignments {
   display: flex;
@@ -453,6 +484,7 @@
   .chatobby-permissions__profile-editor-actions { grid-column: 1; }
   .chatobby-permissions__capability-summary { grid-template-columns: minmax(0, 1fr); }
   .chatobby-permissions__rule,
+  .chatobby-permissions__live-agent,
   .chatobby-permissions__assignment {
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;

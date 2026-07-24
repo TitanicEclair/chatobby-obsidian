@@ -355,6 +355,28 @@ export interface FrontendPermissionProfileViewModel {
     readonly deleteImpactLabel?: string;
     readonly duplicateLabel: string;
 }
+export type FrontendPermissionAuthority = {
+    readonly kind: "main";
+    readonly mainSessionId: string;
+} | {
+    readonly kind: "subagent";
+    readonly mainSessionId: string;
+    readonly runId: string;
+    readonly nodeId: string;
+} | {
+    readonly kind: "event";
+    readonly eventId: string;
+    readonly eventSessionId: string;
+    readonly mainSessionId?: string;
+};
+export interface FrontendPermissionLiveAgentViewModel {
+    readonly authority: FrontendPermissionAuthority;
+    readonly label: string;
+    readonly detail: string;
+    readonly audience: "main" | "child" | "background";
+    readonly profileId: string;
+    readonly bindingRevision: number;
+}
 export interface FrontendPermissionChannelGrantViewModel {
     readonly channelId: string;
     readonly label: string;
@@ -381,6 +403,7 @@ export interface FrontendPermissionScreenViewModel {
     readonly selectedProfileId: string;
     readonly profiles: readonly FrontendPermissionProfileViewModel[];
     readonly selectedProfile: FrontendPermissionProfileViewModel;
+    readonly liveAgents: readonly FrontendPermissionLiveAgentViewModel[];
     readonly capabilityDescription: string;
     readonly inventoryWarning?: string;
     readonly capabilities: readonly FrontendPermissionCapabilityGroupViewModel[];
@@ -1239,6 +1262,13 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly payload: FrontendPermissionRevisionPayload & {
         readonly profileId: string;
         readonly replacementProfileId?: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "permissions.set-live-agent-profile";
+    readonly payload: FrontendPermissionRevisionPayload & {
+        readonly authority: FrontendPermissionAuthority;
+        readonly profileId: string;
+        readonly expectedBindingRevision: number;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.update-profile";
