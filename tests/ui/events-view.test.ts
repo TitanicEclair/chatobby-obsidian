@@ -37,7 +37,14 @@ function createHarness(
     onRefresh: vi.fn(async () => {}),
     onIntent,
   });
-  return { view, onIntent };
+  return {
+    view,
+    onIntent,
+    publishModel(next: FrontendEventScreenViewModel): void {
+      model = next;
+      publish();
+    },
+  };
 }
 
 describe("EventsView", () => {
@@ -169,6 +176,32 @@ describe("EventsView", () => {
     await vi.waitFor(() => expect(root.querySelector(".chatobby-events__schedule")).not.toBeNull());
     expect(fieldControl<HTMLInputElement>(root, "Date").value).not.toBe("");
     expect(fieldControl<HTMLInputElement>(root, "Time").value).not.toBe("");
+  });
+
+  it("retains the submitted draft until the authoritative model closes the editor", async () => {
+    const harness = createHarness();
+    const root = mount(harness.view);
+    buttonWithText(root, "New event").click();
+    await vi.waitFor(() => expect(root.textContent).toContain("Create event"));
+
+    const name = fieldControl<HTMLInputElement>(root, "Name");
+    const instructions = root.querySelector<HTMLTextAreaElement>("textarea");
+    if (!instructions) throw new Error("instructions field missing");
+    name.value = "No blank editor flash";
+    name.dispatchEvent(new Event("input"));
+    instructions.value = "Keep this draft until the backend closes the editor.";
+    instructions.dispatchEvent(new Event("input"));
+    root.querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith(expect.objectContaining({ type: "events.save" })));
+    expect(root.textContent).toContain("Create event");
+    expect(fieldControl<HTMLInputElement>(root, "Name").value).toBe("No blank editor flash");
+
+    harness.publishModel(screenModel());
+    await vi.waitFor(() => expect(root.textContent).toContain("No events yet"));
+    buttonWithText(root, "New event").click();
+    await vi.waitFor(() => expect(root.textContent).toContain("Create event"));
+    expect(fieldControl<HTMLInputElement>(root, "Name").value).toBe("");
   });
 });
 

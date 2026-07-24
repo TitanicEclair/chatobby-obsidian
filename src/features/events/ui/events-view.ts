@@ -130,7 +130,7 @@ export class EventsView extends ChatobbyComponent {
     if (event.key !== "Escape" && event.key !== "BrowserBack") return false;
     if (this.props.getModel()?.editor) {
       event.preventDefault();
-      void this.runIntent({ type: "events.cancel-edit", payload: {} }, () => this.clearDraft());
+      void this.runIntent({ type: "events.cancel-edit", payload: {} });
       return true;
     }
     if (this.deleteConfirmId) {
@@ -145,6 +145,7 @@ export class EventsView extends ChatobbyComponent {
   private renderState(model: FrontendEventScreenViewModel | null): void {
     const container = this.container;
     if (!container) return;
+    if (model && !model.editor) this.clearDraft();
     container.empty();
     const { actions } = createPageHeader(container, {
       title: "Events",
@@ -268,7 +269,7 @@ export class EventsView extends ChatobbyComponent {
     const draft = this.draft;
     if (!draft) return;
     const header = body.createDiv({ cls: "chatobby-events__editor-header" });
-    iconButton(header, "arrow-left", "Back to events").addEventListener("click", () => void this.runIntent({ type: "events.cancel-edit", payload: {} }, () => this.clearDraft()));
+    iconButton(header, "arrow-left", "Back to events").addEventListener("click", () => void this.runIntent({ type: "events.cancel-edit", payload: {} }));
     header.createEl("h4", { text: draft.definitionId ? "Edit event" : "Create event" });
     const form = body.createEl("form", { cls: "chatobby-events__editor" });
     if (editor.allocationError) form.createDiv({ cls: "chatobby-events__form-error", text: editor.allocationError });
@@ -326,7 +327,7 @@ export class EventsView extends ChatobbyComponent {
           this.deleteConfirmId = draft.definitionId ?? null;
           this.renderState(this.props.getModel());
         } else if (draft.definitionId && draft.expectedRevision !== undefined) {
-          void this.runIntent({ type: "events.delete", payload: { definitionId: draft.definitionId, expectedDefinitionRevision: draft.expectedRevision } }, () => this.clearDraft());
+          void this.runIntent({ type: "events.delete", payload: { definitionId: draft.definitionId, expectedDefinitionRevision: draft.expectedRevision } });
         }
       });
     }
@@ -365,7 +366,7 @@ export class EventsView extends ChatobbyComponent {
           maxRunsPerDay: draft.maxRunsPerDay,
           maxRuntimeMinutes: draft.maxRuntimeMinutes,
         },
-      }, () => this.clearDraft());
+      });
     });
   }
 
