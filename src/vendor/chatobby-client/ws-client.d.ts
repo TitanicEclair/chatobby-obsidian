@@ -15,6 +15,10 @@ export interface WsClientOptions {
     requestTimeout?: number;
     disconnectTimeout?: number;
 }
+export declare class ChatobbyWsError extends Error {
+    readonly code: string;
+    constructor(code: string, message: string);
+}
 type ExtensionUIHandler = (request: WsExtensionUIRequest) => Promise<unknown>;
 /**
  * Narrow public connector client. Product-domain behavior is available only

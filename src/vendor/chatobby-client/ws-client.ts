@@ -62,6 +62,16 @@ export interface WsClientOptions {
 	disconnectTimeout?: number;
 }
 
+export class ChatobbyWsError extends Error {
+	readonly code: string;
+
+	constructor(code: string, message: string) {
+		super(message);
+		this.name = "ChatobbyWsError";
+		this.code = code;
+	}
+}
+
 interface PendingRequest {
 	resolve(result: unknown): void;
 	reject(error: Error): void;
@@ -78,7 +88,7 @@ interface ResponseFrame {
 	id: string;
 	type: "response" | "error";
 	result?: unknown;
-	error?: { message: string };
+	error?: { code?: string; message?: string };
 }
 
 type ExtensionUIHandler = (request: WsExtensionUIRequest) => Promise<unknown>;
@@ -414,7 +424,12 @@ export class ChatobbyWsClient {
 			this.pending.delete(parsed.id);
 			window.clearTimeout(pending.timer);
 			if (parsed.type === "error") {
-				pending.reject(new Error(parsed.error?.message ?? "Chatobby runtime request failed"));
+				pending.reject(
+					new ChatobbyWsError(
+						parsed.error?.code ?? "handler_error",
+						parsed.error?.message ?? "Chatobby runtime request failed",
+					),
+				);
 			} else {
 				pending.resolve(parsed.result);
 			}
