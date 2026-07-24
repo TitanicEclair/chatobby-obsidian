@@ -54,12 +54,7 @@ import { FrontendStore } from "../frontend/frontend-store";
 import { FrontendSnapshotBatcher, sessionDirectoryProjectionChanged } from "../frontend/frontend-snapshot-batcher";
 import { createFrontendBootstrapRequest } from "./controller/frontend-bootstrap-request";
 import { synchronizeFrontendFeed as syncFrontendFeedProjection } from "./controller/frontend-feed-sync";
-import type {
-  FrontendBootstrap,
-  FrontendChoiceControl,
-  FrontendIntent,
-  FrontendNavigationReference,
-} from "../vendor/chatobby-client/frontend-contracts.js";
+import type { FrontendBootstrap, FrontendChoiceControl, FrontendIntent, FrontendNavigationReference } from "../vendor/chatobby-client/frontend-contracts.js";
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
 import { PROMPT_START_TIMEOUT_MS, retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
@@ -308,6 +303,7 @@ export class ChatobbyView extends ItemView {
       },
       onOpened: (mode) => { this.viewMode = mode; this.renderViewMode(); },
       onClosed: (mode, renderChat) => this.finishOverlayClose(mode, renderChat),
+      openSession: async (projectPath, sessionPath) => { await this.plugin.openSessionView(projectPath, sessionPath); },
     });
     const subagents = createChatViewSubagentControllers({
       app: this.app,

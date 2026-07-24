@@ -27,6 +27,7 @@ function createHarness(
       await onSave?.(intent);
     }
   });
+  const onOpenSession = vi.fn(async () => {});
   const view = new EventsView({
     getModel: () => model,
     subscribe: (listener) => {
@@ -36,10 +37,12 @@ function createHarness(
     onBack: vi.fn(),
     onRefresh: vi.fn(async () => {}),
     onIntent,
+    onOpenSession,
   });
   return {
     view,
     onIntent,
+    onOpenSession,
     publishModel(next: FrontendEventScreenViewModel): void {
       model = next;
       publish();
@@ -202,6 +205,43 @@ describe("EventsView", () => {
     buttonWithText(root, "New event").click();
     await vi.waitFor(() => expect(root.textContent).toContain("Create event"));
     expect(fieldControl<HTMLInputElement>(root, "Name").value).toBe("");
+  });
+
+  it("opens a running event session from live history", async () => {
+    const harness = createHarness();
+    const root = mount(harness.view);
+    harness.publishModel({
+      ...screenModel(),
+      occurrences: [
+        {
+          id: "occurrence-1",
+          eventName: "Live review",
+          projectPath: "Projects/Current",
+          status: "running",
+          statusLabel: "Running",
+          originLabel: "Manual",
+          triggeredAt: "2026-07-24T12:00:00.000Z",
+          allocationLabel: "Projects/Current",
+          canApprove: false,
+          session: {
+            id: "event-session-1",
+            recoveryPath: "C:/sessions/event-session-1.jsonl",
+          },
+        },
+      ],
+    });
+    buttonWithText(root, "History").click();
+    const open = root.querySelector<HTMLButtonElement>('[aria-label="Open event session"]');
+    if (!open) throw new Error("event session button missing");
+
+    open.click();
+
+    await vi.waitFor(() =>
+      expect(harness.onOpenSession).toHaveBeenCalledWith(
+        "Projects/Current",
+        "C:/sessions/event-session-1.jsonl",
+      ),
+    );
   });
 });
 

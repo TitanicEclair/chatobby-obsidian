@@ -544,6 +544,7 @@ export interface FrontendEventDefinitionViewModel {
 export interface FrontendEventOccurrenceViewModel {
 	readonly id: string;
 	readonly eventName: string;
+	readonly projectPath: string;
 	readonly status: string;
 	readonly statusLabel: string;
 	readonly originLabel: string;
@@ -552,6 +553,10 @@ export interface FrontendEventOccurrenceViewModel {
 	readonly summary?: string;
 	readonly error?: string;
 	readonly canApprove: boolean;
+	readonly session?: {
+		readonly id: string;
+		readonly recoveryPath: string;
+	};
 }
 
 export interface FrontendEventEditorViewModel {

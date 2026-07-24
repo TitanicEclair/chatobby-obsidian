@@ -13,6 +13,7 @@ export interface EventsScreenControllerOptions {
   prepareOpen(): void;
   onOpened(): void;
   onClosed(renderChat: boolean): void;
+  openSession(projectPath: string, sessionPath: string): Promise<void>;
 }
 
 /** Binds the runtime-owned Events read model to the native Obsidian renderer. */
@@ -39,6 +40,7 @@ export class EventsScreenController {
       onBack: () => this.close(),
       onRefresh: () => this.refresh(),
       onIntent: (intent) => this.dispatch(intent),
+      onOpenSession: (projectPath, sessionPath) => this.options.openSession(projectPath, sessionPath),
     });
     this.options.onOpened();
     this.view.render(this.options.getHost());

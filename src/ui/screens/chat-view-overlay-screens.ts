@@ -23,6 +23,7 @@ export interface ChatViewOverlayScreenOptions {
   prepareOpen(): void;
   onOpened(mode: OverlayViewMode): void;
   onClosed(mode: OverlayViewMode, renderChat: boolean): void;
+  openSession(projectPath: string, sessionPath: string): Promise<void>;
 }
 
 /** Builds mutually exclusive full-view screens without adding their lifecycle policy to ChatobbyView. */
@@ -61,6 +62,7 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     prepareOpen: () => prepare("events"),
     onOpened: () => options.onOpened("events"),
     onClosed: (renderChat) => options.onClosed("events", renderChat),
+    openSession: (projectPath, sessionPath) => options.openSession(projectPath, sessionPath),
   });
   queries = new ContextQueryScreenController({
     getHost: () => options.getHost(),

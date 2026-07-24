@@ -57,6 +57,7 @@ export interface EventsViewProps {
   onBack(): void;
   onRefresh(): Promise<void>;
   onIntent(intent: EventViewIntent): Promise<void>;
+  onOpenSession(projectPath: string, sessionPath: string): Promise<void>;
 }
 
 interface EditorDraft {
@@ -261,6 +262,13 @@ export class EventsView extends ChatobbyComponent {
       const approve = row.createEl("button", { cls: "mod-cta", text: "Approve", attr: { type: "button" } });
       approve.disabled = this.busy;
       approve.addEventListener("click", () => void this.runIntent({ type: "events.approve", payload: { occurrenceId: occurrence.id } }));
+    }
+    if (occurrence.session) {
+      const open = iconButton(row, "message-square", "Open event session");
+      open.disabled = this.busy;
+      open.addEventListener("click", () => {
+        void this.props.onOpenSession(occurrence.projectPath, occurrence.session!.recoveryPath);
+      });
     }
   }
 
