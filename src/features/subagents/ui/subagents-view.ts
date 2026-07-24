@@ -263,7 +263,7 @@ export class SubagentsView extends ChatobbyComponent {
     advanced.createEl("summary", { text: "Advanced runtime options" });
     const advancedGrid = advanced.createDiv({ cls: "chatobby-subagents__role-advanced-grid" });
     const executor = addSelect(advancedGrid, "Executor", [["auto", "Automatic"], ["in-process", "In process"], ["worker-process", "Worker process"]]);
-    const context = addSelect(advancedGrid, "Starting context", [["fresh", "Fresh"], ["fork", "Full parent context"], ["summary", "Parent summary"]]);
+    const context = addSelect(advancedGrid, "Starting context", [["fresh", "Fresh"], ["fork", "Parent conversation"]]);
     const workspace = addSelect(advancedGrid, "Workspace", [["shared", "Shared working directory"], ["worktree", "Isolated worktree"]]);
     const priority = addInput(advancedGrid, "Priority", "0");
     priority.type = "number";

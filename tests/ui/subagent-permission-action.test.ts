@@ -6,27 +6,34 @@ describe("subagent permission feed actions", () => {
 		await expect(
 			resolveSubagentPermissionAction(
 				{} as never,
-				"subagent-permission:approve:run-1:node-1:permission-1:Project%3A%20all%20notes",
+				"subagent-permission:approve:run-1:node-1:permission-1:7:Project%3A%20all%20notes",
 			),
 		).resolves.toEqual({
 			runId: "run-1",
 			nodeId: "node-1",
 			permissionRequestId: "permission-1",
+			expectedPermissionRequestRevision: 7,
 			approved: true,
 			value: "Project: all notes",
 		});
 	});
 
-	it("rejects malformed or value-bearing deny actions", async () => {
+	it("rejects missing, malformed, or value-bearing revisions and deny actions", async () => {
 		await expect(
-			resolveSubagentPermissionAction({}, "subagent-permission:deny:run-1:node-1:permission-1:unexpected"),
+			resolveSubagentPermissionAction({}, "subagent-permission:approve:run-1:node-1:permission-1"),
+		).resolves.toBeNull();
+		await expect(
+			resolveSubagentPermissionAction({}, "subagent-permission:approve:run-1:node-1:permission-1:not-a-revision"),
+		).resolves.toBeNull();
+		await expect(
+			resolveSubagentPermissionAction({}, "subagent-permission:deny:run-1:node-1:permission-1:3:unexpected"),
 		).resolves.toBeNull();
 	});
 
 	it("collects a free-form value before approving an input permission", async () => {
 		const decision = resolveSubagentPermissionAction(
 			{} as never,
-			"subagent-permission:input:run-1:node-1:permission-1",
+			"subagent-permission:input:run-1:node-1:permission-1:11",
 		);
 		const input = document.querySelector<HTMLInputElement>(".chatobby-prompt-input");
 		const submit = document.querySelector<HTMLButtonElement>(".chatobby-modal-actions .mod-cta");
@@ -38,6 +45,7 @@ describe("subagent permission feed actions", () => {
 			runId: "run-1",
 			nodeId: "node-1",
 			permissionRequestId: "permission-1",
+			expectedPermissionRequestRevision: 11,
 			approved: true,
 			value: "release/0.1.6",
 		});

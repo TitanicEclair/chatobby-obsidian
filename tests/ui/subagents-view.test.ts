@@ -60,6 +60,39 @@ describe("SubagentsView", () => {
     expect(element.textContent).toContain("Nothing needs your attention");
   });
 
+  it("dispatches the exact pending-request revision from the management UI", async () => {
+    const run = runSnapshot();
+    const node = run.nodes["node-a"];
+    if (!node) throw new Error("fixture node missing");
+    node.pendingPermission = {
+      id: "request-7",
+      revision: 7,
+      runId: run.id,
+      nodeId: node.id,
+      kind: "confirm",
+      title: "Use a permission policy?",
+      status: "pending",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const callbacks = actions();
+    const element = mount(createView(createStore({ runs: [run] }), callbacks));
+    const approve = Array.from(element.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "Approve");
+
+    approve?.click();
+    await Promise.resolve();
+
+    expect(callbacks.decidePermission).toHaveBeenCalledWith(
+      "run-a",
+      "node-a",
+      "request-7",
+      7,
+      true,
+      undefined,
+    );
+  });
+
   it("marks Chatobby-provided roles and does not offer impossible edit or delete actions", () => {
     const store = createStore({
       definitions: [

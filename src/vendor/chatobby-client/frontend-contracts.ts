@@ -602,7 +602,7 @@ export interface FrontendEventScreenViewModel {
 /** Public subagent contracts intentionally decoupled from the private supervisor package. */
 export type FrontendSubagentExecutionMode = "auto" | "in-process" | "worker-process";
 export type FrontendSubagentResolvedExecutionMode = Exclude<FrontendSubagentExecutionMode, "auto">;
-export type FrontendSubagentContextMode = "fresh" | "fork" | "selected" | "summary";
+export type FrontendSubagentContextMode = "fresh" | "fork";
 export type FrontendSubagentDefinitionScope = "global" | "vault" | "directory" | "session";
 export type FrontendSubagentRunStatus =
 	| "created"
@@ -637,6 +637,8 @@ export type FrontendSubagentControlAction =
 	| "append-step"
 	| "fork"
 	| "clone"
+	| "decide-child-input"
+	| "decide-tool-permission"
 	| "adopt"
 	| "reconcile-orphan"
 	| "approve-permission"
@@ -644,6 +646,7 @@ export type FrontendSubagentControlAction =
 	| "approve-acceptance"
 	| "reject-acceptance"
 	| "extend-budget";
+export type FrontendSubagentControlReceiptAction = FrontendSubagentControlAction | "set-permission-profile";
 
 export interface FrontendSubagentRuntimePolicy {
 	executionMode?: FrontendSubagentExecutionMode;
@@ -742,8 +745,120 @@ export interface FrontendSubagentBudgets {
 	maxToolCallsPerNode?: number;
 }
 
+export type FrontendSubagentLaunchResolutionSource =
+	| "node"
+	| "run"
+	| "role"
+	| "parent"
+	| "project"
+	| "settings"
+	| "fallback"
+	| "auto";
+
+/**
+ * Browser-safe projection of an accepted launch contract. Private role
+ * instructions and the materialized context packet never cross this boundary.
+ */
+export interface FrontendSubagentLaunchSummaryV1 {
+	readonly schemaVersion: 1;
+	readonly contractId: string;
+	readonly resolutionFingerprint: string;
+	readonly runId: string;
+	readonly nodeId: string;
+	readonly role: {
+		readonly id: string;
+		readonly name: string;
+		readonly revision: number;
+		readonly promptHash: string;
+	};
+	readonly model: {
+		readonly selected: string;
+		readonly thinking: ThinkingLevel;
+		readonly fallbacks: readonly string[];
+	};
+	readonly executor: {
+		readonly requested: FrontendSubagentExecutionMode;
+		readonly selected: FrontendSubagentResolvedExecutionMode;
+		readonly source: "node" | "run" | "role" | "auto";
+		readonly reason: string;
+		readonly runtimeFingerprintRequirement: string | null;
+	};
+	readonly context: {
+		readonly mode: FrontendSubagentContextMode;
+		readonly source: "node" | "run" | "role" | "fallback";
+		readonly explicit: boolean;
+		readonly packetFingerprint: string | null;
+		readonly estimatedTokens: number;
+		readonly messageCount: number;
+	};
+	readonly permission: {
+		readonly profileId: string;
+		readonly profileRevision: number;
+		readonly profileFingerprint: string;
+		readonly source: "run" | "node" | "role" | "project" | "fallback";
+	};
+	readonly budgets: {
+		readonly limits: {
+			readonly maxConcurrency: number | null;
+			readonly maxDepth: number | null;
+			readonly maxTurnsPerNode: number | null;
+			readonly maxTokens: number | null;
+			readonly maxCostUsd: number | null;
+			readonly maxWallTimeMs: number | null;
+			readonly maxToolCallsPerNode: number | null;
+			readonly toolCallLimits: Readonly<Record<string, number>>;
+		};
+		readonly sources: {
+			readonly maxConcurrency: FrontendSubagentLaunchResolutionSource;
+			readonly maxDepth: FrontendSubagentLaunchResolutionSource;
+			readonly maxTurnsPerNode: FrontendSubagentLaunchResolutionSource;
+			readonly maxTokens: FrontendSubagentLaunchResolutionSource;
+			readonly maxCostUsd: FrontendSubagentLaunchResolutionSource;
+			readonly maxWallTimeMs: FrontendSubagentLaunchResolutionSource;
+			readonly maxToolCallsPerNode: FrontendSubagentLaunchResolutionSource;
+			readonly toolCallLimits: FrontendSubagentLaunchResolutionSource;
+		};
+		readonly preflight: {
+			readonly estimatedInitialTokens: number;
+			readonly responseReserveTokens: number;
+			readonly recommendedMinimumTokens: number;
+			readonly toolCount: number;
+			readonly method: "conservative-chars-per-token";
+			readonly sourceFingerprint: string;
+		};
+	};
+	readonly tools: {
+		readonly capabilityPreset: string | null;
+		readonly eligibleNames: readonly string[];
+		readonly eligibleActions: Readonly<Record<string, readonly string[]>>;
+		readonly mcpNames: readonly string[];
+		readonly skills: readonly string[];
+		readonly productExtensions: readonly string[];
+		readonly registryFingerprint: string;
+		readonly eligibleFingerprint: string;
+		readonly source: "role" | "fallback";
+	};
+	readonly workspace: {
+		readonly request: {
+			readonly mode: "shared" | "worktree" | "sandbox";
+			readonly cwd: string;
+			readonly artifactDirectory: string | null;
+			readonly providerRequirement: string | null;
+			readonly source: "run";
+		};
+		readonly materialized: {
+			readonly resolvedCwd: string;
+			readonly provider: string;
+			readonly workspaceId: string;
+			readonly baseRevision: string | null;
+		};
+	};
+	readonly definitionChangedSinceLaunch: boolean;
+}
+
 export interface FrontendSubagentPermissionRequestViewModel {
 	id: string;
+	revision: number;
 	runId: string;
 	nodeId: string;
 	kind: "confirm" | "select" | "input";
@@ -790,6 +905,8 @@ export interface FrontendSubagentNodeViewModel {
 	dependsOn: string[];
 	priority: number;
 	requestedExecutionMode: FrontendSubagentExecutionMode;
+	/** Compact accepted launch facts; private role instructions and context packet are omitted. */
+	launchSummary?: FrontendSubagentLaunchSummaryV1;
 	runtimePolicy?: FrontendSubagentRuntimePolicy;
 	resolvedExecutionMode?: FrontendSubagentResolvedExecutionMode;
 	model?: string;
@@ -835,7 +952,7 @@ export interface FrontendSubagentRunViewModel {
 	completedAt?: number;
 	lastSequence: number;
 	budgets: FrontendSubagentBudgets;
-	context: { mode: FrontendSubagentContextMode; messageIds?: string[]; summary?: string };
+	context: { mode: FrontendSubagentContextMode };
 	permissionProfileId?: string;
 	workspace: {
 		cwd: string;
@@ -925,7 +1042,7 @@ export interface FrontendSubagentControlReceiptViewModel {
 	commandId: string;
 	runId: string;
 	nodeId?: string;
-	action: FrontendSubagentControlAction;
+	action: FrontendSubagentControlReceiptAction;
 	state: "requested" | "acknowledged" | "effective" | "failed" | "timed-out";
 	message?: string;
 	timestamp: number;
@@ -1221,6 +1338,7 @@ export type FrontendIntent =
 				readonly runId: string;
 				readonly nodeId: string;
 				readonly permissionRequestId: string;
+				readonly expectedPermissionRequestRevision: number;
 				readonly approved: boolean;
 				readonly value?: string;
 			};
@@ -1443,7 +1561,7 @@ export type FrontendIntent =
 				readonly task: string;
 				readonly agentId: string;
 				readonly executionMode: "auto" | "in-process" | "worker-process";
-				readonly contextMode: "fresh" | "fork" | "selected" | "summary";
+				readonly contextMode: "fresh" | "fork";
 				readonly workspaceMode: "shared" | "worktree";
 				readonly permissionProfileId?: string;
 				readonly priority: number;
@@ -1647,6 +1765,10 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				runId: requireString(payload.runId, "payload.runId"),
 				nodeId: requireString(payload.nodeId, "payload.nodeId"),
 				permissionRequestId: requireString(payload.permissionRequestId, "payload.permissionRequestId"),
+				expectedPermissionRequestRevision: requireSafeInteger(
+					payload.expectedPermissionRequestRevision,
+					"payload.expectedPermissionRequestRevision",
+				),
 				approved: requireBoolean(payload.approved, "payload.approved"),
 				value: optionalString(payload.value, "payload.value"),
 			},
@@ -1990,12 +2112,7 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			throw new Error("payload.executionMode is invalid");
 		}
 		const contextMode = requireString(payload.contextMode, "payload.contextMode");
-		if (
-			contextMode !== "fresh" &&
-			contextMode !== "fork" &&
-			contextMode !== "selected" &&
-			contextMode !== "summary"
-		) {
+		if (contextMode !== "fresh" && contextMode !== "fork") {
 			throw new Error("payload.contextMode is invalid");
 		}
 		const workspaceMode = requireString(payload.workspaceMode, "payload.workspaceMode");
@@ -2496,6 +2613,8 @@ const SUBAGENT_CONTROL_ACTIONS = new Set([
 	"append-step",
 	"fork",
 	"clone",
+	"decide-child-input",
+	"decide-tool-permission",
 	"adopt",
 	"reconcile-orphan",
 	"approve-permission",

@@ -15,7 +15,7 @@ export interface SubagentStartDraft {
   task: string;
   agentId: string;
   executionMode: "auto" | "in-process" | "worker-process";
-  contextMode: "fresh" | "fork" | "selected" | "summary";
+  contextMode: "fresh" | "fork";
   workspaceMode: "shared" | "worktree";
   priority: number;
   maxTurns?: number;
@@ -62,7 +62,14 @@ export interface SubagentScreenActions {
     kind: "inform" | "steer",
   ) => Promise<void>;
   acknowledgeMessage: (message: SubagentMessage, text?: string) => Promise<void>;
-  decidePermission: (runId: string, nodeId: string, requestId: string, approved: boolean, value?: string) => Promise<void>;
+  decidePermission: (
+    runId: string,
+    nodeId: string,
+    requestId: string,
+    expectedRequestRevision: number,
+    approved: boolean,
+    value?: string,
+  ) => Promise<void>;
   decideAcceptance: (runId: string, nodeId: string, approved: boolean, note?: string) => Promise<void>;
   promoteArtifact: (artifactId: string, expectedRevision: number, targetVaultPath: string) => Promise<void>;
   saveDefinition: (definition: AgentDefinition, permissionProfileId: string) => Promise<void>;

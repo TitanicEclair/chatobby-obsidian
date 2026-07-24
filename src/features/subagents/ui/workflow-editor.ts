@@ -10,7 +10,7 @@ import type { SubagentViewState } from "../state/subagent-store";
 type AcceptanceLevel = FrontendSubagentAcceptancePolicy["level"];
 
 const EXECUTION_MODES = ["inherit", "auto", "in-process", "worker-process"] as const;
-const CONTEXT_MODES = ["inherit", "fresh", "fork", "selected", "summary"] as const;
+const CONTEXT_MODES = ["inherit", "fresh", "fork"] as const;
 const ACCEPTANCE_LEVELS: readonly AcceptanceLevel[] = ["none", "attested", "checked"];
 
 /** Render the user-facing workflow builder. Specialized fields that this editor does not expose
@@ -207,7 +207,7 @@ function renderStep(
     "Starting context",
     node.contextMode ?? "inherit",
     CONTEXT_MODES,
-    "Inherit uses the role. Fresh is smallest; fork is richest; selected and summary keep context bounded.",
+    "Inherit uses the role. Fresh receives the assignment only; fork starts from the parent conversation.",
   );
   context.addEventListener("change", () => {
     node.contextMode = context.value === "inherit"

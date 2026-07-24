@@ -149,8 +149,8 @@ export class SubagentScreenController {
       sendMessage: (runId, nodeId, text, kind) =>
         this.dispatch({ type: "subagents.send-message", payload: { runId, nodeId, text, kind } }),
       acknowledgeMessage: (message, text) => this.acknowledgeMessage(message, text),
-      decidePermission: (runId, nodeId, requestId, approved, value) =>
-        this.decidePermission(runId, nodeId, requestId, approved, value),
+      decidePermission: (runId, nodeId, requestId, expectedRequestRevision, approved, value) =>
+        this.decidePermission(runId, nodeId, requestId, expectedRequestRevision, approved, value),
       decideAcceptance: (runId, nodeId, approved, note) =>
         this.dispatch({ type: "subagents.decide-acceptance", payload: { runId, nodeId, approved, note } }),
       promoteArtifact: (artifactId, expectedRevision, targetVaultPath) =>
@@ -205,12 +205,13 @@ export class SubagentScreenController {
     runId: string,
     nodeId: string,
     permissionRequestId: string,
+    expectedPermissionRequestRevision: number,
     approved: boolean,
     value?: string,
   ): Promise<void> {
     return this.dispatch({
       type: "subagent.decide-permission",
-      payload: { runId, nodeId, permissionRequestId, approved, value },
+      payload: { runId, nodeId, permissionRequestId, expectedPermissionRequestRevision, approved, value },
     });
   }
 

@@ -192,8 +192,8 @@ function renderAgentEditor(
     advancedGrid,
     "Starting context",
     initialDefinition.policy.contextMode ?? "fresh",
-    ["fresh", "fork", "selected", "summary"],
-    "Fresh receives only the assignment; fork copies the current context; selected and summary pass bounded context.",
+    ["fresh", "fork"],
+    "Fresh receives only the assignment; fork starts from the parent conversation.",
   );
   const thinking = addSelectField(
     advancedGrid,

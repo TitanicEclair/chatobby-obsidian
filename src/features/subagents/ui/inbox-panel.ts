@@ -78,11 +78,21 @@ function renderPermission(
   const deny = actionsRow.createEl("button", { text: "Deny", attr: { type: "button" } });
   const approve = actionsRow.createEl("button", { cls: "mod-cta", text: "Approve", attr: { type: "button" } });
   deny.addEventListener("click", () =>
-    void runPendingAction([deny, approve], () => actions.decidePermission(runId, node.id, permission.id, false)));
+    void runPendingAction(
+      [deny, approve],
+      () => actions.decidePermission(runId, node.id, permission.id, permission.revision, false),
+    ));
   approve.addEventListener("click", () =>
     void runPendingAction(
       [deny, approve],
-      () => actions.decidePermission(runId, node.id, permission.id, true, valueControl?.value),
+      () => actions.decidePermission(
+        runId,
+        node.id,
+        permission.id,
+        permission.revision,
+        true,
+        valueControl?.value,
+      ),
     ));
 }
 
