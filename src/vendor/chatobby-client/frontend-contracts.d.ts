@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from "./wire-types.js";
 /** Public, data-only protocol consumed by reviewable Chatobby frontends. */
 export declare const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 1;
-export type FrontendScreenId = "memory" | "permissions" | "events" | "queries" | "channels" | "subagents";
+export type FrontendScreenId = "memory" | "permissions" | "events" | "queries" | "channels" | "subagents" | "mcp";
 export type FrontendIconToken = "activity" | "agent" | "alert" | "archive" | "arrow-left-right" | "audio-lines" | "badge-alert" | "blocks" | "book-open" | "book-plus" | "book-up" | "brain" | "bot" | "calendar" | "calendar-clock" | "calendar-plus" | "calendar-x" | "captions" | "channel" | "check" | "clock" | "command" | "external-link" | "file" | "file-plus" | "file-text" | "folder" | "folder-kanban" | "folder-sync" | "git-branch" | "git-graph" | "globe" | "history" | "image" | "info" | "layout-panel-top" | "link" | "list" | "list-checks" | "memory" | "messages-square" | "paperclip" | "pencil" | "play" | "plug" | "search" | "square-terminal" | "send" | "shield" | "shield-check" | "shield-x" | "terminal" | "terminal-square" | "toggle-right" | "tool" | "trash-2" | "triangle-alert" | "unplug" | "users" | "user-round" | "video" | "workflow" | "wrench" | "x";
 export interface FrontendCapabilityReport {
     readonly featureFamilies: readonly string[];
@@ -319,6 +319,87 @@ export interface FrontendContextQueryScreenViewModel {
     readonly projectDirectory: string;
     readonly trusted: boolean;
     readonly items: readonly FrontendContextQueryViewModel[];
+}
+export type FrontendMcpServerState = "disabled" | "configured" | "discovering" | "needs-sign-in" | "ready" | "connected" | "updating" | "unavailable" | "incompatible";
+export interface FrontendMcpServerViewModel {
+    readonly id: string;
+    readonly state: FrontendMcpServerState;
+    readonly enabled: boolean;
+    readonly builtIn: boolean;
+    readonly sourceLabel: string;
+    readonly sourceScope: "global" | "project";
+    readonly writable: boolean;
+    readonly transport: "local" | "remote";
+    readonly lifecycle: "keep-alive" | "lazy" | "eager";
+    readonly toolCount: number;
+    readonly resourceCount: number;
+    readonly requiresAuthentication: boolean;
+    readonly command?: string;
+    readonly arguments: readonly string[];
+    readonly workingDirectory?: string;
+    readonly url?: string;
+    readonly environmentNames: readonly string[];
+    readonly headerNames: readonly string[];
+    readonly registry?: {
+        readonly serverName: string;
+        readonly version: string;
+    };
+}
+export interface FrontendMcpCatalogItemViewModel {
+    readonly name: string;
+    readonly title: string;
+    readonly description: string;
+    readonly version: string;
+    readonly repositoryUrl?: string;
+    readonly transportLabel: string;
+    readonly environmentNames: readonly string[];
+    readonly canConfigure: boolean;
+    readonly unavailableReason?: string;
+}
+export interface FrontendMcpScreenViewModel {
+    readonly screenId: "mcp";
+    readonly revision: number;
+    readonly loading: boolean;
+    readonly error?: string;
+    readonly statusMessage?: string;
+    readonly selectedTab: "installed" | "discover";
+    readonly query: string;
+    readonly configRevision: string;
+    readonly inventoryRevision: number;
+    readonly servers: readonly FrontendMcpServerViewModel[];
+    readonly catalog: readonly FrontendMcpCatalogItemViewModel[];
+    readonly nextCatalogCursor?: string;
+    readonly pendingAuthentication?: {
+        readonly serverId: string;
+        readonly authorizationUrl: string;
+    };
+}
+export interface FrontendMcpServerDraft {
+    readonly name: string;
+    readonly scope: "user" | "project";
+    readonly enabled: boolean;
+    readonly lifecycle: "keep-alive" | "lazy" | "eager";
+    readonly transport: "local" | "remote";
+    readonly command?: string;
+    readonly arguments?: readonly string[];
+    readonly workingDirectory?: string;
+    readonly url?: string;
+    readonly authentication?: "oauth" | "bearer" | "none";
+    readonly bearerTokenEnvironmentVariable?: string;
+    readonly environment?: readonly {
+        readonly name: string;
+        readonly sourceEnvironmentVariable: string;
+    }[];
+    readonly headers?: readonly {
+        readonly name: string;
+        readonly sourceEnvironmentVariable: string;
+    }[];
+    readonly registry?: {
+        readonly source: "official";
+        readonly serverName: string;
+        readonly version: string;
+        readonly packageIdentifier?: string;
+    };
 }
 export type FrontendPermissionDecision = "allow" | "ask" | "deny";
 export interface FrontendPermissionDecisionControl {
@@ -974,7 +1055,7 @@ export interface FrontendSubagentScreenViewModel {
     readonly controlReceipts: readonly FrontendSubagentControlReceiptViewModel[];
     readonly focusedFeed: FrontendFeedDocumentViewModel;
 }
-export type FrontendScreenViewModel = FrontendChannelScreenViewModel | FrontendMemoryScreenViewModel | FrontendContextQueryScreenViewModel | FrontendPermissionScreenViewModel | FrontendEventScreenViewModel | FrontendSubagentScreenViewModel;
+export type FrontendScreenViewModel = FrontendChannelScreenViewModel | FrontendMemoryScreenViewModel | FrontendContextQueryScreenViewModel | FrontendPermissionScreenViewModel | FrontendEventScreenViewModel | FrontendSubagentScreenViewModel | FrontendMcpScreenViewModel;
 export interface FrontendScreenRequest {
     readonly schemaVersion: 1;
     readonly viewId: string;
@@ -1246,6 +1327,58 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly payload: {
         readonly queryId: string;
         readonly expectedQueryRevision: number;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.set-view";
+    readonly payload: {
+        readonly tab: "installed" | "discover";
+        readonly query: string;
+        readonly cursor?: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.save";
+    readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly draft: FrontendMcpServerDraft;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.preview";
+    readonly payload: {
+        readonly draft: FrontendMcpServerDraft;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.configure-registry";
+    readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly registryName: string;
+        readonly registryVersion: string;
+        readonly scope: "user" | "project";
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.set-enabled";
+    readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly enabled: boolean;
+        readonly scope?: "user" | "project";
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.discover" | "mcp.connect" | "mcp.disconnect" | "mcp.auth-start" | "mcp.check-update" | "mcp.diagnostics";
+    readonly payload: {
+        readonly serverId: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.auth-complete";
+    readonly payload: {
+        readonly serverId: string;
+        readonly input: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.apply-update" | "mcp.remove";
+    readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly scope?: "user" | "project";
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.select-profile";

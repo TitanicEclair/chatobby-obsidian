@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added a native MCP servers page with Installed and Discover tabs, official
+  registry search, disabled-first setup, custom local or remote configuration,
+  authentication, lifecycle controls, updates, diagnostics, and removal.
 - Added exact Apple Silicon and Intel runtime selection through one signed
   multi-platform release index, with platform-specific diagnostics and a safe
   link to Apple's documented security approval flow.
@@ -14,6 +17,15 @@
   contract, including native macOS Application Support and Logs locations.
 - Runtime package verification now streams large files off the Obsidian UI
   path and assigns fixed private modes instead of trusting archive permissions.
+
+### Fixed
+
+- Preserved non-final assistant messages when completed thinking and tool work
+  is compressed in the feed.
+- Kept the composer text mirror aligned with long native textarea content,
+  including scrolling and trailing newlines.
+- Deferred Dataview and other fenced plugin processors until streaming content
+  is complete, preventing partial code blocks from leaving repeated feed errors.
 
 ## [0.1.15] - 2026-07-22
 

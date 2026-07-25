@@ -2,16 +2,18 @@ import type { FrontendProtocolController } from "../../frontend/frontend-protoco
 import type { FrontendStore } from "../../frontend/frontend-store";
 import { EventsScreenController } from "../../features/events/public";
 import { ContextQueryScreenController } from "../../features/queries/public";
+import { McpScreenController } from "../../features/mcp/public";
 import { MemoryScreenController } from "./memory-screen-controller";
 import { PermissionsScreenController } from "./permissions-screen-controller";
 
-export type OverlayViewMode = "permissions" | "memory" | "events" | "queries";
+export type OverlayViewMode = "permissions" | "memory" | "events" | "queries" | "mcp";
 
 export interface ChatViewOverlayScreens {
   memory: MemoryScreenController;
   permissions: PermissionsScreenController;
   events: EventsScreenController;
   queries: ContextQueryScreenController;
+  mcp: McpScreenController;
   closeAll(renderChat: boolean): void;
   destroy(): void;
 }
@@ -32,12 +34,14 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
   let permissions: PermissionsScreenController;
   let events: EventsScreenController;
   let queries: ContextQueryScreenController;
+  let mcp: McpScreenController;
   const prepare = (mode: OverlayViewMode): void => {
     options.prepareOpen();
     if (mode !== "memory") memory.close(false);
     if (mode !== "permissions") permissions.close(false);
     if (mode !== "events") events.close(false);
     if (mode !== "queries") queries.close(false);
+    if (mode !== "mcp") mcp.close(false);
   };
   memory = new MemoryScreenController({
     getHost: () => options.getHost(),
@@ -72,22 +76,33 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     onOpened: () => options.onOpened("queries"),
     onClosed: (renderChat) => options.onClosed("queries", renderChat),
   });
+  mcp = new McpScreenController({
+    getHost: () => options.getHost(),
+    getStore: () => options.getFrontendStore(),
+    getProtocol: () => options.getFrontendProtocol(),
+    prepareOpen: () => prepare("mcp"),
+    onOpened: () => options.onOpened("mcp"),
+    onClosed: (renderChat) => options.onClosed("mcp", renderChat),
+  });
   return {
     memory,
     permissions,
     events,
     queries,
+    mcp,
     closeAll: (renderChat) => {
       memory.close(renderChat);
       permissions.close(renderChat);
       events.close(renderChat);
       queries.close(renderChat);
+      mcp.close(renderChat);
     },
     destroy: () => {
       memory.destroy();
       permissions.destroy();
       events.destroy();
       queries.destroy();
+      mcp.destroy();
     },
   };
 }

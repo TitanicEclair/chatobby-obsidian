@@ -119,6 +119,7 @@ export class ChatobbyView extends ItemView {
     else if (this.viewMode === "memory") handled = this.overlayScreens.memory.handleKeydown(event);
     else if (this.viewMode === "events") handled = this.overlayScreens.events.handleKeydown(event);
     else if (this.viewMode === "queries") handled = this.overlayScreens.queries.handleKeydown(event);
+    else if (this.viewMode === "mcp") handled = this.overlayScreens.mcp.handleKeydown(event);
     else if (this.viewMode === "subagents") handled = this.subagentScreen.handleKeydown(event);
     else if (this.viewMode === "chat") handled = this.composer.handleViewKeydown(event);
     if (handled) event.stopPropagation();
@@ -143,6 +144,7 @@ export class ChatobbyView extends ItemView {
       openMemory: () => this.overlayScreens.memory.open(),
       openEvents: () => this.overlayScreens.events.open(),
       openQueries: () => this.overlayScreens.queries.open(),
+      openMcp: () => this.overlayScreens.mcp.open(),
       openSubagents: (state) => {
         this.subagentScreen.open(state.runId, state.subagentTab ?? "runs", state.nodeId, state.feedOnly ?? false);
       },
@@ -800,6 +802,7 @@ export class ChatobbyView extends ItemView {
     else if (this.viewMode === "permissions") this.overlayScreens.permissions.synchronize();
     else if (this.viewMode === "events") this.overlayScreens.events.synchronize();
     else if (this.viewMode === "queries") this.overlayScreens.queries.synchronize();
+    else if (this.viewMode === "mcp") this.overlayScreens.mcp.synchronize();
     else if (this.viewMode === "subagents") this.subagentScreen.synchronize();
   }
   private handleRuntimeStateChange(): void {

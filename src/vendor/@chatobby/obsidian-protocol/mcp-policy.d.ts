@@ -1,4 +1,6 @@
-export type ObsidianDirectToolName = "obsidian_get_context" | "obsidian_resolve_note" | "obsidian_read_note" | "obsidian_search" | "obsidian_read_image" | "obsidian_list_entries" | "obsidian_create_note" | "obsidian_edit_note" | "obsidian_open_note" | "obsidian_open_app";
+export type ObsidianDirectToolName = "obsidian_context" | "obsidian_find" | "obsidian_read" | "obsidian_write" | "obsidian_files" | "obsidian_open";
+/** Legacy core primitives remain selectable for explicit compatibility policies. */
+export type ObsidianLegacyDirectToolName = "obsidian_get_context" | "obsidian_resolve_note" | "obsidian_read_note" | "obsidian_search" | "obsidian_read_image" | "obsidian_list_entries" | "obsidian_create_note" | "obsidian_edit_note" | "obsidian_open_note" | "obsidian_open_app";
 export interface ObsidianMcpPolicyOptions {
     bridgeUrl?: string;
     bridgeToken?: string;
@@ -8,7 +10,7 @@ export interface ObsidianMcpPolicyOptions {
     idleTimeoutMinutes?: number;
     bridgeTimeoutMs?: number;
     cliTimeoutMs?: number;
-    directTools?: readonly ObsidianDirectToolName[];
+    directTools?: readonly (ObsidianDirectToolName | ObsidianLegacyDirectToolName)[];
     excludeTools?: readonly string[];
 }
 export interface ObsidianMcpServerPolicy {
@@ -18,10 +20,10 @@ export interface ObsidianMcpServerPolicy {
     env: Record<string, string>;
     lifecycle: "eager" | "lazy" | "keep-alive";
     idleTimeout: number;
-    directTools: readonly ObsidianDirectToolName[];
+    directTools: readonly (ObsidianDirectToolName | ObsidianLegacyDirectToolName)[];
     excludeTools: readonly string[];
 }
-/** The fixed 10-tool direct-tool list for the initial adapter policy. */
+/** The compact six-façade direct surface; primitives remain deferred specialists. */
 export declare const OBSIDIAN_DEFAULT_DIRECT_TOOLS: readonly ObsidianDirectToolName[];
 /**
  * Create an Obsidian MCP server policy from the given options.
@@ -32,7 +34,7 @@ export declare const OBSIDIAN_DEFAULT_DIRECT_TOOLS: readonly ObsidianDirectToolN
  * - idleTimeout: 10 minutes
  * - bridge timeout: 30000 ms
  * - CLI timeout: 30000 ms
- * - direct tools: the fixed 10-tool list
+ * - direct tools: the compact six-façade list
  * - excluded tools: empty
  */
 export declare function createObsidianMcpServerPolicy(options?: ObsidianMcpPolicyOptions): ObsidianMcpServerPolicy;

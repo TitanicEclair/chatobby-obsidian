@@ -1,6 +1,6 @@
 import type { WorkspaceLeaf } from "obsidian";
 
-export type ChatobbyViewMode = "chat" | "session-picker" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries";
+export type ChatobbyViewMode = "chat" | "session-picker" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp";
 export type ChatobbySubagentTab = "runs" | "inbox" | "agents" | "workflows" | "settings";
 export type ExclusiveViewSurface = "chat" | "session-picker" | "overlays" | "subagents" | "channels";
 
@@ -46,6 +46,7 @@ interface NavigationHandlers {
   openMemory: () => void;
   openEvents: () => void;
   openQueries: () => void;
+  openMcp: () => void;
   openSubagents: (state: ChatobbyNavigationState) => void;
   openChannels: (state: ChatobbyNavigationState) => void;
   openSessionPicker: () => Promise<void>;
@@ -127,6 +128,7 @@ export class ViewNavigationController {
     else if (state.mode === "memory") this.handlers.openMemory();
     else if (state.mode === "events") this.handlers.openEvents();
     else if (state.mode === "queries") this.handlers.openQueries();
+    else if (state.mode === "mcp") this.handlers.openMcp();
     else if (state.mode === "subagents") this.handlers.openSubagents(state);
     else if (state.mode === "channels") this.handlers.openChannels(state);
     else await this.handlers.openSessionPicker();
@@ -190,7 +192,8 @@ function isViewMode(value: unknown): value is ChatobbyViewMode {
     || value === "permissions"
     || value === "memory"
     || value === "events"
-    || value === "queries";
+    || value === "queries"
+    || value === "mcp";
 }
 
 function isSubagentTab(value: unknown): value is ChatobbySubagentTab {

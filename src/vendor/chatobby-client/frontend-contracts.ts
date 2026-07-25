@@ -4,7 +4,7 @@ import type { ThinkingLevel } from "./wire-types.ts";
 /** Public, data-only protocol consumed by reviewable Chatobby frontends. */
 export const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 1;
 
-export type FrontendScreenId = "memory" | "permissions" | "events" | "queries" | "channels" | "subagents";
+export type FrontendScreenId = "memory" | "permissions" | "events" | "queries" | "channels" | "subagents" | "mcp";
 export type FrontendIconToken =
 	| "activity"
 	| "agent"
@@ -445,6 +445,101 @@ export interface FrontendContextQueryScreenViewModel {
 	readonly projectDirectory: string;
 	readonly trusted: boolean;
 	readonly items: readonly FrontendContextQueryViewModel[];
+}
+
+export type FrontendMcpServerState =
+	| "disabled"
+	| "configured"
+	| "discovering"
+	| "needs-sign-in"
+	| "ready"
+	| "connected"
+	| "updating"
+	| "unavailable"
+	| "incompatible";
+
+export interface FrontendMcpServerViewModel {
+	readonly id: string;
+	readonly state: FrontendMcpServerState;
+	readonly enabled: boolean;
+	readonly builtIn: boolean;
+	readonly sourceLabel: string;
+	readonly sourceScope: "global" | "project";
+	readonly writable: boolean;
+	readonly transport: "local" | "remote";
+	readonly lifecycle: "keep-alive" | "lazy" | "eager";
+	readonly toolCount: number;
+	readonly resourceCount: number;
+	readonly requiresAuthentication: boolean;
+	readonly command?: string;
+	readonly arguments: readonly string[];
+	readonly workingDirectory?: string;
+	readonly url?: string;
+	readonly environmentNames: readonly string[];
+	readonly headerNames: readonly string[];
+	readonly registry?: {
+		readonly serverName: string;
+		readonly version: string;
+	};
+}
+
+export interface FrontendMcpCatalogItemViewModel {
+	readonly name: string;
+	readonly title: string;
+	readonly description: string;
+	readonly version: string;
+	readonly repositoryUrl?: string;
+	readonly transportLabel: string;
+	readonly environmentNames: readonly string[];
+	readonly canConfigure: boolean;
+	readonly unavailableReason?: string;
+}
+
+export interface FrontendMcpScreenViewModel {
+	readonly screenId: "mcp";
+	readonly revision: number;
+	readonly loading: boolean;
+	readonly error?: string;
+	readonly statusMessage?: string;
+	readonly selectedTab: "installed" | "discover";
+	readonly query: string;
+	readonly configRevision: string;
+	readonly inventoryRevision: number;
+	readonly servers: readonly FrontendMcpServerViewModel[];
+	readonly catalog: readonly FrontendMcpCatalogItemViewModel[];
+	readonly nextCatalogCursor?: string;
+	readonly pendingAuthentication?: {
+		readonly serverId: string;
+		readonly authorizationUrl: string;
+	};
+}
+
+export interface FrontendMcpServerDraft {
+	readonly name: string;
+	readonly scope: "user" | "project";
+	readonly enabled: boolean;
+	readonly lifecycle: "keep-alive" | "lazy" | "eager";
+	readonly transport: "local" | "remote";
+	readonly command?: string;
+	readonly arguments?: readonly string[];
+	readonly workingDirectory?: string;
+	readonly url?: string;
+	readonly authentication?: "oauth" | "bearer" | "none";
+	readonly bearerTokenEnvironmentVariable?: string;
+	readonly environment?: readonly {
+		readonly name: string;
+		readonly sourceEnvironmentVariable: string;
+	}[];
+	readonly headers?: readonly {
+		readonly name: string;
+		readonly sourceEnvironmentVariable: string;
+	}[];
+	readonly registry?: {
+		readonly source: "official";
+		readonly serverName: string;
+		readonly version: string;
+		readonly packageIdentifier?: string;
+	};
 }
 
 export type FrontendPermissionDecision = "allow" | "ask" | "deny";
@@ -1170,7 +1265,8 @@ export type FrontendScreenViewModel =
 	| FrontendContextQueryScreenViewModel
 	| FrontendPermissionScreenViewModel
 	| FrontendEventScreenViewModel
-	| FrontendSubagentScreenViewModel;
+	| FrontendSubagentScreenViewModel
+	| FrontendMcpScreenViewModel;
 
 export interface FrontendScreenRequest {
 	readonly schemaVersion: 1;
@@ -1437,6 +1533,65 @@ export type FrontendIntent =
 	| (FrontendIntentBase & {
 			readonly type: "queries.delete" | "queries.test";
 			readonly payload: { readonly queryId: string; readonly expectedQueryRevision: number };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.set-view";
+			readonly payload: {
+				readonly tab: "installed" | "discover";
+				readonly query: string;
+				readonly cursor?: string;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.save";
+			readonly payload: {
+				readonly expectedConfigRevision: string;
+				readonly draft: FrontendMcpServerDraft;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.preview";
+			readonly payload: { readonly draft: FrontendMcpServerDraft };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.configure-registry";
+			readonly payload: {
+				readonly expectedConfigRevision: string;
+				readonly registryName: string;
+				readonly registryVersion: string;
+				readonly scope: "user" | "project";
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.set-enabled";
+			readonly payload: {
+				readonly expectedConfigRevision: string;
+				readonly serverId: string;
+				readonly enabled: boolean;
+				readonly scope?: "user" | "project";
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type:
+				| "mcp.discover"
+				| "mcp.connect"
+				| "mcp.disconnect"
+				| "mcp.auth-start"
+				| "mcp.check-update"
+				| "mcp.diagnostics";
+			readonly payload: { readonly serverId: string };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.auth-complete";
+			readonly payload: { readonly serverId: string; readonly input: string };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.apply-update" | "mcp.remove";
+			readonly payload: {
+				readonly expectedConfigRevision: string;
+				readonly serverId: string;
+				readonly scope?: "user" | "project";
+			};
 	  })
 	| (FrontendIntentBase & {
 			readonly type: "permissions.select-profile";
@@ -1918,6 +2073,107 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			},
 		};
 	}
+	if (input.type === "mcp.set-view") {
+		const tab = requireString(payload.tab, "payload.tab");
+		if (tab !== "installed" && tab !== "discover") throw new Error("payload.tab is invalid");
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				tab,
+				query: optionalText(payload.query, "payload.query"),
+				cursor: optionalString(payload.cursor, "payload.cursor"),
+			},
+		};
+	}
+	if (input.type === "mcp.save") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				expectedConfigRevision: requireString(
+					payload.expectedConfigRevision,
+					"payload.expectedConfigRevision",
+				),
+				draft: parseMcpServerDraft(payload.draft),
+			},
+		};
+	}
+	if (input.type === "mcp.preview") {
+		return {
+			...base,
+			type: input.type,
+			payload: { draft: parseMcpServerDraft(payload.draft) },
+		};
+	}
+	if (input.type === "mcp.configure-registry") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				expectedConfigRevision: requireString(
+					payload.expectedConfigRevision,
+					"payload.expectedConfigRevision",
+				),
+				registryName: requireString(payload.registryName, "payload.registryName"),
+				registryVersion: requireString(payload.registryVersion, "payload.registryVersion"),
+				scope: requireMcpScope(payload.scope),
+			},
+		};
+	}
+	if (input.type === "mcp.set-enabled") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				expectedConfigRevision: requireString(
+					payload.expectedConfigRevision,
+					"payload.expectedConfigRevision",
+				),
+				serverId: requireString(payload.serverId, "payload.serverId"),
+				enabled: requireBoolean(payload.enabled, "payload.enabled"),
+				scope: payload.scope === undefined ? undefined : requireMcpScope(payload.scope),
+			},
+		};
+	}
+	if (
+		input.type === "mcp.discover" ||
+		input.type === "mcp.connect" ||
+		input.type === "mcp.disconnect" ||
+		input.type === "mcp.auth-start" ||
+		input.type === "mcp.check-update" ||
+		input.type === "mcp.diagnostics"
+	) {
+		return {
+			...base,
+			type: input.type,
+			payload: { serverId: requireString(payload.serverId, "payload.serverId") },
+		};
+	}
+	if (input.type === "mcp.auth-complete") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				serverId: requireString(payload.serverId, "payload.serverId"),
+				input: requireString(payload.input, "payload.input"),
+			},
+		};
+	}
+	if (input.type === "mcp.apply-update" || input.type === "mcp.remove") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				expectedConfigRevision: requireString(
+					payload.expectedConfigRevision,
+					"payload.expectedConfigRevision",
+				),
+				serverId: requireString(payload.serverId, "payload.serverId"),
+				scope: payload.scope === undefined ? undefined : requireMcpScope(payload.scope),
+			},
+		};
+	}
 	if (input.type === "permissions.select-profile") {
 		return {
 			...base,
@@ -2366,7 +2622,8 @@ export function parseFrontendScreenRequest(value: unknown): FrontendScreenReques
 		screenId !== "events" &&
 		screenId !== "queries" &&
 		screenId !== "channels" &&
-		screenId !== "subagents"
+		screenId !== "subagents" &&
+		screenId !== "mcp"
 	) {
 		throw new Error(`Unknown frontend screen: ${screenId}`);
 	}
@@ -2386,7 +2643,8 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 		input.screenId !== "permissions" &&
 		input.screenId !== "events" &&
 		input.screenId !== "queries" &&
-		input.screenId !== "subagents"
+		input.screenId !== "subagents" &&
+		input.screenId !== "mcp"
 	) {
 		throw new Error(`Unknown frontend screen: ${String(input.screenId)}`);
 	}
@@ -2420,6 +2678,13 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 		requireArray(input.channels, "channels");
 		requireArray(input.advancedGroups, "advancedGroups");
 		return value as FrontendPermissionScreenViewModel;
+	}
+	if (input.screenId === "mcp") {
+		requireString(input.configRevision, "configRevision");
+		requireSafeInteger(input.inventoryRevision, "inventoryRevision");
+		requireArray(input.servers, "servers");
+		requireArray(input.catalog, "catalog");
+		return value as FrontendMcpScreenViewModel;
 	}
 	if (input.screenId === "subagents") {
 		requireSafeInteger(input.sequence, "sequence");
@@ -2566,6 +2831,83 @@ function requireMemoryFilter(value: unknown): FrontendMemoryFilter {
 		return value;
 	}
 	throw new Error(`payload.filter is invalid: ${String(value)}`);
+}
+
+function requireMcpScope(value: unknown): "user" | "project" {
+	if (value === "user" || value === "project") return value;
+	throw new Error("MCP scope must be user or project");
+}
+
+function parseMcpServerDraft(value: unknown): FrontendMcpServerDraft {
+	const input = requireRecord(value, "payload.draft");
+	const transport = requireString(input.transport, "payload.draft.transport");
+	if (transport !== "local" && transport !== "remote") {
+		throw new Error("payload.draft.transport is invalid");
+	}
+	const lifecycle = requireString(input.lifecycle, "payload.draft.lifecycle");
+	if (lifecycle !== "keep-alive" && lifecycle !== "lazy" && lifecycle !== "eager") {
+		throw new Error("payload.draft.lifecycle is invalid");
+	}
+	const authentication = optionalString(input.authentication, "payload.draft.authentication");
+	if (
+		authentication !== undefined &&
+		authentication !== "oauth" &&
+		authentication !== "bearer" &&
+		authentication !== "none"
+	) {
+		throw new Error("payload.draft.authentication is invalid");
+	}
+	const parseReferences = (
+		references: unknown,
+		label: string,
+	): FrontendMcpServerDraft["environment"] => references === undefined
+		? undefined
+		: requireArray(references, label).map((entry, index) => {
+				const reference = requireRecord(entry, `${label}[${index}]`);
+				return {
+					name: requireString(reference.name, `${label}[${index}].name`),
+					sourceEnvironmentVariable: requireString(
+						reference.sourceEnvironmentVariable,
+						`${label}[${index}].sourceEnvironmentVariable`,
+					),
+				};
+			});
+	const registry = input.registry === undefined
+		? undefined
+		: (() => {
+				const record = requireRecord(input.registry, "payload.draft.registry");
+				if (record.source !== "official") throw new Error("payload.draft.registry.source is invalid");
+				return {
+					source: "official" as const,
+					serverName: requireString(record.serverName, "payload.draft.registry.serverName"),
+					version: requireString(record.version, "payload.draft.registry.version"),
+					packageIdentifier: optionalString(
+						record.packageIdentifier,
+						"payload.draft.registry.packageIdentifier",
+					),
+				};
+			})();
+	return {
+		name: requireString(input.name, "payload.draft.name"),
+		scope: requireMcpScope(input.scope),
+		enabled: requireBoolean(input.enabled, "payload.draft.enabled"),
+		lifecycle,
+		transport,
+		command: optionalString(input.command, "payload.draft.command"),
+		arguments: input.arguments === undefined
+			? undefined
+			: requireStringArray(input.arguments, "payload.draft.arguments"),
+		workingDirectory: optionalString(input.workingDirectory, "payload.draft.workingDirectory"),
+		url: optionalString(input.url, "payload.draft.url"),
+		authentication,
+		bearerTokenEnvironmentVariable: optionalString(
+			input.bearerTokenEnvironmentVariable,
+			"payload.draft.bearerTokenEnvironmentVariable",
+		),
+		environment: parseReferences(input.environment, "payload.draft.environment"),
+		headers: parseReferences(input.headers, "payload.draft.headers"),
+		registry,
+	};
 }
 
 function parseMemoryPolicyPatch(

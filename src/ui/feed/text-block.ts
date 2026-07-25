@@ -127,7 +127,10 @@ export class TextBlockView extends ChatobbyComponent {
     const startedAt = performance.now();
     let rendered: void | Promise<void>;
     try {
-      rendered = this.host.renderMarkdown(this.block.text, staging);
+      rendered = this.host.renderMarkdown(
+        prepareMarkdownForRender(this.block.text, this.block.status === "streaming"),
+        staging,
+      );
     } catch (error) {
       console.error("Chatobby: markdown render failed", error);
       return;
@@ -177,6 +180,53 @@ export class TextBlockView extends ChatobbyComponent {
       !this.block || this.block.status === "streaming" || this.block.text.trim().length === 0,
     );
   }
+}
+
+/**
+ * Obsidian dispatches fenced code blocks to registered plugin processors while
+ * Markdown is rendered. A streaming Dataview/Mermaid/plugin block is not a
+ * valid program yet, and repeatedly executing each partial revision can leave
+ * persistent error nodes behind. Keep every fence inert while the response is
+ * streaming, then let the final canonical render execute completed blocks.
+ * Malformed final output with an unclosed fence also remains inert.
+ */
+export function prepareMarkdownForRender(markdown: string, streaming: boolean): string {
+  const lines = markdown.split("\n");
+  let openFence: {
+    char: "`" | "~";
+    length: number;
+    lineIndex: number;
+    indent: string;
+  } | null = null;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(\s{0,3})(`{3,}|~{3,})(.*)$/u.exec(lines[index] ?? "");
+    if (!match) continue;
+    const marker = match[2] ?? "";
+    const markerChar = marker[0];
+    if (markerChar !== "`" && markerChar !== "~") continue;
+
+    if (openFence) {
+      if (markerChar === openFence.char && marker.length >= openFence.length && (match[3] ?? "").trim() === "") {
+        openFence = null;
+      }
+      continue;
+    }
+
+    openFence = {
+      char: markerChar,
+      length: marker.length,
+      lineIndex: index,
+      indent: match[1] ?? "",
+    };
+    if (streaming) lines[index] = `${openFence.indent}${marker}text`;
+  }
+
+  if (openFence) {
+    lines[openFence.lineIndex] = `${openFence.indent}${openFence.char.repeat(openFence.length)}text`;
+    lines.push(`${openFence.indent}${openFence.char.repeat(openFence.length)}`);
+  }
+  return lines.join("\n");
 }
 
 function selectionIntersects(container: HTMLElement): boolean {

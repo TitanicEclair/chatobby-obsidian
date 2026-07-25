@@ -178,11 +178,16 @@ div.chatobby-input-highlight {
   padding: var(--size-4-3) var(--size-4-4) var(--size-4-2);
   border: 0;
   box-shadow: none;
+  box-sizing: border-box;
   font-family: var(--font-interface-theme);
   font-size: var(--chatobby-body-size);
+  font-weight: normal;
+  letter-spacing: normal;
   line-height: var(--line-height-normal);
   white-space: pre-wrap;
   overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+  tab-size: 4;
 }
 
 .chatobby-input-highlight {

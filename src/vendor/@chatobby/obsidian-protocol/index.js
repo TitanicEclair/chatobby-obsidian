@@ -406,16 +406,12 @@ function parseVaultSelector(input) {
 
 // packages/chatobby-obsidian-protocol/src/mcp-policy.ts
 var OBSIDIAN_DEFAULT_DIRECT_TOOLS = [
-  "obsidian_get_context",
-  "obsidian_resolve_note",
-  "obsidian_read_note",
-  "obsidian_search",
-  "obsidian_read_image",
-  "obsidian_list_entries",
-  "obsidian_create_note",
-  "obsidian_edit_note",
-  "obsidian_open_note",
-  "obsidian_open_app"
+  "obsidian_context",
+  "obsidian_find",
+  "obsidian_read",
+  "obsidian_write",
+  "obsidian_files",
+  "obsidian_open"
 ];
 var DEFAULT_BRIDGE_TIMEOUT_MS = 3e4;
 var DEFAULT_CLI_TIMEOUT_MS = 3e4;
@@ -459,6 +455,14 @@ function createObsidianMcpServerPolicy(options) {
 
 // packages/chatobby-obsidian-protocol/src/mcp-tool-catalog.ts
 var OBSIDIAN_DIRECT_TOOL_OPERATION_MAP = {
+  obsidian_context: "context.get",
+  obsidian_find: "note.resolve",
+  obsidian_read: "note.read",
+  obsidian_write: "note.write",
+  obsidian_files: "vault.list",
+  obsidian_open: "note.open"
+};
+var OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP = {
   obsidian_get_context: "context.get",
   obsidian_resolve_note: "note.resolve",
   obsidian_read_note: "note.read",
@@ -543,6 +547,9 @@ var OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP = {
   obsidian_run_cli: "cli.run",
   obsidian_read_cli_result: "cli.result.read"
 };
+var OBSIDIAN_CORE_SPECIALIST_TOOL_NAMES = Object.keys(
+  OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP
+);
 var OBSIDIAN_PLUGIN_NATIVE_TOOL_NAMES = Object.keys(
   OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP
 );
@@ -559,6 +566,7 @@ var OBSIDIAN_CLI_SUBSTRATE_TOOL_NAMES = Object.keys(
   OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP
 );
 var OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP = {
+  ...OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP,
   ...OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
   ...OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
   ...OBSIDIAN_BROWSER_TOOL_OPERATION_MAP,
@@ -941,6 +949,24 @@ function capabilityForOperation(operation) {
   if (operation.startsWith("hotkeys.")) return "hotkeys";
   return "vault";
 }
+
+// packages/chatobby-obsidian-protocol/src/vault-paths.ts
+function normalizeVaultFolderPath(input) {
+  if (input.includes("\0")) throw new TypeError("Vault folder paths cannot contain null bytes.");
+  const path = input.replace(/\\/gu, "/");
+  if (path === "" || path === "/" || path === "." || path === "./") return "";
+  const pathWithoutRootMarkers = path.replace(/^(?:\/+|\.\/)+/u, "");
+  if (/^[A-Za-z]:/u.test(pathWithoutRootMarkers) || path.startsWith("//")) {
+    throw new TypeError("Vault folder paths must be vault-relative, not operating-system absolute paths.");
+  }
+  const segments = [];
+  for (const segment of path.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") throw new TypeError("Vault folder paths cannot contain '..' traversal segments.");
+    segments.push(segment);
+  }
+  return segments.join("/");
+}
 export {
   OBSIDIAN_ALL_OPERATIONS,
   OBSIDIAN_ALL_TOOL_NAMES,
@@ -958,6 +984,8 @@ export {
   OBSIDIAN_CLI_SUBSTRATE_TOOL_NAMES,
   OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP,
   OBSIDIAN_CORE_OPERATIONS,
+  OBSIDIAN_CORE_SPECIALIST_TOOL_NAMES,
+  OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP,
   OBSIDIAN_DEFAULT_DIRECT_TOOLS,
   OBSIDIAN_DIRECT_TOOL_OPERATION_MAP,
   OBSIDIAN_EXCLUDED_COMPAT_TOOL_NAMES,
@@ -974,6 +1002,7 @@ export {
   evaluateObsidianToolAvailability,
   isBridgeCapability,
   isOperationName,
+  normalizeVaultFolderPath,
   parseBridgeErrorPayload,
   parsePluginToServerMessage,
   parseRetrievalEnvelope,

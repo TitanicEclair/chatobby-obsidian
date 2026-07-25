@@ -132,6 +132,7 @@ export class Composer extends ChatobbyComponent {
   private recoverableSubmission: RecoverableSubmission | null = null;
   private retractionPending = false;
   private committedTurnPending = false;
+  private highlightSyncFrame = 0;
 
   constructor(private host: ComposerHost) {
     super();
@@ -139,6 +140,12 @@ export class Composer extends ChatobbyComponent {
 
   protected componentClass(): string {
     return "chatobby-composer";
+  }
+
+  destroy(): void {
+    if (this.highlightSyncFrame) window.cancelAnimationFrame(this.highlightSyncFrame);
+    this.highlightSyncFrame = 0;
+    super.destroy();
   }
 
   /** Bind to pre-built shell elements (from ViewShell). */
@@ -472,7 +479,9 @@ export class Composer extends ChatobbyComponent {
    *  slash autocomplete) don't fire DOM `input` events, so the autosize in
    *  ViewShell never runs — leaving an expanded box stuck tall after a long send. */
   private resizeInput(): void {
-    if (this.inputEl) resizeComposerInput(this.inputEl);
+    if (!this.inputEl) return;
+    resizeComposerInput(this.inputEl);
+    this.scheduleHighlightScrollSync();
   }
 
   private renderState(): void {
@@ -1036,7 +1045,10 @@ export class Composer extends ChatobbyComponent {
     if (cursor < this.state.text.length) {
       this.highlightEl.createSpan({ cls: "chatobby-input-highlight__text", text: this.state.text.slice(cursor) });
     }
-    if (this.state.text.length === 0) {
+    // A pre-wrap div otherwise drops the textarea's final empty visual line,
+    // which makes the mirrored glyphs drift from the native caret after a
+    // trailing newline.
+    if (this.state.text.length === 0 || this.state.text.endsWith("\n")) {
       this.highlightEl.createSpan({ cls: "chatobby-input-highlight__text", text: " " });
     }
     this.syncHighlightScroll();
@@ -1064,6 +1076,15 @@ export class Composer extends ChatobbyComponent {
     if (!this.inputEl || !this.highlightEl) return;
     this.highlightEl.scrollTop = this.inputEl.scrollTop;
     this.highlightEl.scrollLeft = this.inputEl.scrollLeft;
+  }
+
+  private scheduleHighlightScrollSync(): void {
+    this.syncHighlightScroll();
+    if (this.highlightSyncFrame) return;
+    this.highlightSyncFrame = window.requestAnimationFrame(() => {
+      this.highlightSyncFrame = 0;
+      this.syncHighlightScroll();
+    });
   }
 
   protected onRender(_container: HTMLElement): void {

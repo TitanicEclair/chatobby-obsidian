@@ -23,6 +23,7 @@
 @import "../features/tasks/ui/tasks.css";
 @import "../features/events/ui/events.css";
 @import "../features/queries/ui/queries.css";
+@import "../features/mcp/ui/mcp.css";
 @import "../features/channels/ui/channels.css";
 @import "./shared/page-shell.css";
 @import "./shared/motion.css";

@@ -8,7 +8,7 @@ export interface TabBarHost {
 	activeMode(): ChatobbyViewMode;
 	onReturnToChat(): void;
 	onCreateView(): void;
-	onNavigate(mode: "subagents" | "channels" | "permissions" | "memory" | "events" | "queries"): void;
+	onNavigate(mode: "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp"): void;
   onSetWorkingDirectory(): void;
 }
 
@@ -49,6 +49,7 @@ export class TabBar extends ChatobbyComponent {
 		this.renderPage("memory", "brain", "Memory");
 		this.renderPage("events", "calendar-clock", "Events");
 		this.renderPage("queries", "braces", "Queries");
+		this.renderPage("mcp", "blocks", "MCP servers");
 		actions.createDiv({ cls: "chatobby-tab-bar__separator", attr: { role: "separator", "aria-orientation": "vertical" } });
     const newButton = actions.createEl("button", {
       cls: "chatobby-tab-bar__action chatobby-tab-bar__new clickable-icon",
@@ -73,7 +74,7 @@ export class TabBar extends ChatobbyComponent {
     return "chatobby-tab-bar";
   }
 
-	private renderPage(mode: "subagents" | "channels" | "permissions" | "memory" | "events" | "queries", icon: string, label: string): void {
+	private renderPage(mode: "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp", icon: string, label: string): void {
 		if (!this.pagesEl) return;
 		const button = this.pagesEl.createEl("button", {
 			cls: "chatobby-tab-bar__action chatobby-tab-bar__page clickable-icon",
