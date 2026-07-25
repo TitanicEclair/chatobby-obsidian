@@ -63,7 +63,7 @@ export const NOTICE_DURATION_MS = 3000;
 export const LIVE_STATS_POLL_MS = 1000;
 
 /** User-configurable bounds for model-specific automatic compaction. */
-export const AUTO_COMPACTION_MIN_THRESHOLD_PERCENT = 50;
+export const AUTO_COMPACTION_MIN_THRESHOLD_PERCENT = 25;
 export const AUTO_COMPACTION_MAX_THRESHOLD_PERCENT = 95;
 export const AUTO_COMPACTION_THRESHOLD_STEP_PERCENT = 1;
 

@@ -10,11 +10,10 @@ describe("ChannelsView", () => {
     const listeners = new Set<(value: FrontendChannelScreenViewModel | null) => void>();
     const onSetArchived = vi.fn(async () => {});
     const onDeleteChannel = vi.fn(async () => {});
-    const createGuide = vi.fn(async () => ({}));
     const app = {
       vault: {
         getAbstractFileByPath: vi.fn(() => null),
-        create: createGuide,
+        create: vi.fn(async () => ({})),
         modify: vi.fn(async () => {}),
       },
     } as unknown as App;
@@ -39,7 +38,7 @@ describe("ChannelsView", () => {
 
     expect(host.querySelector(".chatobby-channels.chatobby-page")).not.toBeNull();
     expect(host.querySelector(".chatobby-channels__header.chatobby-page__header")).not.toBeNull();
-    expect(host.querySelectorAll(".chatobby-channels__header .chatobby-page__icon-button")).toHaveLength(3);
+    expect(host.querySelectorAll(".chatobby-channels__header .chatobby-page__icon-button")).toHaveLength(2);
     expect(host.querySelector("aside[aria-label='Channel list']")).not.toBeNull();
     expect(host.querySelectorAll(".chatobby-channels__channel")).toHaveLength(2);
     expect([...host.querySelectorAll(".chatobby-channels__section-label")].map((element) => element.textContent)).toEqual([
@@ -57,13 +56,6 @@ describe("ChannelsView", () => {
 
     host.querySelector<HTMLButtonElement>(".chatobby-channels__channel")
       ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-
-    host.querySelector<HTMLButtonElement>('[aria-label="Add Chatobby guide to vault"]')?.click();
-    document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();
-    await vi.waitFor(() => expect(createGuide).toHaveBeenCalledWith(
-      "Chatobby Guide.md",
-      expect.stringContaining("## Permissions"),
-    ));
 
     host.querySelector<HTMLButtonElement>('[aria-label="Archive channel"]')?.click();
     document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();

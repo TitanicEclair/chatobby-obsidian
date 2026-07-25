@@ -6,6 +6,10 @@ export class TFile {
   constructor(readonly path: string) {}
 }
 
+export class TFolder {
+  constructor(readonly path: string) {}
+}
+
 export class Component {
   load(): void {}
   unload(): void {}

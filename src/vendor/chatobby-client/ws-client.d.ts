@@ -88,6 +88,19 @@ export declare class ChatobbyWsClient {
     exportHtml(outputPath?: string): Promise<string>;
     exportJsonl(outputPath?: string): Promise<string>;
     getRuntimeInfo(): Promise<WsRuntimeInfo>;
+    getGuide(): Promise<{
+        content: string;
+        path: string;
+        title: string;
+        version: string;
+        earlyAccess: boolean;
+        confirmationNotice: string;
+        files: Array<{
+            path: string;
+            title: string;
+            content: string;
+        }>;
+    }>;
     onBridgeConfig(listener: (config: WsBridgeConfig) => void): () => void;
     onFrontendPatch(listener: (patch: FrontendPatch) => void): () => void;
     onExtensionUI(handler: ExtensionUIHandler): void;

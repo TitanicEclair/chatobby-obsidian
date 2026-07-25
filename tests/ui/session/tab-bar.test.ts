@@ -32,7 +32,7 @@ describe("TabBar", () => {
 		expect(pages.map((button) => button.textContent)).toEqual(["", "", "", "", "", "", ""]);
 		expect(element.querySelector(".chatobby-tab-bar__page-label")).toBeNull();
 		expect(element.querySelector("[role='toolbar']")?.getAttribute("aria-label")).toBe("Chatobby view controls");
-		expect(element.querySelectorAll(".chatobby-tab-bar__action")).toHaveLength(9);
+		expect(element.querySelectorAll(".chatobby-tab-bar__action")).toHaveLength(10);
 		expect(element.querySelector<HTMLButtonElement>("[data-mode='memory']")?.getAttribute("aria-pressed")).toBe("true");
 		expect(element.querySelector<HTMLButtonElement>("[data-mode='memory']")?.getAttribute("aria-current")).toBe("page");
 		element.querySelector<HTMLButtonElement>("[data-mode='memory']")?.click();

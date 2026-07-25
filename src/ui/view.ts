@@ -35,7 +35,7 @@ import { ExtensionUiController } from "./controller/extension-ui-controller";
 import { SessionController, type SessionMutationRequest, type WorkingDirectoryScope } from "./controller/session-controller";
 import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRailController, type SubagentScreenController, type SubagentScreenTab } from "../features/subagents/public";
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
-import { downloadChatobbyGuide } from "../features/guide/chatobby-guide";
+import { downloadChatobbyGuide } from "../features/guide/public";
 import { RuntimeStatusController, RuntimeStatusMenu, RuntimeUpdateController } from "../features/runtime-status/public";
 import { ViewRuntimeController } from "../runtime/application/view-runtime-controller";
 import { closeInactiveViewSurfaces, parseLeafSessionState, parseNavigationState, ribbonModeForNavigation, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode, type ExclusiveViewSurface } from "./controller/view-navigation-controller";
@@ -1211,21 +1211,13 @@ export class ChatobbyView extends ItemView {
     this.shell.slashMenuEl.addClass("is-hidden");
   }
 
-  getFeedStore(): FeedStore {
-    return this.sessions.feedStore();
-  }
+  getFeedStore(): FeedStore { return this.sessions.feedStore(); }
 
-  scrollFeed(): void {
-    this.shell.feedEl.scrollTo({ top: this.shell.feedEl.scrollHeight });
-  }
+  scrollFeed(): void { this.shell.feedEl.scrollTo({ top: this.shell.feedEl.scrollHeight }); }
 
-  openVaultLink(path: string): void {
-    void this.app.workspace.openLinkText(path, "", "tab");
-  }
+  openVaultLink(path: string): void { void this.app.workspace.openLinkText(path, "", "tab"); }
 
-  openSystemPath(path: string): void {
-    openSystemPathExternally(this.app, path);
-  }
+  openSystemPath(path: string): void { openSystemPathExternally(this.app, path); }
 
   copyToClipboard(text: string): void {
     navigator.clipboard.writeText(text).catch((e) => {
@@ -1245,13 +1237,9 @@ export class ChatobbyView extends ItemView {
     });
   }
 
-  tabs(): SessionTab[] {
-    return this.sessions.allTabs();
-  }
+  tabs(): SessionTab[] { return this.sessions.allTabs(); }
 
-  activeTabId(): string | null {
-    return this.sessions.activeTabId();
-  }
+  activeTabId(): string | null { return this.sessions.activeTabId(); }
 
   onCreateTab(): void {
 		void this.plugin.openBlankView(this.sessions.workingDirectoryPath()).catch((e) => {
@@ -1267,9 +1255,7 @@ export class ChatobbyView extends ItemView {
     void downloadChatobbyGuide({
       app: this.app,
       getTransport: () => this.getTransport(),
-      onError: (message) => {
-        new Notice(message);
-      },
+      onError: (message) => new Notice(message),
     });
   }
 

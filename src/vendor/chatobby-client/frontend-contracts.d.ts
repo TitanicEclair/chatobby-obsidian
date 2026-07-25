@@ -333,6 +333,8 @@ export interface FrontendContextQueryScreenViewModel {
 export type FrontendMcpServerState = "disabled" | "configured" | "connecting" | "discovering" | "needs-sign-in" | "ready" | "connected" | "updating" | "unavailable" | "incompatible";
 export interface FrontendMcpServerViewModel {
     readonly id: string;
+    readonly reportedName?: string;
+    readonly reportedVersion?: string;
     readonly state: FrontendMcpServerState;
     readonly enabled: boolean;
     readonly builtIn: boolean;
@@ -343,7 +345,19 @@ export interface FrontendMcpServerViewModel {
     readonly lifecycle: "keep-alive" | "lazy" | "eager";
     readonly toolCount: number;
     readonly resourceCount: number;
+    readonly tools: readonly {
+        readonly name: string;
+        readonly title?: string;
+        readonly description?: string;
+    }[];
+    readonly resources: readonly {
+        readonly uri: string;
+        readonly name: string;
+        readonly description?: string;
+        readonly mimeType?: string;
+    }[];
     readonly requiresAuthentication: boolean;
+    readonly sourcePath: string;
     readonly command?: string;
     readonly arguments: readonly string[];
     readonly workingDirectory?: string;
@@ -477,6 +491,11 @@ export interface FrontendPermissionChannelGrantViewModel {
     readonly decisions: Readonly<Record<"connect" | "read" | "send", FrontendPermissionDecision>>;
     readonly disabled: boolean;
 }
+export interface FrontendPermissionSessionApprovalViewModel {
+    readonly surface: string;
+    readonly surfaceLabel: string;
+    readonly pattern: string;
+}
 export interface FrontendPermissionAdvancedGroupViewModel {
     readonly section: "path" | "external_directory" | "bash" | "skill";
     readonly label: string;
@@ -498,6 +517,8 @@ export interface FrontendPermissionScreenViewModel {
     readonly profiles: readonly FrontendPermissionProfileViewModel[];
     readonly selectedProfile: FrontendPermissionProfileViewModel;
     readonly liveAgents: readonly FrontendPermissionLiveAgentViewModel[];
+    readonly temporaryApprovalDescription: string;
+    readonly temporaryApprovals: readonly FrontendPermissionSessionApprovalViewModel[];
     readonly capabilityDescription: string;
     readonly inventoryWarning?: string;
     readonly capabilities: readonly FrontendPermissionCapabilityGroupViewModel[];
@@ -1362,11 +1383,10 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly draft: FrontendMcpServerDraft;
     };
 }) | (FrontendIntentBase & {
-    readonly type: "mcp.configure-registry";
+    readonly type: "mcp.configure-verified";
     readonly payload: {
         readonly expectedConfigRevision: string;
-        readonly registryName: string;
-        readonly registryVersion: string;
+        readonly pluginId: string;
         readonly scope: "user" | "project";
     };
 }) | (FrontendIntentBase & {
@@ -1386,7 +1406,7 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly scope?: "user" | "project";
     };
 }) | (FrontendIntentBase & {
-    readonly type: "mcp.discover" | "mcp.connect" | "mcp.disconnect" | "mcp.auth-start" | "mcp.check-update" | "mcp.diagnostics";
+    readonly type: "mcp.discover" | "mcp.connect" | "mcp.disconnect" | "mcp.auth-start" | "mcp.diagnostics";
     readonly payload: {
         readonly serverId: string;
     };
@@ -1397,7 +1417,7 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly input: string;
     };
 }) | (FrontendIntentBase & {
-    readonly type: "mcp.apply-update" | "mcp.remove";
+    readonly type: "mcp.remove";
     readonly payload: {
         readonly expectedConfigRevision: string;
         readonly serverId: string;

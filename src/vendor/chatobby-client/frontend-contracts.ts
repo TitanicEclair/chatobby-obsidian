@@ -479,6 +479,8 @@ export type FrontendMcpServerState =
 
 export interface FrontendMcpServerViewModel {
 	readonly id: string;
+	readonly reportedName?: string;
+	readonly reportedVersion?: string;
 	readonly state: FrontendMcpServerState;
 	readonly enabled: boolean;
 	readonly builtIn: boolean;
@@ -489,7 +491,19 @@ export interface FrontendMcpServerViewModel {
 	readonly lifecycle: "keep-alive" | "lazy" | "eager";
 	readonly toolCount: number;
 	readonly resourceCount: number;
+	readonly tools: readonly {
+		readonly name: string;
+		readonly title?: string;
+		readonly description?: string;
+	}[];
+	readonly resources: readonly {
+		readonly uri: string;
+		readonly name: string;
+		readonly description?: string;
+		readonly mimeType?: string;
+	}[];
 	readonly requiresAuthentication: boolean;
+	readonly sourcePath: string;
 	readonly command?: string;
 	readonly arguments: readonly string[];
 	readonly workingDirectory?: string;
@@ -635,6 +649,12 @@ export interface FrontendPermissionChannelGrantViewModel {
 	readonly disabled: boolean;
 }
 
+export interface FrontendPermissionSessionApprovalViewModel {
+	readonly surface: string;
+	readonly surfaceLabel: string;
+	readonly pattern: string;
+}
+
 export interface FrontendPermissionAdvancedGroupViewModel {
 	readonly section: "path" | "external_directory" | "bash" | "skill";
 	readonly label: string;
@@ -654,6 +674,8 @@ export interface FrontendPermissionScreenViewModel {
 	readonly profiles: readonly FrontendPermissionProfileViewModel[];
 	readonly selectedProfile: FrontendPermissionProfileViewModel;
 	readonly liveAgents: readonly FrontendPermissionLiveAgentViewModel[];
+	readonly temporaryApprovalDescription: string;
+	readonly temporaryApprovals: readonly FrontendPermissionSessionApprovalViewModel[];
 	readonly capabilityDescription: string;
 	readonly inventoryWarning?: string;
 	readonly capabilities: readonly FrontendPermissionCapabilityGroupViewModel[];
@@ -1581,11 +1603,10 @@ export type FrontendIntent =
 			readonly payload: { readonly draft: FrontendMcpServerDraft };
 	  })
 	| (FrontendIntentBase & {
-			readonly type: "mcp.configure-registry";
+			readonly type: "mcp.configure-verified";
 			readonly payload: {
 				readonly expectedConfigRevision: string;
-				readonly registryName: string;
-				readonly registryVersion: string;
+				readonly pluginId: string;
 				readonly scope: "user" | "project";
 			};
 	  })
@@ -1608,13 +1629,7 @@ export type FrontendIntent =
 			};
 	  })
 	| (FrontendIntentBase & {
-			readonly type:
-				| "mcp.discover"
-				| "mcp.connect"
-				| "mcp.disconnect"
-				| "mcp.auth-start"
-				| "mcp.check-update"
-				| "mcp.diagnostics";
+			readonly type: "mcp.discover" | "mcp.connect" | "mcp.disconnect" | "mcp.auth-start" | "mcp.diagnostics";
 			readonly payload: { readonly serverId: string };
 	  })
 	| (FrontendIntentBase & {
@@ -1622,7 +1637,7 @@ export type FrontendIntent =
 			readonly payload: { readonly serverId: string; readonly input: string };
 	  })
 	| (FrontendIntentBase & {
-			readonly type: "mcp.apply-update" | "mcp.remove";
+			readonly type: "mcp.remove";
 			readonly payload: {
 				readonly expectedConfigRevision: string;
 				readonly serverId: string;
@@ -2141,14 +2156,13 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			payload: { draft: parseMcpServerDraft(payload.draft) },
 		};
 	}
-	if (input.type === "mcp.configure-registry") {
+	if (input.type === "mcp.configure-verified") {
 		return {
 			...base,
 			type: input.type,
 			payload: {
 				expectedConfigRevision: requireString(payload.expectedConfigRevision, "payload.expectedConfigRevision"),
-				registryName: requireString(payload.registryName, "payload.registryName"),
-				registryVersion: requireString(payload.registryVersion, "payload.registryVersion"),
+				pluginId: requireString(payload.pluginId, "payload.pluginId"),
 				scope: requireMcpScope(payload.scope),
 			},
 		};
@@ -2182,7 +2196,6 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 		input.type === "mcp.connect" ||
 		input.type === "mcp.disconnect" ||
 		input.type === "mcp.auth-start" ||
-		input.type === "mcp.check-update" ||
 		input.type === "mcp.diagnostics"
 	) {
 		return {
@@ -2201,7 +2214,7 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			},
 		};
 	}
-	if (input.type === "mcp.apply-update" || input.type === "mcp.remove") {
+	if (input.type === "mcp.remove") {
 		return {
 			...base,
 			type: input.type,

@@ -32,11 +32,14 @@ function server(): FrontendMcpServerViewModel {
     builtIn: false,
     sourceLabel: "project Chatobby configuration",
     sourceScope: "project",
+    sourcePath: "C:/vault/.chatobby/mcp.json",
     writable: true,
     transport: "remote",
     lifecycle: "lazy",
     toolCount: 0,
     resourceCount: 0,
+    tools: [],
+    resources: [],
     requiresAuthentication: false,
     authentication: "none",
     arguments: [],
@@ -158,14 +161,24 @@ describe("McpView", () => {
     expect(element.textContent).not.toContain("DEMO_TOKEN");
   });
 
-  it("uses Obsidian SecretStorage selection for bearer-authenticated plugins", async () => {
+  it("links an explicitly selected Obsidian secret for bearer-authenticated plugins", async () => {
+    const bearerApp = {
+      secretStorage: {
+        getSecret: (reference: string) => reference === "github-token" ? "test-token" : null,
+        listSecrets: () => ["github-token"],
+      },
+    } as unknown as App;
     const bearerServer = {
       ...server(),
+      enabled: true,
+      state: "needs-sign-in" as const,
       authentication: "bearer" as const,
       requiresAuthentication: true,
     };
     const selected = {
       ...detail(),
+      enabled: true,
+      state: "needs-sign-in" as const,
       server: bearerServer,
     };
     const current = model({
@@ -175,7 +188,7 @@ describe("McpView", () => {
     });
     const onIntent = vi.fn(async (_intent: McpViewIntent) => {});
     const view = new McpView({
-      app,
+      app: bearerApp,
       getModel: () => current,
       subscribe: () => () => {},
       onBack: vi.fn(),
@@ -186,14 +199,27 @@ describe("McpView", () => {
     });
     const element = mount(view);
 
-    expect(element.textContent).toContain("Choose a secret stored by Obsidian.");
+    expect(element.textContent).toContain("The token stays in Obsidian");
+    expect(element.textContent).toContain("No access token is linked.");
     expect(element.textContent).not.toContain("Sign in");
-    const secret = element.querySelector<HTMLSelectElement>(".secret-component");
-    expect(secret).not.toBeNull();
-    if (!secret) return;
-    secret.createEl("option", { value: "github-token", text: "github-token" });
+    const connect = [...element.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "Connect");
+    expect(connect?.disabled).toBe(true);
+    expect(connect?.title).toContain("Link an access token");
+    const secret = element.querySelector<HTMLSelectElement>(
+      "[data-page-state-key='mcp:demo:credential']",
+    );
+    expect(secret?.value).toBe("");
+    const link = [...element.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "Link selected token");
+    expect(link?.disabled).toBe(true);
+
+    if (!secret || !link) return;
     secret.value = "github-token";
     secret.dispatchEvent(new window.Event("change", { bubbles: true }));
+    expect(link.disabled).toBe(false);
+    expect(onIntent).not.toHaveBeenCalled();
+    link.click();
 
     await vi.waitFor(() =>
       expect(onIntent).toHaveBeenCalledWith({
@@ -208,27 +234,27 @@ describe("McpView", () => {
     );
   });
 
-  it("adds a registry plugin disabled only after its detail page is reviewed", async () => {
+  it("adds a Chatobby-verified plugin disabled only after its detail page is reviewed", async () => {
     const catalog = {
-      name: "com.notion/mcp",
-      title: "Notion",
-      description: "Public registry description.",
-      version: "1.2.3",
-      repositoryUrl: "https://github.com/example/demo",
+      name: "github",
+      title: "GitHub",
+      description: "Work with repositories, issues, pull requests, and workflows.",
+      version: "1.7.0",
+      repositoryUrl: "https://github.com/github/github-mcp-server",
       transportLabel: "Remote",
       environmentNames: [],
       canConfigure: true,
     };
     const selected: FrontendChatobbyPluginDetail = {
-      id: "mcp:registry:com.notion%2Fmcp",
+      id: "mcp:verified:github",
       title: catalog.title,
       description: catalog.description,
       version: catalog.version,
-      publisher: "Notion",
-      source: "community",
-      sourceLabel: "Official MCP Registry",
+      publisher: "GitHub",
+      source: "first-party",
+      sourceLabel: "Verified by Chatobby",
       verifiedPublisher: true,
-      brandIcon: "notion",
+      brandIcon: "github",
       installed: false,
       enabled: false,
       state: "available",
@@ -245,7 +271,7 @@ describe("McpView", () => {
       }],
       setup: [],
       permissions: ["Review the server before enabling it."],
-      cautions: ["Registry publication is not a Chatobby endorsement."],
+      cautions: ["Review the token scopes before enabling write-capable tools."],
       metrics: [],
       catalog,
     };
@@ -269,8 +295,8 @@ describe("McpView", () => {
     });
     const element = mount(view);
 
-    expect(element.querySelector("[data-brand-icon='notion']")).not.toBeNull();
-    expect(element.querySelector("[aria-label='Verified publisher']")).not.toBeNull();
+    expect(element.querySelector("[data-brand-icon='github']")).not.toBeNull();
+    expect(element.querySelector("[aria-label='Verified by Chatobby']")).not.toBeNull();
     const add = [...element.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.trim() === "Add disabled");
     expect(add).toBeDefined();
@@ -278,11 +304,10 @@ describe("McpView", () => {
 
     await vi.waitFor(() =>
       expect(onIntent).toHaveBeenCalledWith({
-        type: "mcp.configure-registry",
+        type: "mcp.configure-verified",
         payload: {
           expectedConfigRevision: "config-1",
-          registryName: "com.notion/mcp",
-          registryVersion: "1.2.3",
+          pluginId: "github",
           scope: "project",
         },
       }),
@@ -316,13 +341,14 @@ describe("McpView", () => {
     expect(microsoft.querySelectorAll("rect")).toHaveLength(4);
   });
 
-  it("paginates sorted visible results before expanding the registry index", async () => {
+  it("shows the complete release-owned verified catalogue without registry pagination", () => {
     const catalogPlugins = Array.from({ length: 25 }, (_, index): FrontendChatobbyPluginSummary => ({
       ...installedPlugin(),
-      id: `mcp:registry:community-${index}`,
-      title: `Community plugin ${String(index + 1).padStart(2, "0")}`,
-      source: "community",
-      sourceLabel: "MCP Registry",
+      id: `mcp:verified:plugin-${index}`,
+      title: `Verified plugin ${String(index + 1).padStart(2, "0")}`,
+      source: "first-party",
+      sourceLabel: "Verified by Chatobby",
+      verifiedPublisher: true,
       installed: false,
       state: "available",
     }));
@@ -331,55 +357,33 @@ describe("McpView", () => {
       servers: [],
       installedPlugins: [],
       catalogPlugins,
-      nextCatalogCursor: "next-page",
     });
-    const onIntent = vi.fn(async (_intent: McpViewIntent) => {});
     const view = new McpView({
       app,
       getModel: () => current,
       subscribe: () => () => {},
       onBack: vi.fn(),
       onRefresh: vi.fn(async () => {}),
-      onIntent,
+      onIntent: vi.fn(async (_intent: McpViewIntent) => {}),
       onNavigatePlugin: vi.fn(),
     });
     const element = mount(view);
 
-    expect(element.querySelectorAll(".chatobby-mcp__plugin-row")).toHaveLength(20);
-    expect(element.textContent).toContain("20 of 25 shown");
-    expect(element.textContent).toContain("25 catalogue entries indexed");
-
-    const showMore = [...element.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.trim() === "Show 5 more");
-    expect(showMore).toBeDefined();
-    showMore?.click();
-
     expect(element.querySelectorAll(".chatobby-mcp__plugin-row")).toHaveLength(25);
     expect(element.textContent).toContain("25 shown");
-    const findMore = [...element.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.trim() === "Find more plugins");
-    expect(findMore).toBeDefined();
-    findMore?.click();
-
-    await vi.waitFor(() =>
-      expect(onIntent).toHaveBeenCalledWith({
-        type: "mcp.set-view",
-        payload: {
-          tab: "discover",
-          query: "",
-          cursor: "next-page",
-        },
-      }),
-    );
+    expect(element.textContent).toContain("25 verified plugins in this Chatobby release");
+    expect(element.textContent).not.toContain("Load more");
+    expect(element.textContent).not.toContain("MCP Registry");
   });
 
-  it("explains a filter miss without claiming the loaded catalogue is unavailable", () => {
-    const communityPlugin: FrontendChatobbyPluginSummary = {
+  it("explains a connection filter miss without implying an unavailable external catalogue", () => {
+    const verifiedPlugin: FrontendChatobbyPluginSummary = {
       ...installedPlugin(),
-      id: "mcp:registry:community",
-      title: "Community plugin",
-      source: "community",
-      sourceLabel: "MCP Registry",
+      id: "mcp:verified:github",
+      title: "GitHub",
+      source: "first-party",
+      sourceLabel: "Verified by Chatobby",
+      verifiedPublisher: true,
       installed: false,
       state: "available",
     };
@@ -387,8 +391,7 @@ describe("McpView", () => {
       selectedTab: "discover",
       servers: [],
       installedPlugins: [],
-      catalogPlugins: [communityPlugin],
-      nextCatalogCursor: "next-page",
+      catalogPlugins: [verifiedPlugin],
     });
     const view = new McpView({
       app,
@@ -400,51 +403,48 @@ describe("McpView", () => {
       onNavigatePlugin: vi.fn(),
     });
     const element = mount(view);
-    const source = element.querySelector<HTMLSelectElement>("[aria-label='Filter by source']");
-    expect(source).not.toBeNull();
-    if (!source) return;
+    const connection = element.querySelector<HTMLSelectElement>("[aria-label='Filter by connection']");
+    expect(connection).not.toBeNull();
+    if (!connection) return;
 
-    source.value = "first-party";
-    expect(source.value).toBe("first-party");
-    source.dispatchEvent(new window.Event("change", { bubbles: true, cancelable: true }));
+    connection.value = "local";
+    connection.dispatchEvent(new window.Event("change", { bubbles: true, cancelable: true }));
 
-    expect(element.textContent).toContain("No matching plugins");
-    expect(element.textContent).toContain("Change the source or connection filter.");
-    expect(element.textContent).not.toContain("Refresh when the MCP Registry is available.");
-    expect(element.textContent).not.toContain("Find more plugins");
+    expect(element.textContent).toContain("No matching verified plugins");
+    expect(element.textContent).toContain("different connection filter");
+    expect(element.textContent).not.toContain("Registry");
   });
 
-  it("keeps local plugins visible when the public catalogue is temporarily unavailable", () => {
-    const featured = {
+  it("labels the page as Connections and Verified without registry language", () => {
+    const verified = {
       ...installedPlugin(),
-      id: "mcp:registry:featured",
-      title: "Featured plugin",
+      id: "mcp:verified:github",
+      title: "GitHub",
+      source: "first-party" as const,
+      sourceLabel: "Verified by Chatobby",
+      verifiedPublisher: true,
       installed: false,
       state: "available" as const,
     };
     const current = model({
       selectedTab: "discover",
-      catalogError: "Official MCP Registry request timed out.",
-      catalogPlugins: [featured],
+      catalogPlugins: [verified],
     });
-    const onRefresh = vi.fn(async () => {});
     const view = new McpView({
       app,
       getModel: () => current,
       subscribe: () => () => {},
       onBack: vi.fn(),
-      onRefresh,
+      onRefresh: vi.fn(async () => {}),
       onIntent: vi.fn(async (_intent: McpViewIntent) => {}),
       onNavigatePlugin: vi.fn(),
     });
     const element = mount(view);
 
-    expect(element.textContent).toContain("public plugin catalogue is temporarily unavailable");
-    expect(element.textContent).toContain("Featured plugin");
-    const retry = [...element.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.trim() === "Try again");
-    retry?.click();
-    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(element.textContent).toContain("Connections");
+    expect(element.textContent).toContain("Verified");
+    expect(element.textContent).toContain("GitHub");
+    expect(element.textContent).not.toContain("Registry");
   });
 
   it("shows and invokes cancellation while an MCP connection is starting", async () => {

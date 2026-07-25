@@ -121,6 +121,7 @@ export class PermissionsView extends ChatobbyComponent {
       }
       this.renderProfiles(body, model);
       this.renderLiveAgents(body, model);
+      this.renderTemporaryApprovals(body, model);
       this.renderCapabilities(body, model);
       this.renderChannels(body, model);
       this.renderAdvanced(body, model);
@@ -265,6 +266,20 @@ export class PermissionsView extends ChatobbyComponent {
         payload: { profileId: profile.id, name: name.value.trim(), description: description.value.trim() },
       }, () => { this.editingProfileId = null; });
     });
+  }
+
+  private renderTemporaryApprovals(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
+    const approvals = model.temporaryApprovals ?? [];
+    if (approvals.length === 0) return;
+    const section = this.section(body, "Temporary session access", model.temporaryApprovalDescription);
+    const list = section.createDiv({ cls: "chatobby-permissions__live-agents" });
+    for (const approval of approvals) {
+      const row = list.createDiv({ cls: "chatobby-permissions__live-agent" });
+      const copy = row.createDiv({ cls: "chatobby-permissions__live-agent-copy" });
+      copy.createDiv({ cls: "chatobby-permissions__live-agent-name", text: approval.surfaceLabel });
+      copy.createDiv({ cls: "chatobby-permissions__profile-description", text: approval.pattern });
+      row.createSpan({ cls: "chatobby-permissions__active-label", text: "Allowed for this session" });
+    }
   }
 
   private renderDeleteConfirmation(card: HTMLElement, model: FrontendPermissionScreenViewModel): void {

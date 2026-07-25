@@ -105,18 +105,20 @@ export class McpScreenController {
       ...input,
     } as FrontendIntent;
     if (intent.type === "mcp.set-credential-reference") {
+      const secret = this.requireSavedSecret(intent.payload.reference);
       await this.options.getProtocol().synchronizeMcpCredential(
         intent.payload.reference,
-        this.options.app.secretStorage.getSecret(intent.payload.reference),
+        secret,
       );
     } else if (
       intent.type === "mcp.save"
       && intent.payload.draft.authentication === "bearer"
       && intent.payload.draft.bearerCredentialReference
     ) {
+      const secret = this.requireSavedSecret(intent.payload.draft.bearerCredentialReference);
       await this.options.getProtocol().synchronizeMcpCredential(
         intent.payload.draft.bearerCredentialReference,
-        this.options.app.secretStorage.getSecret(intent.payload.draft.bearerCredentialReference),
+        secret,
       );
     }
     const outcome = await this.options.getProtocol().dispatch(intent);
@@ -124,6 +126,14 @@ export class McpScreenController {
       throw new Error(outcome.notice?.message ?? "The MCP action could not be applied.");
     }
     this.view?.setLocalError(null);
+  }
+
+  private requireSavedSecret(reference: string): string {
+    const secret = this.options.app.secretStorage.getSecret(reference);
+    if (secret) return secret;
+    throw new Error(
+      `The Obsidian secret “${reference}” has no saved value. Create or update it in Obsidian, then select it here again.`,
+    );
   }
 
   private currentModel(): FrontendPluginMcpScreenViewModel | null {

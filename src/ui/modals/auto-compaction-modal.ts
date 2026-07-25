@@ -46,7 +46,7 @@ export class AutoCompactionModal extends Modal {
 
     // Persistent readout of the chosen threshold. The slider's displayFormat only
     // surfaces a value while dragging; this keeps the exact percentage visible at
-    // rest so the user isn't guessing between the 50–95% endpoints.
+    // rest so the user isn't guessing between the 25–95% endpoints.
     const thresholdValueEl = this.contentEl.createSpan({
       cls: "chatobby-auto-compaction-modal__threshold-value",
       text: `${this.thresholdPercent}%`,

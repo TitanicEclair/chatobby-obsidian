@@ -4,7 +4,7 @@
 
 [![Install Chatobby in Obsidian](https://img.shields.io/badge/Install%20in-Obsidian-7C3AED?style=for-the-badge&logo=obsidian&logoColor=white)](https://obsidian.md/plugins?id=chatobby)
 [![Public alpha](https://img.shields.io/badge/release-public%20alpha-2F81F7?style=for-the-badge)](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/alpha-guide.md)
-[![Windows desktop](https://img.shields.io/badge/platform-Windows%20desktop-0078D4?style=for-the-badge&logo=windows&logoColor=white)](#platform-and-alpha-status)
+[![Windows and macOS desktop](https://img.shields.io/badge/platform-Windows%20%2B%20macOS-4B5563?style=for-the-badge)](#platform-and-alpha-status)
 [![Star Chatobby on GitHub](https://img.shields.io/github/stars/TitanicEclair/chatobby-obsidian?style=for-the-badge&logo=github&label=Star%20Chatobby)](https://github.com/TitanicEclair/chatobby-obsidian)
 
 **Community:** [GitHub Discussions](https://github.com/TitanicEclair/chatobby-obsidian/discussions) · [Issue tracker](https://github.com/TitanicEclair/chatobby-obsidian/issues) · [Documentation](https://github.com/TitanicEclair/chatobby-obsidian/tree/main/docs)
@@ -245,7 +245,7 @@ Chatobby does not resell model tokens during the free alpha.
 
 The plugin downloads the runtime only after confirmation. It cryptographically
 verifies the release descriptor and included files, installs the runtime for the
-current Windows account, and reconnects to it. When a compatible runtime update
+current operating-system account, and reconnects to it. When a compatible runtime update
 is available, Chatobby can present an update action inside the plugin.
 
 Chatobby itself is free during the public alpha. The model provider you choose
@@ -293,8 +293,9 @@ it or connect it to the current note.
 ### 5. Explore the workspace
 
 Use the top ribbon to open Sessions, Permissions, Memory, Events, Queries,
-Channels, and Subagents. These pages are part of the same agent workspace; you
-do not need to move configuration into the message composer.
+Channels, Subagents, and Plugins. The guide button can copy a linked Chatobby
+Guide into the vault. These pages are part of the same agent workspace; you do
+not need to move configuration into the message composer.
 
 ## User guides
 
@@ -578,6 +579,10 @@ When customizing a policy:
 Permission instructions do not belong in `.chatobby.md`, memory, Context Query
 output, or an agent message. The Permissions page and permission tools are the
 authority-bearing surfaces.
+
+Connected MCP plugins appear as separate capability groups after discovery.
+Their tools start denied in every policy until you explicitly choose Allow or
+Ask; connecting a service does not grant an agent permission to use it.
 
 <!--
 Show one readable policy and a visible ask/allow/deny decision without exposing

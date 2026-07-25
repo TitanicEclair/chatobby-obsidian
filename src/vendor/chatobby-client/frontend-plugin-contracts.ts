@@ -6,7 +6,7 @@ import type {
 	FrontendMcpServerViewModel,
 } from "./frontend-contracts.ts";
 
-export type FrontendChatobbyPluginSource = "built-in" | "reference" | "first-party" | "community" | "custom";
+export type FrontendChatobbyPluginSource = "built-in" | "first-party" | "custom";
 
 export type FrontendChatobbyPluginBrandIcon =
 	| "chatobby"
@@ -32,7 +32,14 @@ export type FrontendChatobbyPluginBrandIcon =
 	| "airtable"
 	| "postman";
 
-export type FrontendChatobbyPluginCapabilityKind = "mcp-server" | "skill" | "command" | "workflow" | "context-query";
+export type FrontendChatobbyPluginCapabilityKind =
+	| "mcp-server"
+	| "mcp-tool"
+	| "mcp-resource"
+	| "skill"
+	| "command"
+	| "workflow"
+	| "context-query";
 
 export interface FrontendChatobbyPluginCapability {
 	readonly kind: FrontendChatobbyPluginCapabilityKind;
@@ -102,7 +109,6 @@ export interface FrontendChatobbyPluginDetail extends FrontendChatobbyPluginSumm
 export interface FrontendPluginMcpScreenViewModel extends FrontendMcpScreenViewModel {
 	readonly installedPlugins: readonly FrontendChatobbyPluginSummary[];
 	readonly catalogPlugins: readonly FrontendChatobbyPluginSummary[];
-	readonly catalogError?: string;
 	readonly selectedPluginId?: string;
 	readonly selectedPlugin?: FrontendChatobbyPluginDetail;
 }

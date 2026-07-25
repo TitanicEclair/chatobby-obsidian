@@ -411,10 +411,15 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("get_runtime_info", {}), "info");
 	}
 
-	// Returns the runtime-owned Chatobby guide payload. Hand-added until the next
-	// vendored-client regeneration (mirrored in frontend-client.ts). Returns the
-	// raw object; the transport casts it to GuideContent.
-	async getGuide(): Promise<unknown> {
+	async getGuide(): Promise<{
+		content: string;
+		path: string;
+		title: string;
+		version: string;
+		earlyAccess: boolean;
+		confirmationNotice: string;
+		files: Array<{ path: string; title: string; content: string }>;
+	}> {
 		return resultField(await this.send("get_guide", {}), "guide");
 	}
 

@@ -15,6 +15,8 @@ describe("AutoCompactionModal", () => {
     const slider = modal.modalEl.querySelector<HTMLInputElement>("input[type='range']");
     const readout = modal.modalEl.querySelector(".chatobby-auto-compaction-modal__threshold-value");
     expect(slider?.value).toBe("85");
+    expect(slider?.min).toBe("25");
+    expect(slider?.max).toBe("95");
     expect(slider?.getAttribute("aria-label")).toBe("Automatic compaction threshold percentage");
     expect(readout?.textContent).toBe("85%");
     expect(modal.modalEl.textContent).toContain("Save for model");

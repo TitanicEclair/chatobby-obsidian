@@ -3,7 +3,7 @@
 // Does NOT own the session state — that's the view's job.
 
 import { ChatobbyWsClient } from "../vendor/chatobby-client/ws-client.js";
-import type { GuideContent } from "../features/guide/chatobby-guide";
+import type { GuideContent } from "../features/guide/public";
 import type {
   WsExtensionUIRequest,
   WsBridgeConfig,
