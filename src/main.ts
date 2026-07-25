@@ -58,7 +58,8 @@ export default class ChatobbyPlugin extends Plugin {
   private readonly operations = new OperationCoordinator();
   private readonly bridgeClients = new Map<string, ObsidianBridgeClient>();
   private readonly frontendSessions = new FrontendSessionRegistry({
-    createTransport: (runtime) => new ChatobbyTransport(runtime),
+    createTransport: (runtime) =>
+      new ChatobbyTransport(runtime, (reference) => this.app.secretStorage.getSecret(reference)),
     bindTransport: (channelId, transport) => {
       const unsubscribeConnection = transport.onConnectionChange((state) => {
         if (state.status === "error") {

@@ -188,10 +188,20 @@ export class PermissionsView extends ChatobbyComponent {
       void this.runIntent({ type: "permissions.select-profile", payload: { profileId: select.value } });
     });
     const profile = model.selectedProfile;
+    const liveMain = (model.liveAgents ?? []).find((agent) => agent.authority.kind === "main");
     if (profile.activeForMain) toolbar.createSpan({ cls: "chatobby-permissions__active-label", text: "Used by Main" });
     else if (profile.canActivate) {
       toolbar.createEl("button", { cls: "chatobby-permissions__secondary-btn", text: "Use for Main", attr: { type: "button" } })
-        .addEventListener("click", () => void this.runIntent({ type: "permissions.activate-profile", payload: { profileId: profile.id } }));
+        .addEventListener("click", () => void this.runIntent(liveMain
+          ? {
+              type: "permissions.set-live-agent-profile",
+              payload: {
+                authority: liveMain.authority,
+                profileId: profile.id,
+                expectedBindingRevision: liveMain.bindingRevision,
+              },
+            }
+          : { type: "permissions.activate-profile", payload: { profileId: profile.id } }));
     }
     toolbar.createEl("button", { cls: "chatobby-permissions__secondary-btn", text: profile.duplicateLabel, attr: { type: "button" } })
       .addEventListener("click", () => void this.runIntent({ type: "permissions.duplicate-profile", payload: { profileId: profile.id } }));

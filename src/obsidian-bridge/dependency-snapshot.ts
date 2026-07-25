@@ -24,9 +24,11 @@ interface CorePluginRegistry {
 /** Capture installed/enabled integrations plus local executable dependencies. */
 export function collectObsidianCapabilityState(app: App): ObsidianCapabilityState {
   const registries = app as unknown as {
+    version?: string;
     plugins?: CommunityPluginRegistry;
     internalPlugins?: CorePluginRegistry;
   };
+  const cliSupported = !registries.version || versionAtLeast(registries.version, 1, 12);
   return {
     capabilities: [...PLUGIN_CAPABILITIES],
     plugins: [
@@ -36,10 +38,25 @@ export function collectObsidianCapabilityState(app: App): ObsidianCapabilityStat
     runtimeDependencies: [{
       id: "obsidian-cli",
       name: "Obsidian CLI",
-      available: executableAvailable(process.env.CHATOBBY_OBSIDIAN_CLI_BIN || "obsidian"),
-      detail: "Required for CLI-backed daily note, Bases, Sync, plugin, and diagnostics tools.",
+      available: cliSupported && obsidianCliAvailable(),
+      detail: cliSupported
+        ? "Required for CLI-backed daily note, Bases, Sync, plugin, and diagnostics tools."
+        : `Obsidian CLI requires Obsidian 1.12 or later; this vault is running ${registries.version}.`,
     }],
   };
+}
+
+function versionAtLeast(value: string, requiredMajor: number, requiredMinor: number): boolean {
+  const [major = 0, minor = 0] = value.split(".").map((part) => Number.parseInt(part, 10));
+  return major > requiredMajor || (major === requiredMajor && minor >= requiredMinor);
+}
+
+function obsidianCliAvailable(): boolean {
+  const explicit = process.env.CHATOBBY_OBSIDIAN_CLI_BIN || process.env.CHATOBBY_OBSIDIAN_CLI;
+  if (explicit) return executableAvailable(explicit);
+  if (executableAvailable("obsidian")) return true;
+  if (process.platform !== "win32" || !process.env.LOCALAPPDATA) return false;
+  return existsSync(join(process.env.LOCALAPPDATA, "Programs", "obsidian", "Obsidian.com"));
 }
 
 export function capabilityStateFingerprint(state: ObsidianCapabilityState): string {

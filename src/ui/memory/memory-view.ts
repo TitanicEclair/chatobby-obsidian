@@ -1,8 +1,11 @@
 import { setIcon } from "obsidian";
 import type {
+  FrontendMemoryBoundaryMode,
+  FrontendMemoryCategoryFilter,
   FrontendMemoryFilter,
   FrontendMemoryRecordViewModel,
   FrontendMemoryScreenViewModel,
+  FrontendMemorySort,
 } from "../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../shared/component";
 import {
@@ -20,7 +23,12 @@ export type MemoryActionId = "memory:insights";
 export type MemoryTab = "memories" | "suggestions" | "settings";
 
 export type MemoryViewIntent =
-  | { readonly type: "memory.set-view"; readonly payload: { readonly filter: FrontendMemoryFilter; readonly query: string } }
+  | { readonly type: "memory.set-view"; readonly payload: {
+      readonly filter: FrontendMemoryFilter;
+      readonly query: string;
+      readonly category: FrontendMemoryCategoryFilter;
+      readonly sort: FrontendMemorySort;
+    } }
   | { readonly type: "memory.create"; readonly payload: { readonly target: "user" | "memory" | "project" | "failure"; readonly content: string } }
   | { readonly type: "memory.update"; readonly payload: { readonly recordId: string; readonly expectedRecordRevision: number; readonly content: string } }
   | { readonly type: "memory.set-status"; readonly payload: { readonly recordId: string; readonly expectedRecordRevision: number; readonly status: "active" | "archived" } }
@@ -30,7 +38,7 @@ export type MemoryViewIntent =
       readonly backgroundLearning?: "off" | "suggest" | "auto";
       readonly correctionLearning?: "off" | "suggest" | "auto";
       readonly promptRouting?: "off" | "profile-project" | "hybrid";
-      readonly isolateCurrentProject?: boolean;
+      readonly projectBoundaryMode?: FrontendMemoryBoundaryMode;
     } }
   | { readonly type: "memory.import-markdown" | "memory.export-markdown"; readonly payload: Record<string, never> };
 
@@ -188,11 +196,51 @@ export class MemoryView extends ChatobbyComponent {
     });
     input.value = model.query;
     input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") void this.runIntent({ type: "memory.set-view", payload: { filter: model.filter, query: input.value } });
+      if (event.key === "Enter") {
+        void this.runIntent({
+          type: "memory.set-view",
+          payload: { filter: model.filter, query: input.value, category: model.category, sort: model.sort },
+        });
+      }
     });
     input.addEventListener("input", () => {
-      if (!input.value && model.query) void this.runIntent({ type: "memory.set-view", payload: { filter: model.filter, query: "" } });
+      if (!input.value && model.query) {
+        void this.runIntent({
+          type: "memory.set-view",
+          payload: { filter: model.filter, query: "", category: model.category, sort: model.sort },
+        });
+      }
     });
+    const category = this.createViewSelect(
+      toolbar,
+      "Memory category",
+      model.category,
+      model.categoryOptions,
+      (value) => {
+        if (!isMemoryCategoryFilter(value)) return;
+        this.selectedRecordId = null;
+        void this.runIntent({
+          type: "memory.set-view",
+          payload: { filter: model.filter, query: model.query, category: value, sort: model.sort },
+        });
+      },
+    );
+    category.addClass("chatobby-memory__category-select");
+    const sort = this.createViewSelect(
+      toolbar,
+      "Sort memories",
+      model.sort,
+      model.sortOptions,
+      (value) => {
+        if (!isMemorySort(value)) return;
+        this.selectedRecordId = null;
+        void this.runIntent({
+          type: "memory.set-view",
+          payload: { filter: model.filter, query: model.query, category: model.category, sort: value },
+        });
+      },
+    );
+    sort.addClass("chatobby-memory__sort-select");
     const add = toolbar.createEl("button", { cls: "mod-cta", attr: { type: "button" } });
     setIcon(add.createSpan(), "plus");
     add.createSpan({ text: "Add" });
@@ -211,7 +259,10 @@ export class MemoryView extends ChatobbyComponent {
       });
       button.addEventListener("click", () => {
         this.selectedRecordId = null;
-        void this.runIntent({ type: "memory.set-view", payload: { filter: option.id, query: model.query } });
+        void this.runIntent({
+          type: "memory.set-view",
+          payload: { filter: option.id, query: model.query, category: model.category, sort: model.sort },
+        });
       });
     }
     if (model.searchResultCount !== undefined) {
@@ -417,23 +468,33 @@ export class MemoryView extends ChatobbyComponent {
       description: model.projectBoundary.description,
       surface: "divided",
     });
-    const boundaryRow = boundary.content.createDiv({ cls: "chatobby-memory__setting-row" });
+    const boundaryRow = boundary.content.createDiv({ cls: "chatobby-memory__setting-row chatobby-memory__boundary-row" });
     const boundaryCopy = boundaryRow.createDiv({ cls: "chatobby-memory__setting-copy" });
-    boundaryCopy.createDiv({ cls: "chatobby-memory__setting-label", text: "Isolate this project" });
-    boundaryCopy.createDiv({ cls: "chatobby-memory__setting-description", text: "Keep this project's memories separate while retaining your vault-wide preferences." });
-    const toggle = boundaryRow.createEl("input", {
+    boundaryCopy.createDiv({ cls: "chatobby-memory__setting-label", text: "Memory available in this project" });
+    boundaryCopy.createDiv({
+      cls: "chatobby-memory__setting-description",
+      text: "Parent projects never read child-project memory. Choose whether this project also inherits memory from above it.",
+    });
+    const boundarySelect = boundaryRow.createEl("select", {
       attr: {
-        type: "checkbox",
-        "aria-label": "Isolate this project",
+        "aria-label": "Memory available in this project",
       },
     });
-    toggle.checked = model.projectBoundary.checked;
-    toggle.disabled = Boolean(model.projectBoundary.disabledReason) || this.busy;
-    if (model.projectBoundary.disabledReason) toggle.title = model.projectBoundary.disabledReason;
-    toggle.addEventListener("change", () => void this.runIntent({
+    for (const option of model.projectBoundary.options) {
+      const element = boundarySelect.createEl("option", { value: option.value, text: option.label });
+      element.disabled = Boolean(option.disabledReason);
+      if (option.disabledReason) element.title = option.disabledReason;
+    }
+    boundarySelect.value = model.projectBoundary.value;
+    boundarySelect.disabled = Boolean(model.projectBoundary.disabledReason) || this.busy;
+    if (model.projectBoundary.disabledReason) boundarySelect.title = model.projectBoundary.disabledReason;
+    boundarySelect.addEventListener("change", () => {
+      if (!isMemoryBoundaryMode(boundarySelect.value)) return;
+      void this.runIntent({
       type: "memory.update-policy",
-      payload: { isolateCurrentProject: toggle.checked },
-    }));
+        payload: { projectBoundaryMode: boundarySelect.value },
+      });
+    });
 
     const learning = createPageSection(parent, {
       title: "Learning",
@@ -491,6 +552,27 @@ export class MemoryView extends ChatobbyComponent {
     });
   }
 
+  private createViewSelect(
+    parent: HTMLElement,
+    label: string,
+    value: string,
+    options: FrontendMemoryScreenViewModel["categoryOptions"],
+    onChange: (value: string) => void,
+  ): HTMLSelectElement {
+    const select = parent.createEl("select", {
+      cls: "chatobby-memory__view-select",
+      attr: { "aria-label": label },
+    });
+    for (const option of options) {
+      const element = select.createEl("option", { value: option.value, text: option.label });
+      element.disabled = Boolean(option.disabledReason);
+    }
+    select.value = value;
+    select.disabled = this.busy;
+    select.addEventListener("change", () => onChange(select.value));
+    return select;
+  }
+
   private selectTab(tab: MemoryTab): void {
     if (this.tab === tab) return;
     this.tab = tab;
@@ -526,6 +608,28 @@ export class MemoryView extends ChatobbyComponent {
 
 function isMemoryTarget(value: string): value is "user" | "memory" | "project" | "failure" {
   return value === "user" || value === "memory" || value === "project" || value === "failure";
+}
+
+function isMemoryCategoryFilter(value: string): value is FrontendMemoryCategoryFilter {
+  return value === "all"
+    || value === "uncategorized"
+    || value === "failure"
+    || value === "correction"
+    || value === "insight"
+    || value === "preference"
+    || value === "convention"
+    || value === "tool-quirk";
+}
+
+function isMemorySort(value: string): value is FrontendMemorySort {
+  return value === "updated-desc"
+    || value === "last-used-desc"
+    || value === "created-desc"
+    || value === "created-asc";
+}
+
+function isMemoryBoundaryMode(value: string): value is FrontendMemoryBoundaryMode {
+  return value === "inherit" || value === "separate" || value === "project-only";
 }
 
 function errorMessage(error: unknown): string {

@@ -10,6 +10,7 @@ export interface TabBarHost {
 	onCreateView(): void;
 	onNavigate(mode: "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp"): void;
   onSetWorkingDirectory(): void;
+	onDownloadGuide(): void;
 }
 
 export class TabBar extends ChatobbyComponent {
@@ -49,7 +50,7 @@ export class TabBar extends ChatobbyComponent {
 		this.renderPage("memory", "brain", "Memory");
 		this.renderPage("events", "calendar-clock", "Events");
 		this.renderPage("queries", "braces", "Queries");
-		this.renderPage("mcp", "blocks", "MCP servers");
+		this.renderPage("mcp", "blocks", "Plugins");
 		actions.createDiv({ cls: "chatobby-tab-bar__separator", attr: { role: "separator", "aria-orientation": "vertical" } });
     const newButton = actions.createEl("button", {
       cls: "chatobby-tab-bar__action chatobby-tab-bar__new clickable-icon",
@@ -67,6 +68,16 @@ export class TabBar extends ChatobbyComponent {
     });
     setIcon(directoryButton, "folder-open");
     directoryButton.addEventListener("click", () => this.host.onSetWorkingDirectory());
+    const guideButton = actions.createEl("button", {
+      cls: "chatobby-tab-bar__action chatobby-tab-bar__guide clickable-icon",
+      attr: {
+        type: "button",
+        "aria-label": "Download Chatobby guide",
+        title: "Download Chatobby guide into the vault",
+      },
+    });
+    setIcon(guideButton, "book-open-check");
+    guideButton.addEventListener("click", () => this.host.onDownloadGuide());
     this.refresh();
   }
 

@@ -35,6 +35,8 @@ import {
 	parseFrontendScreen,
 } from "./frontend-contracts.ts";
 
+const MCP_FRONTEND_OPERATION_TIMEOUT_MS = 105_000;
+
 export type {
 	RuntimeClientHello,
 	RuntimeIdentity,
@@ -49,6 +51,18 @@ export {
 	RUNTIME_CLOSE_CODES,
 } from "./control/contracts.ts";
 export { CHATOBBY_FRONTEND_PROTOCOL_VERSION } from "./frontend-contracts.ts";
+export type {
+	FrontendChatobbyPluginBrandIcon,
+	FrontendChatobbyPluginCapability,
+	FrontendChatobbyPluginCapabilityCounts,
+	FrontendChatobbyPluginCapabilityKind,
+	FrontendChatobbyPluginDetail,
+	FrontendChatobbyPluginMetric,
+	FrontendChatobbyPluginSource,
+	FrontendChatobbyPluginSummary,
+	FrontendPluginMcpScreenViewModel,
+	FrontendPublicSkillMetadata,
+} from "./frontend-plugin-contracts.ts";
 
 export interface WsClientOptions {
 	url: string;
@@ -251,6 +265,14 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("frontend_intent", intent), "outcome");
 	}
 
+	async getMcpCredentialReferences(): Promise<readonly string[]> {
+		return resultField(await this.send("mcp_credential_references", {}), "references");
+	}
+
+	async setMcpCredential(reference: string, secret?: string): Promise<void> {
+		await this.send("mcp_credential_set", { reference, secret });
+	}
+
 	async prompt(
 		message: string,
 		attachments?: WsPromptAttachment[],
@@ -389,6 +411,13 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("get_runtime_info", {}), "info");
 	}
 
+	// Returns the runtime-owned Chatobby guide payload. Hand-added until the next
+	// vendored-client regeneration (mirrored in frontend-client.ts). Returns the
+	// raw object; the transport casts it to GuideContent.
+	async getGuide(): Promise<unknown> {
+		return resultField(await this.send("get_guide", {}), "guide");
+	}
+
 	onBridgeConfig(listener: (config: WsBridgeConfig) => void): () => void {
 		this.bridgeConfigListeners.add(listener);
 		return () => this.bridgeConfigListeners.delete(listener);
@@ -475,7 +504,19 @@ export class ChatobbyWsClient {
 				reject(new Error("WebSocket is not connected"));
 				return;
 			}
-			const timeout = this.options.requestTimeout ?? (method === "bash" || method === "compact" ? 130_000 : 30_000);
+			const frontendIntentType =
+				method === "frontend_intent" && params && typeof params === "object" && !Array.isArray(params)
+					? (params as { readonly type?: unknown }).type
+					: undefined;
+			const timeout =
+				this.options.requestTimeout ??
+				(frontendIntentType === "mcp.connect" ||
+				frontendIntentType === "mcp.discover" ||
+				frontendIntentType === "mcp.auth-complete"
+					? MCP_FRONTEND_OPERATION_TIMEOUT_MS
+					: method === "bash" || method === "compact"
+						? 130_000
+						: 30_000);
 			const timer = window.setTimeout(() => {
 				if (!this.pending.delete(id)) return;
 				reject(new Error(`Chatobby runtime request timed out after ${timeout}ms: ${method}`));

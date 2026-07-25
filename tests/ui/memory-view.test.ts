@@ -75,7 +75,7 @@ describe("MemoryView", () => {
     buttonWithText(el, "Project").click();
     await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
       type: "memory.set-view",
-      payload: { filter: "project", query: "" },
+      payload: { filter: "project", query: "", category: "all", sort: "updated-desc" },
     }));
 
     const input = el.querySelector<HTMLInputElement>(".chatobby-memory__search-input");
@@ -84,7 +84,28 @@ describe("MemoryView", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
     await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
       type: "memory.set-view",
-      payload: { filter: "all", query: "concise" },
+      payload: { filter: "all", query: "concise", category: "all", sort: "updated-desc" },
+    }));
+    const categoryHarness = createHarness();
+    const categoryEl = mount(categoryHarness.view);
+    const category = categoryEl.querySelector<HTMLSelectElement>('select[aria-label="Memory category"]');
+    if (!category) throw new Error("category filter missing");
+    category.value = "preference";
+    category.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(categoryHarness.onIntent).toHaveBeenCalledWith({
+      type: "memory.set-view",
+      payload: { filter: "all", query: "", category: "preference", sort: "updated-desc" },
+    }));
+
+    const sortHarness = createHarness();
+    const sortEl = mount(sortHarness.view);
+    const sort = sortEl.querySelector<HTMLSelectElement>('select[aria-label="Sort memories"]');
+    if (!sort) throw new Error("memory sort missing");
+    sort.value = "last-used-desc";
+    sort.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(sortHarness.onIntent).toHaveBeenCalledWith({
+      type: "memory.set-view",
+      payload: { filter: "all", query: "", category: "all", sort: "last-used-desc" },
     }));
   });
 
@@ -145,18 +166,22 @@ describe("MemoryView", () => {
       type: "memory.decide-candidate",
       payload: { candidateId: "candidate-1", decision: "approve" },
     }));
-
-    buttonWithText(el, "Settings").click();
-    const isolation = el.querySelector<HTMLInputElement>('input[aria-label="Isolate this project"]');
-    if (!isolation) throw new Error("isolation toggle missing");
-    isolation.checked = true;
-    isolation.dispatchEvent(new Event("change"));
-    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
+    const settingsHarness = createHarness();
+    const settingsEl = mount(settingsHarness.view);
+    buttonWithText(settingsEl, "Settings").click();
+    const boundary = settingsEl.querySelector<HTMLSelectElement>('select[aria-label="Memory available in this project"]');
+    if (!boundary) throw new Error("project memory selector missing");
+    boundary.value = "project-only";
+    boundary.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(settingsHarness.onIntent).toHaveBeenCalledWith({
       type: "memory.update-policy",
-      payload: { isolateCurrentProject: true },
+      payload: { projectBoundaryMode: "project-only" },
     }));
-    buttonWithText(el, "Import Markdown changes").click();
-    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({ type: "memory.import-markdown", payload: {} }));
+    const importHarness = createHarness();
+    const importEl = mount(importHarness.view);
+    buttonWithText(importEl, "Settings").click();
+    buttonWithText(importEl, "Import Markdown changes").click();
+    await vi.waitFor(() => expect(importHarness.onIntent).toHaveBeenCalledWith({ type: "memory.import-markdown", payload: {} }));
   });
 });
 
@@ -166,6 +191,16 @@ function memoryModel(): FrontendMemoryScreenViewModel {
     revision: 1,
     loading: false,
     filter: "all",
+    category: "all",
+    categoryOptions: [
+      { value: "all", label: "All categories" },
+      { value: "preference", label: "Preferences" },
+    ],
+    sort: "updated-desc",
+    sortOptions: [
+      { value: "updated-desc", label: "Recently updated" },
+      { value: "last-used-desc", label: "Recently used" },
+    ],
     filters: [
       { id: "all", label: "Active", selected: true },
       { id: "profile", label: "Vault profile", selected: false },
@@ -183,7 +218,9 @@ function memoryModel(): FrontendMemoryScreenViewModel {
         label: "Vault profile",
         content: "Prefers concise technical answers",
         provenanceLabel: "Saved explicitly",
+        createdAt: "2026-07-01T00:00:00Z",
         updatedAt: "2026-07-11T00:00:00Z",
+        lastReferencedAt: "2026-07-11T00:00:00Z",
         sensitivityLabel: "Vault Local",
         status: "active",
         availableActions: ["edit", "archive", "delete"],
@@ -196,7 +233,9 @@ function memoryModel(): FrontendMemoryScreenViewModel {
         label: "vault-a",
         content: "Use Obsidian-aware tools for note edits",
         provenanceLabel: "Imported from an earlier memory format",
+        createdAt: "2026-07-02T00:00:00Z",
         updatedAt: "2026-07-10T00:00:00Z",
+        lastReferencedAt: null,
         sensitivityLabel: "Unspecified",
         status: "active",
         availableActions: ["edit", "archive", "delete"],
@@ -210,7 +249,15 @@ function memoryModel(): FrontendMemoryScreenViewModel {
       { value: "project", label: "Current project" },
       { value: "failure", label: "Lesson or correction" },
     ],
-    projectBoundary: { description: "Keep this project isolated.", checked: false },
+    projectBoundary: {
+      description: "Use vault and parent project memory.",
+      value: "inherit",
+      options: [
+        { value: "inherit", label: "Vault and parent projects" },
+        { value: "separate", label: "No parent projects" },
+        { value: "project-only", label: "Only this project" },
+      ],
+    },
     learningSettings: [
       { id: "backgroundLearning", title: "Conversation learning", description: "Facts inferred during conversation review.", value: "suggest", options: [{ value: "off", label: "Off" }, { value: "suggest", label: "Suggest" }, { value: "auto", label: "Auto" }] },
       { id: "correctionLearning", title: "User corrections", description: "How explicit corrections become durable lessons.", value: "auto", options: [{ value: "off", label: "Off" }, { value: "suggest", label: "Suggest" }, { value: "auto", label: "Auto" }] },

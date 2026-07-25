@@ -1,6 +1,10 @@
 /* Memory-specific content. Structural page styles live in page-shell.css. */
 
-.chatobby-memory__toolbar { display: flex; }
+.chatobby-memory__toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(132px, auto) minmax(132px, auto) auto;
+  align-items: center;
+}
 .chatobby-memory__search {
   display: grid;
   min-width: 0;
@@ -20,6 +24,10 @@
 .chatobby-memory__search > span { display: inline-flex; color: var(--text-faint); }
 .chatobby-memory__search-input { min-width: 0; border: 0; background: transparent; box-shadow: none; }
 .chatobby-memory__search-input:focus { box-shadow: none; }
+.chatobby-memory__view-select {
+  min-width: 0;
+  max-width: 190px;
+}
 
 .chatobby-memory__filters {
   display: flex;
@@ -169,6 +177,7 @@
 .chatobby-memory__setting-copy { min-width: 0; }
 .chatobby-memory__setting-label { font-size: var(--font-ui-small); font-weight: var(--font-semibold); }
 .chatobby-memory__setting-description { margin-top: 2px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.chatobby-memory__boundary-row select { max-width: min(100%, 220px); }
 .chatobby-memory__storage-actions { justify-content: flex-start; padding-block: var(--size-4-3); }
 .chatobby-memory__help-list {
   margin: 0;
@@ -182,10 +191,18 @@
 @container chatobby-page (max-width: 620px) {
   .chatobby-memory__create,
   .chatobby-memory__setting-row { grid-template-columns: minmax(0, 1fr); }
+  .chatobby-memory__toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chatobby-memory__search { grid-column: 1 / -1; }
+  .chatobby-memory__view-select { width: 100%; max-width: none; }
   .chatobby-memory__toolbar > button { width: 100%; }
   .chatobby-memory__record-summary {
     grid-template-columns: auto minmax(0, 1fr);
   }
   .chatobby-memory__record-divider { display: none; }
   .chatobby-memory__record-content { grid-column: 2; }
+}
+
+@container chatobby-page (max-width: 380px) {
+  .chatobby-memory__toolbar { grid-template-columns: minmax(0, 1fr); }
+  .chatobby-memory__search { grid-column: auto; }
 }

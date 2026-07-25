@@ -4,15 +4,21 @@ import type {
   FrontendIntent,
   FrontendMcpScreenViewModel,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
+import type {
+  FrontendPluginMcpScreenViewModel,
+} from "../../../vendor/chatobby-client/frontend-plugin-contracts";
+import type { App } from "obsidian";
 import { McpView, type McpViewIntent } from "../ui/mcp-view";
 
 export interface McpScreenControllerOptions {
+  app: App;
   getHost(): HTMLElement;
   getStore(): FrontendStore;
   getProtocol(): FrontendProtocolController;
   prepareOpen(): void;
   onOpened(): void;
   onClosed(renderChat: boolean): void;
+  onNavigatePlugin(pluginId?: string): void;
 }
 
 /** Binds the runtime-owned MCP management model to the native Obsidian view. */
@@ -28,25 +34,34 @@ export class McpScreenController {
     return this.view?.handleKeydown(event) ?? false;
   }
 
-  open(): void {
+  open(pluginId?: string): void {
     this.options.prepareOpen();
-    this.view?.destroy();
+    if (this.view) {
+      this.view.setPluginRoute(pluginId);
+      this.options.onOpened();
+      void this.refresh(pluginId);
+      return;
+    }
     this.view = new McpView({
+      app: this.options.app,
       getModel: () => this.currentModel(),
       subscribe: (listener) => this.options.getStore().subscribeSelector(
         (snapshot) => snapshot.screenModels.find(
-          (screen): screen is FrontendMcpScreenViewModel => screen.screenId === "mcp",
+          (screen): screen is FrontendPluginMcpScreenViewModel =>
+            screen.screenId === "mcp" && isPluginMcpScreen(screen),
         ) ?? null,
         listener,
       ),
       onBack: () => this.close(),
       onRefresh: () => this.refresh(),
+      onNavigatePlugin: (nextPluginId) => this.options.onNavigatePlugin(nextPluginId),
       onIntent: (intent) => this.dispatch(intent),
+      initialPluginId: pluginId,
     });
     this.options.onOpened();
     this.view.render(this.options.getHost());
     window.requestAnimationFrame(() => this.view?.focusContainer());
-    void this.refresh();
+    void this.refresh(pluginId);
   }
 
   close(renderChat = true): void {
@@ -63,7 +78,7 @@ export class McpScreenController {
     if (this.view) void this.refresh();
   }
 
-  private async refresh(): Promise<void> {
+  private async refresh(pluginId = this.view?.pluginRoute()): Promise<void> {
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) return;
     try {
@@ -71,6 +86,7 @@ export class McpScreenController {
         schemaVersion: 1,
         viewId: snapshot.viewId,
         screenId: "mcp",
+        ...(pluginId ? { preferredEntityId: pluginId } : {}),
       });
       this.view?.setLocalError(null);
     } catch (error) {
@@ -88,6 +104,21 @@ export class McpScreenController {
       mainSessionId: snapshot.session?.id,
       ...input,
     } as FrontendIntent;
+    if (intent.type === "mcp.set-credential-reference") {
+      await this.options.getProtocol().synchronizeMcpCredential(
+        intent.payload.reference,
+        this.options.app.secretStorage.getSecret(intent.payload.reference),
+      );
+    } else if (
+      intent.type === "mcp.save"
+      && intent.payload.draft.authentication === "bearer"
+      && intent.payload.draft.bearerCredentialReference
+    ) {
+      await this.options.getProtocol().synchronizeMcpCredential(
+        intent.payload.draft.bearerCredentialReference,
+        this.options.app.secretStorage.getSecret(intent.payload.draft.bearerCredentialReference),
+      );
+    }
     const outcome = await this.options.getProtocol().dispatch(intent);
     if (outcome.status === "rejected" || outcome.status === "conflict") {
       throw new Error(outcome.notice?.message ?? "The MCP action could not be applied.");
@@ -95,11 +126,21 @@ export class McpScreenController {
     this.view?.setLocalError(null);
   }
 
-  private currentModel(): FrontendMcpScreenViewModel | null {
+  private currentModel(): FrontendPluginMcpScreenViewModel | null {
     return this.options.getStore().snapshot?.screenModels.find(
-      (screen): screen is FrontendMcpScreenViewModel => screen.screenId === "mcp",
+      (screen): screen is FrontendPluginMcpScreenViewModel =>
+        screen.screenId === "mcp" && isPluginMcpScreen(screen),
     ) ?? null;
   }
+}
+
+function isPluginMcpScreen(
+  screen: FrontendMcpScreenViewModel,
+): screen is FrontendPluginMcpScreenViewModel {
+  return "installedPlugins" in screen
+    && Array.isArray(screen.installedPlugins)
+    && "catalogPlugins" in screen
+    && Array.isArray(screen.catalogPlugins);
 }
 
 function errorMessage(error: unknown): string {

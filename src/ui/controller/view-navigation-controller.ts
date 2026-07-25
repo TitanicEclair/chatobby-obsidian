@@ -19,6 +19,7 @@ export interface ChatobbyNavigationState {
   feedOnly?: boolean;
   channelId?: string;
   messageId?: string;
+  pluginId?: string;
 }
 
 /** Map internal routes onto the page ribbon without treating child feeds as management pages. */
@@ -46,7 +47,7 @@ interface NavigationHandlers {
   openMemory: () => void;
   openEvents: () => void;
   openQueries: () => void;
-  openMcp: () => void;
+  openMcp: (state: ChatobbyNavigationState) => void;
   openSubagents: (state: ChatobbyNavigationState) => void;
   openChannels: (state: ChatobbyNavigationState) => void;
   openSessionPicker: () => Promise<void>;
@@ -128,7 +129,7 @@ export class ViewNavigationController {
     else if (state.mode === "memory") this.handlers.openMemory();
     else if (state.mode === "events") this.handlers.openEvents();
     else if (state.mode === "queries") this.handlers.openQueries();
-    else if (state.mode === "mcp") this.handlers.openMcp();
+    else if (state.mode === "mcp") this.handlers.openMcp(state);
     else if (state.mode === "subagents") this.handlers.openSubagents(state);
     else if (state.mode === "channels") this.handlers.openChannels(state);
     else await this.handlers.openSessionPicker();
@@ -161,6 +162,7 @@ export function parseNavigationState(value: unknown): ChatobbyNavigationState {
     feedOnly: typeof record.feedOnly === "boolean" ? record.feedOnly : undefined,
     channelId: typeof record.channelId === "string" ? record.channelId : undefined,
     messageId: typeof record.messageId === "string" ? record.messageId : undefined,
+    pluginId: typeof record.pluginId === "string" ? record.pluginId : undefined,
   };
 }
 
@@ -207,5 +209,6 @@ function sameNavigationState(left: ChatobbyNavigationState, right: ChatobbyNavig
     && left.subagentTab === right.subagentTab
     && left.feedOnly === right.feedOnly
     && left.channelId === right.channelId
-    && left.messageId === right.messageId;
+    && left.messageId === right.messageId
+    && left.pluginId === right.pluginId;
 }

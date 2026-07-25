@@ -64,4 +64,19 @@ describe("Obsidian dependency snapshot", () => {
 
     expect(capabilityStateFingerprint(enabled)).not.toBe(capabilityStateFingerprint(disabled));
   });
+
+  it("does not advertise CLI-backed tools on pre-1.12 Obsidian even when a binary path exists", () => {
+    process.env.CHATOBBY_OBSIDIAN_CLI_BIN = resolve("package.json");
+    const state = collectObsidianCapabilityState({
+      version: "1.8.0",
+    } as unknown as App);
+
+    expect(state.runtimeDependencies).toEqual([
+      expect.objectContaining({
+        id: "obsidian-cli",
+        available: false,
+        detail: expect.stringContaining("requires Obsidian 1.12"),
+      }),
+    ]);
+  });
 });

@@ -92,6 +92,8 @@ const expectedPublicClientFiles = [
 	"control/contracts.ts",
 	"frontend-contracts.d.ts",
 	"frontend-contracts.ts",
+	"frontend-plugin-contracts.d.ts",
+	"frontend-plugin-contracts.ts",
 	"wire-types.d.ts",
 	"wire-types.ts",
 	"ws-client.d.ts",

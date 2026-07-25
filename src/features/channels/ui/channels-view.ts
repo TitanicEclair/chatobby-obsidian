@@ -1,4 +1,4 @@
-import { type App, setIcon } from "obsidian";
+import { type App, Menu, setIcon } from "obsidian";
 import { confirmAction } from "../../../ui/modals/modals";
 import { ChatobbyComponent } from "../../../ui/shared/component";
 import {
@@ -132,6 +132,10 @@ export class ChannelsView extends ChatobbyComponent {
         copy.createSpan({ cls: "chatobby-channels__channel-name", text: item.label });
         copy.createSpan({ cls: "chatobby-channels__channel-members", text: item.subtitle });
         button.addEventListener("click", () => void this.options.onSelectChannel(item.id));
+        button.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          this.openChannelMenu(event, item);
+        });
       }
     }
   }
@@ -197,7 +201,22 @@ export class ChannelsView extends ChatobbyComponent {
       createPageState(messages, { kind: "empty", title: "No messages in this channel yet" });
       return;
     }
-    for (const message of model.messages) this.renderMessage(messages, message);
+    let previousDate = "";
+    for (const message of model.messages) {
+      const date = dateKey(message.createdAt);
+      if (date !== previousDate) {
+        const separator = messages.createDiv({
+          cls: "chatobby-channels__date-separator",
+          attr: { role: "separator", "aria-label": formatDate(message.createdAt) },
+        });
+        separator.createEl("time", {
+          text: formatDate(message.createdAt),
+          attr: { datetime: date },
+        });
+        previousDate = date;
+      }
+      this.renderMessage(messages, message);
+    }
   }
 
   private renderMessage(parent: HTMLElement, message: FrontendChannelMessageViewModel): void {
@@ -248,8 +267,53 @@ export class ChannelsView extends ChatobbyComponent {
     })) return;
     await this.options.onDeleteChannel(id);
   }
+
+  private openChannelMenu(
+    event: MouseEvent,
+    item: FrontendChannelScreenViewModel["groups"][number]["items"][number],
+  ): void {
+    const menu = new Menu();
+    menu.addItem((entry) => entry
+      .setTitle("Open channel")
+      .setIcon("messages-square")
+      .onClick(() => void this.options.onSelectChannel(item.id)));
+    menu.addItem((entry) => entry
+      .setTitle("Copy channel name")
+      .setIcon("copy")
+      .onClick(() => void navigator.clipboard.writeText(item.label)));
+    if (item.archived || item.canArchive) {
+      menu.addSeparator();
+      menu.addItem((entry) => entry
+        .setTitle(item.archived ? "Restore channel" : "Archive channel")
+        .setIcon(item.archived ? "archive-restore" : "archive")
+        .onClick(() => void this.confirmArchive(item.id, item.label, item.archived)));
+    }
+    if (item.canDelete) {
+      menu.addItem((entry) => entry
+        .setTitle("Delete channel permanently")
+        .setIcon("trash-2")
+        .onClick(() => void this.confirmDelete(item.id, item.label)));
+    }
+    menu.showAtMouseEvent(event);
+  }
 }
 
 function formatTime(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
+}
+
+function dateKey(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  if (target === today) return "Today";
+  if (target === today - 86_400_000) return "Yesterday";
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+    .format(date);
 }

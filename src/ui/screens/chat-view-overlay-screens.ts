@@ -1,5 +1,6 @@
 import type { FrontendProtocolController } from "../../frontend/frontend-protocol-controller";
 import type { FrontendStore } from "../../frontend/frontend-store";
+import type { App } from "obsidian";
 import { EventsScreenController } from "../../features/events/public";
 import { ContextQueryScreenController } from "../../features/queries/public";
 import { McpScreenController } from "../../features/mcp/public";
@@ -19,6 +20,7 @@ export interface ChatViewOverlayScreens {
 }
 
 export interface ChatViewOverlayScreenOptions {
+  app: App;
   getHost(): HTMLElement;
   getFrontendStore(): FrontendStore;
   getFrontendProtocol(): FrontendProtocolController;
@@ -26,6 +28,7 @@ export interface ChatViewOverlayScreenOptions {
   onOpened(mode: OverlayViewMode): void;
   onClosed(mode: OverlayViewMode, renderChat: boolean): void;
   openSession(projectPath: string, sessionPath: string): Promise<void>;
+  navigateMcpPlugin(pluginId?: string): void;
 }
 
 /** Builds mutually exclusive full-view screens without adding their lifecycle policy to ChatobbyView. */
@@ -77,12 +80,14 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     onClosed: (renderChat) => options.onClosed("queries", renderChat),
   });
   mcp = new McpScreenController({
+    app: options.app,
     getHost: () => options.getHost(),
     getStore: () => options.getFrontendStore(),
     getProtocol: () => options.getFrontendProtocol(),
     prepareOpen: () => prepare("mcp"),
     onOpened: () => options.onOpened("mcp"),
     onClosed: (renderChat) => options.onClosed("mcp", renderChat),
+    onNavigatePlugin: (pluginId) => options.navigateMcpPlugin(pluginId),
   });
   return {
     memory,

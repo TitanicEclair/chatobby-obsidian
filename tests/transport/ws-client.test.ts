@@ -102,6 +102,42 @@ describe("ChatobbyTransport", () => {
     await transport.disconnect();
   });
 
+  it("hydrates referenced MCP credentials before reporting the transport connected", async () => {
+    const credentialSource = vi.fn((reference: string) =>
+      reference === "github-token" ? "secret-value" : null,
+    );
+    const transport = new ChatobbyTransport(externalRuntime(), credentialSource);
+    const connect = transport.connect();
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+
+    await waitForSent(socket, 1);
+    const referencesFrame = JSON.parse(socket.sent[0]!);
+    expect(referencesFrame).toMatchObject({ method: "mcp_credential_references", params: {} });
+    socket.serverMessage({
+      id: referencesFrame.id,
+      type: "response",
+      result: { references: ["github-token"] },
+    });
+
+    await waitForSent(socket, 2);
+    const credentialFrame = JSON.parse(socket.sent[1]!);
+    expect(credentialFrame).toMatchObject({
+      method: "mcp_credential_set",
+      params: { reference: "github-token", secret: "secret-value" },
+    });
+    socket.serverMessage({
+      id: credentialFrame.id,
+      type: "response",
+      result: { status: "updated" },
+    });
+
+    await connect;
+    expect(credentialSource).toHaveBeenCalledWith("github-token");
+    expect(transport.state.status).toBe("connected");
+    await transport.disconnect();
+  });
+
 	it("rejects a backend request that never receives a response", async () => {
 		const transport = new ChatobbyTransport(externalRuntime());
 		const connect = transport.connect();

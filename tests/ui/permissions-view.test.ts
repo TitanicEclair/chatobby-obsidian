@@ -163,6 +163,48 @@ describe("PermissionsView", () => {
     }));
   });
 
+  it("uses the selected policy for the live main agent instead of only changing the project default", async () => {
+    const base = permissionModel();
+    const model: FrontendPermissionScreenViewModel = {
+      ...base,
+      selectedProfileId: "standard",
+      selectedProfile: { ...base.profiles[1]!, selected: true, activeForMain: false, canActivate: true },
+      profiles: [
+        { ...base.profiles[0]!, selected: false, activeForMain: true, canActivate: false },
+        { ...base.profiles[1]!, selected: true, activeForMain: false, canActivate: true },
+      ],
+      liveAgents: [{
+        authority: { kind: "main", mainSessionId: "main-1" },
+        label: "Main agent",
+        detail: "main-1",
+        audience: "main",
+        profileId: "custom",
+        bindingRevision: 11,
+      }],
+    };
+    const onIntent = vi.fn(async () => {});
+    const view = new PermissionsView({
+      getModel: () => model,
+      subscribe: () => () => {},
+      onRefresh: vi.fn(async () => {}),
+      onIntent,
+      onBack: vi.fn(),
+    });
+    const root = mount(view);
+    [...root.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Use for Main")
+      ?.click();
+
+    await vi.waitFor(() => expect(onIntent).toHaveBeenCalledWith({
+      type: "permissions.set-live-agent-profile",
+      payload: {
+        authority: { kind: "main", mainSessionId: "main-1" },
+        profileId: "standard",
+        expectedBindingRevision: 11,
+      },
+    }));
+  });
+
 	it("deletes an active custom policy only after choosing its replacement", async () => {
 		const model = permissionModel();
 		const onIntent = vi.fn(async () => {});

@@ -237,6 +237,9 @@ export interface FrontendChannelScreenViewModel {
     readonly nextCursor?: string;
 }
 export type FrontendMemoryFilter = "all" | "profile" | "vault" | "project" | "lessons" | "archived";
+export type FrontendMemoryCategoryFilter = "all" | "uncategorized" | "failure" | "correction" | "insight" | "preference" | "convention" | "tool-quirk";
+export type FrontendMemorySort = "updated-desc" | "last-used-desc" | "created-desc" | "created-asc";
+export type FrontendMemoryBoundaryMode = "inherit" | "separate" | "project-only";
 export interface FrontendMemoryRecordViewModel {
     readonly id: string;
     readonly revision: number;
@@ -245,6 +248,8 @@ export interface FrontendMemoryRecordViewModel {
     readonly stateLabel?: string;
     readonly content: string;
     readonly provenanceLabel: string;
+    readonly createdAt: string;
+    readonly lastReferencedAt: string;
     readonly updatedAt: string;
     readonly sensitivityLabel: string;
     readonly status: "active" | "archived";
@@ -278,12 +283,17 @@ export interface FrontendMemoryScreenViewModel {
     }[];
     readonly query: string;
     readonly searchResultCount?: number;
+    readonly category: FrontendMemoryCategoryFilter;
+    readonly categoryOptions: readonly FrontendChoiceOption[];
+    readonly sort: FrontendMemorySort;
+    readonly sortOptions: readonly FrontendChoiceOption[];
     readonly records: readonly FrontendMemoryRecordViewModel[];
     readonly candidates: readonly FrontendMemoryCandidateViewModel[];
     readonly createTargets: readonly FrontendChoiceOption[];
     readonly projectBoundary: {
         readonly description: string;
-        readonly checked: boolean;
+        readonly value: FrontendMemoryBoundaryMode;
+        readonly options: readonly FrontendChoiceOption[];
         readonly disabledReason?: string;
     };
     readonly learningSettings: readonly FrontendMemorySettingChoice[];
@@ -320,7 +330,7 @@ export interface FrontendContextQueryScreenViewModel {
     readonly trusted: boolean;
     readonly items: readonly FrontendContextQueryViewModel[];
 }
-export type FrontendMcpServerState = "disabled" | "configured" | "discovering" | "needs-sign-in" | "ready" | "connected" | "updating" | "unavailable" | "incompatible";
+export type FrontendMcpServerState = "disabled" | "configured" | "connecting" | "discovering" | "needs-sign-in" | "ready" | "connected" | "updating" | "unavailable" | "incompatible";
 export interface FrontendMcpServerViewModel {
     readonly id: string;
     readonly state: FrontendMcpServerState;
@@ -338,6 +348,8 @@ export interface FrontendMcpServerViewModel {
     readonly arguments: readonly string[];
     readonly workingDirectory?: string;
     readonly url?: string;
+    readonly authentication: "oauth" | "bearer" | "none";
+    readonly credentialReference?: string;
     readonly environmentNames: readonly string[];
     readonly headerNames: readonly string[];
     readonly registry?: {
@@ -385,6 +397,7 @@ export interface FrontendMcpServerDraft {
     readonly workingDirectory?: string;
     readonly url?: string;
     readonly authentication?: "oauth" | "bearer" | "none";
+    readonly bearerCredentialReference?: string;
     readonly bearerTokenEnvironmentVariable?: string;
     readonly environment?: readonly {
         readonly name: string;
@@ -1266,6 +1279,8 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly payload: {
         readonly filter: FrontendMemoryFilter;
         readonly query: string;
+        readonly category: FrontendMemoryCategoryFilter;
+        readonly sort: FrontendMemorySort;
     };
 }) | (FrontendIntentBase & {
     readonly type: "memory.create";
@@ -1300,7 +1315,7 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly backgroundLearning?: "off" | "suggest" | "auto";
         readonly correctionLearning?: "off" | "suggest" | "auto";
         readonly promptRouting?: "off" | "profile-project" | "hybrid";
-        readonly isolateCurrentProject?: boolean;
+        readonly projectBoundaryMode?: FrontendMemoryBoundaryMode;
     };
 }) | (FrontendIntentBase & {
     readonly type: "memory.import-markdown" | "memory.export-markdown";
@@ -1360,6 +1375,14 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly expectedConfigRevision: string;
         readonly serverId: string;
         readonly enabled: boolean;
+        readonly scope?: "user" | "project";
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "mcp.set-credential-reference";
+    readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly reference: string;
         readonly scope?: "user" | "project";
     };
 }) | (FrontendIntentBase & {

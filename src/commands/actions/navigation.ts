@@ -72,7 +72,7 @@ export const navigationActions: ChatobbyAction[] = [
   },
   {
     id: "open-mcp",
-    name: "Open MCP servers",
+    name: "Open plugins",
     group: "navigation",
     run: (services) => services.withView((view) => view.commandOpenPage("mcp")),
   },

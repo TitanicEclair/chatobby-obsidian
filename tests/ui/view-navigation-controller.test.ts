@@ -3,6 +3,7 @@ import type { WorkspaceLeaf } from "obsidian";
 import {
   closeInactiveViewSurfaces,
   clearWorkspaceLeafNavigationHistory,
+  parseNavigationState,
   ribbonModeForNavigation,
   shouldActivateLeafSession,
   type ChatobbyNavigationState,
@@ -41,6 +42,7 @@ describe("ViewNavigationController", () => {
       openMemory: vi.fn(),
       openEvents: vi.fn(),
       openQueries: vi.fn(),
+      openMcp: vi.fn(),
       openSubagents: vi.fn(),
       openChannels: vi.fn(),
       openSessionPicker: vi.fn(async () => {}),
@@ -125,6 +127,7 @@ describe("ViewNavigationController", () => {
       { mode: "memory" },
       { mode: "events" },
       { mode: "queries" },
+      { mode: "mcp" },
     ];
 
     for (const from of routes) {
@@ -139,15 +142,41 @@ describe("ViewNavigationController", () => {
       }
     }
   });
+
+  it("treats each plugin detail as an Obsidian history route", async () => {
+    const leaf = { setViewState: vi.fn(async () => {}) } as unknown as WorkspaceLeaf;
+    const openMcp = vi.fn();
+    const controller = createController(leaf, openMcp);
+
+    controller.navigate({ mode: "mcp", pluginId: "mcp:installed:demo" });
+    expect(leaf.setViewState).toHaveBeenCalledWith({
+      type: "chatobby-view",
+      state: {
+        mode: "mcp",
+        pluginId: "mcp:installed:demo",
+        vaultDirectoryPath: "project",
+        sessionPath: "session.jsonl",
+      },
+      active: true,
+    });
+
+    const restored = parseNavigationState({ mode: "mcp", pluginId: "mcp:installed:demo" });
+    await controller.apply(restored);
+    expect(openMcp).toHaveBeenCalledWith(restored);
+  });
 });
 
-function createController(leaf: WorkspaceLeaf): ViewNavigationController {
+function createController(
+  leaf: WorkspaceLeaf,
+  openMcp: (state: ChatobbyNavigationState) => void = vi.fn(),
+): ViewNavigationController {
   return new ViewNavigationController(leaf, "chatobby-view", {
     openChat: vi.fn(),
     openPermissions: vi.fn(),
     openMemory: vi.fn(),
     openEvents: vi.fn(),
     openQueries: vi.fn(),
+    openMcp,
     openSubagents: vi.fn(),
     openChannels: vi.fn(),
     openSessionPicker: vi.fn(async () => {}),

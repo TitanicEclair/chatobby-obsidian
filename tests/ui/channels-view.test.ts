@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { App } from "obsidian";
 import { describe, expect, it, vi } from "vitest";
 import { ChannelsView } from "../../src/features/channels/ui/channels-view";
 import type { FrontendChannelScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
@@ -9,7 +10,16 @@ describe("ChannelsView", () => {
     const listeners = new Set<(value: FrontendChannelScreenViewModel | null) => void>();
     const onSetArchived = vi.fn(async () => {});
     const onDeleteChannel = vi.fn(async () => {});
+    const createGuide = vi.fn(async () => ({}));
+    const app = {
+      vault: {
+        getAbstractFileByPath: vi.fn(() => null),
+        create: createGuide,
+        modify: vi.fn(async () => {}),
+      },
+    } as unknown as App;
     const view = new ChannelsView({
+      app,
       getModel: () => model,
       subscribe: (listener) => {
         listeners.add(listener);
@@ -29,7 +39,7 @@ describe("ChannelsView", () => {
 
     expect(host.querySelector(".chatobby-channels.chatobby-page")).not.toBeNull();
     expect(host.querySelector(".chatobby-channels__header.chatobby-page__header")).not.toBeNull();
-    expect(host.querySelectorAll(".chatobby-channels__header .chatobby-page__icon-button")).toHaveLength(2);
+    expect(host.querySelectorAll(".chatobby-channels__header .chatobby-page__icon-button")).toHaveLength(3);
     expect(host.querySelector("aside[aria-label='Channel list']")).not.toBeNull();
     expect(host.querySelectorAll(".chatobby-channels__channel")).toHaveLength(2);
     expect([...host.querySelectorAll(".chatobby-channels__section-label")].map((element) => element.textContent)).toEqual([
@@ -43,6 +53,17 @@ describe("ChannelsView", () => {
     expect(host.querySelector(".chatobby-channels__message-route")?.textContent).toBe("to Researcher");
     expect(host.querySelector(".chatobby-channels__bubble")?.textContent).toContain("Status update");
     expect(host.querySelector(".chatobby-channels__message-context")?.textContent).toContain("Directory: C:\\Vault\\Projects\\Chatobby");
+    expect(host.querySelectorAll(".chatobby-channels__date-separator")).toHaveLength(1);
+
+    host.querySelector<HTMLButtonElement>(".chatobby-channels__channel")
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+
+    host.querySelector<HTMLButtonElement>('[aria-label="Add Chatobby guide to vault"]')?.click();
+    document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();
+    await vi.waitFor(() => expect(createGuide).toHaveBeenCalledWith(
+      "Chatobby Guide.md",
+      expect.stringContaining("## Permissions"),
+    ));
 
     host.querySelector<HTMLButtonElement>('[aria-label="Archive channel"]')?.click();
     document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();

@@ -357,6 +357,17 @@ export interface FrontendChannelScreenViewModel {
 }
 
 export type FrontendMemoryFilter = "all" | "profile" | "vault" | "project" | "lessons" | "archived";
+export type FrontendMemoryCategoryFilter =
+	| "all"
+	| "uncategorized"
+	| "failure"
+	| "correction"
+	| "insight"
+	| "preference"
+	| "convention"
+	| "tool-quirk";
+export type FrontendMemorySort = "updated-desc" | "last-used-desc" | "created-desc" | "created-asc";
+export type FrontendMemoryBoundaryMode = "inherit" | "separate" | "project-only";
 
 export interface FrontendMemoryRecordViewModel {
 	readonly id: string;
@@ -366,6 +377,8 @@ export interface FrontendMemoryRecordViewModel {
 	readonly stateLabel?: string;
 	readonly content: string;
 	readonly provenanceLabel: string;
+	readonly createdAt: string;
+	readonly lastReferencedAt: string;
 	readonly updatedAt: string;
 	readonly sensitivityLabel: string;
 	readonly status: "active" | "archived";
@@ -402,12 +415,17 @@ export interface FrontendMemoryScreenViewModel {
 	}[];
 	readonly query: string;
 	readonly searchResultCount?: number;
+	readonly category: FrontendMemoryCategoryFilter;
+	readonly categoryOptions: readonly FrontendChoiceOption[];
+	readonly sort: FrontendMemorySort;
+	readonly sortOptions: readonly FrontendChoiceOption[];
 	readonly records: readonly FrontendMemoryRecordViewModel[];
 	readonly candidates: readonly FrontendMemoryCandidateViewModel[];
 	readonly createTargets: readonly FrontendChoiceOption[];
 	readonly projectBoundary: {
 		readonly description: string;
-		readonly checked: boolean;
+		readonly value: FrontendMemoryBoundaryMode;
+		readonly options: readonly FrontendChoiceOption[];
 		readonly disabledReason?: string;
 	};
 	readonly learningSettings: readonly FrontendMemorySettingChoice[];
@@ -450,6 +468,7 @@ export interface FrontendContextQueryScreenViewModel {
 export type FrontendMcpServerState =
 	| "disabled"
 	| "configured"
+	| "connecting"
 	| "discovering"
 	| "needs-sign-in"
 	| "ready"
@@ -475,6 +494,8 @@ export interface FrontendMcpServerViewModel {
 	readonly arguments: readonly string[];
 	readonly workingDirectory?: string;
 	readonly url?: string;
+	readonly authentication: "oauth" | "bearer" | "none";
+	readonly credentialReference?: string;
 	readonly environmentNames: readonly string[];
 	readonly headerNames: readonly string[];
 	readonly registry?: {
@@ -525,6 +546,7 @@ export interface FrontendMcpServerDraft {
 	readonly workingDirectory?: string;
 	readonly url?: string;
 	readonly authentication?: "oauth" | "bearer" | "none";
+	readonly bearerCredentialReference?: string;
 	readonly bearerTokenEnvironmentVariable?: string;
 	readonly environment?: readonly {
 		readonly name: string;
@@ -1471,7 +1493,12 @@ export type FrontendIntent =
 	  })
 	| (FrontendIntentBase & {
 			readonly type: "memory.set-view";
-			readonly payload: { readonly filter: FrontendMemoryFilter; readonly query: string };
+			readonly payload: {
+				readonly filter: FrontendMemoryFilter;
+				readonly query: string;
+				readonly category: FrontendMemoryCategoryFilter;
+				readonly sort: FrontendMemorySort;
+			};
 	  })
 	| (FrontendIntentBase & {
 			readonly type: "memory.create";
@@ -1504,7 +1531,7 @@ export type FrontendIntent =
 				readonly backgroundLearning?: "off" | "suggest" | "auto";
 				readonly correctionLearning?: "off" | "suggest" | "auto";
 				readonly promptRouting?: "off" | "profile-project" | "hybrid";
-				readonly isolateCurrentProject?: boolean;
+				readonly projectBoundaryMode?: FrontendMemoryBoundaryMode;
 			};
 	  })
 	| (FrontendIntentBase & {
@@ -1568,6 +1595,15 @@ export type FrontendIntent =
 				readonly expectedConfigRevision: string;
 				readonly serverId: string;
 				readonly enabled: boolean;
+				readonly scope?: "user" | "project";
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "mcp.set-credential-reference";
+			readonly payload: {
+				readonly expectedConfigRevision: string;
+				readonly serverId: string;
+				readonly reference: string;
 				readonly scope?: "user" | "project";
 			};
 	  })
@@ -1974,6 +2010,8 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			payload: {
 				filter: requireMemoryFilter(payload.filter),
 				query: typeof payload.query === "string" ? payload.query : "",
+				category: requireMemoryCategoryFilter(payload.category),
+				sort: requireMemorySort(payload.sort),
 			},
 		};
 	}
@@ -2091,10 +2129,7 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			...base,
 			type: input.type,
 			payload: {
-				expectedConfigRevision: requireString(
-					payload.expectedConfigRevision,
-					"payload.expectedConfigRevision",
-				),
+				expectedConfigRevision: requireString(payload.expectedConfigRevision, "payload.expectedConfigRevision"),
 				draft: parseMcpServerDraft(payload.draft),
 			},
 		};
@@ -2111,10 +2146,7 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			...base,
 			type: input.type,
 			payload: {
-				expectedConfigRevision: requireString(
-					payload.expectedConfigRevision,
-					"payload.expectedConfigRevision",
-				),
+				expectedConfigRevision: requireString(payload.expectedConfigRevision, "payload.expectedConfigRevision"),
 				registryName: requireString(payload.registryName, "payload.registryName"),
 				registryVersion: requireString(payload.registryVersion, "payload.registryVersion"),
 				scope: requireMcpScope(payload.scope),
@@ -2126,12 +2158,21 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			...base,
 			type: input.type,
 			payload: {
-				expectedConfigRevision: requireString(
-					payload.expectedConfigRevision,
-					"payload.expectedConfigRevision",
-				),
+				expectedConfigRevision: requireString(payload.expectedConfigRevision, "payload.expectedConfigRevision"),
 				serverId: requireString(payload.serverId, "payload.serverId"),
 				enabled: requireBoolean(payload.enabled, "payload.enabled"),
+				scope: payload.scope === undefined ? undefined : requireMcpScope(payload.scope),
+			},
+		};
+	}
+	if (input.type === "mcp.set-credential-reference") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				expectedConfigRevision: requireString(payload.expectedConfigRevision, "payload.expectedConfigRevision"),
+				serverId: requireString(payload.serverId, "payload.serverId"),
+				reference: requireString(payload.reference, "payload.reference"),
 				scope: payload.scope === undefined ? undefined : requireMcpScope(payload.scope),
 			},
 		};
@@ -2165,10 +2206,7 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			...base,
 			type: input.type,
 			payload: {
-				expectedConfigRevision: requireString(
-					payload.expectedConfigRevision,
-					"payload.expectedConfigRevision",
-				),
+				expectedConfigRevision: requireString(payload.expectedConfigRevision, "payload.expectedConfigRevision"),
 				serverId: requireString(payload.serverId, "payload.serverId"),
 				scope: payload.scope === undefined ? undefined : requireMcpScope(payload.scope),
 			},
@@ -2833,6 +2871,34 @@ function requireMemoryFilter(value: unknown): FrontendMemoryFilter {
 	throw new Error(`payload.filter is invalid: ${String(value)}`);
 }
 
+function requireMemoryCategoryFilter(value: unknown): FrontendMemoryCategoryFilter {
+	if (
+		value === "all" ||
+		value === "uncategorized" ||
+		value === "failure" ||
+		value === "correction" ||
+		value === "insight" ||
+		value === "preference" ||
+		value === "convention" ||
+		value === "tool-quirk"
+	) {
+		return value;
+	}
+	throw new Error(`payload.category is invalid: ${String(value)}`);
+}
+
+function requireMemorySort(value: unknown): FrontendMemorySort {
+	if (value === "updated-desc" || value === "last-used-desc" || value === "created-desc" || value === "created-asc") {
+		return value;
+	}
+	throw new Error(`payload.sort is invalid: ${String(value)}`);
+}
+
+function optionalMemoryBoundaryMode(value: unknown): FrontendMemoryBoundaryMode | undefined {
+	if (value === undefined || value === "inherit" || value === "separate" || value === "project-only") return value;
+	throw new Error(`payload.projectBoundaryMode is invalid: ${String(value)}`);
+}
+
 function requireMcpScope(value: unknown): "user" | "project" {
 	if (value === "user" || value === "project") return value;
 	throw new Error("MCP scope must be user or project");
@@ -2857,36 +2923,35 @@ function parseMcpServerDraft(value: unknown): FrontendMcpServerDraft {
 	) {
 		throw new Error("payload.draft.authentication is invalid");
 	}
-	const parseReferences = (
-		references: unknown,
-		label: string,
-	): FrontendMcpServerDraft["environment"] => references === undefined
-		? undefined
-		: requireArray(references, label).map((entry, index) => {
-				const reference = requireRecord(entry, `${label}[${index}]`);
-				return {
-					name: requireString(reference.name, `${label}[${index}].name`),
-					sourceEnvironmentVariable: requireString(
-						reference.sourceEnvironmentVariable,
-						`${label}[${index}].sourceEnvironmentVariable`,
-					),
-				};
-			});
-	const registry = input.registry === undefined
-		? undefined
-		: (() => {
-				const record = requireRecord(input.registry, "payload.draft.registry");
-				if (record.source !== "official") throw new Error("payload.draft.registry.source is invalid");
-				return {
-					source: "official" as const,
-					serverName: requireString(record.serverName, "payload.draft.registry.serverName"),
-					version: requireString(record.version, "payload.draft.registry.version"),
-					packageIdentifier: optionalString(
-						record.packageIdentifier,
-						"payload.draft.registry.packageIdentifier",
-					),
-				};
-			})();
+	const parseReferences = (references: unknown, label: string): FrontendMcpServerDraft["environment"] =>
+		references === undefined
+			? undefined
+			: requireArray(references, label).map((entry, index) => {
+					const reference = requireRecord(entry, `${label}[${index}]`);
+					return {
+						name: requireString(reference.name, `${label}[${index}].name`),
+						sourceEnvironmentVariable: requireString(
+							reference.sourceEnvironmentVariable,
+							`${label}[${index}].sourceEnvironmentVariable`,
+						),
+					};
+				});
+	const registry =
+		input.registry === undefined
+			? undefined
+			: (() => {
+					const record = requireRecord(input.registry, "payload.draft.registry");
+					if (record.source !== "official") throw new Error("payload.draft.registry.source is invalid");
+					return {
+						source: "official" as const,
+						serverName: requireString(record.serverName, "payload.draft.registry.serverName"),
+						version: requireString(record.version, "payload.draft.registry.version"),
+						packageIdentifier: optionalString(
+							record.packageIdentifier,
+							"payload.draft.registry.packageIdentifier",
+						),
+					};
+				})();
 	return {
 		name: requireString(input.name, "payload.draft.name"),
 		scope: requireMcpScope(input.scope),
@@ -2894,12 +2959,15 @@ function parseMcpServerDraft(value: unknown): FrontendMcpServerDraft {
 		lifecycle,
 		transport,
 		command: optionalString(input.command, "payload.draft.command"),
-		arguments: input.arguments === undefined
-			? undefined
-			: requireStringArray(input.arguments, "payload.draft.arguments"),
+		arguments:
+			input.arguments === undefined ? undefined : requireStringArray(input.arguments, "payload.draft.arguments"),
 		workingDirectory: optionalString(input.workingDirectory, "payload.draft.workingDirectory"),
 		url: optionalString(input.url, "payload.draft.url"),
 		authentication,
+		bearerCredentialReference: optionalString(
+			input.bearerCredentialReference,
+			"payload.draft.bearerCredentialReference",
+		),
 		bearerTokenEnvironmentVariable: optionalString(
 			input.bearerTokenEnvironmentVariable,
 			"payload.draft.bearerTokenEnvironmentVariable",
@@ -2917,19 +2985,16 @@ function parseMemoryPolicyPatch(
 	const backgroundLearning = optionalLearningMode(payload.backgroundLearning, "payload.backgroundLearning");
 	const correctionLearning = optionalLearningMode(payload.correctionLearning, "payload.correctionLearning");
 	const promptRouting = optionalPromptRouting(payload.promptRouting);
-	const isolateCurrentProject =
-		payload.isolateCurrentProject === undefined
-			? undefined
-			: requireBoolean(payload.isolateCurrentProject, "payload.isolateCurrentProject");
+	const projectBoundaryMode = optionalMemoryBoundaryMode(payload.projectBoundaryMode);
 	if (
 		backgroundLearning === undefined &&
 		correctionLearning === undefined &&
 		promptRouting === undefined &&
-		isolateCurrentProject === undefined
+		projectBoundaryMode === undefined
 	) {
 		throw new Error("memory.update-policy requires at least one change");
 	}
-	return { expectedMemoryRevision, backgroundLearning, correctionLearning, promptRouting, isolateCurrentProject };
+	return { expectedMemoryRevision, backgroundLearning, correctionLearning, promptRouting, projectBoundaryMode };
 }
 
 function optionalLearningMode(value: unknown, label: string): "off" | "suggest" | "auto" | undefined {

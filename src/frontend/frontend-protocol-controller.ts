@@ -61,6 +61,12 @@ export class FrontendProtocolController {
     return screen;
   }
 
+  async synchronizeMcpCredential(reference: string, secret: string | null): Promise<void> {
+    const transport = this.transport;
+    if (!transport?.isConnected) throw new Error("Chatobby runtime is not connected");
+    await transport.synchronizeMcpCredential(reference, secret);
+  }
+
   destroy(): void {
     this.unsubscribePatch?.();
     this.unsubscribePatch = null;

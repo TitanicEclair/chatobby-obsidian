@@ -35,6 +35,7 @@ import { ExtensionUiController } from "./controller/extension-ui-controller";
 import { SessionController, type SessionMutationRequest, type WorkingDirectoryScope } from "./controller/session-controller";
 import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRailController, type SubagentScreenController, type SubagentScreenTab } from "../features/subagents/public";
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
+import { downloadChatobbyGuide } from "../features/guide/chatobby-guide";
 import { RuntimeStatusController, RuntimeStatusMenu, RuntimeUpdateController } from "../features/runtime-status/public";
 import { ViewRuntimeController } from "../runtime/application/view-runtime-controller";
 import { closeInactiveViewSurfaces, parseLeafSessionState, parseNavigationState, ribbonModeForNavigation, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode, type ExclusiveViewSurface } from "./controller/view-navigation-controller";
@@ -144,7 +145,7 @@ export class ChatobbyView extends ItemView {
       openMemory: () => this.overlayScreens.memory.open(),
       openEvents: () => this.overlayScreens.events.open(),
       openQueries: () => this.overlayScreens.queries.open(),
-      openMcp: () => this.overlayScreens.mcp.open(),
+      openMcp: (state) => this.overlayScreens.mcp.open(state.pluginId),
       openSubagents: (state) => {
         this.subagentScreen.open(state.runId, state.subagentTab ?? "runs", state.nodeId, state.feedOnly ?? false);
       },
@@ -294,6 +295,7 @@ export class ChatobbyView extends ItemView {
       stopBackend: () => this.plugin.stopBackend(),
     });
     this.overlayScreens = createChatViewOverlayScreens({
+      app: this.app,
       getHost: () => this.shell.sessionPickerHostEl,
       getFrontendStore: () => this.frontendStore,
       getFrontendProtocol: () => this.frontendProtocol,
@@ -303,6 +305,7 @@ export class ChatobbyView extends ItemView {
       onOpened: (mode) => { this.viewMode = mode; this.renderViewMode(); },
       onClosed: (mode, renderChat) => this.finishOverlayClose(mode, renderChat),
       openSession: async (projectPath, sessionPath) => { await this.plugin.openSessionView(projectPath, sessionPath); },
+      navigateMcpPlugin: (pluginId) => this.navigateTo(pluginId ? { mode: "mcp", pluginId } : { mode: "mcp" }),
     });
     const subagents = createChatViewSubagentControllers({
       app: this.app,
@@ -642,6 +645,7 @@ export class ChatobbyView extends ItemView {
 			onCreateView: () => this.onCreateTab(),
 			onNavigate: (mode) => this.navigateTo({ mode }),
       onSetWorkingDirectory: () => this.onSetWorkingDirectory(),
+      onDownloadGuide: () => this.onDownloadGuide(),
     });
 
     this.toolbar = new Toolbar({
@@ -1257,6 +1261,16 @@ export class ChatobbyView extends ItemView {
 
   onSetWorkingDirectory(): void {
     void this.commandSetWorkingDirectory();
+  }
+
+  onDownloadGuide(): void {
+    void downloadChatobbyGuide({
+      app: this.app,
+      getTransport: () => this.getTransport(),
+      onError: (message) => {
+        new Notice(message);
+      },
+    });
   }
 
   onSwitchTab(id: string): void {

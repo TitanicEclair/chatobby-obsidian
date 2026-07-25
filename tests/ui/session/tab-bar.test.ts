@@ -27,7 +27,7 @@ describe("TabBar", () => {
 			"Open Memory",
 			"Open Events",
 			"Open Queries",
-			"Open MCP servers",
+			"Open Plugins",
 		]);
 		expect(pages.map((button) => button.textContent)).toEqual(["", "", "", "", "", "", ""]);
 		expect(element.querySelector(".chatobby-tab-bar__page-label")).toBeNull();

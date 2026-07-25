@@ -844,7 +844,7 @@ pre.chatobby-code-block .code-block-flair {
 .chatobby-turn-summary.is-expanded .chatobby-turn-summary__details { display: block; }
 .chatobby-turn-summary__child + .chatobby-turn-summary__child { margin-top: 0; }
 .chatobby-turn-summary__child--text {
-  color: var(--text-faint);
+  color: var(--text-normal);
 }
 .chatobby-turn-summary__tool-header {
   display: flex;

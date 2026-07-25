@@ -3,6 +3,7 @@
 // Does NOT own the session state — that's the view's job.
 
 import { ChatobbyWsClient } from "../vendor/chatobby-client/ws-client.js";
+import type { GuideContent } from "../features/guide/chatobby-guide";
 import type {
   WsExtensionUIRequest,
   WsBridgeConfig,
@@ -35,6 +36,8 @@ import type {
   FrontendSubscriptionRequest,
 } from "../vendor/chatobby-client/frontend-contracts.js";
 
+export type McpCredentialSource = (reference: string) => string | null;
+
 export class ChatobbyTransport {
   private client: ChatobbyWsClient | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -47,10 +50,12 @@ export class ChatobbyTransport {
 
   private serverUrl: string;
   private runtimeSession: RuntimeSessionCredentials | undefined;
+  private readonly mcpCredentialSource: McpCredentialSource | undefined;
 
-  constructor(runtime: ReadyRuntime) {
+  constructor(runtime: ReadyRuntime, mcpCredentialSource?: McpCredentialSource) {
     this.serverUrl = runtime.endpoint;
     this.runtimeSession = runtime.session;
+    this.mcpCredentialSource = mcpCredentialSource;
   }
 
   // ── Subscriptions ───────────────────────────────────────────────
@@ -163,6 +168,10 @@ export class ChatobbyTransport {
 
   async dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult> {
     return this.requireClient().dispatchFrontendIntent(intent);
+  }
+
+  async synchronizeMcpCredential(reference: string, secret: string | null): Promise<void> {
+    await this.requireClient().setMcpCredential(reference, secret ?? undefined);
   }
 
   // ── Prompting ──────────────────────────────────────────────────────
@@ -332,6 +341,10 @@ export class ChatobbyTransport {
     return client.getRuntimeInfo();
   }
 
+  async getGuide(): Promise<GuideContent> {
+    return this.requireClient().getGuide() as Promise<GuideContent>;
+  }
+
   // ── Private helpers ──────────────────────────────────────────────
 
   private requireClient(): ChatobbyWsClient {
@@ -353,6 +366,7 @@ export class ChatobbyTransport {
   private async connectClient(client: ChatobbyWsClient): Promise<void> {
     try {
       await client.connect();
+      await this.synchronizeMcpCredentials(client);
       if (this.client !== client) {
         await client.disconnect().catch(() => {});
         return;
@@ -369,6 +383,14 @@ export class ChatobbyTransport {
       if (this.client === client || this.client === null) {
         this.connectPromise = null;
       }
+    }
+  }
+
+  private async synchronizeMcpCredentials(client: ChatobbyWsClient): Promise<void> {
+    if (!this.mcpCredentialSource) return;
+    const references = await client.getMcpCredentialReferences();
+    for (const reference of references) {
+      await client.setMcpCredential(reference, this.mcpCredentialSource(reference) ?? undefined);
     }
   }
 

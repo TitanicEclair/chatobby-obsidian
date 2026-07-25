@@ -2,6 +2,10 @@ export class Notice {
   constructor(readonly message: string, readonly timeout?: number) {}
 }
 
+export class TFile {
+  constructor(readonly path: string) {}
+}
+
 export class Component {
   load(): void {}
   unload(): void {}
@@ -99,6 +103,30 @@ export class Setting {
   }
 }
 
+export class SecretComponent {
+  readonly selectEl: HTMLSelectElement;
+  private changeHandler: ((value: string) => unknown) | undefined;
+
+  constructor(_app: unknown, containerEl: HTMLElement) {
+    this.selectEl = document.createElement("select");
+    this.selectEl.className = "secret-component";
+    containerEl.appendChild(this.selectEl);
+    this.selectEl.addEventListener("change", () => {
+      this.changeHandler?.(this.selectEl.value);
+    });
+  }
+
+  setValue(value: string): this {
+    this.selectEl.value = value;
+    return this;
+  }
+
+  onChange(handler: (value: string) => unknown): this {
+    this.changeHandler = handler;
+    return this;
+  }
+}
+
 export class Modal {
   readonly modalEl = document.createElement("div");
   readonly titleEl = document.createElement("div");
@@ -177,6 +205,10 @@ export function htmlToMarkdown(input: string | HTMLElement | Document | Document
 
 export function setIcon(el: HTMLElement, icon: string): void {
   el.dataset.icon = icon;
+}
+
+export function normalizePath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\/+/u, "");
 }
 
 function markdownChildren(node: Node): string {
