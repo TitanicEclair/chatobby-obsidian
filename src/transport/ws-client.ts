@@ -342,7 +342,7 @@ export class ChatobbyTransport {
   }
 
   async getGuide(): Promise<GuideContent> {
-    return this.requireClient().getGuide() as Promise<GuideContent>;
+    return this.requireClient().getGuide();
   }
 
   // ── Private helpers ──────────────────────────────────────────────
