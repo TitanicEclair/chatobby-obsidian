@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FrontendSnapshotBatcher, sessionDirectoryProjectionChanged } from "../../src/frontend/frontend-snapshot-batcher";
 import type { FrontendBootstrap } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 
-function snapshot(streaming: boolean, messageCount: number): FrontendBootstrap {
+function snapshot(streaming: boolean, messageCount: number, compacting = false): FrontendBootstrap {
   return {
     session: {
       id: "session-1",
       streaming,
+      compacting,
       messageCount,
       recoveryPath: "sessions/session-1.jsonl",
       name: "Session",
@@ -36,6 +37,22 @@ describe("FrontendSnapshotBatcher", () => {
     batcher.schedule(completed);
     expect(apply).toHaveBeenCalledTimes(2);
     expect(apply).toHaveBeenLastCalledWith(completed, second);
+  });
+
+  it("flushes compaction completion immediately", () => {
+    vi.useFakeTimers();
+    const apply = vi.fn();
+    const batcher = new FrontendSnapshotBatcher(30, apply);
+    const compacting = snapshot(false, 3, true);
+    const completed = snapshot(false, 3, false);
+
+    batcher.schedule(compacting);
+    vi.advanceTimersByTime(30);
+    expect(apply).toHaveBeenLastCalledWith(compacting, null);
+
+    batcher.schedule(completed);
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply).toHaveBeenLastCalledWith(completed, compacting);
   });
 
   it("detects only persisted session-directory metadata changes", () => {

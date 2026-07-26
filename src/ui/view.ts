@@ -963,24 +963,14 @@ export class ChatobbyView extends ItemView {
     const previous = this.sessionState;
     const sessionChanged = applied?.session !== session;
     const sessionDirectoryChanged = sessionChanged && sessionDirectoryProjectionChanged(applied?.session, session);
-    const feedChanged = applied?.feed !== snapshot.feed;
+    const feedChanged = applied?.feed.revision !== snapshot.feed.revision;
     const composerChanged = applied?.composer !== snapshot.composer;
     const agentRailChanged = applied?.agentRail !== snapshot.agentRail;
     const commandsChanged = applied?.localCommands !== snapshot.localCommands;
     const taskPlanChanged = applied?.taskPlan !== snapshot.taskPlan;
-    if (session && sessionChanged) {
-      this.sessions.applyRuntimeSession(session);
-    }
-	if (feedChanged) {
-		if (this.viewMode === "chat") this.synchronizeFrontendFeed(snapshot);
-		else this.pendingFeedCatchup = true;
-		this.composer?.observeTurnProgress();
-	}
+    if (session && sessionChanged) this.sessions.applyRuntimeSession(session);
     if (sessionChanged) {
-      this.getFeedStore().dispatch({
-        type: "feed.runtime-activity-synchronized",
-        active: session?.streaming ?? false,
-      });
+      this.getFeedStore().dispatch({ type: "feed.runtime-activity-synchronized", active: Boolean(session?.streaming || session?.compacting) });
     }
     if (agentRailChanged) this.sessionAgentRail.setModel(snapshot.agentRail);
     if (commandsChanged) this.slashCommands.setRuntimeCommands(snapshot.localCommands);
@@ -1014,6 +1004,15 @@ export class ChatobbyView extends ItemView {
       this.toolbar?.renderFlags();
       this.liveStats.sync();
     }
+	if (feedChanged) {
+		try {
+			if (this.viewMode === "chat") this.synchronizeFrontendFeed(snapshot); else this.pendingFeedCatchup = true;
+			this.composer?.observeTurnProgress();
+		} catch (error) {
+			this.pendingFeedCatchup = true;
+			console.error("Chatobby: failed to synchronize the conversation feed", error);
+		}
+	}
     if (sessionDirectoryChanged) this.plugin.notifySessionDirectoryChanged();
   }
 

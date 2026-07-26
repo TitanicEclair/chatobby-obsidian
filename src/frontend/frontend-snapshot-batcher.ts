@@ -1,6 +1,6 @@
 import type { FrontendBootstrap } from "../vendor/chatobby-client/frontend-contracts.js";
 
-/** Coalesces transport snapshots while preserving immediate turn-completion delivery. */
+/** Coalesces transport snapshots while preserving immediate activity-completion delivery. */
 export class FrontendSnapshotBatcher {
   private pending: FrontendBootstrap | null = null;
   private applied: FrontendBootstrap | null = null;
@@ -17,8 +17,14 @@ export class FrontendSnapshotBatcher {
 
   schedule(snapshot: FrontendBootstrap): void {
     this.pending = snapshot;
-    const generationCompleted = this.applied?.session?.streaming === true && snapshot.session?.streaming === false;
-    if (generationCompleted) {
+    const activityCompleted = (
+      this.applied?.session?.streaming === true
+      && snapshot.session?.streaming === false
+    ) || (
+      this.applied?.session?.compacting === true
+      && snapshot.session?.compacting === false
+    );
+    if (activityCompleted) {
       this.clearTimer();
       this.flush();
       return;

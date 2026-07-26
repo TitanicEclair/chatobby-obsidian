@@ -239,6 +239,52 @@ describe("normalized feed projection", () => {
     expect(unchanged.changes.updatedToolIds).toEqual([]);
   });
 
+  it("reconciles positional history IDs reused for different block types after compaction", () => {
+    const store = createFeedStore();
+    store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: {
+        blocks: [{
+          type: "summary",
+          id: "old-summary",
+          turnId: "old-turn",
+          summaryKind: "call",
+          text: "Thought",
+          isExpanded: false,
+          blocks: [{
+            type: "thinking",
+            id: "history:1",
+            turnId: "old-turn",
+            text: "Old reasoning",
+            startIndex: 0,
+            endIndex: 0,
+            status: "complete",
+          }],
+        }],
+      },
+    });
+
+    expect(() => store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: {
+        blocks: [{
+          type: "text",
+          id: "history:1",
+          turnId: "compacted-turn",
+          text: "Compacted response",
+          startIndex: 0,
+          endIndex: 0,
+          status: "complete",
+        }],
+      },
+    })).not.toThrow();
+
+    expect(blocks(store)).toEqual([
+      expect.objectContaining({ id: "history:1", type: "text", text: "Compacted response" }),
+    ]);
+    expect(store.exportSnapshot().summaryChildren).toEqual([]);
+  });
+
   it("freezes unresolved projected lifetimes when transport is interrupted", () => {
     const store = createFeedStore({ now: () => 500 });
     store.dispatch({

@@ -48,10 +48,10 @@ export function reduceDocumentProjection(
 
   const staleIds = transaction.allBlockIds().filter((id) => !expectedIds.has(id));
   for (const id of staleIds.filter((candidate) => transaction.getBlock(candidate)?.type === "summary")) {
-    transaction.removeBlock(id);
+    removeBlockFromProjection(transaction, id);
   }
   for (const id of staleIds.filter((candidate) => transaction.getBlock(candidate)?.type !== "summary")) {
-    transaction.removeBlock(id);
+    removeBlockFromProjection(transaction, id);
   }
 }
 
@@ -71,11 +71,30 @@ function reconcileBlock(transaction: FeedTransaction, block: FeedDocumentProject
   const id = blockId(block.id);
   const entity = toEntity(block);
   const current = transaction.getBlock(id);
-  if (current && current.type !== entity.type) transaction.removeBlock(id);
+  if (current && current.type !== entity.type) removeBlockFromProjection(transaction, id);
   const retained = transaction.getBlock(id);
   if (!retained) transaction.addBlock(entity);
   else if (!equalUnknown(retained, entity)) transaction.updateBlock(id, () => entity);
   if (block.type === "tools") reconcileTools(transaction, block);
+}
+
+/**
+ * Detach a block from summaries before replacing or removing it.
+ *
+ * Runtime history IDs are positional. Compaction can therefore reuse an ID for
+ * a different block type while an older summary still owns that ID in the
+ * connector's normalized store. The projection update is atomic, so detaching
+ * first and restoring the projected relationships later is safe and prevents a
+ * stale parent relationship from aborting the entire terminal snapshot.
+ */
+function removeBlockFromProjection(transaction: FeedTransaction, id: ReturnType<typeof blockId>): void {
+  for (const parentId of transaction.summaryParentIdsForChild(id)) {
+    transaction.setSummaryChildren(
+      parentId,
+      transaction.childIdsForSummary(parentId).filter((childId) => childId !== id),
+    );
+  }
+  transaction.removeBlock(id);
 }
 
 function flattenBlocks(blocks: readonly FeedBlock[]): FeedBlock[] {
