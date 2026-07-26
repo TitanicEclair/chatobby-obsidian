@@ -24,6 +24,8 @@ Chatobby 0.2.2 pairs with Runtime 0.2.2 on Windows and experimental macOS.
 - Added a ribbon action that copies or updates a linked, multi-page Chatobby
   Guide inside the vault after confirmation.
 - Lowered the minimum automatic-compaction threshold from 50 to 25 percent.
+- Made early Stop settle the elapsed timer even when the backend never entered
+  streaming before acknowledging cancellation.
 - Updated the bundled frontend contracts for live permission approvals, MCP
   configuration, guide files, and tool capability metadata.
 

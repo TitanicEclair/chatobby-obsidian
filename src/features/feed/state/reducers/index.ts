@@ -24,7 +24,7 @@ export function reduceFeedAction(transaction: FeedTransaction, action: FeedActio
       reduceDocumentProjection(transaction, action.projection);
       return;
     case "feed.runtime-activity-synchronized":
-      if (action.active) transaction.beginRun();
+      if (action.active) transaction.ensureRunStarted();
       else transaction.completeRun();
       return;
     case "feed.transport-interrupted":

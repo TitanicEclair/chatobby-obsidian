@@ -976,7 +976,7 @@ export class ChatobbyView extends ItemView {
 		else this.pendingFeedCatchup = true;
 		this.composer?.observeTurnProgress();
 	}
-    if (sessionChanged && previous.isStreaming !== (session?.streaming ?? false)) {
+    if (sessionChanged) {
       this.getFeedStore().dispatch({
         type: "feed.runtime-activity-synchronized",
         active: session?.streaming ?? false,

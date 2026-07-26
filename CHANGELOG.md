@@ -20,6 +20,8 @@
 
 ### Fixed
 
+- Settled optimistic feed timing when Stop is acknowledged before the runtime
+  emits an active streaming state.
 - Preserved non-final assistant messages when completed thinking and tool work
   is compressed in the feed.
 - Kept the composer text mirror aligned with long native textarea content,

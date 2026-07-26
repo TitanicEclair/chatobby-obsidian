@@ -37,6 +37,37 @@ describe("normalized feed projection", () => {
     expect(store.select(feedSelectors.runTiming).runStartedAt).toBeNull();
   });
 
+  it("settles an optimistic run when the backend reports an idle terminal state without first reporting active", () => {
+    let now = 1_000;
+    const store = createFeedStore({ now: () => now });
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "abort before output",
+      startRun: true,
+      submissionId: "submission-abort",
+    });
+    now = 2_500;
+
+    store.dispatch({ type: "feed.runtime-activity-synchronized", active: false });
+
+    expect(store.select(feedSelectors.runTiming)).toEqual({
+      activeCallId: null,
+      runStartedAt: null,
+      lastRunDurationMs: 1_500,
+    });
+  });
+
+  it("does not restart the elapsed timer when repeated runtime snapshots remain active", () => {
+    let now = 1_000;
+    const store = createFeedStore({ now: () => now });
+    store.dispatch({ type: "feed.runtime-activity-synchronized", active: true });
+    now = 5_000;
+
+    store.dispatch({ type: "feed.runtime-activity-synchronized", active: true });
+
+    expect(store.select(feedSelectors.runTiming).runStartedAt).toBe(1_000);
+  });
+
   it("removes the local queued marker when an idle backend promotes it to a prompt", () => {
     const store = createFeedStore();
     store.dispatch({ type: "feed.queued-message-appended", kind: "steer", text: "continue normally" });
