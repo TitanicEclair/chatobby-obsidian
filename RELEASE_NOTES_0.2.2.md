@@ -32,11 +32,12 @@ Chatobby 0.2.2 pairs with Runtime 0.2.2 on Windows and experimental macOS.
 ## Verification
 
 - Connector type and architecture checks pass.
-- The complete connector suite passes 775 tests, with two intentional skips.
+- The complete connector suite passes 779 tests, with two intentional skips.
 - Runtime permission, MCP, schema, guide, and compaction regression suites pass.
-- Exact Windows and macOS production candidates must still pass native build
-  verification and the Windows candidate must pass live test-vault acceptance
-  before publication.
+- Exact Windows, Apple Silicon, and Intel production targets pass native build,
+  clean-home startup, installer, update, cancellation, and rollback checks.
+- The exact Windows runtime and connector pass live test-vault acceptance.
+- Final combined candidate assembly and publication remain pending.
 
 Chatobby remains public-alpha software. Back up important vaults and begin with
 the minimum permissions needed for the task.
