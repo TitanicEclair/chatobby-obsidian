@@ -27,10 +27,11 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
     nextRef: number;
     elementRefs: WeakMap<Element, string>;
     refElements: Map<string, Element>;
+    refFingerprints: Map<string, string>;
     observer: MutationObserver | null;
   }
 
-  const stateKey = "__chatobbyBrowserPageV1_6f5c9f3b";
+  const stateKey = "__chatobbyBrowserPageV2_6f5c9f3b";
   const globalRecord = window as unknown as Record<string, unknown>;
 
   function createDocumentId(): string {
@@ -43,20 +44,24 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
 
   function pageState(): PageRuntimeState {
     const existing = globalRecord[stateKey] as PageRuntimeState | undefined;
-    if (existing?.documentId && existing.elementRefs && existing.refElements) return existing;
+    if (existing?.documentId && existing.elementRefs && existing.refElements && existing.refFingerprints) return existing;
     const created: PageRuntimeState = {
       documentId: createDocumentId(),
       revision: 0,
       nextRef: 1,
       elementRefs: new WeakMap<Element, string>(),
       refElements: new Map<string, Element>(),
+      refFingerprints: new Map<string, string>(),
       observer: null,
     };
     if (document.documentElement && typeof MutationObserver !== "undefined") {
       created.observer = new MutationObserver(() => {
         created.revision += 1;
         for (const [ref, element] of created.refElements) {
-          if (!element.isConnected) created.refElements.delete(ref);
+          if (!element.isConnected) {
+            created.refElements.delete(ref);
+            created.refFingerprints.delete(ref);
+          }
         }
       });
       created.observer.observe(document.documentElement, {
@@ -81,7 +86,13 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
     if (expectedDocumentId !== state.documentId) {
       throw new Error(`Stale page document: expected ${expectedDocumentId}, current ${state.documentId}`);
     }
-    if (expectedRevision !== state.revision) {
+    const referenced = [input.ref, input.toRef].filter((value): value is string => typeof value === "string");
+    const refsRemainStable = referenced.length > 0 && referenced.every((ref) => {
+      const element = state.refElements.get(ref);
+      const expected = state.refFingerprints.get(ref);
+      return Boolean(element?.isConnected && expected && expected === elementFingerprint(element));
+    });
+    if (expectedRevision !== state.revision && !refsRemainStable) {
       throw new Error(`Stale page revision: expected ${expectedRevision}, current ${state.revision}`);
     }
   }
@@ -138,7 +149,18 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
     state.nextRef += 1;
     state.elementRefs.set(element, ref);
     state.refElements.set(ref, element);
+    state.refFingerprints.set(ref, elementFingerprint(element));
     return ref;
+  }
+
+  function elementFingerprint(element: Element): string {
+    const inputType = isDomNodeOfType(element, HTMLInputElement) ? element.type.toLowerCase() : "";
+    return [
+      element.tagName.toLowerCase(),
+      implicitRole(element).toLowerCase(),
+      clean(labelledText(element)).toLowerCase(),
+      inputType,
+    ].join("\u001f");
   }
 
   function cssEscape(value: string): string {
@@ -532,11 +554,26 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
       : mode === "structure"
         ? deepQuery(root, structureSelector)
         : Array.from(new Set([...interactiveCandidates(root), ...deepQuery(root, structureSelector)]));
+    const candidateSet = new Set(candidates);
     const elements: Array<Record<string, unknown>> = [];
     let budget = maxTextChars;
     for (const element of candidates) {
       if (!includeHidden && !visible(element)) continue;
       const summary = elementSummary(element);
+      let semanticParent = element.parentElement;
+      let depth = 0;
+      while (semanticParent && !candidateSet.has(semanticParent)) {
+        semanticParent = semanticParent.parentElement;
+      }
+      if (semanticParent) {
+        let ancestor: Element | null = semanticParent;
+        while (ancestor) {
+          if (candidateSet.has(ancestor)) depth += 1;
+          ancestor = ancestor.parentElement;
+        }
+        summary.parentRef = refFor(semanticParent);
+      }
+      summary.depth = depth;
       const text = String(summary.text ?? "").slice(0, Math.max(0, budget));
       summary.text = text;
       budget -= text.length;

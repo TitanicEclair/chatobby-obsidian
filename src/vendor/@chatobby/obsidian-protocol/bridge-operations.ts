@@ -50,6 +50,12 @@ export const OBSIDIAN_PLUGIN_NATIVE_OPERATIONS = [
 
 export type ObsidianPluginNativeOperationName = (typeof OBSIDIAN_PLUGIN_NATIVE_OPERATIONS)[number];
 
+// --- Obsidian UI operations ---
+
+export const OBSIDIAN_UI_OPERATIONS = ["ui.snapshot", "ui.interact"] as const;
+
+export type ObsidianUiOperationName = (typeof OBSIDIAN_UI_OPERATIONS)[number];
+
 // --- Browser operations ---
 
 export const OBSIDIAN_BROWSER_OPERATIONS = [
@@ -117,6 +123,7 @@ export type ObsidianCliOperationName = ObsidianCliStaticOperationName | `cli.nat
 export type ObsidianOperationName =
 	| ObsidianCoreOperationName
 	| ObsidianPluginNativeOperationName
+	| ObsidianUiOperationName
 	| ObsidianBrowserOperationName
 	| ObsidianRetrievalOperationName
 	| ObsidianCliOperationName;
@@ -125,6 +132,7 @@ export type ObsidianOperationName =
 export const OBSIDIAN_ALL_OPERATIONS: ReadonlySet<string> = new Set<string>([
 	...OBSIDIAN_CORE_OPERATIONS,
 	...OBSIDIAN_PLUGIN_NATIVE_OPERATIONS,
+	...OBSIDIAN_UI_OPERATIONS,
 	...OBSIDIAN_BROWSER_OPERATIONS,
 	...OBSIDIAN_RETRIEVAL_OPERATIONS,
 	...OBSIDIAN_CLI_OPERATIONS,

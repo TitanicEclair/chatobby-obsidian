@@ -23,6 +23,7 @@ import { routeInboundFrame, serializeOutbound } from "./bridge-router";
 import { getVaultIdentity } from "./operations/helpers/vault-identity";
 import { PLUGIN_CAPABILITIES } from "./capabilities";
 import { capabilityStateFingerprint, collectObsidianCapabilityState } from "./dependency-snapshot";
+import { getObsidianSemanticContextService } from "../obsidian-context";
 import {
   BRIDGE_PING_INTERVAL_MS,
   RECONNECT_BASE_DELAY_MS,
@@ -37,6 +38,7 @@ export class ObsidianBridgeClient {
   private pingTimer: number | null = null;
   private reconnectTimer: number | null = null;
   private capabilityTimer: number | null = null;
+  private contextUnsubscribe: (() => void) | null = null;
   private capabilityFingerprint = "";
   private connectionListeners: Set<(state: BridgeConnectionState) => void> = new Set();
 
@@ -81,6 +83,7 @@ export class ObsidianBridgeClient {
             this.dispatch({ type: "ready" });
             this.startPing();
             this.startCapabilityWatch();
+            this.startContextWatch();
           }
         }, BRIDGE_READY_GRACE_MS);
       };
@@ -94,6 +97,7 @@ export class ObsidianBridgeClient {
       this.ws.onclose = (event) => {
         this.stopPing();
         this.stopCapabilityWatch();
+        this.stopContextWatch();
         const isTerminal = TERMINAL_CLOSE_CODES.has(event.code);
 
         if (isTerminal) {
@@ -143,6 +147,7 @@ export class ObsidianBridgeClient {
     this.clearReconnectTimer();
     this.stopPing();
     this.stopCapabilityWatch();
+    this.stopContextWatch();
 
     // Abort all in-flight requests
     for (const [, entry] of this.inFlight) {
@@ -219,6 +224,18 @@ export class ObsidianBridgeClient {
     }
   }
 
+  private startContextWatch(): void {
+    this.stopContextWatch();
+    this.contextUnsubscribe = getObsidianSemanticContextService(this.app).onChange((event) => {
+      if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(event));
+    });
+  }
+
+  private stopContextWatch(): void {
+    this.contextUnsubscribe?.();
+    this.contextUnsubscribe = null;
+  }
+
   private sendCapabilityChanges(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     const state = collectObsidianCapabilityState(this.app);
@@ -226,6 +243,7 @@ export class ObsidianBridgeClient {
     if (fingerprint === this.capabilityFingerprint) return;
     this.capabilityFingerprint = fingerprint;
     this.ws.send(JSON.stringify({ type: "capabilities_changed", ...state }));
+    getObsidianSemanticContextService(this.app).invalidate(["capabilities"]);
   }
 
   private sendPing(): void {

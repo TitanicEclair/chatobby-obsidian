@@ -8,6 +8,7 @@ import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 import { editNote } from "./helpers/note-io";
 import { isTFile } from "./helpers/file-types";
+import { getObsidianSemanticContextService } from "../../obsidian-context";
 
 // ── Command execution allowlist (defense-in-depth; mirrors the MCP server's
 // command-allowlist.ts so a stale/modified MCP server cannot bypass the gate).
@@ -57,7 +58,6 @@ interface WorkspaceLike {
   getLeaf?(...args: unknown[]): LeafLike;
   setActiveLeaf?(leaf: LeafLike, opts?: { focus?: boolean }): void;
 	iterateAllLeaves?(callback: (leaf: LeafLike) => void): void;
-	getLayout?(): Record<string, unknown>;
 	createLeafBySplit?(leaf: LeafLike, direction?: "vertical" | "horizontal", before?: boolean): LeafLike;
 	duplicateLeaf?(leaf: LeafLike, direction?: "vertical" | "horizontal"): Promise<LeafLike>;
 }
@@ -89,34 +89,6 @@ function findLeafById(workspace: WorkspaceLike, id: string | undefined): LeafLik
 	return workspace.getLeafById?.(id) ?? allLeaves(workspace).find((leaf) => leafId(leaf) === id);
 }
 
-function sanitizeLayoutNode(value: unknown): unknown {
-	if (Array.isArray(value)) return value.map(sanitizeLayoutNode);
-	if (!value || typeof value !== "object") return undefined;
-	const record = value as Record<string, unknown>;
-	const sanitized: Record<string, unknown> = {};
-	for (const key of ["id", "type", "direction", "currentTab"] as const) {
-		if (typeof record[key] === "string" || typeof record[key] === "number") sanitized[key] = record[key];
-	}
-	if (Array.isArray(record.children)) sanitized.children = record.children.map(sanitizeLayoutNode);
-	const state = record.state;
-	if (state && typeof state === "object" && !Array.isArray(state)) {
-		const stateRecord = state as Record<string, unknown>;
-		if (typeof stateRecord.type === "string") sanitized.viewType = stateRecord.type;
-	}
-	return sanitized;
-}
-
-function sanitizedWorkspaceLayout(workspace: WorkspaceLike): Record<string, unknown> | undefined {
-	const layout = workspace.getLayout?.();
-	if (!layout) return undefined;
-	const sanitized: Record<string, unknown> = {};
-	for (const key of ["main", "left", "right", "floating"] as const) {
-		const node = sanitizeLayoutNode(layout[key]);
-		if (node !== undefined) sanitized[key] = node;
-	}
-	return sanitized;
-}
-
 /** Find an active markdown view, preferring the workspace's active leaf. */
 function getActiveMarkdownView(app: App, path?: string): MarkdownViewLike | null {
   const ws = getWorkspace(app);
@@ -137,19 +109,7 @@ function getActiveMarkdownView(app: App, path?: string): MarkdownViewLike | null
 
 export const handleEditorGet: OperationHandler = async (args, _signal, app) => {
   const path = typeof args.path === "string" ? args.path : undefined;
-  const view = getActiveMarkdownView(app, path);
-  if (!view) {
-    return { available: false, reason: "No active markdown editor for the requested note" };
-  }
-  const editor = view.editor;
-  const cursor = editor.getCursor();
-  return {
-    available: true,
-    path: view.file.path,
-    cursor: { line: cursor.line + 1, ch: cursor.ch },
-    selection: editor.getSelection() || undefined,
-    lineCount: editor.lineCount(),
-  };
+  return getObsidianSemanticContextService(app).editorProjection(path);
 };
 
 // ── editor.edit ───────────────────────────────────────────────────────
@@ -263,50 +223,7 @@ export const handleEditorFocus: OperationHandler = async (args, _signal, app) =>
 // ── workspace.get ─────────────────────────────────────────────────────
 
 export const handleWorkspaceGet: OperationHandler = async (_args, _signal, app) => {
-  const ws = getWorkspace(app);
-  const leaves = allLeaves(ws);
-  const activeLeafId = ws.activeLeaf ? leafId(ws.activeLeaf) : undefined;
-  const openNotes = [];
-  const leafSummaries: Array<Record<string, unknown>> = [];
-  for (const leaf of leaves) {
-    const viewState = leaf.getViewState?.();
-    const state = viewState?.state && typeof viewState.state === "object" && !Array.isArray(viewState.state)
-      ? viewState.state as Record<string, unknown>
-      : {};
-    const view = leaf.view as { getViewType?: () => string; getDisplayText?: () => string } | undefined;
-    const viewType = view?.getViewType?.() ?? viewState?.type ?? "unknown";
-    const id = leafId(leaf);
-    const summary: Record<string, unknown> = {
-      leafId: id,
-      viewType,
-      isActive: leaf === ws.activeLeaf,
-      pinned: viewState?.pinned === true,
-    };
-    const title = view?.getDisplayText?.();
-    if (title) summary.title = title;
-    if (typeof state.file === "string") summary.path = state.file;
-    if (typeof state.url === "string") summary.url = state.url;
-    leafSummaries.push(summary);
-    if (isMarkdownView(leaf.view)) {
-      const v = leaf.view;
-      openNotes.push({
-        leafId: id,
-        path: v.file.path,
-        basename: v.file.basename,
-        type: v.getViewType?.() ?? "markdown",
-        mtime: v.file.stat.mtime,
-        ctime: v.file.stat.ctime,
-        isActive: leaf === ws.activeLeaf,
-      });
-    }
-  }
-  const layout = sanitizedWorkspaceLayout(ws);
-  return {
-    ...(activeLeafId ? { activeLeafId } : {}),
-    leaves: leafSummaries,
-    openNotes,
-    ...(layout ? { layout } : {}),
-  };
+  return getObsidianSemanticContextService(app).workspaceProjection();
 };
 
 // ── workspace.manage ──────────────────────────────────────────────────

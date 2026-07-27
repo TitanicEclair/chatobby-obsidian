@@ -32,7 +32,7 @@ describe("toPromptContextPacket", () => {
     });
 
     expect(packet).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       source: "obsidian",
       vault: "Work",
       workspace: {
@@ -71,5 +71,40 @@ describe("toPromptContextPacket", () => {
       permissionMode: undefined,
     });
     expect(packet.activeNote).toBeUndefined();
+  });
+
+  it("enforces prompt budgets and excludes unrelated plugin inventory at the packet boundary", () => {
+    const packet = toPromptContextPacket({
+      frontend: "obsidian",
+      vault: "Work",
+      capabilities: {
+        featureFamilies: ["vault", "browser"],
+        integrations: [
+          { id: "webviewer", name: "Web viewer", installed: true, enabled: true },
+          { id: "unrelated-plugin", name: "Unrelated", installed: true, enabled: true },
+        ],
+        runtimeDependencies: [],
+      },
+      notePath: "Large.md",
+      selection: "s".repeat(15_000),
+      headings: Array.from({ length: 80 }, (_, index) => `Heading ${index} ${"h".repeat(250)}`),
+      openNotes: Array.from({ length: 20 }, (_, index) => ({
+        path: `Note ${index}.md`,
+        title: `Note ${index}`,
+      })),
+    });
+
+    expect(packet.activeNote?.selection).toHaveLength(12_000);
+    expect(packet.activeNote).toMatchObject({
+      selectionCharacters: 15_000,
+      selectionTruncated: true,
+      headingCount: 80,
+      headingsTruncated: true,
+    });
+    expect(packet.activeNote?.headings).toHaveLength(64);
+    expect(packet.activeNote?.headings?.every((heading) => heading.length <= 200)).toBe(true);
+    expect(packet.openNotes).toHaveLength(12);
+    expect(packet.capabilities?.integrations.map((integration) => integration.id)).toEqual(["webviewer"]);
+    expect(JSON.stringify(packet).length).toBeLessThan(30_000);
   });
 });

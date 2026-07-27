@@ -46,6 +46,10 @@ import { RuntimeUpdateManager, type RuntimeUpdateState } from "./runtime/public"
 import { RuntimeInstallModal } from "./features/runtime-status/public";
 import { selectChatobbyCommandTarget } from "./ui/controller/view-targeting";
 import { addFileExplorerSessionMenuItems } from "./ui/session/file-explorer-session-menu";
+import {
+  disposeObsidianSemanticContextService,
+  disposeObsidianUiSnapshotService,
+} from "./obsidian-context";
 
 export default class ChatobbyPlugin extends Plugin {
   // ── Persisted settings (public; read by SettingTab, mutated via store) ──
@@ -209,6 +213,8 @@ export default class ChatobbyPlugin extends Plugin {
     await Promise.all([...this.bridgeClients.keys()].map((channelId) => this.disconnectBridge(channelId)));
     // Detach retrieval-service vault listeners so hot-reload doesn't leak them.
     disposeVaultRetrievalService(this.app);
+    disposeObsidianUiSnapshotService(this.app);
+    disposeObsidianSemanticContextService(this.app);
   }
 
   /** Synchronize visible-view policy with the backend Events approval boundary. */

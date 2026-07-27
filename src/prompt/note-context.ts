@@ -1,35 +1,24 @@
-import type { App, MarkdownView } from "obsidian";
+import type { App } from "obsidian";
 import type { VaultContext } from "../types";
-import { buildNoteContextExcerpt } from "../obsidian-bridge/operations/helpers/note-io";
-import { CONTEXT_EXCERPT_AFTER, CONTEXT_EXCERPT_BEFORE, CONTEXT_EXCERPT_MAX_CHARS } from "./constants";
+import { getObsidianSemanticContextService } from "../obsidian-context";
+import {
+  CONTEXT_HEADING_MAX_CHARS,
+  CONTEXT_MAX_HEADINGS,
+  CONTEXT_SELECTION_MAX_CHARS,
+} from "./constants";
 
-export type NoteContext = Pick<VaultContext, "notePath" | "cursor" | "selection" | "contextExcerpt" | "headings">;
-
-/**
- * Resolve the active markdown view, preferring the workspace's active leaf
- * (correct when several notes are open) and falling back to the first markdown
- * leaf. Mirrors `handleContextGet` so the per-turn packet and the
- * `obsidian_get_context` tool agree on which note is "active".
- */
-function resolveActiveMarkdownView(app: App): MarkdownView | null {
-  type LeafLike = { view: unknown };
-  const ws = app.workspace as unknown as {
-    activeLeaf?: LeafLike | null;
-    getLeavesOfType(type: string): LeafLike[];
-  };
-  const activeLeaf = ws.activeLeaf;
-  const activeIsMarkdown =
-    !!activeLeaf?.view && (activeLeaf.view as { getViewType?: () => string }).getViewType?.() === "markdown";
-  const markdownLeaf: LeafLike | undefined = activeIsMarkdown
-    ? activeLeaf
-    : ws.getLeavesOfType("markdown").find(
-        (leaf) => (leaf.view as { getViewType?: () => string }).getViewType?.() === "markdown",
-      );
-  if (!markdownLeaf) return null;
-  const view = markdownLeaf.view as MarkdownView;
-  // file is null for an unsaved/untitled buffer — no excerpt to build in that case.
-  return view.editor && view.file ? view : null;
-}
+export type NoteContext = Pick<
+  VaultContext,
+  | "notePath"
+  | "cursor"
+  | "selection"
+  | "selectionCharacters"
+  | "selectionTruncated"
+  | "contextExcerpt"
+  | "headings"
+  | "headingCount"
+  | "headingsTruncated"
+>;
 
 /**
  * Gather the active note's path, cursor, selection, a bounded text excerpt
@@ -43,41 +32,28 @@ function resolveActiveMarkdownView(app: App): MarkdownView | null {
  * Line numbers are 1-indexed to match `obsidian_get_context`.
  */
 export function gatherNoteContext(app: App): NoteContext {
-  const view = resolveActiveMarkdownView(app);
-  if (!view) {
-    // No markdown editor open — still surface the active file path (any type) if any.
-    const activeFile = (app.workspace as { getActiveFile?: () => { path?: string } | null }).getActiveFile?.();
-    return { notePath: activeFile?.path };
-  }
-
-  const editor = view.editor;
-  const file = view.file;
-  if (!file) return { notePath: undefined };
-  const content = editor.getValue();
-  const cursor = editor.getCursor();
-  const selectionText = editor.getSelection();
-  const excerpt = buildNoteContextExcerpt(
-    content,
-    cursor.line,
-    selectionText ? editor.getCursor("to").line : cursor.line,
-    CONTEXT_EXCERPT_BEFORE,
-    CONTEXT_EXCERPT_AFTER,
-  );
-  const headings = app.metadataCache.getFileCache(file)?.headings?.map((heading) => heading.heading);
-
+  const snapshot = getObsidianSemanticContextService(app).snapshot();
+  const activeNote = snapshot.activeNote;
+  if (!activeNote) return {};
+  const selection = snapshot.selection?.text;
+  const headingCount = snapshot.headings?.length ?? 0;
   return {
-    notePath: file.path,
-    cursor: { line: cursor.line + 1, ch: cursor.ch },
-    selection: selectionText || undefined,
+    notePath: activeNote.path,
+    cursor: snapshot.cursor,
+    selection: selection?.slice(0, CONTEXT_SELECTION_MAX_CHARS),
+    selectionCharacters: selection?.length,
+    selectionTruncated: selection !== undefined && selection.length > CONTEXT_SELECTION_MAX_CHARS,
     contextExcerpt: {
-      fromLine: excerpt.fromLine + 1,
-      toLine: excerpt.toLine + 1,
-      text: clampContextText(excerpt.text),
+      fromLine: activeNote.fromLine,
+      toLine: activeNote.toLine,
+      text: activeNote.excerpt,
     },
-    headings: headings?.length ? headings : undefined,
+    headings: snapshot.headings
+      ?.slice(0, CONTEXT_MAX_HEADINGS)
+      .map((heading) => heading.text.length > CONTEXT_HEADING_MAX_CHARS
+        ? `${heading.text.slice(0, CONTEXT_HEADING_MAX_CHARS - 1)}…`
+        : heading.text),
+    headingCount,
+    headingsTruncated: headingCount > CONTEXT_MAX_HEADINGS,
   };
-}
-
-export function clampContextText(text: string): string {
-  return text.length > CONTEXT_EXCERPT_MAX_CHARS ? text.slice(0, CONTEXT_EXCERPT_MAX_CHARS) : text;
 }

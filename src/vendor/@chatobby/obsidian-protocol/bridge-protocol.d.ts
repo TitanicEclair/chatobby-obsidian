@@ -31,6 +31,30 @@ export interface ObsidianBridgeCapabilitiesChanged {
     plugins: ObsidianPluginState[];
     runtimeDependencies: ObsidianRuntimeDependencyState[];
 }
+export type ObsidianContextChangedDomain = "focus" | "workspace" | "editor" | "page" | "capabilities";
+export interface ObsidianContextRevisions {
+    workspace: number;
+    editor: number;
+    page: number;
+    capabilities: number;
+}
+/**
+ * Compact invalidation notice. The connector remains the snapshot authority;
+ * the runtime uses this event only to invalidate cached projections and detect
+ * missed updates before requesting fresh context.
+ */
+export interface ObsidianBridgeContextChanged {
+    type: "context_changed";
+    sequence: number;
+    capturedAt: string;
+    changed: ObsidianContextChangedDomain[];
+    revisions: ObsidianContextRevisions;
+    summary?: {
+        activeLeafId?: string;
+        viewType?: string;
+        path?: string;
+    };
+}
 export interface ObsidianBridgePing {
     type: "ping";
     requestId?: string;
@@ -46,7 +70,7 @@ export interface ObsidianBridgeError {
     requestId: string;
     error: ObsidianBridgeErrorPayload;
 }
-export type ObsidianPluginToServerMessage = ObsidianBridgeHello | ObsidianBridgePing | ObsidianBridgeCapabilitiesChanged | ObsidianBridgeResult | ObsidianBridgeError;
+export type ObsidianPluginToServerMessage = ObsidianBridgeHello | ObsidianBridgePing | ObsidianBridgeCapabilitiesChanged | ObsidianBridgeContextChanged | ObsidianBridgeResult | ObsidianBridgeError;
 export interface ObsidianBridgePong {
     type: "pong";
     requestId?: string;

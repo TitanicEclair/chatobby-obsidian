@@ -5,14 +5,12 @@ import { gatherNoteContext } from "../../src/prompt/note-context";
 describe("gatherNoteContext", () => {
 	it("builds a real excerpt around the cursor from the active note's live buffer", () => {
 		const lines = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`);
+		lines[0] = "# Title";
+		lines[1] = "## Sub";
 		const content = lines.join("\n");
 		const files = new Map([["Notes/Active.md", content]]);
-		const cache = new Map([
-			["Notes/Active.md", { headings: [{ heading: "Title", level: 1 }, { heading: "Sub", level: 2 }] }],
-		]);
 		const app = createMockApp(files, {
 			activeView: { path: "Notes/Active.md", content, cursor: { line: 20, ch: 0 }, selection: "" },
-			cache,
 		});
 
 		const ctx = gatherNoteContext(app);

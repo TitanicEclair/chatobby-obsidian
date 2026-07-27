@@ -15,6 +15,8 @@ import {
   OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
   OBSIDIAN_RETRIEVAL_TOOL_NAMES,
   OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
+  OBSIDIAN_UI_TOOL_NAMES,
+  OBSIDIAN_UI_TOOL_OPERATION_MAP,
 } from "../../src/vendor/@chatobby/obsidian-protocol/mcp-tool-catalog";
 import { listImplementedOperations } from "../../src/obsidian-bridge/operation-registry";
 
@@ -70,6 +72,11 @@ const BACKEND_BROWSER_TOOL_NAMES = [
   "obsidian_browser_close",
 ] as const;
 
+const BACKEND_UI_TOOL_NAMES = [
+  "obsidian_ui_snapshot",
+  "obsidian_ui_interact",
+] as const;
+
 const BACKEND_CLI_FAMILY_TOOL_NAMES = [
   "obsidian_daily_note",
   "obsidian_base",
@@ -101,6 +108,7 @@ describe("MCP tool catalog", () => {
     expect(OBSIDIAN_PLUGIN_NATIVE_TOOL_NAMES).toEqual([...BACKEND_PLUGIN_NATIVE_TOOL_NAMES]);
     expect(OBSIDIAN_RETRIEVAL_TOOL_NAMES).toEqual([...BACKEND_RETRIEVAL_TOOL_NAMES]);
     expect(OBSIDIAN_BROWSER_TOOL_NAMES).toEqual([...BACKEND_BROWSER_TOOL_NAMES]);
+    expect(OBSIDIAN_UI_TOOL_NAMES).toEqual([...BACKEND_UI_TOOL_NAMES]);
     expect(OBSIDIAN_CLI_FAMILY_TOOL_NAMES).toEqual([...BACKEND_CLI_FAMILY_TOOL_NAMES]);
     expect(OBSIDIAN_CLI_SUBSTRATE_TOOL_NAMES).toEqual([...BACKEND_CLI_SUBSTRATE_TOOL_NAMES]);
   });
@@ -111,14 +119,15 @@ describe("MCP tool catalog", () => {
       OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
       OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
       OBSIDIAN_BROWSER_TOOL_OPERATION_MAP,
+      OBSIDIAN_UI_TOOL_OPERATION_MAP,
     ];
     for (const map of operationMaps) {
       for (const operation of Object.values(map)) {
         expect(implemented.has(operation)).toBe(true);
       }
     }
-    expect(Object.keys(OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP)).toHaveLength(63);
-    expect(OBSIDIAN_NON_DIRECT_TOOL_NAMES).toHaveLength(63);
+    expect(Object.keys(OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP)).toHaveLength(75);
+    expect(OBSIDIAN_NON_DIRECT_TOOL_NAMES).toHaveLength(75);
   });
 
   it("keeps CLI process operations runtime-owned", () => {
@@ -131,10 +140,10 @@ describe("MCP tool catalog", () => {
     }
   });
 
-  it("keeps the full registered tool surface at 73 canonical obsidian_* names", () => {
-    expect(OBSIDIAN_DEFAULT_DIRECT_TOOLS).toHaveLength(10);
-    expect(OBSIDIAN_ALL_TOOL_NAMES).toHaveLength(73);
-    expect(new Set(OBSIDIAN_ALL_TOOL_NAMES).size).toBe(73);
+  it("keeps six direct façades plus 75 deferred canonical obsidian_* names", () => {
+    expect(OBSIDIAN_DEFAULT_DIRECT_TOOLS).toHaveLength(6);
+    expect(OBSIDIAN_ALL_TOOL_NAMES).toHaveLength(81);
+    expect(new Set(OBSIDIAN_ALL_TOOL_NAMES).size).toBe(81);
     for (const name of OBSIDIAN_ALL_TOOL_NAMES) {
       expect(name.startsWith("obsidian_")).toBe(true);
     }

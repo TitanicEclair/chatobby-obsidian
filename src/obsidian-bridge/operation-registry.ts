@@ -59,6 +59,12 @@ import {
   handleHotkeysList,
 } from "./operations/workspace-operations";
 
+// Visible Obsidian ItemView semantic inspection and guarded interaction.
+import {
+  handleUiInteract,
+  handleUiSnapshot,
+} from "./operations/ui-operations";
+
 // Browser handlers (Web viewer core plugin).
 import {
   handleBrowserOpen,
@@ -129,6 +135,10 @@ const HANDLERS: Record<string, OperationHandler> = {
   "commands.list": handleCommandsList,
   "commands.execute": handleCommandsExecute,
   "hotkeys.list": handleHotkeysList,
+
+  // ── Visible Obsidian UI ──
+  "ui.snapshot": handleUiSnapshot,
+  "ui.interact": handleUiInteract,
 
   // ── Browser (Web viewer) ──
   "browser.open": handleBrowserOpen,

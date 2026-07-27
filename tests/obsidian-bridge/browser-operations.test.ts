@@ -27,17 +27,24 @@ interface FakeLeaf extends WorkspaceLeaf {
 function createFakeWebView(): FakeWebView {
   const element = document.createElement("webview") as FakeWebView;
   let runtimeUrl = "https://example.com/";
+  let runtimeInstalled = false;
   element.getURL = () => runtimeUrl;
   element.getTitle = () => "Example";
   element.loadURL = async (url: string) => {
     runtimeUrl = url;
   };
-  element.executeJavaScript = async (code: string) => {
-    const prefix = `(${executeBrowserPageOperation.toString()})(`;
-    if (!code.startsWith(prefix) || !code.endsWith(")")) throw new Error("Unexpected page runtime script");
-    const input = JSON.parse(code.slice(prefix.length, -1)) as Parameters<typeof executeBrowserPageOperation>[0];
+  element.executeJavaScript = vi.fn(async (code: string) => {
+    if (code.startsWith('window["__chatobbyExecuteBrowserPageV2"]=(')) {
+      runtimeInstalled = true;
+      return true;
+    }
+    const prefix = 'window["__chatobbyExecuteBrowserPageV2"]?window["__chatobbyExecuteBrowserPageV2"](';
+    const suffix = "):({__chatobbyRuntimeMissing:true})";
+    if (!code.startsWith(prefix) || !code.endsWith(suffix)) throw new Error("Unexpected page runtime script");
+    if (!runtimeInstalled) return { __chatobbyRuntimeMissing: true };
+    const input = JSON.parse(code.slice(prefix.length, -suffix.length)) as Parameters<typeof executeBrowserPageOperation>[0];
     return await executeBrowserPageOperation(input);
-  };
+  });
   element.canGoBack = () => true;
   element.canGoForward = () => true;
   element.goBack = vi.fn();
@@ -112,7 +119,7 @@ function makeVisible(element: HTMLElement): void {
 
 afterEach(() => {
   document.body.empty();
-  delete (globalThis as unknown as Record<string, unknown>).__chatobbyBrowserPageV1_6f5c9f3b;
+  delete (globalThis as unknown as Record<string, unknown>).__chatobbyBrowserPageV2_6f5c9f3b;
 });
 
 describe("browser operations", () => {
@@ -209,14 +216,18 @@ describe("browser operations", () => {
     const app = createBrowserApp();
     await executeOperation("browser.open", { url: "https://example.com" }, signal, app);
 
-    const listed = await executeOperation("browser.list", {}, signal, app) as { tabs: Array<Record<string, unknown>> };
+    const listed = await executeOperation("browser.list", {}, signal, app) as {
+      tabs: Array<Record<string, unknown>>;
+      coverage: Record<string, unknown>;
+    };
     expect(listed.tabs).toHaveLength(1);
     expect(listed.tabs[0]).toMatchObject({ leafId: "leaf-1", url: "https://example.com/" });
+    expect(listed.coverage).toEqual({ kind: "exact", returned: 1, total: 1, hasMore: false });
 
     const read = await executeOperation("browser.read", { maxChars: 3, includeHtml: true }, signal, app) as Record<string, unknown>;
     expect(read).toMatchObject({
       available: true,
-      text: "# E",
+      text: "# Example article",
       truncated: true,
       htmlTruncated: true,
       htmlSanitized: true,
@@ -318,7 +329,7 @@ describe("browser operations", () => {
     expect(webview.goBack).toHaveBeenCalledOnce();
   });
 
-  it("rejects ref interactions and read cursors after the page revision changes", async () => {
+  it("retains read continuations and keeps refs stable across unrelated page mutations", async () => {
     const app = createBrowserApp();
     await executeOperation("browser.open", { url: "https://example.com" }, signal, app);
 
@@ -364,13 +375,52 @@ describe("browser operations", () => {
       },
       signal,
       app,
-    )).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+    )).resolves.toMatchObject({ clicked: true });
     await expect(executeOperation(
       "browser.read",
       { leafId: "leaf-1", maxChars: 3, cursor: firstRead.nextCursor },
       signal,
       app,
+    )).resolves.toMatchObject({ available: true });
+
+    const buttonElement = document.querySelector("button");
+    if (!buttonElement) throw new Error("Expected button fixture");
+    buttonElement.textContent = "Changed target";
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    await expect(executeOperation(
+      "browser.click",
+      {
+        leafId: "leaf-1",
+        ref: button?.ref,
+        documentId: snapshot.page.documentId,
+        revision: snapshot.page.revision,
+      },
+      signal,
+      app,
     )).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+  });
+
+  it("continues a retained browser read without invoking the guest runtime again", async () => {
+    const app = createBrowserApp();
+    await executeOperation("browser.open", { url: "https://example.com" }, signal, app);
+    const webview = app.leaf.view.containerEl?.querySelector("webview") as FakeWebView;
+
+    const first = await executeOperation(
+      "browser.read",
+      { leafId: "leaf-1", maxChars: 3 },
+      signal,
+      app,
+    ) as { nextCursor: string };
+    const callsAfterFirstPage = vi.mocked(webview.executeJavaScript).mock.calls.length;
+
+    await executeOperation(
+      "browser.read",
+      { leafId: "leaf-1", maxChars: 3, cursor: first.nextCursor },
+      signal,
+      app,
+    );
+
+    expect(webview.executeJavaScript).toHaveBeenCalledTimes(callsAfterFirstPage);
   });
 
   it("redacts password values and sanitizes page HTML", async () => {

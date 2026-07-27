@@ -467,7 +467,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         ...lifecycleArgs,
       ],
       env: {
-        PI_CODING_AGENT_DIR: vaultPaths.agentDir,
+        CHATOBBY_AGENT_DIR: vaultPaths.agentDir,
         CHATOBBY_VAULT_ROOT: vaultPaths.vaultRoot,
         CHATOBBY_ATTACHMENT_DIR: vaultPaths.attachmentDir,
         CHATOBBY_RUNTIME_LOG_FILE: lease.paths.logFile,

@@ -44,6 +44,10 @@ export declare const OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP: {
     readonly obsidian_execute_command: "commands.execute";
     readonly obsidian_list_hotkeys: "hotkeys.list";
 };
+export declare const OBSIDIAN_UI_TOOL_OPERATION_MAP: {
+    readonly obsidian_ui_snapshot: "ui.snapshot";
+    readonly obsidian_ui_interact: "ui.interact";
+};
 export declare const OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP: {
     readonly obsidian_vault_explore: "retrieval.explore";
     readonly obsidian_vault_trace: "retrieval.trace";
@@ -92,14 +96,16 @@ export declare const OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP: {
     readonly obsidian_read_cli_result: "cli.result.read";
 };
 export type ObsidianPluginNativeToolName = keyof typeof OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP;
+export type ObsidianUiToolName = keyof typeof OBSIDIAN_UI_TOOL_OPERATION_MAP;
 export type ObsidianCoreSpecialistToolName = keyof typeof OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP;
 export type ObsidianRetrievalToolName = keyof typeof OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP;
 export type ObsidianBrowserToolName = keyof typeof OBSIDIAN_BROWSER_TOOL_OPERATION_MAP;
 export type ObsidianCliFamilyToolName = keyof typeof OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP;
 export type ObsidianCliSubstrateToolName = keyof typeof OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP;
-export type ObsidianNonDirectToolName = ObsidianCoreSpecialistToolName | ObsidianPluginNativeToolName | ObsidianRetrievalToolName | ObsidianBrowserToolName | ObsidianCliFamilyToolName | ObsidianCliSubstrateToolName;
+export type ObsidianNonDirectToolName = ObsidianCoreSpecialistToolName | ObsidianPluginNativeToolName | ObsidianUiToolName | ObsidianRetrievalToolName | ObsidianBrowserToolName | ObsidianCliFamilyToolName | ObsidianCliSubstrateToolName;
 export declare const OBSIDIAN_CORE_SPECIALIST_TOOL_NAMES: ("obsidian_create_note" | "obsidian_edit_note" | "obsidian_get_context" | "obsidian_list_entries" | "obsidian_open_app" | "obsidian_open_note" | "obsidian_read_image" | "obsidian_read_note" | "obsidian_resolve_note" | "obsidian_search")[];
 export declare const OBSIDIAN_PLUGIN_NATIVE_TOOL_NAMES: ("obsidian_audit_links" | "obsidian_copy_entry" | "obsidian_create_folder" | "obsidian_edit_editor" | "obsidian_execute_command" | "obsidian_focus_location" | "obsidian_generate_link" | "obsidian_get_capabilities" | "obsidian_get_editor_state" | "obsidian_get_links" | "obsidian_get_metadata" | "obsidian_get_workspace" | "obsidian_import_attachment" | "obsidian_list_commands" | "obsidian_list_hotkeys" | "obsidian_list_properties" | "obsidian_list_tags" | "obsidian_list_tasks" | "obsidian_manage_leaf" | "obsidian_move_entry" | "obsidian_trash_entry" | "obsidian_traverse_graph" | "obsidian_update_frontmatter" | "obsidian_update_task")[];
+export declare const OBSIDIAN_UI_TOOL_NAMES: ("obsidian_ui_interact" | "obsidian_ui_snapshot")[];
 export declare const OBSIDIAN_RETRIEVAL_TOOL_NAMES: ("obsidian_vault_communities" | "obsidian_vault_explain" | "obsidian_vault_explore" | "obsidian_vault_hubs" | "obsidian_vault_related" | "obsidian_vault_trace")[];
 export declare const OBSIDIAN_BROWSER_TOOL_NAMES: ("obsidian_browser_click" | "obsidian_browser_close" | "obsidian_browser_dom" | "obsidian_browser_list" | "obsidian_browser_navigate" | "obsidian_browser_open" | "obsidian_browser_pointer" | "obsidian_browser_press" | "obsidian_browser_read" | "obsidian_browser_screenshot" | "obsidian_browser_snapshot" | "obsidian_browser_type" | "obsidian_browser_wait")[];
 export declare const OBSIDIAN_CLI_FAMILY_TOOL_NAMES: ("obsidian_appearance" | "obsidian_backlinks" | "obsidian_base" | "obsidian_bookmarks" | "obsidian_daily_note" | "obsidian_deadends" | "obsidian_dev_diagnostics" | "obsidian_file_history" | "obsidian_orphans" | "obsidian_outline" | "obsidian_plugin" | "obsidian_quickadd" | "obsidian_random" | "obsidian_recents" | "obsidian_sync" | "obsidian_template" | "obsidian_unresolved" | "obsidian_wordcount")[];
@@ -139,6 +145,8 @@ export declare const OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP: {
     readonly obsidian_list_commands: "commands.list";
     readonly obsidian_execute_command: "commands.execute";
     readonly obsidian_list_hotkeys: "hotkeys.list";
+    readonly obsidian_ui_snapshot: "ui.snapshot";
+    readonly obsidian_ui_interact: "ui.interact";
     readonly obsidian_vault_explore: "retrieval.explore";
     readonly obsidian_vault_trace: "retrieval.trace";
     readonly obsidian_vault_related: "retrieval.related";
@@ -221,6 +229,8 @@ export declare const OBSIDIAN_ALL_TOOL_OPERATION_MAP: {
     readonly obsidian_list_commands: "commands.list";
     readonly obsidian_execute_command: "commands.execute";
     readonly obsidian_list_hotkeys: "hotkeys.list";
+    readonly obsidian_ui_snapshot: "ui.snapshot";
+    readonly obsidian_ui_interact: "ui.interact";
     readonly obsidian_vault_explore: "retrieval.explore";
     readonly obsidian_vault_trace: "retrieval.trace";
     readonly obsidian_vault_related: "retrieval.related";
@@ -262,6 +272,6 @@ export declare const OBSIDIAN_ALL_TOOL_OPERATION_MAP: {
     readonly obsidian_read_cli_result: "cli.result.read";
 };
 export type ObsidianToolName = keyof typeof OBSIDIAN_ALL_TOOL_OPERATION_MAP;
-export declare const OBSIDIAN_ALL_TOOL_NAMES: ("obsidian_appearance" | "obsidian_audit_links" | "obsidian_backlinks" | "obsidian_base" | "obsidian_bookmarks" | "obsidian_browser_click" | "obsidian_browser_close" | "obsidian_browser_dom" | "obsidian_browser_list" | "obsidian_browser_navigate" | "obsidian_browser_open" | "obsidian_browser_pointer" | "obsidian_browser_press" | "obsidian_browser_read" | "obsidian_browser_screenshot" | "obsidian_browser_snapshot" | "obsidian_browser_type" | "obsidian_browser_wait" | "obsidian_context" | "obsidian_copy_entry" | "obsidian_create_folder" | "obsidian_create_note" | "obsidian_daily_note" | "obsidian_deadends" | "obsidian_dev_diagnostics" | "obsidian_edit_editor" | "obsidian_edit_note" | "obsidian_execute_command" | "obsidian_file_history" | "obsidian_files" | "obsidian_find" | "obsidian_focus_location" | "obsidian_generate_link" | "obsidian_get_capabilities" | "obsidian_get_context" | "obsidian_get_editor_state" | "obsidian_get_links" | "obsidian_get_metadata" | "obsidian_get_workspace" | "obsidian_import_attachment" | "obsidian_list_commands" | "obsidian_list_entries" | "obsidian_list_hotkeys" | "obsidian_list_properties" | "obsidian_list_tags" | "obsidian_list_tasks" | "obsidian_manage_leaf" | "obsidian_move_entry" | "obsidian_open" | "obsidian_open_app" | "obsidian_open_note" | "obsidian_orphans" | "obsidian_outline" | "obsidian_plugin" | "obsidian_quickadd" | "obsidian_random" | "obsidian_read" | "obsidian_read_cli_result" | "obsidian_read_image" | "obsidian_read_note" | "obsidian_recents" | "obsidian_resolve_note" | "obsidian_run_cli" | "obsidian_search" | "obsidian_sync" | "obsidian_template" | "obsidian_trash_entry" | "obsidian_traverse_graph" | "obsidian_unresolved" | "obsidian_update_frontmatter" | "obsidian_update_task" | "obsidian_vault_communities" | "obsidian_vault_explain" | "obsidian_vault_explore" | "obsidian_vault_hubs" | "obsidian_vault_related" | "obsidian_vault_trace" | "obsidian_wordcount" | "obsidian_write")[];
+export declare const OBSIDIAN_ALL_TOOL_NAMES: ("obsidian_appearance" | "obsidian_audit_links" | "obsidian_backlinks" | "obsidian_base" | "obsidian_bookmarks" | "obsidian_browser_click" | "obsidian_browser_close" | "obsidian_browser_dom" | "obsidian_browser_list" | "obsidian_browser_navigate" | "obsidian_browser_open" | "obsidian_browser_pointer" | "obsidian_browser_press" | "obsidian_browser_read" | "obsidian_browser_screenshot" | "obsidian_browser_snapshot" | "obsidian_browser_type" | "obsidian_browser_wait" | "obsidian_context" | "obsidian_copy_entry" | "obsidian_create_folder" | "obsidian_create_note" | "obsidian_daily_note" | "obsidian_deadends" | "obsidian_dev_diagnostics" | "obsidian_edit_editor" | "obsidian_edit_note" | "obsidian_execute_command" | "obsidian_file_history" | "obsidian_files" | "obsidian_find" | "obsidian_focus_location" | "obsidian_generate_link" | "obsidian_get_capabilities" | "obsidian_get_context" | "obsidian_get_editor_state" | "obsidian_get_links" | "obsidian_get_metadata" | "obsidian_get_workspace" | "obsidian_import_attachment" | "obsidian_list_commands" | "obsidian_list_entries" | "obsidian_list_hotkeys" | "obsidian_list_properties" | "obsidian_list_tags" | "obsidian_list_tasks" | "obsidian_manage_leaf" | "obsidian_move_entry" | "obsidian_open" | "obsidian_open_app" | "obsidian_open_note" | "obsidian_orphans" | "obsidian_outline" | "obsidian_plugin" | "obsidian_quickadd" | "obsidian_random" | "obsidian_read" | "obsidian_read_cli_result" | "obsidian_read_image" | "obsidian_read_note" | "obsidian_recents" | "obsidian_resolve_note" | "obsidian_run_cli" | "obsidian_search" | "obsidian_sync" | "obsidian_template" | "obsidian_trash_entry" | "obsidian_traverse_graph" | "obsidian_ui_interact" | "obsidian_ui_snapshot" | "obsidian_unresolved" | "obsidian_update_frontmatter" | "obsidian_update_task" | "obsidian_vault_communities" | "obsidian_vault_explain" | "obsidian_vault_explore" | "obsidian_vault_hubs" | "obsidian_vault_related" | "obsidian_vault_trace" | "obsidian_wordcount" | "obsidian_write")[];
 /** Historical aliases intentionally excluded from the canonical MCP surface. */
 export declare const OBSIDIAN_EXCLUDED_COMPAT_TOOL_NAMES: readonly ["vault_*", "open_note", "get_active_note", "execute_command", "manage_workspace", "open_obsidian_app", "run_obsidian_cli"];

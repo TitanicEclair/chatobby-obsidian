@@ -3,7 +3,7 @@
 //
 // See docs/tooling/bridge-executor.md §8 for the Obsidian API mapping.
 
-import { MarkdownView, type WorkspaceLeaf } from "obsidian";
+import { type WorkspaceLeaf } from "obsidian";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 import { findLiteralMatches, getFilteredMarkdownFiles, fileToNoteRef } from "./helpers/search";
@@ -11,126 +11,60 @@ import type { SearchResult } from "./helpers/search";
 import { decodeSearchCursor, encodeSearchCursor } from "./helpers/paging";
 import type { PageInfo } from "./helpers/paging";
 import { getVaultIdentity } from "./helpers/vault-identity";
-import { readNote, writeNote, editNote, resolveNote, listEntries, buildNoteContextExcerpt } from "./helpers/note-io";
+import { readNote, writeNote, editNote, resolveNote, listEntries } from "./helpers/note-io";
 import { arrayBufferToBase64 } from "./helpers/binary";
-import { CONTEXT_EXCERPT_BEFORE, CONTEXT_EXCERPT_AFTER } from "../../prompt/constants";
 import { gatherEnvironmentContext } from "../../prompt/environment";
 import { isTFile } from "./helpers/file-types";
-
-function isMarkdownView(view: unknown): view is MarkdownView {
-  if (typeof MarkdownView === "function" && view instanceof MarkdownView) return true;
-  if (!isRecord(view) || !isRecord(view.editor)) return false;
-  return "file" in view
-    && typeof view.editor.getCursor === "function"
-    && typeof view.editor.getSelection === "function";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+import { getObsidianSemanticContextService } from "../../obsidian-context";
 
 // ── context.get ────────────────────────────────────────────────────────
 
-export const handleContextGet: OperationHandler = async (_args, _signal, app) => {
-  // Prefer the active markdown view; fall back to the first open markdown leaf.
-  const activeView = app.workspace.getActiveViewOfType(MarkdownView);
-  const markdownLeaf = activeView?.leaf
-    ?? app.workspace.getLeavesOfType("markdown").find((leaf) => isMarkdownView(leaf.view));
-
-  if (!markdownLeaf) {
+export const handleContextGet: OperationHandler = async (args, _signal, app) => {
+  const include = Array.isArray(args.include)
+    ? args.include.filter(
+        (value): value is "activeNote" | "selection" | "cursor" | "headings" | "openNotes" =>
+          value === "activeNote"
+          || value === "selection"
+          || value === "cursor"
+          || value === "headings"
+          || value === "openNotes",
+      )
+    : undefined;
+  const maxOpenNotes = typeof args.maxOpenNotes === "number" ? args.maxOpenNotes : undefined;
+  const scope = typeof args.scope === "string"
+    && ["current", "active-view", "workspace", "region", "leaf"].includes(args.scope)
+    ? args.scope as "current" | "active-view" | "workspace" | "region" | "leaf"
+    : undefined;
+  const regionId = typeof args.regionId === "string" ? args.regionId : undefined;
+  const leafId = typeof args.leafId === "string" ? args.leafId : undefined;
+  const cursor = typeof args.cursor === "string" ? args.cursor : undefined;
+  const limit = typeof args.limit === "number" ? args.limit : undefined;
+  try {
     return {
-      vault: getVaultIdentity(app),
-      capabilities: [] as string[],
-      warnings: ["NO_ACTIVE_NOTE: No active markdown note"],
+      ...getObsidianSemanticContextService(app).contextProjection({
+        include,
+        maxOpenNotes,
+        scope,
+        regionId,
+        leafId,
+        cursor,
+        limit,
+      }),
+      environment: gatherEnvironmentContext(app),
     };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith("REVISION_CONFLICT:")) {
+      throw new BridgeError("REVISION_CONFLICT", message.slice("REVISION_CONFLICT:".length).trim());
+    }
+    if (message.startsWith("NOT_FOUND:")) {
+      throw new BridgeError("NOTE_NOT_FOUND", message.slice("NOT_FOUND:".length).trim());
+    }
+    if (message.startsWith("INVALID_CURSOR:") || message.startsWith("INVALID_INPUT:")) {
+      throw new BridgeError("INVALID_INPUT", message.replace(/^[A-Z_]+:\s*/u, ""));
+    }
+    throw error;
   }
-
-  if (!isMarkdownView(markdownLeaf.view)) {
-    return {
-      vault: getVaultIdentity(app),
-      capabilities: [] as string[],
-      warnings: ["NO_ACTIVE_NOTE: No active markdown note"],
-    };
-  }
-  const view = markdownLeaf.view;
-  const editor = view.editor;
-  const file = view.file;
-
-  if (!file) {
-    return {
-      vault: getVaultIdentity(app),
-      capabilities: [] as string[],
-      warnings: ["NO_ACTIVE_NOTE: No file in active view"],
-    };
-  }
-
-  const content = await app.vault.cachedRead(file);
-  const cursor = editor.getCursor();
-  const selection = editor.getSelection();
-
-  // Build excerpt around cursor
-  const anchorFromLine = cursor.line;
-  const anchorToLine = selection ? editor.getCursor("to").line : cursor.line;
-  const excerpt = buildNoteContextExcerpt(
-    content,
-    anchorFromLine,
-    anchorToLine,
-    CONTEXT_EXCERPT_BEFORE,
-    CONTEXT_EXCERPT_AFTER,
-  );
-
-  // Get headings from metadata cache
-  const cached = app.metadataCache.getFileCache(file);
-  const headings = cached?.headings?.map((h) => ({
-    level: h.level,
-    text: h.heading,
-    heading: h.heading,
-    line: h.position.start.line,
-  }));
-
-  // Get open notes
-  const openNotes = app.workspace.getLeavesOfType("markdown")
-    .map((leaf) => {
-      if (!isMarkdownView(leaf.view)) return null;
-      const v = leaf.view;
-      const f = v.file;
-      if (!f) return null;
-      return {
-        path: f.path,
-        basename: f.basename,
-        title: f.basename,
-        mtime: f.stat.mtime,
-        ctime: f.stat.ctime,
-        isActive: (leaf as unknown) === (markdownLeaf as unknown),
-      };
-    })
-    .filter((n): n is NonNullable<typeof n> => n !== null);
-
-  return {
-    vault: getVaultIdentity(app),
-    environment: gatherEnvironmentContext(app),
-    activeNote: {
-      path: file.path,
-      basename: file.basename,
-      title: file.basename,
-      mtime: file.stat.mtime,
-      ctime: file.stat.ctime,
-      excerpt: excerpt.text,
-      fromLine: excerpt.fromLine + 1,
-      toLine: excerpt.toLine + 1,
-    },
-    cursor: { line: cursor.line + 1, ch: cursor.ch },
-    selection: selection
-      ? {
-          text: selection,
-          from: editor.getCursor("from").line + 1,
-          to: editor.getCursor("to").line + 1,
-        }
-      : undefined,
-    headings,
-    openNotes,
-    capabilities: ["context", "notes", "search"],
-  };
 };
 
 // ── note.read ──────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ var OBSIDIAN_BRIDGE_ERROR_CODES = /* @__PURE__ */ new Set([
   "NOTE_NOT_FOUND",
   "PATH_AMBIGUOUS",
   "REVISION_CONFLICT",
+  "RESULT_EXPIRED",
   "PATH_EXISTS",
   "INVALID_INPUT",
   "UNSUPPORTED_OPERATION",
@@ -100,6 +101,7 @@ var OBSIDIAN_PLUGIN_NATIVE_OPERATIONS = [
   "commands.execute",
   "hotkeys.list"
 ];
+var OBSIDIAN_UI_OPERATIONS = ["ui.snapshot", "ui.interact"];
 var OBSIDIAN_BROWSER_OPERATIONS = [
   "browser.open",
   "browser.navigate",
@@ -148,6 +150,7 @@ var OBSIDIAN_CLI_OPERATIONS = [
 var OBSIDIAN_ALL_OPERATIONS = /* @__PURE__ */ new Set([
   ...OBSIDIAN_CORE_OPERATIONS,
   ...OBSIDIAN_PLUGIN_NATIVE_OPERATIONS,
+  ...OBSIDIAN_UI_OPERATIONS,
   ...OBSIDIAN_BROWSER_OPERATIONS,
   ...OBSIDIAN_RETRIEVAL_OPERATIONS,
   ...OBSIDIAN_CLI_OPERATIONS
@@ -272,6 +275,63 @@ function parseCapabilitiesChanged(input) {
     runtimeDependencies: input.runtimeDependencies.map(parseRuntimeDependency)
   };
 }
+var CONTEXT_CHANGED_DOMAINS = /* @__PURE__ */ new Set([
+  "focus",
+  "workspace",
+  "editor",
+  "page",
+  "capabilities"
+]);
+function parseNonNegativeInteger(value, field) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`${field} must be a non-negative integer`);
+  }
+  return value;
+}
+function parseContextRevisions(input) {
+  if (!isPlainObject(input)) throw new TypeError("context_changed.revisions must be an object");
+  return {
+    workspace: parseNonNegativeInteger(input.workspace, "context_changed.revisions.workspace"),
+    editor: parseNonNegativeInteger(input.editor, "context_changed.revisions.editor"),
+    page: parseNonNegativeInteger(input.page, "context_changed.revisions.page"),
+    capabilities: parseNonNegativeInteger(input.capabilities, "context_changed.revisions.capabilities")
+  };
+}
+function parseContextChanged(input) {
+  const sequence = parseNonNegativeInteger(input.sequence, "context_changed.sequence");
+  if (typeof input.capturedAt !== "string" || !Number.isFinite(Date.parse(input.capturedAt))) {
+    throw new TypeError("context_changed.capturedAt must be an ISO timestamp");
+  }
+  if (!Array.isArray(input.changed) || input.changed.length === 0) {
+    throw new TypeError("context_changed.changed must be a non-empty array");
+  }
+  const changed = input.changed.map((domain) => {
+    if (typeof domain !== "string" || !CONTEXT_CHANGED_DOMAINS.has(domain)) {
+      throw new TypeError(`Unknown context change domain: ${String(domain)}`);
+    }
+    return domain;
+  });
+  const result = {
+    type: "context_changed",
+    sequence,
+    capturedAt: input.capturedAt,
+    changed,
+    revisions: parseContextRevisions(input.revisions)
+  };
+  if (input.summary !== void 0) {
+    if (!isPlainObject(input.summary)) throw new TypeError("context_changed.summary must be an object");
+    const summary = {};
+    for (const field of ["activeLeafId", "viewType", "path"]) {
+      const value = input.summary[field];
+      if (value !== void 0 && typeof value !== "string") {
+        throw new TypeError(`context_changed.summary.${field} must be a string`);
+      }
+      if (typeof value === "string") summary[field] = value;
+    }
+    result.summary = summary;
+  }
+  return result;
+}
 function parsePing(input) {
   if (typeof input.sentAt !== "string") throw new TypeError("ping.sentAt must be a string");
   const result = { type: "ping", sentAt: input.sentAt };
@@ -342,6 +402,8 @@ function parsePluginToServerMessage(input) {
       return parsePing(input);
     case "capabilities_changed":
       return parseCapabilitiesChanged(input);
+    case "context_changed":
+      return parseContextChanged(input);
     case "result":
       return parseResult(input);
     case "error":
@@ -500,6 +562,10 @@ var OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP = {
   obsidian_execute_command: "commands.execute",
   obsidian_list_hotkeys: "hotkeys.list"
 };
+var OBSIDIAN_UI_TOOL_OPERATION_MAP = {
+  obsidian_ui_snapshot: "ui.snapshot",
+  obsidian_ui_interact: "ui.interact"
+};
 var OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP = {
   obsidian_vault_explore: "retrieval.explore",
   obsidian_vault_trace: "retrieval.trace",
@@ -553,6 +619,7 @@ var OBSIDIAN_CORE_SPECIALIST_TOOL_NAMES = Object.keys(
 var OBSIDIAN_PLUGIN_NATIVE_TOOL_NAMES = Object.keys(
   OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP
 );
+var OBSIDIAN_UI_TOOL_NAMES = Object.keys(OBSIDIAN_UI_TOOL_OPERATION_MAP);
 var OBSIDIAN_RETRIEVAL_TOOL_NAMES = Object.keys(
   OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP
 );
@@ -568,6 +635,7 @@ var OBSIDIAN_CLI_SUBSTRATE_TOOL_NAMES = Object.keys(
 var OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP = {
   ...OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP,
   ...OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
+  ...OBSIDIAN_UI_TOOL_OPERATION_MAP,
   ...OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
   ...OBSIDIAN_BROWSER_TOOL_OPERATION_MAP,
   ...OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP,
@@ -934,6 +1002,7 @@ function evaluateObsidianToolAvailability(descriptor, state) {
   };
 }
 function capabilityForOperation(operation) {
+  if (operation.startsWith("ui.")) return "workspace";
   if (operation.startsWith("browser.")) return "browser";
   if (operation.startsWith("retrieval.")) return "retrieval";
   if (operation.startsWith("cli.")) return "cli";
@@ -998,6 +1067,9 @@ export {
   OBSIDIAN_RETRIEVAL_TOOL_NAMES,
   OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
   OBSIDIAN_TOOL_CAPABILITY_CATALOG,
+  OBSIDIAN_UI_OPERATIONS,
+  OBSIDIAN_UI_TOOL_NAMES,
+  OBSIDIAN_UI_TOOL_OPERATION_MAP,
   createObsidianMcpServerPolicy,
   evaluateObsidianToolAvailability,
   isBridgeCapability,

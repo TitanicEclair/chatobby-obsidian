@@ -47,6 +47,33 @@ export interface ObsidianBridgeCapabilitiesChanged {
 	runtimeDependencies: ObsidianRuntimeDependencyState[];
 }
 
+export type ObsidianContextChangedDomain = "focus" | "workspace" | "editor" | "page" | "capabilities";
+
+export interface ObsidianContextRevisions {
+	workspace: number;
+	editor: number;
+	page: number;
+	capabilities: number;
+}
+
+/**
+ * Compact invalidation notice. The connector remains the snapshot authority;
+ * the runtime uses this event only to invalidate cached projections and detect
+ * missed updates before requesting fresh context.
+ */
+export interface ObsidianBridgeContextChanged {
+	type: "context_changed";
+	sequence: number;
+	capturedAt: string;
+	changed: ObsidianContextChangedDomain[];
+	revisions: ObsidianContextRevisions;
+	summary?: {
+		activeLeafId?: string;
+		viewType?: string;
+		path?: string;
+	};
+}
+
 export interface ObsidianBridgePing {
 	type: "ping";
 	requestId?: string;
@@ -69,6 +96,7 @@ export type ObsidianPluginToServerMessage =
 	| ObsidianBridgeHello
 	| ObsidianBridgePing
 	| ObsidianBridgeCapabilitiesChanged
+	| ObsidianBridgeContextChanged
 	| ObsidianBridgeResult
 	| ObsidianBridgeError;
 
@@ -221,6 +249,67 @@ function parseCapabilitiesChanged(input: Record<string, unknown>): ObsidianBridg
 	};
 }
 
+const CONTEXT_CHANGED_DOMAINS = new Set<ObsidianContextChangedDomain>([
+	"focus",
+	"workspace",
+	"editor",
+	"page",
+	"capabilities",
+]);
+
+function parseNonNegativeInteger(value: unknown, field: string): number {
+	if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+		throw new TypeError(`${field} must be a non-negative integer`);
+	}
+	return value;
+}
+
+function parseContextRevisions(input: unknown): ObsidianContextRevisions {
+	if (!isPlainObject(input)) throw new TypeError("context_changed.revisions must be an object");
+	return {
+		workspace: parseNonNegativeInteger(input.workspace, "context_changed.revisions.workspace"),
+		editor: parseNonNegativeInteger(input.editor, "context_changed.revisions.editor"),
+		page: parseNonNegativeInteger(input.page, "context_changed.revisions.page"),
+		capabilities: parseNonNegativeInteger(input.capabilities, "context_changed.revisions.capabilities"),
+	};
+}
+
+function parseContextChanged(input: Record<string, unknown>): ObsidianBridgeContextChanged {
+	const sequence = parseNonNegativeInteger(input.sequence, "context_changed.sequence");
+	if (typeof input.capturedAt !== "string" || !Number.isFinite(Date.parse(input.capturedAt))) {
+		throw new TypeError("context_changed.capturedAt must be an ISO timestamp");
+	}
+	if (!Array.isArray(input.changed) || input.changed.length === 0) {
+		throw new TypeError("context_changed.changed must be a non-empty array");
+	}
+	const changed = input.changed.map((domain) => {
+		if (typeof domain !== "string" || !CONTEXT_CHANGED_DOMAINS.has(domain as ObsidianContextChangedDomain)) {
+			throw new TypeError(`Unknown context change domain: ${String(domain)}`);
+		}
+		return domain as ObsidianContextChangedDomain;
+	});
+	const result: ObsidianBridgeContextChanged = {
+		type: "context_changed",
+		sequence,
+		capturedAt: input.capturedAt,
+		changed,
+		revisions: parseContextRevisions(input.revisions),
+	};
+	if (input.summary !== undefined) {
+		if (!isPlainObject(input.summary)) throw new TypeError("context_changed.summary must be an object");
+		const summary: NonNullable<ObsidianBridgeContextChanged["summary"]> = {};
+		for (const field of ["activeLeafId", "viewType", "path"] as const) {
+			const value = input.summary[field];
+			if (value !== undefined && typeof value !== "string") {
+				throw new TypeError(`context_changed.summary.${field} must be a string`);
+			}
+			if (typeof value === "string") summary[field] = value;
+		}
+		result.summary = summary;
+	}
+	return result;
+}
+
 function parsePing(input: Record<string, unknown>): ObsidianBridgePing {
 	if (typeof input.sentAt !== "string") throw new TypeError("ping.sentAt must be a string");
 	const result: ObsidianBridgePing = { type: "ping", sentAt: input.sentAt };
@@ -305,6 +394,8 @@ export function parsePluginToServerMessage(input: unknown): ObsidianPluginToServ
 			return parsePing(input);
 		case "capabilities_changed":
 			return parseCapabilitiesChanged(input);
+		case "context_changed":
+			return parseContextChanged(input);
 		case "result":
 			return parseResult(input);
 		case "error":

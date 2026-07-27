@@ -24,6 +24,7 @@ export type {
 	ObsidianOperationName,
 	ObsidianPluginNativeOperationName,
 	ObsidianRetrievalOperationName,
+	ObsidianUiOperationName,
 } from "./bridge-operations.ts";
 // --- Bridge operations ---
 export {
@@ -34,10 +35,12 @@ export {
 	OBSIDIAN_CORE_OPERATIONS,
 	OBSIDIAN_PLUGIN_NATIVE_OPERATIONS,
 	OBSIDIAN_RETRIEVAL_OPERATIONS,
+	OBSIDIAN_UI_OPERATIONS,
 } from "./bridge-operations.ts";
 export type {
 	ObsidianBridgeCancel,
 	ObsidianBridgeCapabilitiesChanged,
+	ObsidianBridgeContextChanged,
 	ObsidianBridgeError,
 	ObsidianBridgeHello,
 	ObsidianBridgeInvoke,
@@ -45,6 +48,8 @@ export type {
 	ObsidianBridgePong,
 	ObsidianBridgeResult,
 	ObsidianBridgeVault,
+	ObsidianContextChangedDomain,
+	ObsidianContextRevisions,
 	ObsidianEnabledPlugin,
 	ObsidianPluginToServerMessage,
 	ObsidianServerToPluginMessage,
@@ -59,6 +64,7 @@ export type { ObsidianVaultSelector } from "./bridge-selectors.ts";
 export { parseVaultSelector } from "./bridge-selectors.ts";
 export type {
 	ObsidianDirectToolName,
+	ObsidianLegacyDirectToolName,
 	ObsidianMcpPolicyOptions,
 	ObsidianMcpServerPolicy,
 } from "./mcp-policy.ts";
@@ -71,10 +77,12 @@ export type {
 	ObsidianBrowserToolName,
 	ObsidianCliFamilyToolName,
 	ObsidianCliSubstrateToolName,
+	ObsidianCoreSpecialistToolName,
 	ObsidianNonDirectToolName,
 	ObsidianPluginNativeToolName,
 	ObsidianRetrievalToolName,
 	ObsidianToolName,
+	ObsidianUiToolName,
 } from "./mcp-tool-catalog.ts";
 export {
 	OBSIDIAN_ALL_TOOL_NAMES,
@@ -85,6 +93,8 @@ export {
 	OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP,
 	OBSIDIAN_CLI_SUBSTRATE_TOOL_NAMES,
 	OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP,
+	OBSIDIAN_CORE_SPECIALIST_TOOL_NAMES,
+	OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP,
 	OBSIDIAN_DIRECT_TOOL_OPERATION_MAP,
 	OBSIDIAN_EXCLUDED_COMPAT_TOOL_NAMES,
 	OBSIDIAN_NON_DIRECT_TOOL_NAMES,
@@ -93,6 +103,8 @@ export {
 	OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
 	OBSIDIAN_RETRIEVAL_TOOL_NAMES,
 	OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
+	OBSIDIAN_UI_TOOL_NAMES,
+	OBSIDIAN_UI_TOOL_OPERATION_MAP,
 } from "./mcp-tool-catalog.ts";
 export type {
 	ObsidianGraphComponent,

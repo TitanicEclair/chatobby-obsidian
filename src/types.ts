@@ -671,13 +671,41 @@ export type FeedBlock =
 export interface VaultContext {
   frontend: "obsidian";
   vault: string;
+  appContext?: {
+    contextId: string;
+    sequence: number;
+    capturedAt: string;
+    revisions: { workspace: number; editor: number; page: number; capabilities: number };
+    focus?: { activeLeafId?: string; viewType: string; title?: string; path?: string };
+    workspace: { leafCount: number; openNoteCount: number };
+    landmarks?: Array<{
+      ref: string;
+      role: string;
+      name?: string;
+      text?: string;
+      href?: string;
+      disabled?: boolean;
+      checked?: boolean;
+      expanded?: boolean;
+    }>;
+    inspection?: {
+      leafId: string;
+      documentId: string;
+      documentRevision: string;
+      cursor?: string;
+    };
+  };
   environment?: VaultEnvironment;
   capabilities?: VaultCapabilityContext;
   notePath?: string;
   cursor?: { line: number; ch: number };
   selection?: string;
+  selectionCharacters?: number;
+  selectionTruncated?: boolean;
   contextExcerpt?: { fromLine: number; toLine: number; text: string };
   headings?: string[];
+  headingCount?: number;
+  headingsTruncated?: boolean;
   openNotes?: OpenNoteInfo[];
   imageEmbeds?: ResolvedImage[];
 }

@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added one event-cached semantic Obsidian context service shared by prompt
+  injection and bridge tools, with live editor state, workspace revisions,
+  bounded paging, and accessible visible-view inspection.
+- Added retained semantic Web Viewer documents, stable revision-bound refs,
+  bounded screenshots, and automatic post-action page deltas.
+
+### Changed
+
+- Simplified user-created agent roles to Vault or Project availability, moved
+  that choice into the primary form, hid the internal role key, and made role
+  cards show their effective availability.
+- Launch the managed runtime with Chatobby-owned agent-directory configuration
+  instead of the legacy Pi environment name.
+
+### Fixed
+
+- Preserved unsaved editor content, active-leaf focus, panel state, and
+  non-Markdown view context while bounding automatic prompt context.
+- Kept prompt and tool context synchronized through the same revisioned
+  Obsidian semantic snapshot after workspace, editor, and visible-page changes.
+
 ## [0.2.3] - 2026-07-27
 
 ### Added

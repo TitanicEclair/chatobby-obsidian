@@ -26,7 +26,7 @@ export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, a
         attr: { title: "Chatobby-provided role", "aria-label": "Chatobby-provided role" },
       });
     }
-    top.createSpan({ cls: "chatobby-subagents__scope", text: scopeLabel(definition.scope) });
+    top.createSpan({ cls: "chatobby-subagents__scope", text: roleAvailabilityLabel(definition) });
     card.createDiv({ cls: "chatobby-subagents__catalog-description", text: definition.description });
     const details = card.createEl("details", { cls: "chatobby-subagents__catalog-details" });
     details.createEl("summary", { text: "Details" });
@@ -153,6 +153,7 @@ function renderAgentEditor(
     initialDefinition.description,
     "Finds, verifies, and summarizes research",
   );
+  const availability = addRoleAvailabilityField(form, initialDefinition.scope);
   const prompt = addTextAreaField(
     form,
     "Role instructions",
@@ -173,14 +174,6 @@ function renderAgentEditor(
   const advanced = form.createEl("details", { cls: "chatobby-subagents__role-advanced" });
   advanced.createEl("summary", { text: "Advanced runtime settings" });
   const advancedGrid = advanced.createDiv({ cls: "chatobby-subagents__role-advanced-grid" });
-  const id = addTextField(advancedGrid, "Role key", initialDefinition.id, "Generated from the role name");
-  const scope = addSelectField(
-    advancedGrid,
-    "Availability",
-    initialDefinition.scope,
-    ["global", "vault", "directory", "session"],
-    "Controls where this role appears. Chatobby assigns the exact vault, project, or session automatically.",
-  );
   const executor = addSelectField(
     advancedGrid,
     "Executor",
@@ -193,7 +186,7 @@ function renderAgentEditor(
     "Starting context",
     initialDefinition.policy.contextMode ?? "fresh",
     ["fresh", "fork"],
-    "Fresh receives only the assignment; fork starts from the parent conversation.",
+    "Fresh starts with Chatobby guidance, this role's instructions, and the assignment. Fork also includes the parent conversation.",
   );
   const thinking = addSelectField(
     advancedGrid,
@@ -212,10 +205,10 @@ function renderAgentEditor(
     actions.setAgentEditorDraft(draftId, {
       definition: {
         ...initialDefinition,
-        id: id.value,
+        id: existing?.id ?? "",
         name: name.value,
         description: description.value,
-        scope: scope.value as AgentDefinition["scope"],
+        scope: availability.value as "vault" | "directory",
         systemPrompt: prompt.value,
         enabled: enabled.checked,
         policy: {
@@ -464,6 +457,23 @@ function addSelectField(
   return select;
 }
 
+function addRoleAvailabilityField(
+  host: HTMLElement,
+  current: AgentDefinition["scope"],
+): HTMLSelectElement {
+  const row = host.createEl("label", { cls: "chatobby-subagents__field" });
+  row.createSpan({ text: "Available in" });
+  const select = row.createEl("select", { attr: { "aria-label": "Role availability" } });
+  select.createEl("option", { text: "This vault", attr: { value: "vault" } });
+  select.createEl("option", { text: "This project", attr: { value: "directory" } });
+  select.value = current === "directory" ? "directory" : "vault";
+  row.createDiv({
+    cls: "chatobby-subagents__field-help",
+    text: "Vault roles are available everywhere in this vault. Project roles appear only in this working directory.",
+  });
+  return select;
+}
+
 function addToggleField(host: HTMLElement, label: string, checked: boolean): HTMLInputElement {
   const row = host.createEl("label", { cls: "chatobby-subagents__toggle" });
   const input = row.createEl("input", { attr: { type: "checkbox" } });
@@ -492,11 +502,9 @@ function assignedPermissionPolicy(state: SubagentViewState, roleId: string | und
   return assignment?.mode === "profile" ? assignment.profileId : "inherit";
 }
 
-function scopeLabel(scope: AgentDefinition["scope"]): string {
-  if (scope === "global") return "All vaults";
-  if (scope === "vault") return "This vault";
-  if (scope === "directory") return "This project";
-  return "This session";
+function roleAvailabilityLabel(definition: AgentDefinition): string {
+  if (definition.builtIn) return "Chatobby role";
+  return definition.scope === "directory" ? "Project" : "Vault";
 }
 
 function humanize(value: string): string {

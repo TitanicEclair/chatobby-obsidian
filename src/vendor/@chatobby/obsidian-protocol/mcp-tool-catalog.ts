@@ -1,7 +1,16 @@
 import type { ObsidianOperationName } from "./bridge-operations.ts";
-import type { ObsidianDirectToolName } from "./mcp-policy.ts";
+import type { ObsidianDirectToolName, ObsidianLegacyDirectToolName } from "./mcp-policy.ts";
 
 export const OBSIDIAN_DIRECT_TOOL_OPERATION_MAP = {
+	obsidian_context: "context.get",
+	obsidian_find: "note.resolve",
+	obsidian_read: "note.read",
+	obsidian_write: "note.write",
+	obsidian_files: "vault.list",
+	obsidian_open: "note.open",
+} as const satisfies Record<ObsidianDirectToolName, ObsidianOperationName>;
+
+export const OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP = {
 	obsidian_get_context: "context.get",
 	obsidian_resolve_note: "note.resolve",
 	obsidian_read_note: "note.read",
@@ -12,7 +21,7 @@ export const OBSIDIAN_DIRECT_TOOL_OPERATION_MAP = {
 	obsidian_edit_note: "note.edit",
 	obsidian_open_note: "note.open",
 	obsidian_open_app: "app.open",
-} as const satisfies Record<ObsidianDirectToolName, ObsidianOperationName>;
+} as const satisfies Record<ObsidianLegacyDirectToolName, ObsidianOperationName>;
 
 export const OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP = {
 	obsidian_get_capabilities: "registry.status",
@@ -39,6 +48,11 @@ export const OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP = {
 	obsidian_list_commands: "commands.list",
 	obsidian_execute_command: "commands.execute",
 	obsidian_list_hotkeys: "hotkeys.list",
+} as const satisfies Record<string, ObsidianOperationName>;
+
+export const OBSIDIAN_UI_TOOL_OPERATION_MAP = {
+	obsidian_ui_snapshot: "ui.snapshot",
+	obsidian_ui_interact: "ui.interact",
 } as const satisfies Record<string, ObsidianOperationName>;
 
 export const OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP = {
@@ -93,20 +107,28 @@ export const OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP = {
 } as const satisfies Record<string, ObsidianOperationName>;
 
 export type ObsidianPluginNativeToolName = keyof typeof OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP;
+export type ObsidianUiToolName = keyof typeof OBSIDIAN_UI_TOOL_OPERATION_MAP;
+export type ObsidianCoreSpecialistToolName = keyof typeof OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP;
 export type ObsidianRetrievalToolName = keyof typeof OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP;
 export type ObsidianBrowserToolName = keyof typeof OBSIDIAN_BROWSER_TOOL_OPERATION_MAP;
 export type ObsidianCliFamilyToolName = keyof typeof OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP;
 export type ObsidianCliSubstrateToolName = keyof typeof OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP;
 export type ObsidianNonDirectToolName =
+	| ObsidianCoreSpecialistToolName
 	| ObsidianPluginNativeToolName
+	| ObsidianUiToolName
 	| ObsidianRetrievalToolName
 	| ObsidianBrowserToolName
 	| ObsidianCliFamilyToolName
 	| ObsidianCliSubstrateToolName;
 
+export const OBSIDIAN_CORE_SPECIALIST_TOOL_NAMES = Object.keys(
+	OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP,
+) as ObsidianCoreSpecialistToolName[];
 export const OBSIDIAN_PLUGIN_NATIVE_TOOL_NAMES = Object.keys(
 	OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
 ) as ObsidianPluginNativeToolName[];
+export const OBSIDIAN_UI_TOOL_NAMES = Object.keys(OBSIDIAN_UI_TOOL_OPERATION_MAP) as ObsidianUiToolName[];
 export const OBSIDIAN_RETRIEVAL_TOOL_NAMES = Object.keys(
 	OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
 ) as ObsidianRetrievalToolName[];
@@ -121,7 +143,9 @@ export const OBSIDIAN_CLI_SUBSTRATE_TOOL_NAMES = Object.keys(
 ) as ObsidianCliSubstrateToolName[];
 
 export const OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP = {
+	...OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP,
 	...OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
+	...OBSIDIAN_UI_TOOL_OPERATION_MAP,
 	...OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
 	...OBSIDIAN_BROWSER_TOOL_OPERATION_MAP,
 	...OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP,

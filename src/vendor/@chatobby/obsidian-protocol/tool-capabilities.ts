@@ -135,6 +135,7 @@ export function evaluateObsidianToolAvailability(
 }
 
 function capabilityForOperation(operation: ObsidianOperationName): ObsidianBridgeCapability {
+	if (operation.startsWith("ui.")) return "workspace";
 	if (operation.startsWith("browser.")) return "browser";
 	if (operation.startsWith("retrieval.")) return "retrieval";
 	if (operation.startsWith("cli.")) return "cli";

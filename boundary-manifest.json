@@ -18,6 +18,7 @@
     { "path": "features", "authority": ["obsidian", "vault", "network"] },
     { "path": "frontend", "authority": ["network"] },
     { "path": "obsidian-bridge", "authority": ["obsidian", "vault", "filesystem", "process", "network"] },
+    { "path": "obsidian-context", "authority": ["obsidian"] },
     { "path": "prompt", "authority": ["vault"] },
     { "path": "runtime", "authority": ["filesystem", "process", "network"] },
     { "path": "state", "authority": ["obsidian"] },

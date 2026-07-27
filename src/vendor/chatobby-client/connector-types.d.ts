@@ -26,12 +26,12 @@ export type WsPromptAttachment = {
     sizeBytes?: number;
 };
 export interface WsPromptContextPacket {
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
     source: "obsidian";
     vault: string;
     workspace?: {
         workingDirectory: string;
-        activeSurface: "note" | "vault";
+        activeSurface: "note" | "view" | "vault";
         isNewSession: boolean;
         sessionMessageCount: number;
         sessionName?: string;
@@ -57,6 +57,43 @@ export interface WsPromptContextPacket {
             chatobbyVersion?: string;
         };
     };
+    appContext?: {
+        contextId: string;
+        sequence: number;
+        capturedAt: string;
+        revisions: {
+            workspace: number;
+            editor: number;
+            page: number;
+            capabilities: number;
+        };
+        focus?: {
+            activeLeafId?: string;
+            viewType: string;
+            title?: string;
+            path?: string;
+        };
+        workspace: {
+            leafCount: number;
+            openNoteCount: number;
+        };
+        landmarks?: Array<{
+            ref: string;
+            role: string;
+            name?: string;
+            text?: string;
+            href?: string;
+            disabled?: boolean;
+            checked?: boolean;
+            expanded?: boolean;
+        }>;
+        inspection?: {
+            leafId: string;
+            documentId: string;
+            documentRevision: string;
+            cursor?: string;
+        };
+    };
     capabilities?: {
         featureFamilies: string[];
         integrations: Array<{
@@ -79,19 +116,23 @@ export interface WsPromptContextPacket {
             ch: number;
         };
         selection?: string;
+        selectionCharacters?: number;
+        selectionTruncated?: boolean;
         excerpt?: {
             fromLine: number;
             toLine: number;
             text: string;
         };
         headings?: string[];
+        headingCount?: number;
+        headingsTruncated?: boolean;
     };
     openNotes?: Array<{
         path: string;
         title: string;
     }>;
     privacy: {
-        included: Array<"workspace" | "environment" | "capabilities" | "active-note" | "selection" | "excerpt" | "headings" | "open-notes">;
+        included: Array<"workspace" | "app-state" | "environment" | "capabilities" | "active-note" | "selection" | "excerpt" | "headings" | "open-notes" | "visible-landmarks">;
         omitted: string[];
     };
 }

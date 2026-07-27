@@ -4,13 +4,21 @@ import {
   type BrowserPageAction,
   type BrowserPageInput,
 } from "../browser/page-runtime";
+import {
+  BrowserArtifactStore,
+  type BrowserSemanticArtifact,
+} from "../browser/artifact-store";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
 
 const WEBVIEWER_TYPE = "webviewer";
-const DEFAULT_MAX_CHARS = 12_000;
+const DEFAULT_MAX_CHARS = 24_000;
+const SOFT_MAX_CHARS = 32_000;
+const HARD_MAX_CHARS = 96_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 5_000;
 const WEBVIEWER_READY_TIMEOUT_MS = 5_000;
+const PAGE_RUNTIME_KEY = "__chatobbyExecuteBrowserPageV2";
+const browserArtifactStore = new BrowserArtifactStore();
 
 interface WebViewerState {
   url?: string;
@@ -58,6 +66,12 @@ interface BrowserCursor {
   revision: number;
   blockIndex: number;
   blockOffset: number;
+  format: "markdown" | "text" | "structured";
+}
+
+interface BrowserListCursor {
+  offset: number;
+  fingerprint: string;
 }
 
 interface WorkspaceWithRecentLeaf {
@@ -287,6 +301,36 @@ async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTab
   };
 }
 
+async function browserSemanticDigest(leaf: WorkspaceLeaf): Promise<Record<string, unknown> | undefined> {
+  const webview = getWebViewElement(leaf);
+  if (!webview?.executeJavaScript || webview.isLoading?.() === true) return undefined;
+  try {
+    const snapshot = await runPageOperation(webview, "snapshot", {
+      mode: "all",
+      maxElements: 12,
+      maxTextChars: 1_200,
+      includeHidden: false,
+    });
+    return {
+      page: snapshot.page,
+      returnedElements: snapshot.returnedElements,
+      truncated: snapshot.truncated,
+      elements: snapshot.elements,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function browserActionState(app: App, leaf: WorkspaceLeaf): Promise<Record<string, unknown>> {
+  const tab = await browserTabInfo(app, leaf);
+  const delta = await browserSemanticDigest(leaf);
+  return {
+    ...tab,
+    ...(delta ? { semanticDelta: delta } : {}),
+  };
+}
+
 function resolveBrowserTarget(app: App, target: unknown): WorkspaceLeaf {
   switch (target) {
     case "current": return app.workspace.getLeaf(false);
@@ -332,9 +376,14 @@ async function runPageOperation(
 ): Promise<Record<string, unknown>> {
   if (!webview.executeJavaScript) throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer page scripting is unavailable");
   const input: BrowserPageInput = { action, ...operationInput };
-  const script = `(${executeBrowserPageOperation.toString()})(${safeScriptJson(input)})`;
   try {
-    const result = asRecord(await webview.executeJavaScript(script, false));
+    const invocation = `window[${JSON.stringify(PAGE_RUNTIME_KEY)}]?window[${JSON.stringify(PAGE_RUNTIME_KEY)}](${safeScriptJson(input)}):({__chatobbyRuntimeMissing:true})`;
+    let result = asRecord(await webview.executeJavaScript(invocation, false));
+    if (result.__chatobbyRuntimeMissing === true) {
+      const install = `window[${JSON.stringify(PAGE_RUNTIME_KEY)}]=(${executeBrowserPageOperation.toString()});true`;
+      await webview.executeJavaScript(install, false);
+      result = asRecord(await webview.executeJavaScript(invocation, false));
+    }
     if (result.ok === false) throw new BridgeError("INVALID_INPUT", String(result.message || `browser.${action} failed`));
     return result;
   } catch (error) {
@@ -420,18 +469,19 @@ function viewportCenter(webview: WebViewElement): BrowserPoint {
 }
 
 function encodeCursor(cursor: BrowserCursor): string {
-  return `browser-v1:${encodeURIComponent(JSON.stringify(cursor))}`;
+  return `browser-v2:${encodeURIComponent(JSON.stringify(cursor))}`;
 }
 
 function decodeCursor(value: unknown): BrowserCursor | null {
-  if (typeof value !== "string" || !value.startsWith("browser-v1:")) return null;
+  if (typeof value !== "string" || !value.startsWith("browser-v2:")) return null;
   try {
-    const parsed = JSON.parse(decodeURIComponent(value.slice("browser-v1:".length))) as Partial<BrowserCursor>;
+    const parsed = JSON.parse(decodeURIComponent(value.slice("browser-v2:".length))) as Partial<BrowserCursor>;
     if (
       typeof parsed.documentId !== "string"
       || !Number.isInteger(parsed.revision)
       || !Number.isInteger(parsed.blockIndex)
       || !Number.isInteger(parsed.blockOffset)
+      || (parsed.format !== "markdown" && parsed.format !== "text" && parsed.format !== "structured")
     ) return null;
     return parsed as BrowserCursor;
   } catch {
@@ -439,44 +489,134 @@ function decodeCursor(value: unknown): BrowserCursor | null {
   }
 }
 
-function pageBlocks(data: Record<string, unknown>): Array<Record<string, unknown>> {
-  return Array.isArray(data.blocks)
-    ? data.blocks.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+function browserListFingerprint(tabs: BrowserTabInfo[]): string {
+  let hash = 2_166_136_261;
+  const source = tabs.map((tab) => `${tab.leafId}\u001f${tab.url ?? ""}`).join("\u001e");
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function encodeListCursor(cursor: BrowserListCursor): string {
+  return `browser-list-v1:${encodeURIComponent(JSON.stringify(cursor))}`;
+}
+
+function decodeListCursor(value: unknown): BrowserListCursor | null {
+  if (typeof value !== "string" || !value.startsWith("browser-list-v1:")) return null;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value.slice("browser-list-v1:".length))) as Partial<BrowserListCursor>;
+    if (!Number.isInteger(parsed.offset) || (parsed.offset ?? -1) < 0 || typeof parsed.fingerprint !== "string") return null;
+    return parsed as BrowserListCursor;
+  } catch {
+    return null;
+  }
+}
+
+function recordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
     : [];
+}
+
+function createArtifact(leafId: string, data: Record<string, unknown>): BrowserSemanticArtifact {
+  const page = asRecord(data.page);
+  const documentId = typeof page.documentId === "string" ? page.documentId : "";
+  const revision = typeof page.revision === "number" ? page.revision : -1;
+  if (!documentId || !Number.isInteger(revision) || revision < 0) {
+    throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "Web Viewer returned an invalid semantic document identity");
+  }
+  return {
+    documentId,
+    revision,
+    leafId,
+    capturedAt: new Date().toISOString(),
+    page,
+    metadata: asRecord(data.metadata),
+    root: asRecord(data.root),
+    blocks: recordArray(data.blocks),
+    outline: recordArray(data.outline),
+    links: recordArray(data.links),
+    coverage: asRecord(data.coverage),
+    captureTruncated: data.captureTruncated === true,
+  };
+}
+
+function blockText(block: Record<string, unknown>, format: BrowserCursor["format"]): string {
+  if (format === "text") return String(block.text ?? "");
+  return String(block.markdown ?? block.text ?? "");
+}
+
+function tokenEstimate(characters: number): number {
+  return Math.ceil(characters / 3.5);
 }
 
 function paginateBlocks(
   blocks: Array<Record<string, unknown>>,
-  format: "markdown" | "text" | "structured",
+  format: BrowserCursor["format"],
   cursor: BrowserCursor,
   maxChars: number,
-): { text: string; blocks: Array<Record<string, unknown>>; next?: BrowserCursor } {
+): {
+  text: string;
+  blocks: Array<Record<string, unknown>>;
+  next?: BrowserCursor;
+  returnedBlockCount: number;
+  remainingBlockCount: number;
+  estimatedRemainingTokens: number;
+} {
   const output: string[] = [];
   const selected: Array<Record<string, unknown>> = [];
-  let remaining = maxChars;
   let blockIndex = cursor.blockIndex;
   let blockOffset = cursor.blockOffset;
-  while (blockIndex < blocks.length && remaining > 0) {
+  const startingBlockIndex = blockIndex;
+  while (blockIndex < blocks.length) {
     const block = blocks[blockIndex] as Record<string, unknown>;
-    const source = format === "text" ? String(block.text ?? "") : String(block.markdown ?? block.text ?? "");
+    const source = blockText(block, format);
     const separator = output.length > 0 ? "\n\n" : "";
-    const available = Math.max(0, remaining - separator.length);
-    if (available === 0) break;
-    const fragment = source.slice(blockOffset, blockOffset + available);
+    const currentLength = output.reduce((total, part) => total + part.length, 0);
+    const remainingTarget = Math.max(0, maxChars - currentLength - separator.length);
+    const remainingSource = source.slice(blockOffset);
+    const wholeBlockLimit = Math.min(HARD_MAX_CHARS, Math.max(maxChars, SOFT_MAX_CHARS));
+    if (
+      output.length > 0
+      && remainingSource.length > remainingTarget
+      && currentLength + separator.length + remainingSource.length > wholeBlockLimit
+    ) break;
+    const available = output.length === 0
+      ? Math.min(HARD_MAX_CHARS, Math.max(remainingTarget, Math.min(remainingSource.length, SOFT_MAX_CHARS)))
+      : Math.min(remainingSource.length, Math.max(remainingTarget, wholeBlockLimit - currentLength - separator.length));
+    if (available <= 0) break;
+    const fragment = remainingSource.slice(0, available);
     output.push(`${separator}${fragment}`);
     selected.push({ ...block, ...(blockOffset > 0 || fragment.length < source.length ? { fragmentOffset: blockOffset } : {}) });
-    remaining -= separator.length + fragment.length;
     blockOffset += fragment.length;
     if (blockOffset < source.length) {
-      return { text: output.join(""), blocks: selected, next: { ...cursor, blockIndex, blockOffset } };
+      const remainingCharacters = source.length - blockOffset
+        + blocks.slice(blockIndex + 1).reduce((total, candidate) => total + blockText(candidate, format).length + 2, 0);
+      return {
+        text: output.join(""),
+        blocks: selected,
+        next: { ...cursor, blockIndex, blockOffset },
+        returnedBlockCount: blockIndex - startingBlockIndex + 1,
+        remainingBlockCount: blocks.length - blockIndex,
+        estimatedRemainingTokens: tokenEstimate(remainingCharacters),
+      };
     }
     blockIndex += 1;
     blockOffset = 0;
+    if (output.reduce((total, part) => total + part.length, 0) >= maxChars) break;
   }
+  const remainingCharacters = blocks
+    .slice(blockIndex)
+    .reduce((total, candidate) => total + blockText(candidate, format).length + 2, 0);
   return {
     text: output.join(""),
     blocks: selected,
     ...(blockIndex < blocks.length ? { next: { ...cursor, blockIndex, blockOffset } } : {}),
+    returnedBlockCount: Math.max(0, blockIndex - startingBlockIndex),
+    remainingBlockCount: Math.max(0, blocks.length - blockIndex),
+    estimatedRemainingTokens: tokenEstimate(remainingCharacters),
   };
 }
 
@@ -487,7 +627,7 @@ export const handleBrowserOpen: OperationHandler = async (args, signal, app) => 
     const existing = listWebViewerLeaves(app).find((leaf) => getWebViewerUrl(leaf) === url);
     if (existing) {
       if (args.focus !== false) app.workspace.setActiveLeaf(existing, { focus: true });
-      return { opened: false, reused: true, ...(await browserTabInfo(app, existing)) };
+      return { opened: false, reused: true, ...(await browserActionState(app, existing)) };
     }
   }
   const requestedLeafId = leafIdFrom(args);
@@ -496,7 +636,7 @@ export const handleBrowserOpen: OperationHandler = async (args, signal, app) => 
   await setWebViewerUrl(leaf, url, signal);
   assertNotAborted(signal);
   if (args.focus !== false) app.workspace.setActiveLeaf(leaf, { focus: true });
-  return { opened: true, ...(await browserTabInfo(app, leaf)) };
+  return { opened: true, ...(await browserActionState(app, leaf)) };
 };
 
 export const handleBrowserNavigate: OperationHandler = async (args, signal, app) => {
@@ -530,12 +670,37 @@ export const handleBrowserNavigate: OperationHandler = async (args, signal, app)
   }
   if (typeof args.waitAfterMs === "number") await waitLocal(args.waitAfterMs, signal);
   assertNotAborted(signal);
-  return { navigated: true, action, ...(requestedUrl ? { requestedUrl } : {}), ...(await browserTabInfo(app, leaf)) };
+  return { navigated: true, action, ...(requestedUrl ? { requestedUrl } : {}), ...(await browserActionState(app, leaf)) };
 };
 
-export const handleBrowserList: OperationHandler = async (_args, signal, app) => {
+export const handleBrowserList: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
-  return { tabs: await Promise.all(listWebViewerLeaves(app).map((leaf) => browserTabInfo(app, leaf))) };
+  const limit = typeof args.limit === "number" ? args.limit : 10;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    throw new BridgeError("INVALID_INPUT", "browser.list limit must be an integer from 1 to 50");
+  }
+  const tabs = await Promise.all(listWebViewerLeaves(app).map((leaf) => browserTabInfo(app, leaf)));
+  tabs.sort((left, right) => Number(right.isActive) - Number(left.isActive) || left.leafId.localeCompare(right.leafId));
+  const fingerprint = browserListFingerprint(tabs);
+  const decoded = decodeListCursor(args.cursor);
+  if (args.cursor !== undefined && !decoded) throw new BridgeError("INVALID_INPUT", "browser.list cursor is invalid");
+  if (decoded && decoded.fingerprint !== fingerprint) {
+    throw new BridgeError("REVISION_CONFLICT", "Web Viewer tabs changed; start a fresh browser list");
+  }
+  const offset = decoded?.offset ?? 0;
+  const page = tabs.slice(offset, offset + limit);
+  const nextOffset = offset + page.length;
+  const hasMore = nextOffset < tabs.length;
+  return {
+    tabs: page,
+    coverage: {
+      kind: "exact",
+      returned: page.length,
+      total: tabs.length,
+      hasMore,
+      ...(hasMore ? { nextCursor: encodeListCursor({ offset: nextOffset, fingerprint }) } : {}),
+    },
+  };
 };
 
 export const handleBrowserSnapshot: OperationHandler = async (args, signal, app) => {
@@ -558,21 +723,9 @@ export const handleBrowserSnapshot: OperationHandler = async (args, signal, app)
 export const handleBrowserRead: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const maxChars = typeof args.maxChars === "number" ? args.maxChars : DEFAULT_MAX_CHARS;
-  if (!Number.isInteger(maxChars) || maxChars <= 0 || maxChars > 100_000) {
-    throw new BridgeError("INVALID_INPUT", "browser.read maxChars must be an integer from 1 to 100000");
+  if (!Number.isInteger(maxChars) || maxChars <= 0 || maxChars > HARD_MAX_CHARS) {
+    throw new BridgeError("INVALID_INPUT", `browser.read maxChars must be an integer from 1 to ${HARD_MAX_CHARS}`);
   }
-  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
-  const webview = requireWebView(leaf);
-  const data = await runPageOperation(webview, "read", {
-    scopeSelector: args.scopeSelector,
-    ref: args.ref,
-    documentId: args.documentId,
-    revision: args.revision,
-  });
-  assertNotAborted(signal);
-  const page = asRecord(data.page);
-  const documentId = typeof page.documentId === "string" ? page.documentId : "unknown";
-  const revision = typeof page.revision === "number" ? page.revision : 0;
   const format = args.format === "text" || args.format === "structured" ? args.format : "markdown";
   const legacyStartIndex = typeof args.startIndex === "number" ? args.startIndex : undefined;
   if (legacyStartIndex !== undefined && (!Number.isInteger(legacyStartIndex) || legacyStartIndex < 0)) {
@@ -583,21 +736,65 @@ export const handleBrowserRead: OperationHandler = async (args, signal, app) => 
   }
   const decoded = decodeCursor(args.cursor);
   if (args.cursor !== undefined && !decoded) throw new BridgeError("INVALID_INPUT", "browser.read cursor is invalid");
-  if (decoded && (decoded.documentId !== documentId || decoded.revision !== revision)) {
-    throw new BridgeError("REVISION_CONFLICT", "Browser page changed; obtain a fresh read cursor");
+  if (decoded && decoded.format !== format) {
+    throw new BridgeError("INVALID_INPUT", `Browser read cursor is bound to ${decoded.format} output`);
   }
-  const initial: BrowserCursor = decoded ?? { documentId, revision, blockIndex: 0, blockOffset: 0 };
-  const blocks = pageBlocks(data);
+  if (decoded && (args.scopeSelector !== undefined || args.ref !== undefined || args.includeHtml === true)) {
+    throw new BridgeError("INVALID_INPUT", "A browser read continuation cannot change scope or request HTML");
+  }
+
+  let artifact: BrowserSemanticArtifact;
+  let tab: BrowserTabInfo | undefined;
+  let data: Record<string, unknown> | undefined;
+  let webview: WebViewElement | undefined;
+  if (decoded) {
+    const retained = browserArtifactStore.get(decoded.documentId, decoded.revision);
+    if (!retained) {
+      throw new BridgeError(
+        "RESULT_EXPIRED",
+        "The retained browser document expired; start a fresh browser read",
+        true,
+      );
+    }
+    artifact = retained;
+  } else {
+    const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+    webview = requireWebView(leaf);
+    data = await runPageOperation(webview, "read", {
+      scopeSelector: args.scopeSelector,
+      ref: args.ref,
+      documentId: args.documentId,
+      revision: args.revision,
+    });
+    assertNotAborted(signal);
+    artifact = createArtifact(getLeafId(leaf), data);
+    browserArtifactStore.put(artifact);
+    tab = await browserTabInfo(app, leaf);
+  }
+
+  const initial: BrowserCursor = decoded ?? {
+    documentId: artifact.documentId,
+    revision: artifact.revision,
+    blockIndex: 0,
+    blockOffset: 0,
+    format,
+  };
+  const blocks = artifact.blocks;
   const legacyText = legacyStartIndex === undefined
     ? undefined
     : blocks
-      .map((block) => format === "text" ? String(block.text ?? "") : String(block.markdown ?? block.text ?? ""))
+      .map((block) => blockText(block, format))
       .join("\n\n");
   const paged = legacyText === undefined
     ? paginateBlocks(blocks, format, initial, maxChars)
     : {
       text: legacyText.slice(legacyStartIndex ?? 0, (legacyStartIndex ?? 0) + maxChars),
       blocks: [],
+      returnedBlockCount: 0,
+      remainingBlockCount: 0,
+      estimatedRemainingTokens: tokenEstimate(
+        Math.max(0, legacyText.length - ((legacyStartIndex ?? 0) + maxChars)),
+      ),
     };
   const legacyNextStartIndex = legacyText !== undefined && legacyStartIndex !== undefined
     && legacyStartIndex + paged.text.length < legacyText.length
@@ -605,7 +802,7 @@ export const handleBrowserRead: OperationHandler = async (args, signal, app) => 
     : undefined;
   const includeHtml = args.includeHtml === true;
   let htmlResult: Record<string, unknown> | undefined;
-  if (includeHtml) {
+  if (includeHtml && webview) {
     htmlResult = await runPageOperation(webview, "dom", {
       operation: "html",
       cssSelector: args.scopeSelector,
@@ -615,15 +812,31 @@ export const handleBrowserRead: OperationHandler = async (args, signal, app) => 
       maxChars,
     });
   }
+  const hasMore = Boolean(paged.next) || legacyNextStartIndex !== undefined || artifact.captureTruncated;
   return {
     available: true,
-    ...(await browserTabInfo(app, leaf)),
-    ...data,
+    ...(tab ?? { leafId: artifact.leafId }),
+    page: artifact.page,
+    metadata: artifact.metadata,
+    root: artifact.root,
+    outline: artifact.outline,
+    links: artifact.links,
+    capturedAt: artifact.capturedAt,
     blocks: paged.blocks,
     text: paged.text,
     format,
     returnedChars: paged.text.length,
-    truncated: Boolean(paged.next) || legacyNextStartIndex !== undefined || data.captureTruncated === true,
+    truncated: hasMore,
+    coverage: {
+      kind: artifact.captureTruncated ? "partial" : "exact",
+      returned: paged.returnedBlockCount,
+      total: blocks.length,
+      hasMore,
+      remaining: paged.remainingBlockCount,
+      estimatedRemainingTokens: paged.estimatedRemainingTokens,
+      ...(paged.next ? { nextCursor: encodeCursor(paged.next) } : {}),
+      ...(artifact.coverage.warnings ? { warnings: artifact.coverage.warnings } : {}),
+    },
     ...(paged.next ? { nextCursor: encodeCursor(paged.next) } : {}),
     ...(legacyStartIndex !== undefined ? { startIndex: legacyStartIndex } : {}),
     ...(legacyNextStartIndex !== undefined ? { nextStartIndex: legacyNextStartIndex } : {}),
@@ -672,7 +885,7 @@ export const handleBrowserClick: OperationHandler = async (args, signal, app) =>
   }
   assertNotAborted(signal);
   if (typeof args.waitAfterMs === "number") await waitLocal(args.waitAfterMs, signal);
-  return { ...(await browserTabInfo(app, leaf)), ...result };
+  return { ...(await browserActionState(app, leaf)), ...result };
 };
 
 export const handleBrowserPointer: OperationHandler = async (args, signal, app) => {
@@ -686,13 +899,13 @@ export const handleBrowserPointer: OperationHandler = async (args, signal, app) 
     : viewportCenter(webview);
   if (action === "hover") {
     await webview.sendInputEvent({ type: "mouseMove", ...start });
-    return { hovered: true, point: start, ...(await browserTabInfo(app, leaf)) };
+    return { hovered: true, point: start, ...(await browserActionState(app, leaf)) };
   }
   if (action === "scroll") {
     const deltaX = typeof args.deltaX === "number" ? args.deltaX : 0;
     const deltaY = typeof args.deltaY === "number" ? args.deltaY : 0;
     await webview.sendInputEvent({ type: "mouseWheel", ...start, deltaX, deltaY, canScroll: true });
-    return { scrolled: true, point: start, deltaX, deltaY, ...(await browserTabInfo(app, leaf)) };
+    return { scrolled: true, point: start, deltaX, deltaY, ...(await browserActionState(app, leaf)) };
   }
   if (action === "drag") {
     const end = typeof args.toX === "number" && typeof args.toY === "number"
@@ -712,7 +925,7 @@ export const handleBrowserPointer: OperationHandler = async (args, signal, app) 
       });
     }
     await webview.sendInputEvent({ type: "mouseUp", ...end, button, clickCount: 1 });
-    return { dragged: true, from: start, to: end, button, steps, ...(await browserTabInfo(app, leaf)) };
+    return { dragged: true, from: start, to: end, button, steps, ...(await browserActionState(app, leaf)) };
   }
   throw new BridgeError("INVALID_INPUT", `Unknown browser pointer action: ${action}`);
 };
@@ -727,7 +940,7 @@ export const handleBrowserType: OperationHandler = async (args, signal, app) => 
     submit: args.submit,
   });
   assertNotAborted(signal);
-  return { ...(await browserTabInfo(app, leaf)), ...result };
+  return { ...(await browserActionState(app, leaf)), ...result };
 };
 
 export const handleBrowserPress: OperationHandler = async (args, signal, app) => {
@@ -745,7 +958,7 @@ export const handleBrowserPress: OperationHandler = async (args, signal, app) =>
   await webview.sendInputEvent({ type: "keyUp", keyCode: key, modifiers });
   assertNotAborted(signal);
   const page = await runPageOperation(webview, "page", {});
-  return { pressed: true, key, modifiers, ...(await browserTabInfo(app, leaf)), ...page };
+  return { pressed: true, key, modifiers, ...(await browserActionState(app, leaf)), ...page };
 };
 
 export const handleBrowserWait: OperationHandler = async (args, signal, app) => {
@@ -805,6 +1018,7 @@ export const handleBrowserClose: OperationHandler = async (args, signal, app) =>
   const leaf = findBrowserLeaf(app, leafId);
   if (!leaf) return { closed: false, alreadyClosed: true, ...(leafId ? { leafId } : {}) };
   const tab = await browserTabInfo(app, leaf);
+  browserArtifactStore.deleteLeaf(getLeafId(leaf));
   leaf.detach();
   return { closed: true, tab };
 };

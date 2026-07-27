@@ -15,6 +15,7 @@ function capabilityFor(op: string): string | undefined {
   if (op.startsWith("attachment.")) return "attachments";
   if (op.startsWith("editor.")) return "editor";
   if (op.startsWith("workspace.")) return "workspace";
+  if (op.startsWith("ui.")) return "workspace";
   if (op.startsWith("commands.")) return "commands";
   if (op.startsWith("hotkeys.")) return "hotkeys";
   if (op.startsWith("browser.")) return "browser";
