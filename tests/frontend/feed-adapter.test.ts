@@ -80,7 +80,13 @@ describe("frontend feed adapter", () => {
       message: {
         content: [
           { type: "text", text: "What is shown here?" },
-          { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+          {
+            type: "attachment",
+            name: "Attached image 1",
+            kind: "image",
+            data: "aGVsbG8=",
+            mimeType: "image/png",
+          },
         ],
       },
     });

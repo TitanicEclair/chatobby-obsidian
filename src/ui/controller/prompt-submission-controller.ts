@@ -1,5 +1,5 @@
 import type { FeedStore } from "../../features/feed/public";
-import type { WsPromptAttachment, WsPromptContextPacket } from "../../types";
+import type { AttachmentContent, WsPromptAttachment, WsPromptContextPacket } from "../../types";
 import type { ChatobbyTransport } from "../../transport/ws-client";
 import type { PromptSubmissionOutcome } from "../composer/composer";
 import { withTimeout } from "./view-utils";
@@ -23,6 +23,7 @@ export async function submitPrompt(options: SubmitPromptOptions): Promise<Prompt
   feedStore.dispatch({
     type: "feed.user-prompt-submitted",
     text: message,
+    attachments: attachments?.map(toFeedAttachment),
     startRun: true,
     submissionId,
   });
@@ -40,6 +41,40 @@ export async function submitPrompt(options: SubmitPromptOptions): Promise<Prompt
   const retraction = await retractAcceptedPrompt(transport, feedStore, submissionId, message);
   return { retracted: retraction.retracted, retractionReason: retraction.reason };
 }
+
+export function toFeedAttachment(attachment: WsPromptAttachment): AttachmentContent {
+  if (attachment.type === "image") {
+    return {
+      type: "attachment",
+      name: attachment.name ?? "Attached image",
+      kind: "image",
+      mimeType: attachment.mimeType,
+      sizeBytes: attachment.sizeBytes,
+      data: attachment.data,
+    };
+  }
+  return {
+    type: "attachment",
+    name: attachment.name ?? attachment.path.split(/[\\/]/u).at(-1) ?? "Attached file",
+    kind: attachmentKind(attachment),
+    mimeType: attachment.mimeType,
+    path: attachment.path,
+    sizeBytes: attachment.sizeBytes,
+  };
+}
+
+function attachmentKind(attachment: Extract<WsPromptAttachment, { type: "file_ref" }>): AttachmentContent["kind"] {
+  if (attachment.mimeType?.startsWith("image/")) return "image";
+  if (attachment.mimeType?.startsWith("text/")) return "text";
+  const extension = /\.([^.]+)$/u.exec(attachment.name ?? attachment.path)?.[1]?.toLowerCase();
+  return extension && TEXT_ATTACHMENT_EXTENSIONS.has(extension) ? "text" : "binary";
+}
+
+const TEXT_ATTACHMENT_EXTENSIONS = new Set([
+  "c", "cc", "cpp", "cs", "css", "csv", "dart", "go", "h", "hpp", "htm", "html", "java", "js", "json",
+  "jsonc", "jsx", "log", "lua", "md", "php", "ps1", "py", "rb", "rs", "scss", "sh", "sql", "svg", "toml",
+  "ts", "tsv", "tsx", "txt", "vue", "xml", "yaml", "yml", "zsh",
+]);
 
 export async function retractAcceptedPrompt(
   transport: PromptTransport | null,

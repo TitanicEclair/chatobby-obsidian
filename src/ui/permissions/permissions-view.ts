@@ -120,7 +120,6 @@ export class PermissionsView extends ChatobbyComponent {
         return;
       }
       this.renderProfiles(body, model);
-      this.renderLiveAgents(body, model);
       this.renderTemporaryApprovals(body, model);
       this.renderCapabilities(body, model);
       this.renderChannels(body, model);
@@ -131,48 +130,8 @@ export class PermissionsView extends ChatobbyComponent {
     });
   }
 
-  private renderLiveAgents(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const liveAgents = model.liveAgents ?? [];
-    if (liveAgents.length === 0) return;
-    const section = this.section(
-      body,
-      "Active agents",
-      "Choose which policy each active agent uses.",
-    );
-    const list = section.createDiv({ cls: "chatobby-permissions__live-agents" });
-    for (const agent of liveAgents) {
-      const row = list.createDiv({ cls: "chatobby-permissions__live-agent" });
-      const copy = row.createDiv({ cls: "chatobby-permissions__live-agent-copy" });
-      copy.createDiv({
-        cls: "chatobby-permissions__live-agent-name",
-        text: agent.label,
-        attr: { title: agent.detail },
-      });
-      const select = row.createEl("select", {
-        cls: "chatobby-permissions__live-agent-policy",
-        attr: { "aria-label": `${agent.label} permission policy` },
-      });
-      for (const profile of model.profiles) {
-        select.createEl("option", { text: profile.name, attr: { value: profile.id } }).selected =
-          profile.id === agent.profileId;
-      }
-      select.disabled = this.saving;
-      select.addEventListener("change", () => {
-        if (select.value === agent.profileId) return;
-        void this.runIntent({
-          type: "permissions.set-live-agent-profile",
-          payload: {
-            authority: agent.authority,
-            profileId: select.value,
-            expectedBindingRevision: agent.bindingRevision,
-          },
-        });
-      });
-    }
-  }
-
   private renderProfiles(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const section = this.section(body, "Permission policy", "Choose a reusable set of permissions. Agent roles can use their own policy.");
+    const section = this.section(body, "Permission policy", "Choose the permissions used by this session.");
     const toolbar = section.createDiv({ cls: "chatobby-permissions__profile-toolbar" });
     const picker = toolbar.createDiv({ cls: "chatobby-permissions__profile-picker" });
     const select = picker.createEl("select", {
@@ -190,19 +149,26 @@ export class PermissionsView extends ChatobbyComponent {
     });
     const profile = model.selectedProfile;
     const liveMain = (model.liveAgents ?? []).find((agent) => agent.authority.kind === "main");
-    if (profile.activeForMain) toolbar.createSpan({ cls: "chatobby-permissions__active-label", text: "Used by Main" });
+    if (profile.activeForMain) toolbar.createSpan({ cls: "chatobby-permissions__active-label", text: "Used by this session" });
     else if (profile.canActivate) {
-      toolbar.createEl("button", { cls: "chatobby-permissions__secondary-btn", text: "Use for Main", attr: { type: "button" } })
-        .addEventListener("click", () => void this.runIntent(liveMain
-          ? {
-              type: "permissions.set-live-agent-profile",
-              payload: {
-                authority: liveMain.authority,
-                profileId: profile.id,
-                expectedBindingRevision: liveMain.bindingRevision,
-              },
-            }
-          : { type: "permissions.activate-profile", payload: { profileId: profile.id } }));
+      const useForSession = toolbar.createEl("button", {
+        cls: "chatobby-permissions__secondary-btn",
+        text: "Use for this session",
+        attr: { type: "button" },
+      });
+      useForSession.disabled = !liveMain;
+      if (!liveMain) {
+        useForSession.setAttr("title", "This session is still connecting. Reload permissions and try again.");
+      } else {
+        useForSession.addEventListener("click", () => void this.runIntent({
+          type: "permissions.set-live-agent-profile",
+          payload: {
+            authority: liveMain.authority,
+            profileId: profile.id,
+            expectedBindingRevision: liveMain.bindingRevision,
+          },
+        }));
+      }
     }
     toolbar.createEl("button", { cls: "chatobby-permissions__secondary-btn", text: profile.duplicateLabel, attr: { type: "button" } })
       .addEventListener("click", () => void this.runIntent({ type: "permissions.duplicate-profile", payload: { profileId: profile.id } }));

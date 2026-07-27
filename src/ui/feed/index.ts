@@ -44,6 +44,7 @@ export interface FeedHost {
   scrollFeed(): void;
   openVaultLink(path: string): void;
   openSystemPath(path: string): void;
+  revealSystemPath(path: string): void;
   copyToClipboard(text: string): void;
   onExtensionPanelAction?(action: ExtensionPanelAction): void;
   onAutoScrollChange(enabled: boolean): void;
@@ -607,7 +608,6 @@ export class FeedRenderer extends ChatobbyComponent {
     this.contentDirty = false;
   }
 }
-
 function canReuseView(block: FeedBlock, view: unknown): boolean {
   switch (block.type) {
     case "user":
@@ -616,11 +616,11 @@ function canReuseView(block: FeedBlock, view: unknown): boolean {
     case "thinking": return view instanceof ThinkingBlockView;
     case "tools": return view instanceof ToolBlockView;
     case "summary": return view instanceof TurnSummaryView;
+    case "queued": return view instanceof QueuedMessageBlockView;
     case "divider": return view instanceof DividerBlockView;
     default: return false;
   }
 }
-
 function updateView(view: unknown, block: FeedBlock): void {
   switch (block.type) {
     case "text": (view as TextBlockView).setBlock(block); return;
@@ -629,18 +629,18 @@ function updateView(view: unknown, block: FeedBlock): void {
     case "summary": (view as TurnSummaryView).setSummary(block); return;
     case "user":
     case "system": (view as UserBlockView).setMessage(block.message, block.type); return;
+    case "queued": (view as QueuedMessageBlockView).setBlock(block); return;
     case "divider": (view as DividerBlockView).setBlock(block); return;
   }
 }
 function createView(host: FeedHost, block: FeedBlock): ChatobbyComponent {
   switch (block.type) {
-    case "user":
-    case "system": return new UserBlockView(host);
+    case "user": case "system": return new UserBlockView(host);
     case "text": return new TextBlockView(host, block);
     case "thinking": return new ThinkingBlockView(host, block);
     case "tools": return new ToolBlockView(host, block);
     case "summary": return new TurnSummaryView(host, block);
-    case "queued": return new QueuedMessageBlockView(block);
+    case "queued": return new QueuedMessageBlockView(host, block);
     case "divider": return new DividerBlockView(block);
     case "subagent": return new SubagentBlockView(block);
     case "subagent-communication": return new SubagentCommunicationBlockView(block, host);

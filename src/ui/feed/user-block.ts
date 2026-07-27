@@ -1,7 +1,8 @@
-import type { ImageContent, UserMessage } from "../../types";
+import type { AttachmentContent, ImageContent, UserMessage } from "../../types";
 import { ChatobbyComponent } from "../shared/component";
 import { decorateAfterMarkdown } from "./decorations";
 import type { FeedHost } from "./index";
+import { renderMessageAttachments } from "./message-attachments";
 
 export class UserBlockView extends ChatobbyComponent {
   private contentEl: HTMLElement | null = null;
@@ -32,13 +33,17 @@ export class UserBlockView extends ChatobbyComponent {
       this.renderMarkdown(content, this.contentEl);
       return;
     }
+    const attachments: AttachmentContent[] = [];
     for (const item of content) {
       if (item.type === "text") {
         this.renderMarkdown(item.text, this.contentEl.createDiv({ cls: "chatobby-user-block__text" }));
       } else if (item.type === "image") {
         renderImageCard(this.contentEl, item, this.host);
+      } else if (item.type === "attachment") {
+        attachments.push(item);
       }
     }
+    renderMessageAttachments(this.contentEl, attachments, this.host);
   }
 
   private renderMarkdown(markdown: string, container: HTMLElement): void {

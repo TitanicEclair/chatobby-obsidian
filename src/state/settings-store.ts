@@ -28,6 +28,9 @@ interface PersistedData {
   developerArgs?: string[];
   commandShell?: string;
   customShellPath?: string;
+  documentOcrEngine?: string;
+  documentOcrLanguage?: string;
+  advancedOcrCommand?: string;
   // One-time migration inputs from the pre-runtime-manager settings schema.
   serverUrl?: string;
   backendCommand?: string;
@@ -67,6 +70,9 @@ export class SettingsStore {
       developerArgs: data.developerArgs ?? data.backendArgs ?? DEFAULT_PLUGIN_SETTINGS.developerArgs,
       commandShell: isCommandShell(data.commandShell) ? data.commandShell : DEFAULT_PLUGIN_SETTINGS.commandShell,
       customShellPath: data.customShellPath ?? DEFAULT_PLUGIN_SETTINGS.customShellPath,
+      documentOcrEngine: data.documentOcrEngine === "advanced" ? "advanced" : "builtin",
+      documentOcrLanguage: data.documentOcrLanguage?.trim() || DEFAULT_PLUGIN_SETTINGS.documentOcrLanguage,
+      advancedOcrCommand: data.advancedOcrCommand?.trim() || DEFAULT_PLUGIN_SETTINGS.advancedOcrCommand,
       providerKeys: data.providerKeys ?? DEFAULT_PLUGIN_SETTINGS.providerKeys,
       thinkingDisplay: (data.thinkingDisplay as ThinkingDisplay) ?? DEFAULT_PLUGIN_SETTINGS.thinkingDisplay,
       autoScroll: data.autoScroll ?? DEFAULT_PLUGIN_SETTINGS.autoScroll,
@@ -91,6 +97,9 @@ export class SettingsStore {
       developerArgs: this.settings.developerArgs,
       commandShell: this.settings.commandShell,
       customShellPath: this.settings.customShellPath,
+      documentOcrEngine: this.settings.documentOcrEngine,
+      documentOcrLanguage: this.settings.documentOcrLanguage,
+      advancedOcrCommand: this.settings.advancedOcrCommand,
       providerKeys: this.settings.providerKeys,
       thinkingDisplay: this.settings.thinkingDisplay,
       autoScroll: this.settings.autoScroll,

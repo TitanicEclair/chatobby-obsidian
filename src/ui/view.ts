@@ -39,7 +39,7 @@ import { downloadChatobbyGuide } from "../features/guide/public";
 import { RuntimeStatusController, RuntimeStatusMenu, RuntimeUpdateController } from "../features/runtime-status/public";
 import { ViewRuntimeController } from "../runtime/application/view-runtime-controller";
 import { closeInactiveViewSurfaces, parseLeafSessionState, parseNavigationState, ribbonModeForNavigation, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode, type ExclusiveViewSurface } from "./controller/view-navigation-controller";
-import { openSystemPathExternally } from "./controller/system-path-opener";
+import { openSystemPathExternally, revealSystemPathExternally } from "./controller/system-path-opener";
 import { ConnectionStatusController } from "./controller/connection-status-controller";
 import { SessionPreferenceController } from "./controller/session-preference-controller";
 import { removeOnboardingPanel } from "./controller/onboarding-panel-controller";
@@ -59,7 +59,7 @@ import type { FrontendBootstrap, FrontendChoiceControl, FrontendIntent, Frontend
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
 import { PROMPT_START_TIMEOUT_MS, retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
-import { deliverQueuedMessage } from "./controller/queued-message-delivery";
+import { deliverQueuedMessage, deliverSteer } from "./controller/queued-message-delivery";
 import { focusPageNavigation, movePageNavigation } from "./shared/page-shell";
 const VIEW_TYPE = "chatobby-view";
 export class ChatobbyView extends ItemView {
@@ -358,6 +358,7 @@ export class ChatobbyView extends ItemView {
       getFeedStore: () => this.getFeedStore(),
       getFeedRenderer: () => this.feed,
       setComposerText: (text) => this.composer.setText(text),
+      focusComposer: () => this.composer.focus(),
       getActiveInteraction: () => this.sessions.activeInteraction(),
       setActiveInteraction: (interaction) => this.setActiveInteraction(interaction),
     });
@@ -620,7 +621,7 @@ export class ChatobbyView extends ItemView {
     const message = await promptText(this.app, { title: "Queue follow-up message", placeholder: "message…", submitLabel: "Queue", multiline: true });
     if (!message || !message.trim()) return;
     const trimmed = message.trim();
-    await deliverQueuedMessage(this.getFeedStore(), "followUp", trimmed, (message) => transport.followUp(message));
+    await deliverQueuedMessage(this.getFeedStore(), "followUp", trimmed, undefined, (message) => transport.followUp(message));
   }
   // ── Component wiring ────────────────────────────────────────────
 
@@ -669,7 +670,7 @@ export class ChatobbyView extends ItemView {
 
     this.composer = new Composer({
       send: (msg, att, signal, submissionId) => this.sendPrompt(msg, att, signal, submissionId),
-      steer: (msg) => this.steerPrompt(msg),
+      steer: (msg, attachments) => this.steerPrompt(msg, attachments),
       abort: () => this.turnAbort.request(),
       retractPrompt: (submissionId, message) =>
         retractAcceptedPrompt(this.getTransport(), this.getFeedStore(), submissionId, message),
@@ -729,6 +730,7 @@ export class ChatobbyView extends ItemView {
     this.toolbar.bind(this.shell.connectionEl, this.shell.statsEl);
     this.feed.bind(this.shell.feedEl);
     this.composer.bind(this.shell.inputEl, this.shell.sendBtn, this.shell.stopBtn, this.shell.inputHighlightEl);
+    this.composer.setInteraction(this.sessions.activeInteraction());
     this.composerControls.render(this.shell.composerControlsEl);
     this.slashMenu = new SlashMenu();
     this.slashMenu.render(this.shell.slashMenuEl);
@@ -1022,14 +1024,12 @@ export class ChatobbyView extends ItemView {
     if (transport?.isConnected) void this.frontendProtocol.synchronize(transport);
   }
 
-  /** Send a mid-generation steer (a correction to the running turn). Rendered immediately as a
-   *  queued block whose ack state (pending→queued→applied) advances via queue_update. */
-  private async steerPrompt(message: string): Promise<void> {
+  /** Send a mid-generation correction and render its pending, queued, and applied states. */
+  private async steerPrompt(message: string, attachments?: WsPromptAttachment[]): Promise<void> {
     const transport = this.getTransport();
-    if (!transport?.isConnected) return;
-    await deliverQueuedMessage(this.getFeedStore(), "steer", message, (queuedMessage) => transport.steer(queuedMessage));
+    if (transport?.isConnected) await deliverSteer(this.getFeedStore(), message, attachments, (queuedMessage, queuedAttachments) =>
+      transport.steer(queuedMessage, queuedAttachments));
   }
-
   private async executePermissionSystemSlash(parsed: SlashParsedCommand): Promise<void> {
     await routePermissionSlash(parsed, {
       openPermissions: () => this.openPermissionPolicyScreen(),
@@ -1218,6 +1218,8 @@ export class ChatobbyView extends ItemView {
 
   openSystemPath(path: string): void { openSystemPathExternally(this.app, path); }
 
+  revealSystemPath(path: string): void { revealSystemPathExternally(this.app, path); }
+
   copyToClipboard(text: string): void {
     navigator.clipboard.writeText(text).catch((e) => {
       console.error("Chatobby: clipboard write failed", e);
@@ -1364,6 +1366,7 @@ export class ChatobbyView extends ItemView {
 
   private setActiveInteraction(interaction: InteractionState | null): void {
     this.sessions.setActiveInteraction(interaction);
+    this.composer?.setInteraction(interaction);
   }
 
   private renderActiveTab(): void {

@@ -1,4 +1,4 @@
-import type { TFile, App, EventRef } from "obsidian";
+import type { App, EventRef } from "obsidian";
 import type {
   ObsidianRetrievalBackendStatus,
   ObsidianRetrievalDiagnostics,
@@ -13,16 +13,15 @@ import {
   topHubs,
 } from "../operations/helpers/retrieval-graph";
 import type { GraphAdjacency } from "../operations/helpers/retrieval-graph";
-import { BridgeError } from "../types";
 import { GraphifyIndex, normalizePath } from "./graphify-index";
 import { createSmartConnectionsAdapter } from "./smart-connections-adapter";
 import type { GraphComponent, GraphifySnapshot, SemanticHit, SemanticIndexAdapter } from "./types";
 import { isTFile } from "../operations/helpers/file-types";
+import { searchVaultLexically } from "./lexical-search";
 
 export type RetrievalPrimitiveProvider = "graphify" | "smart-connections" | "lexical" | "obsidian-links";
 
 const services = new WeakMap<App, VaultRetrievalService>();
-const LEXICAL_SCAN_CHUNK_SIZE = 32;
 
 export function getVaultRetrievalService(app: App): VaultRetrievalService {
   const existing = services.get(app);
@@ -63,10 +62,27 @@ export class VaultRetrievalService {
     signal?: AbortSignal,
   ): Promise<ObsidianRetrievalEnvelope> {
     if (provider === "lexical") {
-      return this.envelope(provider, { query, semanticHits: await this.lexicalSearch(query, limit, folder, signal) });
+      const lexical = await searchVaultLexically(this.app, this.getAdjacency(), query, limit, folder, signal);
+      const result = this.envelope(provider, { query, semanticHits: lexical.hits });
+      result.diagnostics = {
+        ...result.diagnostics,
+        lexical: {
+          searchedFileCount: lexical.searchedFileCount,
+          totalFileCount: lexical.totalFileCount,
+        },
+      };
+      if (lexical.incomplete) {
+        result.partial = true;
+        result.warnings = [{
+          code: "STALE_COMPONENT_DATA",
+          message: lexical.timedOut
+            ? `Lexical content search inspected ${lexical.searchedFileCount} of ${lexical.totalFileCount} notes before its time budget elapsed. Path and metadata matches are still included.`
+            : `Lexical content search skipped ${lexical.failedFileCount} unreadable note(s). Other ranked matches are still included.`,
+        }];
+      }
+      return result;
     }
     if (provider === "smart-connections") {
-      await this.ensureSemanticFresh();
       const status = this.semantic.status();
       if (!status.available || !status.queryEmbedding || !this.semantic.searchText) {
         return this.unavailable(provider, "Smart Connections text search is unavailable", { query });
@@ -274,38 +290,6 @@ export class VaultRetrievalService {
     }
   }
 
-  private async lexicalSearch(query: string, limit: number, folder: string | undefined, signal?: AbortSignal): Promise<SemanticHit[]> {
-    const wanted = query.toLocaleLowerCase();
-    const adj = this.getAdjacency();
-    const normalizedFolder = folder ? normalizePath(folder) : undefined;
-    const files = this.app.vault.getMarkdownFiles().filter((file) =>
-      !normalizedFolder || file.path === normalizedFolder || file.path.startsWith(`${normalizedFolder}/`));
-    if (signal?.aborted) throw abortedError();
-    const hits: SemanticHit[] = [];
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index]!;
-      const content = await this.app.vault.cachedRead(file);
-      const pathHit = file.path.toLocaleLowerCase().includes(wanted) || file.basename.toLocaleLowerCase().includes(wanted);
-      const contentIndex = content.toLocaleLowerCase().indexOf(wanted);
-      const cacheHit = metadataCacheMatch(this.app, file, wanted);
-      if (pathHit || contentIndex >= 0 || cacheHit) {
-        hits.push({
-          path: file.path,
-          score: (pathHit ? 3 : 0) + (cacheHit ? 2 : 0) + (contentIndex >= 0 ? 1.5 : 0) + degreeOf(adj, file.path) * 0.01,
-          provider: "lexical",
-          ...(contentIndex >= 0
-            ? { excerpt: excerptAround(content, contentIndex, query.length) }
-            : pathHit ? { excerpt: `Matched note path: ${file.path}` } : {}),
-        });
-      }
-      if ((index + 1) % LEXICAL_SCAN_CHUNK_SIZE === 0) {
-        if (signal?.aborted) throw abortedError();
-        await yieldToEventLoop();
-      }
-    }
-    return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path)).slice(0, limit);
-  }
-
   private lexicalRelated(path: string, limit: number): SemanticHit[] {
     const adj = this.getAdjacency();
     const weights = new Map<string, number>();
@@ -454,7 +438,10 @@ export class VaultRetrievalService {
         sourceMtime: semantic.sourceMtime,
         reason: semantic.reason,
       },
-      lexical: { searchedFileCount: markdownPaths.size },
+      lexical: {
+        searchedFileCount: markdownPaths.size,
+        totalFileCount: markdownPaths.size,
+      },
     };
   }
 }
@@ -465,14 +452,6 @@ function backendAvailable(backends: ObsidianRetrievalBackendStatus[], provider: 
 
 function getResolvedLinks(app: App): Record<string, Record<string, number>> {
   return (app.metadataCache as unknown as { resolvedLinks?: Record<string, Record<string, number>> }).resolvedLinks ?? {};
-}
-
-function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, 0));
-}
-
-function abortedError(): BridgeError {
-  return new BridgeError("DEADLINE_EXCEEDED", "Retrieval scan aborted", true);
 }
 
 function graphFromNodeIds(snapshot: GraphifySnapshot, nodeIds: Set<string>, orderedPath?: string[]): GraphComponent {
@@ -576,30 +555,6 @@ function pathContainsEdge(path: string[], source: string, target: string): boole
     if ((a === source && b === target) || (a === target && b === source)) return true;
   }
   return false;
-}
-
-function excerptAround(content: string, index: number, length: number): string {
-  const start = Math.max(0, index - 120);
-  const end = Math.min(content.length, index + Math.max(length, 1) + 120);
-  return content.slice(start, end).replace(/\s+/g, " ").trim();
-}
-
-function metadataCacheMatch(app: App, file: TFile, wanted: string): boolean {
-  const cache = app.metadataCache.getFileCache(file) as {
-    frontmatter?: Record<string, unknown>;
-    tags?: Array<{ tag?: string }>;
-    headings?: Array<{ heading?: string }>;
-  } | null;
-  if (!cache) return false;
-  const haystack: string[] = [];
-  for (const [key, value] of Object.entries(cache.frontmatter ?? {})) {
-    haystack.push(key);
-    if (typeof value === "string") haystack.push(value);
-    if (Array.isArray(value)) haystack.push(...value.filter((entry): entry is string => typeof entry === "string"));
-  }
-  for (const tag of cache.tags ?? []) if (tag.tag) haystack.push(tag.tag);
-  for (const heading of cache.headings ?? []) if (heading.heading) haystack.push(heading.heading);
-  return haystack.some((value) => value.toLocaleLowerCase().includes(wanted));
 }
 
 function uniqueStrings(value: string, index: number, values: string[]): boolean {

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFeedStore, feedSelectors } from "../../src/features/feed/public";
-import { EMPTY_SESSION_STATE, DEFAULT_SESSION_PREFERENCES, type SessionState } from "../../src/types";
+import {
+  createInteractionState,
+  DEFAULT_SESSION_PREFERENCES,
+  EMPTY_SESSION_STATE,
+  type InteractionState,
+  type SessionState,
+} from "../../src/types";
 import { Composer, type ComposerHost } from "../../src/ui/composer/composer";
 import { turnOutputMarker } from "../../src/ui/composer/turn-output-marker";
 import type { SlashArgumentOption, SlashCommandSpec, SlashParsedCommand, SlashSubmitPlan } from "../../src/ui/composer/slash-command";
@@ -120,6 +126,37 @@ describe("Composer", () => {
     expect(sendBtn.disabled).toBe(false);
   });
 
+  it("renders a permission reason in the composer and submits it instead of a prompt", () => {
+    let interaction: InteractionState | null = createInteractionState("reason-1", "input", {
+      title: "Deny with reason",
+      message: "Allow the agent to read C:/Private/quarterly-report.md and related files?",
+      placeholder: "Optional reason for the agent",
+    });
+    const send = vi.fn();
+    const submitInteraction = vi.fn(() => { interaction = null; });
+    const updateInteractionText = vi.fn();
+    const { composer, input, card, sendBtn } = bindComposer(createHost({
+      send,
+      isInteractionActive: () => interaction !== null,
+      submitInteraction,
+      updateInteractionText,
+    }));
+    composer.setInteraction(interaction);
+
+    expect(card.querySelector(".chatobby-interaction-rail__title")?.textContent).toBe("Deny with reason");
+    expect(card.querySelector(".chatobby-interaction-rail__summary")?.textContent).toContain("quarterly-report.md");
+    expect(input.placeholder).toBe("Optional reason for the agent");
+    expect(sendBtn.disabled).toBe(false);
+
+    input.value = "This file is outside the requested scope.";
+    composer.handleInput();
+    composer.send();
+
+    expect(submitInteraction).toHaveBeenCalledOnce();
+    expect(updateInteractionText).toHaveBeenLastCalledWith("This file is outside the requested scope.");
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("opens a native file picker from a compact attachment action", () => {
     const { card } = bindComposer(createHost({ storeFiles: vi.fn(async () => []) }));
     const attachBtn = card.querySelector<HTMLButtonElement>(".chatobby-attach-btn");
@@ -169,7 +206,45 @@ describe("Composer", () => {
     expect(name?.getAttribute("title")).toBe(attachmentName);
     expect(card.querySelector(".chatobby-attachment-chip__meta")?.textContent).toBe("PDF · 2.0 KB");
     expect(card.querySelector<HTMLElement>(".chatobby-attachment-chip__icon")?.dataset.icon).toBe("file-text");
+    expect(card.querySelector<HTMLElement>(".chatobby-attachment-chip")?.dataset.fileKind).toBe("pdf");
+    expect(card.querySelector(".chatobby-attachment-chip__remove")?.parentElement).toBe(
+      card.querySelector(".chatobby-attachment-chip"),
+    );
     expect(sendBtn.disabled).toBe(false);
+  });
+
+  it.each([
+    ["workbook.xlsx", "file-spreadsheet", "spreadsheet"],
+    ["slides.pptx", "presentation", "presentation"],
+    ["source.ts", "file-code-2", "code"],
+    ["records.json", "file-json", "data"],
+    ["bundle.zip", "file-archive", "archive"],
+    ["voice.mp3", "file-audio", "audio"],
+    ["clip.mp4", "file-video", "video"],
+  ])("renders a distinct document icon for %s", async (name, iconName, fileKind) => {
+    const storeFiles = vi.fn(async () => [{
+      id: `attachment-${name}`,
+      name,
+      prompt: {
+        type: "file_ref" as const,
+        path: `C:/vault/.chatobby/attachments/${name}`,
+        name,
+        sizeBytes: 1024,
+      },
+      delivery: "document" as const,
+      sizeBytes: 1024,
+      localPath: `C:/vault/.chatobby/attachments/${name}`,
+    }]);
+    const { card } = bindComposer(createHost({ storeFiles }));
+    const fileInput = card.querySelector<HTMLInputElement>(".chatobby-attachment-input");
+    if (!fileInput) throw new Error("Attachment input was not rendered");
+    const file = new File(["test"], name);
+    Object.defineProperty(fileInput, "files", { configurable: true, value: [file] });
+    fileInput.dispatchEvent(new Event("change"));
+
+    await vi.waitFor(() => expect(storeFiles).toHaveBeenCalledWith([file]));
+    expect(card.querySelector<HTMLElement>(".chatobby-attachment-chip__icon")?.dataset.icon).toBe(iconName);
+    expect(card.querySelector<HTMLElement>(".chatobby-attachment-chip")?.dataset.fileKind).toBe(fileKind);
   });
 
   it("enforces the eight-attachment composer limit before storage", async () => {
@@ -198,7 +273,7 @@ describe("Composer", () => {
     composer.handleInput();
     composer.send();
 
-    expect(input.value).toBe("hello");
+    expect(input.value).toBe("");
     expect(sendBtn.classList.contains("is-hidden")).toBe(true);
     expect(stopBtn.classList.contains("is-hidden")).toBe(false);
 
@@ -210,6 +285,22 @@ describe("Composer", () => {
 
     composer.setStreaming(false);
     expect(sendBtn.classList.contains("is-hidden")).toBe(false);
+  });
+
+  it("clears the visual draft before the transport can publish it to the feed", () => {
+    let input: HTMLTextAreaElement;
+    const send = vi.fn(() => {
+      expect(input.value).toBe("");
+    });
+    const bound = bindComposer(createHost({ send }));
+    input = bound.input;
+    input.value = "show this once";
+    bound.composer.handleInput();
+
+    bound.composer.send();
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(input.value).toBe("");
   });
 
   it("retains the editable draft when runtime preparation or prompt start fails", async () => {
@@ -491,6 +582,42 @@ describe("Composer", () => {
 
     expect(steer).toHaveBeenCalledTimes(1);
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("sends selected attachments with a mid-turn steer", async () => {
+    const attachment = {
+      id: "attachment-steer",
+      name: "diagram.png",
+      prompt: {
+        type: "file_ref" as const,
+        path: "C:/vault/.chatobby/attachments/diagram.png",
+        name: "diagram.png",
+        mimeType: "image/png",
+        sizeBytes: 1024,
+      },
+      delivery: "image" as const,
+      mimeType: "image/png",
+      sizeBytes: 1024,
+      localPath: "C:/vault/.chatobby/attachments/diagram.png",
+    };
+    const steer = vi.fn();
+    const streaming: SessionState = { ...EMPTY_SESSION_STATE, isStreaming: true };
+    const { composer, card } = bindComposer(createHost({
+      steer,
+      getSessionState: () => streaming,
+      storeFiles: vi.fn(async () => [attachment]),
+    }));
+    const fileInput = card.querySelector<HTMLInputElement>(".chatobby-attachment-input");
+    if (!fileInput) throw new Error("Attachment input was not rendered");
+    const file = new File(["image"], "diagram.png", { type: "image/png" });
+    Object.defineProperty(fileInput, "files", { configurable: true, value: [file] });
+    fileInput.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(card.querySelector(".chatobby-attachment-chip")).toBeTruthy());
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Enter" }));
+
+    expect(steer).toHaveBeenCalledWith("", [attachment.prompt]);
+    expect(card.querySelector(".chatobby-attachment-chip")).toBeNull();
   });
 
 	it("hides send and shows stop while the session is streaming", () => {

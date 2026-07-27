@@ -116,7 +116,7 @@ describe("PermissionsView", () => {
     expect(root.querySelector<HTMLElement>(".chatobby-permissions__body")?.scrollTop).toBe(420);
   });
 
-  it("changes one active agent policy with its exact binding revision", async () => {
+  it("does not expose vault-wide active-agent assignment controls on a session-scoped page", () => {
     const base = permissionModel();
     const model: FrontendPermissionScreenViewModel = {
       ...base,
@@ -134,36 +134,20 @@ describe("PermissionsView", () => {
         bindingRevision: 7,
       }],
     };
-    const onIntent = vi.fn(async () => {});
     const view = new PermissionsView({
       getModel: () => model,
       subscribe: () => () => {},
       onRefresh: vi.fn(async () => {}),
-      onIntent,
+      onIntent: vi.fn(async () => {}),
       onBack: vi.fn(),
     });
     const root = mount(view);
-    const select = root.querySelector<HTMLSelectElement>('select[aria-label="Subagent node-1 permission policy"]');
-    if (!select) throw new Error("live agent policy selector missing");
-    select.value = "standard";
-    select.dispatchEvent(new Event("change"));
 
-    await vi.waitFor(() => expect(onIntent).toHaveBeenCalledWith({
-      type: "permissions.set-live-agent-profile",
-      payload: {
-        authority: {
-          kind: "subagent",
-          mainSessionId: "main-1",
-          runId: "run-1",
-          nodeId: "node-1",
-        },
-        profileId: "standard",
-        expectedBindingRevision: 7,
-      },
-    }));
+    expect(root.textContent).not.toContain("Active agents");
+    expect(root.querySelector('select[aria-label="Subagent node-1 permission policy"]')).toBeNull();
   });
 
-  it("uses the selected policy for the live main agent instead of only changing the project default", async () => {
+  it("uses the selected policy for this exact session instead of changing the project default", async () => {
     const base = permissionModel();
     const model: FrontendPermissionScreenViewModel = {
       ...base,
@@ -192,7 +176,7 @@ describe("PermissionsView", () => {
     });
     const root = mount(view);
     [...root.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "Use for Main")
+      .find((button) => button.textContent === "Use for this session")
       ?.click();
 
     await vi.waitFor(() => expect(onIntent).toHaveBeenCalledWith({
@@ -203,6 +187,35 @@ describe("PermissionsView", () => {
         expectedBindingRevision: 11,
       },
     }));
+  });
+
+  it("does not silently change the project default when the current session binding is unavailable", () => {
+    const base = permissionModel();
+    const model: FrontendPermissionScreenViewModel = {
+      ...base,
+      selectedProfileId: "standard",
+      selectedProfile: { ...base.profiles[1]!, selected: true, activeForMain: false, canActivate: true },
+      profiles: [
+        { ...base.profiles[0]!, selected: false, activeForMain: true, canActivate: false },
+        { ...base.profiles[1]!, selected: true, activeForMain: false, canActivate: true },
+      ],
+      liveAgents: [],
+    };
+    const onIntent = vi.fn(async () => {});
+    const view = new PermissionsView({
+      getModel: () => model,
+      subscribe: () => () => {},
+      onRefresh: vi.fn(async () => {}),
+      onIntent,
+      onBack: vi.fn(),
+    });
+    const root = mount(view);
+    const button = [...root.querySelectorAll<HTMLButtonElement>("button")]
+      .find((candidate) => candidate.textContent === "Use for this session");
+
+    expect(button?.disabled).toBe(true);
+    button?.click();
+    expect(onIntent).not.toHaveBeenCalled();
   });
 
 	it("deletes an active custom policy only after choosing its replacement", async () => {

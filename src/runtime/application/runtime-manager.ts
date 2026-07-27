@@ -471,6 +471,15 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         CHATOBBY_VAULT_ROOT: vaultPaths.vaultRoot,
         CHATOBBY_ATTACHMENT_DIR: vaultPaths.attachmentDir,
         CHATOBBY_RUNTIME_LOG_FILE: lease.paths.logFile,
+        ...(configuration.documentOcrEngine
+          ? { CHATOBBY_DOCUMENT_OCR_ENGINE: configuration.documentOcrEngine }
+          : {}),
+        ...(configuration.documentOcrLanguage
+          ? { CHATOBBY_DOCUMENT_OCR_LANGUAGE: configuration.documentOcrLanguage }
+          : {}),
+        ...(configuration.advancedOcrCommand
+          ? { CHATOBBY_ADVANCED_OCR_COMMAND: configuration.advancedOcrCommand }
+          : {}),
         ...(configuration.shellCommand ? { CHATOBBY_SHELL: configuration.shellCommand } : {}),
         ...(mode === "managed" && this.deps.runtimePublicKey?.trim()
           ? { CHATOBBY_RUNTIME_PUBLIC_KEY: this.deps.runtimePublicKey.trim() }

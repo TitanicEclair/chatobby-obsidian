@@ -11,7 +11,13 @@ export function reduceLocalFeedAction(transaction: FeedTransaction, action: Loca
   switch (action.type) {
     case "feed.user-prompt-submitted": {
       if (action.startRun) transaction.beginRun();
-      const message: UserMessage = { role: "user", content: [{ type: "text", text: action.text }] };
+      const message: UserMessage = {
+        role: "user",
+        content: [
+          ...(action.text ? [{ type: "text" as const, text: action.text }] : []),
+          ...(action.attachments ?? []),
+        ],
+      };
       transaction.addBlock({
         type: "user",
         id: transaction.allocateBlockId(),
@@ -19,7 +25,8 @@ export function reduceLocalFeedAction(transaction: FeedTransaction, action: Loca
         submissionId: action.submissionId,
         message,
       });
-      transaction.appendPendingPromptEcho(normalizeText(action.text));
+      const normalized = normalizeText(action.text);
+      if (normalized) transaction.appendPendingPromptEcho(normalized);
       return;
     }
     case "feed.user-prompt-retracted": {
@@ -30,7 +37,8 @@ export function reduceLocalFeedAction(transaction: FeedTransaction, action: Loca
           break;
         }
       }
-      transaction.removePendingPromptEcho(normalizeText(action.text));
+      const normalized = normalizeText(action.text);
+      if (normalized) transaction.removePendingPromptEcho(normalized);
       transaction.completeRun();
       return;
     }
@@ -57,6 +65,7 @@ export function reduceLocalFeedAction(transaction: FeedTransaction, action: Loca
         id: transaction.allocateBlockId(),
         kind: action.kind,
         text: action.text,
+        attachments: action.attachments,
         status: "pending",
       });
       return;

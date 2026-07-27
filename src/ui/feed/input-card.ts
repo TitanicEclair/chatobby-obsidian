@@ -1,8 +1,9 @@
 import { InteractionCard, type InteractionHost } from "./interaction-card";
 import type { InteractionState } from "../../types";
+import { interactionCopy } from "../shared/interaction-copy";
 
 export class InputCard extends InteractionCard {
-  private inputEl: HTMLInputElement | null = null;
+  private text = "";
 
   constructor(host: InteractionHost) {
     super(host);
@@ -10,24 +11,25 @@ export class InputCard extends InteractionCard {
 
   setState(state: InteractionState): void {
     super.setState(state);
-    this.setText(state.text || (typeof state.params.placeholder === "string" ? "" : ""));
-    if (this.inputEl && typeof state.params.placeholder === "string") this.inputEl.placeholder = state.params.placeholder;
-  }
-
-  setText(text: string): void {
-    if (this.inputEl) this.inputEl.value = text;
+    this.text = state.text;
+    if (this.bodyEl) {
+      this.bodyEl.empty();
+      const message = interactionCopy(state.params, state.method).message;
+      if (message) this.bodyEl.createDiv({ cls: "chatobby-input-card__request", text: message });
+      this.bodyEl.createDiv({
+        cls: "chatobby-input-card__hint",
+        text: "Type your response in the composer below, then press Enter.",
+      });
+    }
   }
 
   /** Update the card's text from composer keystrokes in real-time. */
   setLiveText(text: string): void {
-    if (this.inputEl) {
-      this.inputEl.value = text;
-      this.inputEl.scrollLeft = this.inputEl.scrollWidth;
-    }
+    this.text = text;
   }
 
   submit(): void {
-    this.resolve(this.inputEl?.value ?? "");
+    this.resolve(this.text);
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
@@ -47,10 +49,7 @@ export class InputCard extends InteractionCard {
 
   protected onRender(container: HTMLElement): void {
     super.onRender(container);
-    this.inputEl = this.bodyEl?.createEl("input", { cls: "chatobby-input-card__input" }) ?? null;
-    const submit = this.actionsEl?.createEl("button", { cls: "chatobby-input-card__submit", text: "Submit" });
     const cancel = this.actionsEl?.createEl("button", { cls: "chatobby-input-card__cancel", text: "Cancel" });
-    if (submit) submit.onclick = () => this.submit();
     if (cancel) cancel.onclick = () => this.cancel();
   }
 

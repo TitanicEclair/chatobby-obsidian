@@ -30,7 +30,8 @@ export function reduceDocumentProjection(
     });
     if (!pendingId || (existing && existing.type === "user" && existing.submissionId === undefined)) continue;
     unmatchedPendingIds.delete(pendingId);
-    transaction.consumePendingPromptEcho(projectedText);
+    const promptText = normalizeUserText(projected.message.content);
+    if (promptText) transaction.consumePendingPromptEcho(promptText);
   }
 
   const expectedIds = new Set([
@@ -55,12 +56,33 @@ export function reduceDocumentProjection(
   }
 }
 
+function normalizeUserText(content: UserMessage["content"]): string {
+  if (typeof content === "string") return normalizeText(content);
+  return content
+    .filter((item): item is Extract<typeof item, { type: "text" }> => item.type === "text")
+    .map((item) => normalizeText(item.text))
+    .filter(Boolean)
+    .join("\n");
+}
+
 function normalizeUserContent(content: UserMessage["content"]): string {
   if (typeof content === "string") return normalizeText(content);
-  return normalizeText(content.flatMap((item) => {
-    if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") return [];
-    return [item.text];
-  }).join("\n"));
+  return content.map((item) => {
+    if (!isRecord(item)) return "";
+    if (item.type === "text" && typeof item.text === "string") return normalizeText(item.text);
+    if (item.type === "image" && typeof item.data === "string") {
+      return `image:${typeof item.mimeType === "string" ? item.mimeType : ""}:${item.data.length}:${item.data.slice(0, 24)}`;
+    }
+    if (item.type !== "attachment" || typeof item.name !== "string") return "";
+    return [
+      "attachment",
+      item.name,
+      typeof item.kind === "string" ? item.kind : "",
+      typeof item.mimeType === "string" ? item.mimeType : "",
+      typeof item.path === "string" ? item.path : "",
+      typeof item.sizeBytes === "number" ? String(item.sizeBytes) : "",
+    ].join(":");
+  }).filter(Boolean).join("\n");
 }
 
 function normalizeText(value: string): string {

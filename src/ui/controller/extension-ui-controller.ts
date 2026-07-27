@@ -14,6 +14,7 @@ export interface ExtensionUiControllerOptions {
   getFeedStore: () => FeedStore;
   getFeedRenderer: () => FeedRenderer | null;
   setComposerText: (text: string) => void;
+  focusComposer: () => void;
   getActiveInteraction: () => InteractionState | null;
   setActiveInteraction: (interaction: InteractionState | null) => void;
 }
@@ -90,12 +91,13 @@ export class ExtensionUiController {
     if (!request || !isBlockingInteraction(request.method)) return;
     const interaction = createInteractionState(request.id, request.method, request.params);
     this.options.setActiveInteraction(interaction);
-    this.options.setComposerText("");
+    this.options.setComposerText(interaction.text);
     const card = this.createCard(request.method);
     this.activeCard = card;
     this.activeRequestId = request.id;
     this.options.getFeedRenderer()?.mountInteraction(card);
     card.setState(interaction);
+    if (interaction.method === "input") this.options.focusComposer();
   }
 
   private createCard(method: InteractionState["method"]): InteractionCard {

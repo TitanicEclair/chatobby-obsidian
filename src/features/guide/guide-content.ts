@@ -137,7 +137,7 @@ To make an agent use it:
 1. Open **Permissions**.
 2. Choose or duplicate a policy.
 3. Edit its capability groups and channel access.
-4. In **Active agents**, assign it to **Main agent** or the relevant active agent.
+4. Select **Use for this session**. Each Chatobby view manages its own session.
 5. For future subagents or events, choose the policy in their role or event setup.
 
 The composer shows the current session policy. You can click its name to switch the session to another available policy.

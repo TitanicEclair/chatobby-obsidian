@@ -11,7 +11,14 @@
 import { Notice, setIcon } from "obsidian";
 import { ChatobbyComponent } from "../shared/component";
 import { resizeComposerInput } from "../shell/view-shell";
-import type { ComposerAttachment, ComposerKeybindings, SessionPreferences, SessionState, WsPromptAttachment } from "../../types";
+import type {
+  ComposerAttachment,
+  ComposerKeybindings,
+  InteractionState,
+  SessionPreferences,
+  SessionState,
+  WsPromptAttachment,
+} from "../../types";
 import { DEFAULT_COMPOSER_KEYBINDINGS, INITIAL_COMPOSER_STATE } from "../../types";
 import { revokeComposerAttachment } from "../../attachments/attachment-store";
 import { ABORT_CONFIRM_TIMEOUT_MS } from "../shared/constants";
@@ -26,6 +33,8 @@ import {
 } from "./slash-state";
 import { routePrintableKeyToComposer } from "./view-key-routing";
 import { matchesComposerKeybinding } from "./keybindings";
+import { interactionCopy } from "../shared/interaction-copy";
+import { attachmentMeta, attachmentVisual } from "../attachments/attachment-presentation";
 
 const MAX_COMPOSER_ATTACHMENTS = 8;
 const COMPOSER_ATTACHMENT_ACCEPT = [
@@ -51,7 +60,7 @@ export interface ComposerHost {
     submissionId?: string,
   ): void | PromptSubmissionOutcome | Promise<void | PromptSubmissionOutcome>;
   /** Steer a running turn (mid-generation correction). Distinct from starting a new prompt. */
-  steer(message: string): void | Promise<void>;
+  steer(message: string, attachments?: WsPromptAttachment[]): void | Promise<void>;
   /** Abort the current generation. */
   abort(): void;
   /** Retract a specific prompt before visible response output begins. */
@@ -107,6 +116,8 @@ export class Composer extends ChatobbyComponent {
   private highlightEl: HTMLElement | null = null;
   private attachmentRailEl: HTMLElement | null = null;
   private activationRailEl: HTMLElement | null = null;
+  private interactionRailEl: HTMLElement | null = null;
+  private composerCardEl: HTMLElement | null = null;
   private attachBtn: HTMLButtonElement | null = null;
   private attachInputEl: HTMLInputElement | null = null;
   private sendBtn: HTMLButtonElement | null = null;
@@ -118,6 +129,8 @@ export class Composer extends ChatobbyComponent {
   private promptInFlight = false;
   private slashCommandInFlight = false;
   private pendingSendAbort: AbortController | null = null;
+  private pendingSubmissionDraft: ComposerDraftSnapshot | null = null;
+  private pendingSubmissionDraftRestored = false;
   private pendingSendSequence = 0;
   private activePendingSendId: number | null = null;
   private abortConfirmArmed = false;
@@ -133,6 +146,8 @@ export class Composer extends ChatobbyComponent {
   private retractionPending = false;
   private committedTurnPending = false;
   private highlightSyncFrame = 0;
+  private activeInteraction: InteractionState | null = null;
+  private defaultPlaceholder = "";
 
   constructor(private host: ComposerHost) {
     super();
@@ -159,12 +174,16 @@ export class Composer extends ChatobbyComponent {
     this.sendBtn = sendBtn;
     this.stopBtn = stopBtn;
     this.highlightEl = highlightEl ?? null;
+    this.defaultPlaceholder = inputEl.placeholder;
     this.inputEl.addEventListener("scroll", () => this.syncHighlightScroll());
     const card = this.inputEl.closest<HTMLElement>(".chatobby-composer-card");
+    this.composerCardEl = card;
+    this.interactionRailEl = card?.createDiv({ cls: "chatobby-interaction-rail is-hidden" }) ?? null;
     this.attachmentRailEl = card?.createDiv({ cls: "chatobby-attachment-rail is-hidden" }) ?? null;
     this.activationRailEl = card?.createDiv({ cls: "chatobby-activation-rail is-hidden" }) ?? null;
     if (this.attachmentRailEl && card) {
       const inputWrap = card.querySelector(".chatobby-input-wrap");
+      if (inputWrap && this.interactionRailEl) card.insertBefore(this.interactionRailEl, inputWrap);
       if (inputWrap) card.insertBefore(this.attachmentRailEl, inputWrap);
       if (inputWrap && this.activationRailEl) card.insertBefore(this.activationRailEl, inputWrap);
       this.bindAttachmentEvents(card);
@@ -198,6 +217,22 @@ export class Composer extends ChatobbyComponent {
     this.inputEl?.focus();
   }
 
+  /** Present one blocking request in the composer without mixing it into the user's next prompt. */
+  setInteraction(interaction: InteractionState | null): void {
+    this.activeInteraction = interaction;
+    this.composerCardEl?.toggleClass("has-interaction", interaction !== null);
+    if (this.inputEl) {
+      this.inputEl.readOnly = interaction !== null && interaction.method !== "input";
+      this.inputEl.placeholder = interaction
+        ? interaction.method === "input"
+          ? (typeof interaction.params.placeholder === "string" ? interaction.params.placeholder : "Type a response")
+          : "Choose an option above"
+        : this.defaultPlaceholder;
+    }
+    this.renderInteractionContext();
+    this.updateControls();
+  }
+
   /** Get the current input text. */
   get text(): string {
     return this.state.text;
@@ -216,6 +251,7 @@ export class Composer extends ChatobbyComponent {
     }
     this.resizeInput();
     this.refreshSlashState();
+    this.updateControls();
   }
 
   /** Clear the input. */
@@ -245,6 +281,13 @@ export class Composer extends ChatobbyComponent {
   /** Send the current input. */
   send(): void {
     this.disarmAbortConfirm();
+    if (this.activeInteraction) {
+      if (this.activeInteraction.method === "input") {
+        this.host.updateInteractionText?.(this.state.text);
+        this.host.submitInteraction?.();
+      }
+      return;
+    }
     if (this.promptInFlight) return;
     const rawText = this.state.text;
     const text = rawText.trim();
@@ -263,9 +306,18 @@ export class Composer extends ChatobbyComponent {
     const recoverOnEarlyCancel = commands.length === 0;
     const submissionId = recoverOnEarlyCancel ? crypto.randomUUID() : undefined;
     const outputMarker = this.currentTurnOutputMarker();
+    const attachments = submittedDraft.attachments.length > 0
+      ? submittedDraft.attachments.map((attachment) => attachment.prompt)
+      : undefined;
+    const isSlashSubmission = commands.length > 0 && this.host.submitSlashPlan !== undefined;
+    if (!isSlashSubmission) {
+      this.pendingSubmissionDraft = submittedDraft;
+      this.pendingSubmissionDraftRestored = false;
+      // Clear before the transport publishes the optimistic feed block. Waiting
+      // for prompt acceptance leaves the same text visible in both surfaces.
+      this.clearDraft(false);
+    }
     try {
-      const attachments = this.state.attachments.length > 0 ? this.state.attachments.map((attachment) => attachment.prompt) : undefined;
-      const isSlashSubmission = commands.length > 0 && this.host.submitSlashPlan !== undefined;
       let slashAccepted = false;
       this.slashCommandInFlight = isSlashSubmission;
       const acceptSlashSubmission = () => {
@@ -288,36 +340,40 @@ export class Composer extends ChatobbyComponent {
             }
             if (pendingAbort.signal.aborted) {
               if (outcome?.retracted !== false) {
+                this.restorePendingSubmissionDraft();
                 this.finishPendingSend(pendingSendId);
                 return;
               }
-              if (this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
-                this.acceptSubmittedDraft(submittedDraft, outputMarker, undefined, true);
-              }
+              this.removeRestoredPendingDraft(rawText, submittedAttachmentIds);
+              this.acceptSubmittedDraft(submittedDraft, outputMarker, undefined, true, true);
               this.finishPendingSend(pendingSendId);
               return;
             }
-            if (this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
-              this.acceptSubmittedDraft(submittedDraft, outputMarker, submissionId, false);
-            }
+            this.acceptSubmittedDraft(submittedDraft, outputMarker, submissionId, false, true);
             this.finishPendingSend(pendingSendId);
           },
           (error) => {
             if (!pendingAbort.signal.aborted) console.error("Chatobby: pending send failed", error);
+            this.restorePendingSubmissionDraft();
             this.finishPendingSend(pendingSendId);
           },
         );
       } else {
-        if (!isSlashSubmission && !pendingAbort.signal.aborted && this.submittedDraftIsCurrent(rawText, submittedAttachmentIds)) {
-          this.acceptSubmittedDraft(submittedDraft, outputMarker, submissionId, false);
+        if (!isSlashSubmission && !pendingAbort.signal.aborted) {
+          this.acceptSubmittedDraft(submittedDraft, outputMarker, submissionId, false, true);
         }
         this.pendingSendAbort = null;
+        this.pendingSubmissionDraft = null;
+        this.pendingSubmissionDraftRestored = false;
         this.activePendingSendId = null;
         this.slashCommandInFlight = false;
         this.setPromptInFlight(false);
       }
     } catch (error) {
+      this.restorePendingSubmissionDraft();
       this.pendingSendAbort = null;
+      this.pendingSubmissionDraft = null;
+      this.pendingSubmissionDraftRestored = false;
       this.activePendingSendId = null;
       this.slashCommandInFlight = false;
       this.setPromptInFlight(false);
@@ -330,8 +386,11 @@ export class Composer extends ChatobbyComponent {
   steer(): void {
     this.disarmAbortConfirm();
     const text = this.state.text.trim();
-    if (!text) return;
-    const result = this.host.steer(text);
+    if (!text && this.state.attachments.length === 0) return;
+    const attachments = this.state.attachments.length > 0
+      ? this.state.attachments.map((attachment) => attachment.prompt)
+      : undefined;
+    const result = this.host.steer(text, attachments);
     this.clear();
     if (isPromiseLike(result)) void Promise.resolve(result).catch(() => { });
   }
@@ -341,6 +400,7 @@ export class Composer extends ChatobbyComponent {
     this.disarmAbortConfirm();
     if (this.promptInFlight && !this.slashCommandInFlight) {
       this.pendingSendAbort?.abort();
+      this.restorePendingSubmissionDraft();
       this.setStopping(true);
       return;
     }
@@ -401,7 +461,7 @@ export class Composer extends ChatobbyComponent {
         return;
       } else if (this.isTurnActive()) {
         // Mid-turn Enter STEERS the running turn (a correction) — it does not start a new prompt.
-        if (this.state.text.trim()) this.steer();
+        if (this.state.text.trim() || this.state.attachments.length > 0) this.steer();
       } else {
         this.send();
       }
@@ -505,17 +565,20 @@ export class Composer extends ChatobbyComponent {
   private updateControls(): void {
     const turnActive = this.isTurnActive();
     const empty = this.state.text.trim().length === 0 && this.state.attachments.length === 0;
+    const submittingInteraction = this.activeInteraction?.method === "input";
 
     // One morphing slot: send while idle, stop while a turn runs. Same circle, same place.
     // Send is disabled when the box is empty (nothing to send). Stop only exists mid-turn.
     if (this.sendBtn) {
-      this.sendBtn.toggleClass("is-hidden", turnActive);
-      this.sendBtn.disabled = turnActive || empty;
+      this.sendBtn.toggleClass("is-hidden", turnActive && !submittingInteraction);
+      this.sendBtn.disabled = submittingInteraction ? false : turnActive || empty || this.activeInteraction !== null;
+      this.sendBtn.setAttr("aria-label", submittingInteraction ? "Submit response" : "Send message");
+      this.sendBtn.setAttr("title", submittingInteraction ? "Submit response" : "Send message");
     }
 
 		if (this.stopBtn) {
-			this.stopBtn.toggleClass("is-hidden", !turnActive);
-			this.stopBtn.disabled = !turnActive || this.isStopping || !this.host.canAbort();
+			this.stopBtn.toggleClass("is-hidden", !turnActive || submittingInteraction);
+			this.stopBtn.disabled = !turnActive || submittingInteraction || this.isStopping || !this.host.canAbort();
 			this.stopBtn.empty();
 			if (turnActive && this.isStopping) {
 				setIcon(this.stopBtn, "loader-circle");
@@ -537,6 +600,28 @@ export class Composer extends ChatobbyComponent {
 				this.stopBtn.removeClass("is-confirming");
 				this.stopBtn.removeClass("is-stopping");
 			}
+    }
+  }
+
+  private renderInteractionContext(): void {
+    const rail = this.interactionRailEl;
+    if (!rail) return;
+    rail.empty();
+    const interaction = this.activeInteraction;
+    rail.toggleClass("is-hidden", interaction === null);
+    if (!interaction) return;
+    const icon = rail.createSpan({ cls: "chatobby-interaction-rail__icon", attr: { "aria-hidden": "true" } });
+    setIcon(icon, "shield-question");
+    const copy = rail.createDiv({ cls: "chatobby-interaction-rail__copy" });
+    const display = interactionCopy(interaction.params, "Response requested");
+    copy.createDiv({ cls: "chatobby-interaction-rail__title", text: display.title });
+    const message = display.message;
+    if (message) {
+      copy.createDiv({
+        cls: "chatobby-interaction-rail__summary",
+        text: truncateInteractionSummary(message),
+        attr: { title: message },
+      });
     }
   }
 
@@ -578,6 +663,8 @@ export class Composer extends ChatobbyComponent {
   private finishPendingSend(pendingSendId: number): void {
     if (this.activePendingSendId !== pendingSendId) return;
     this.pendingSendAbort = null;
+    this.pendingSubmissionDraft = null;
+    this.pendingSubmissionDraftRestored = false;
     this.activePendingSendId = null;
     this.slashCommandInFlight = false;
     this.setPromptInFlight(false);
@@ -589,19 +676,43 @@ export class Composer extends ChatobbyComponent {
     outputMarker: string,
     submissionId: string | undefined,
     trackCommittedTurn: boolean,
+    alreadyCleared = false,
   ): void {
     this.resetHistoryNavigation();
     if (submissionId) {
       this.recoverableSubmission = { draft, outputMarker, submissionId };
       this.committedTurnPending = false;
-      this.clearDraft(false);
-      this.restoreStashedDraft();
+      if (!alreadyCleared) this.clearDraft(false);
+      this.restoreStashedDraftIfComposerEmpty();
       this.observeTurnProgress();
       return;
     }
     if (draft.text.trim()) this.submittedPromptHistory.push(draft.text);
     this.committedTurnPending = trackCommittedTurn;
-    this.clearDraft(true);
+    if (alreadyCleared) {
+      this.releaseDraftAttachments(draft);
+    } else {
+      this.clearDraft(true);
+    }
+    this.restoreStashedDraftIfComposerEmpty();
+  }
+
+  private restorePendingSubmissionDraft(): void {
+    const draft = this.pendingSubmissionDraft;
+    if (!draft || this.pendingSubmissionDraftRestored) return;
+    if (this.state.text.length > 0 || this.state.attachments.length > 0) return;
+    this.restoreDraft(draft);
+    this.pendingSubmissionDraftRestored = true;
+  }
+
+  private removeRestoredPendingDraft(text: string, attachmentIds: readonly string[]): void {
+    if (!this.pendingSubmissionDraftRestored || !this.submittedDraftIsCurrent(text, attachmentIds)) return;
+    this.clearDraft(false);
+    this.pendingSubmissionDraftRestored = false;
+  }
+
+  private restoreStashedDraftIfComposerEmpty(): void {
+    if (this.state.text.length > 0 || this.state.attachments.length > 0) return;
     this.restoreStashedDraft();
   }
 
@@ -858,6 +969,12 @@ export class Composer extends ChatobbyComponent {
     this.attachmentRailEl.toggleClass("is-hidden", this.state.attachments.length === 0);
     for (const attachment of this.state.attachments) {
       const item = this.attachmentRailEl.createDiv({ cls: "chatobby-attachment-chip" });
+      const visual = attachmentVisual(
+        attachment.name,
+        attachment.delivery === "image" ? "image" : attachment.delivery === "text" ? "text" : "file",
+      );
+      item.dataset.fileKind = visual.kind;
+      item.setAttr("title", attachment.name);
       if (attachment.previewUrl) {
         item.createEl("img", {
           cls: "chatobby-attachment-chip__thumb",
@@ -865,11 +982,18 @@ export class Composer extends ChatobbyComponent {
         });
       } else {
         const icon = item.createSpan({ cls: "chatobby-attachment-chip__icon", attr: { "aria-hidden": "true" } });
-        setIcon(icon, attachment.delivery === "document" || attachment.delivery === "text" ? "file-text" : "paperclip");
+        setIcon(icon, visual.icon);
       }
       const body = item.createDiv({ cls: "chatobby-attachment-chip__body" });
       body.createDiv({ cls: "chatobby-attachment-chip__name", text: attachment.name, attr: { title: attachment.name } });
-      body.createDiv({ cls: "chatobby-attachment-chip__meta", text: attachmentMeta(attachment) });
+      body.createDiv({
+        cls: "chatobby-attachment-chip__meta",
+        text: attachmentMeta(
+          attachment.name,
+          attachment.delivery.charAt(0).toUpperCase() + attachment.delivery.slice(1),
+          attachment.sizeBytes,
+        ),
+      });
       const remove = item.createEl("button", {
         cls: "chatobby-attachment-chip__remove",
         attr: { type: "button", "aria-label": `Remove ${attachment.name}`, title: "Remove attachment" },
@@ -1160,16 +1284,7 @@ function activationLabel(command: SlashCommandSpec): string {
   return command.source === "skill" && command.name.startsWith("skill:") ? command.name.slice(6) : command.name;
 }
 
-function attachmentMeta(attachment: ComposerAttachment): string {
-  const extension = /\.([^.]+)$/u.exec(attachment.name)?.[1]?.toUpperCase();
-  const kind = extension || attachment.delivery.charAt(0).toUpperCase() + attachment.delivery.slice(1);
-  return attachment.sizeBytes === undefined ? kind : `${kind} · ${formatFileSize(attachment.sizeBytes)}`;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kilobytes = bytes / 1024;
-  if (kilobytes < 1024) return `${kilobytes < 10 ? kilobytes.toFixed(1) : Math.round(kilobytes)} KB`;
-  const megabytes = kilobytes / 1024;
-  return `${megabytes.toFixed(megabytes < 10 ? 1 : 0)} MB`;
+function truncateInteractionSummary(message: string): string {
+  const normalized = message.replace(/\s+/gu, " ").trim();
+  return normalized.length <= 160 ? normalized : `${normalized.slice(0, 157).trimEnd()}…`;
 }

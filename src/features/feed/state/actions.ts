@@ -1,4 +1,4 @@
-import type { ExtensionPanelAction, ThinkingDisplayMode } from "../../../types";
+import type { AttachmentContent, ExtensionPanelAction, ThinkingDisplayMode } from "../../../types";
 import type { FeedScrollState } from "../domain/entities";
 import type { BlockId, ToolCallId } from "../domain/ids";
 import type { FeedDocumentProjection } from "../domain/projections";
@@ -22,12 +22,23 @@ export type FeedViewAction =
 
 /** Complete command surface accepted by a feed store. */
 export type FeedAction =
-  | { type: "feed.user-prompt-submitted"; text: string; startRun: boolean; submissionId?: string }
+  | {
+      type: "feed.user-prompt-submitted";
+      text: string;
+      attachments?: readonly AttachmentContent[];
+      startRun: boolean;
+      submissionId?: string;
+    }
   | { type: "feed.user-prompt-retracted"; submissionId: string; text: string }
   | { type: "feed.local-feedback-appended"; input: string; guidance: string }
   | { type: "feed.extension-panel-upserted"; panel: ExtensionPanelInput }
   | { type: "feed.extension-panel-removed"; key: string }
-  | { type: "feed.queued-message-appended"; kind: "steer" | "followUp"; text: string }
+  | {
+      type: "feed.queued-message-appended";
+      kind: "steer" | "followUp";
+      text: string;
+      attachments?: readonly AttachmentContent[];
+    }
   | { type: "feed.queued-message-promoted"; kind: "steer" | "followUp"; text: string }
   | { type: "feed.document-projection-synchronized"; projection: FeedDocumentProjection }
   | { type: "feed.runtime-activity-synchronized"; active: boolean }

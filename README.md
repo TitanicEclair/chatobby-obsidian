@@ -130,12 +130,14 @@ or select only the portion you need.
 ### Work with images and documents
 
 Paste an image into the composer or attach a supported document. Chatobby keeps
-the attachment visible with the message and can use an appropriate model or
-document-reading capability when available. This is useful for screenshots,
-diagrams, lecture material, reports, reference documents, and UI feedback.
+the attachment visible with the message. Attached files can be opened through
+the operating system, while the document reader extracts bounded text from
+supported Office, OpenDocument, PDF, RTF, HTML, Markdown, CSV, and text files.
+Built-in OCR can recover text from image-only documents without requiring a
+multimodal model.
 
-Image and document understanding depends on the selected model and the tools
-available to the current session.
+Understanding photographs, diagrams, page layout, and other visual meaning
+still depends on a multimodal model or a configured advanced OCR engine.
 
 ### Continue real projects
 
@@ -147,6 +149,9 @@ Changing to a different directory while a view already has an active session
 opens the work in a separate Chatobby view. Obsidian tabs remain the boundary
 between independent workspaces, while the agent rail switches between a main
 session and its subagents.
+
+Right-click a folder, or a file inside it, to start a Chatobby session in that
+folder or browse its stored sessions.
 
 ### Use Chatobby for coding as well as notes
 
@@ -561,9 +566,13 @@ history entry.
 
 ## Permission policies
 
-The easiest starting point is a built-in project policy and visible prompts for
-actions that require more authority. Create narrower policies for specialized
-roles, web-only research, automation, or sensitive projects.
+New sessions begin with **Obsidian**, the vault-focused default. **Approve
+safe** asks before potentially unsafe work, **Full access** permits the broadest
+surface, **Read only** blocks changes, and **Auto** privately classifies the
+checks that Approve safe would otherwise ask you to decide. Auto may add a
+small model request before a tool runs and fails closed if classification
+cannot complete. Create narrower custom policies for specialized roles,
+web-only research, automation, or sensitive projects.
 
 When customizing a policy:
 

@@ -16,6 +16,7 @@ describe("ExtensionUiController", () => {
       getFeedStore: () => createFeedStore(),
       getFeedRenderer: () => renderer,
       setComposerText: vi.fn(),
+      focusComposer: vi.fn(),
       getActiveInteraction: () => interaction,
       setActiveInteraction: (next) => { interaction = next; },
     });
@@ -52,6 +53,7 @@ describe("ExtensionUiController", () => {
       getFeedStore: () => createFeedStore(),
       getFeedRenderer: () => renderer,
       setComposerText: vi.fn(),
+      focusComposer: vi.fn(),
       getActiveInteraction: () => interaction,
       setActiveInteraction: (next) => { interaction = next; },
     });
@@ -73,6 +75,7 @@ describe("ExtensionUiController", () => {
 			getFeedStore: () => createFeedStore(),
 			getFeedRenderer: () => renderer,
 			setComposerText: vi.fn(),
+			focusComposer: vi.fn(),
 			getActiveInteraction: () => interaction,
 			setActiveInteraction: (next) => { interaction = next; },
 		});
@@ -86,6 +89,47 @@ describe("ExtensionUiController", () => {
 		expect(interaction).toBeNull();
 		expect(mountInteraction).toHaveBeenCalledTimes(1);
 		expect(clearInteraction).toHaveBeenCalledTimes(1);
+	});
+
+	it("moves a typed follow-up into the composer and resolves its exact text", async () => {
+		let interaction: InteractionState | null = null;
+		let mountedCard: InteractionCard | null = null;
+		const focusComposer = vi.fn();
+		const setComposerText = vi.fn();
+		const renderer = {
+			mountInteraction: vi.fn((card: InteractionCard) => { mountedCard = card; }),
+			clearInteraction: vi.fn(),
+		} as unknown as FeedRenderer;
+		const controller = new ExtensionUiController({
+			getFeedStore: () => createFeedStore(),
+			getFeedRenderer: () => renderer,
+			setComposerText,
+			focusComposer,
+			getActiveInteraction: () => interaction,
+			setActiveInteraction: (next) => { interaction = next; },
+		});
+		const pending = controller.handle({
+			id: "reason-1",
+			method: "input",
+			params: {
+				title: "Deny with reason",
+				message: "Allow the agent to read C:/Private/report.md?",
+				placeholder: "Optional reason for the agent",
+			},
+		});
+
+		expect(interaction).toMatchObject({
+			method: "input",
+			params: { title: "Deny with reason" },
+		});
+		expect(setComposerText).toHaveBeenCalledWith("");
+		expect(focusComposer).toHaveBeenCalledOnce();
+		controller.updateText("That file is outside this task.");
+		controller.submit();
+
+		await expect(pending).resolves.toBe("That file is outside this task.");
+		expect(interaction).toBeNull();
+		expect(mountedCard).not.toBeNull();
 	});
 });
 

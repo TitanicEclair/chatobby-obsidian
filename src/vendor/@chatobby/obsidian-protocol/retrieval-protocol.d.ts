@@ -81,6 +81,7 @@ export interface ObsidianRetrievalDiagnostics {
     };
     lexical?: {
         searchedFileCount?: number;
+        totalFileCount?: number;
     };
 }
 export interface ObsidianRetrievalEnvelope {

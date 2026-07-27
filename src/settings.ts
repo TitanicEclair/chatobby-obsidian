@@ -28,6 +28,9 @@ const SETTINGS_SEARCH_ALIASES = [
   "runtime mode",
   "runtime lifetime",
   "command shell",
+  "document OCR",
+  "PDF OCR",
+  "Office documents",
   "external server",
   "developer command",
   "model providers",
@@ -87,6 +90,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
 		this.renderFirstRunSection(containerEl);
     this.renderConnectionSection(containerEl);
     this.renderCredentialsSection(containerEl);
+    this.renderDocumentSection(containerEl);
 		this.renderDisplaySection(containerEl);
     this.renderHelpSection(containerEl);
   }
@@ -284,12 +288,75 @@ export class ChatobbySettingTab extends PluginSettingTab {
             .setPlaceholder("/path/to/shell")
             .setValue(this.plugin.settings.customShellPath)
             .onChange((value) => {
-              this.updateSettings({ customShellPath: value.trim() }).catch((error: unknown) => {
-                console.error("Chatobby: failed to update custom shell", error);
-                new Notice("Failed to update custom shell");
-              });
+              this.updateSettings({ customShellPath: value.trim() })
+                .then(() => {
+                  new Notice("Command shell saved. Restart Chatobby to apply it.");
+                })
+                .catch((error: unknown) => {
+                  console.error("Chatobby: failed to update custom shell", error);
+                  new Notice("Failed to update custom shell");
+                });
             });
         });
+    }
+  }
+
+  private renderDocumentSection(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName("Documents").setHeading();
+
+    new Setting(containerEl)
+      .setName("Document OCR")
+      .setDesc("Built-in OCR handles scanned images and image-only PDFs. Advanced local OCR preserves more layout but requires MinerU to be installed separately.")
+      .addDropdown((dropdown) => dropdown
+        .addOption("builtin", "Built-in OCR (recommended)")
+        .addOption("advanced", "Advanced local OCR")
+        .setValue(this.plugin.settings.documentOcrEngine)
+        .onChange((value) => {
+          this.updateSettings({ documentOcrEngine: value === "advanced" ? "advanced" : "builtin" })
+            .then(() => {
+              new Notice("Document OCR setting saved. Restart Chatobby to apply it.");
+              this.refreshSettingsSurface();
+            })
+            .catch((error: unknown) => {
+              console.error("Chatobby: failed to update document OCR", error);
+              new Notice("Failed to update document OCR");
+            });
+        }));
+
+    new Setting(containerEl)
+      .setName("OCR language")
+      .setDesc("Tesseract language code, for example eng or eng+fra. English is available by default; other languages may download data on first use.")
+      .addText((text) => text
+        .setPlaceholder("eng")
+        .setValue(this.plugin.settings.documentOcrLanguage)
+        .onChange((value) => {
+          this.updateSettings({ documentOcrLanguage: value.trim() || "eng" })
+            .then(() => new Notice("OCR language saved. Restart Chatobby to apply it."))
+            .catch((error: unknown) => {
+              console.error("Chatobby: failed to update OCR language", error);
+              new Notice("Failed to update OCR language");
+            });
+        }));
+
+    if (this.plugin.settings.documentOcrEngine === "advanced") {
+      new Setting(containerEl)
+        .setName("Advanced OCR command")
+        .setDesc("MinerU executable name on PATH or an absolute executable path. Chatobby invokes it without a shell and applies a five-minute limit.")
+        .addText((text) => text
+          .setPlaceholder("mineru")
+          .setValue(this.plugin.settings.advancedOcrCommand)
+          .onChange((value) => {
+            this.updateSettings({ advancedOcrCommand: value.trim() || "mineru" })
+              .then(() => new Notice("Advanced OCR command saved. Restart Chatobby to apply it."))
+              .catch((error: unknown) => {
+                console.error("Chatobby: failed to update advanced OCR command", error);
+                new Notice("Failed to update advanced OCR command");
+              });
+          }));
+      containerEl.createDiv({
+        cls: "chatobby-settings-note",
+        text: "Advanced OCR is optional and model-inferred. Chatobby does not install model weights, alter Python, or bypass operating-system security settings.",
+      });
     }
   }
 

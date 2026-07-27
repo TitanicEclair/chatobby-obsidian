@@ -52,9 +52,19 @@ export interface ImageContent {
   mimeType: string;
 }
 
+export interface AttachmentContent {
+  type: "attachment";
+  name: string;
+  kind: "image" | "text" | "binary";
+  mimeType?: string;
+  path?: string;
+  sizeBytes?: number;
+  data?: string;
+}
+
 export interface UserMessage {
   role: "user";
-  content: string | (TextContent | ImageContent)[];
+  content: string | (TextContent | ImageContent | AttachmentContent)[];
   timestamp?: number;
 }
 
@@ -128,6 +138,12 @@ export interface PluginSettings {
   commandShell: "auto" | "pwsh" | "powershell" | "cmd" | "bash" | "zsh" | "fish" | "sh" | "custom";
   /** Executable name or absolute path used when commandShell is custom. */
   customShellPath: string;
+  /** Document OCR path used by read_document. */
+  documentOcrEngine: "builtin" | "advanced";
+  /** Tesseract language code used by built-in OCR. */
+  documentOcrLanguage: string;
+  /** MinerU-compatible command used by optional advanced local OCR. */
+  advancedOcrCommand: string;
   /** Local display flags only; credential values are persisted by the runtime. */
   providerKeys: Record<string, boolean>;
   /** How thinking blocks are rendered in the feed. */
@@ -152,6 +168,9 @@ export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   developerArgs: [],
   commandShell: "auto",
   customShellPath: "",
+  documentOcrEngine: "builtin",
+  documentOcrLanguage: "eng",
+  advancedOcrCommand: "mineru",
   providerKeys: {},
   thinkingDisplay: "collapsed",
   autoScroll: true,
@@ -511,6 +530,8 @@ export interface QueuedMessageBlock {
   kind: "steer" | "followUp";
   /** The message text. */
   text: string;
+  /** Attachments submitted with this steer or follow-up. */
+  attachments?: readonly AttachmentContent[];
   /** Ack state driven by queue_update events. */
   status: "pending" | "queued" | "applied";
 }

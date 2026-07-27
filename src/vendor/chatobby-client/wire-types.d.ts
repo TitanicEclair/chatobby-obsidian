@@ -41,6 +41,7 @@ export interface WireToolResultMessage {
     toolName: string;
     content: WireContentBlock[];
     isError: boolean;
+    details?: unknown;
     timestamp: number;
 }
 /** Application-owned message with a dedicated frontend renderer and structured details. */

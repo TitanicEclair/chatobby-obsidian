@@ -282,12 +282,12 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("prompt", { message, attachments, context, submissionId }), "status");
 	}
 
-	async steer(message: string): Promise<"accepted" | "promoted-to-prompt"> {
-		return resultField(await this.send("steer", { message }), "status");
+	async steer(message: string, attachments?: WsPromptAttachment[]): Promise<"accepted" | "promoted-to-prompt"> {
+		return resultField(await this.send("steer", { message, attachments }), "status");
 	}
 
-	async followUp(message: string): Promise<"started" | "promoted-to-prompt"> {
-		return resultField(await this.send("follow_up", { message }), "status");
+	async followUp(message: string, attachments?: WsPromptAttachment[]): Promise<"started" | "promoted-to-prompt"> {
+		return resultField(await this.send("follow_up", { message, attachments }), "status");
 	}
 
 	async abort(): Promise<void> {

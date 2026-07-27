@@ -4,6 +4,8 @@
 import { setIcon } from "obsidian";
 import type { QueuedMessageBlock } from "../../types";
 import { ChatobbyComponent } from "../shared/component";
+import type { FeedHost } from "./index";
+import { renderMessageAttachments } from "./message-attachments";
 
 const STATUS_ICON: Record<QueuedMessageBlock["status"], string> = {
   pending: "loader-circle",
@@ -18,7 +20,7 @@ const STATUS_LABEL: Record<QueuedMessageBlock["status"], string> = {
 };
 
 export class QueuedMessageBlockView extends ChatobbyComponent {
-  constructor(private block: QueuedMessageBlock) {
+  constructor(private readonly host: FeedHost, private block: QueuedMessageBlock) {
     super();
   }
 
@@ -50,5 +52,6 @@ export class QueuedMessageBlockView extends ChatobbyComponent {
     setIcon(icon, STATUS_ICON[this.block.status]);
     if (this.block.status === "pending") icon.addClass("is-spinning");
     status.createSpan({ cls: "chatobby-queued__status-label", text: STATUS_LABEL[this.block.status] });
+    renderMessageAttachments(container, this.block.attachments ?? [], this.host);
   }
 }

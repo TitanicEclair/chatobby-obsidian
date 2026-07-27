@@ -282,6 +282,79 @@ describe("FeedRenderer", () => {
     expect(image?.alt).toBe("Attached image/png");
   });
 
+  it("renders named file attachments and reveals the stored file on click", () => {
+    const path = "C:/vault/.chatobby/attachments/report.xlsx";
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      blocks: [{
+        type: "user",
+        id: "block-user-file",
+        messageId: "msg-user-file",
+        message: {
+          role: "user",
+          content: [
+            { type: "text", text: "Inspect this workbook" },
+            {
+              type: "attachment",
+              name: "report.xlsx",
+              kind: "binary",
+              mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              path,
+              sizeBytes: 4096,
+            },
+          ],
+        },
+      }],
+    };
+    const host = createMockFeedHost(state);
+    const renderer = new FeedRenderer(host);
+    const el = mount(renderer);
+    const attachment = el.querySelector<HTMLButtonElement>(".chatobby-message-attachment");
+
+    expect(attachment?.textContent).toContain("report.xlsx");
+    expect(attachment?.textContent).toContain("XLSX");
+    expect(attachment?.dataset.fileKind).toBe("spreadsheet");
+    attachment?.click();
+    expect(host.revealSystemPath).toHaveBeenCalledWith(path);
+  });
+
+  it("renders queued steer attachments and preserves them across status updates", () => {
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      blocks: [{
+        type: "queued",
+        id: "queued-image",
+        kind: "steer",
+        text: "",
+        attachments: [{
+          type: "attachment",
+          name: "correction.png",
+          kind: "image",
+          mimeType: "image/png",
+          path: "C:/vault/.chatobby/attachments/correction.png",
+          sizeBytes: 2048,
+        }],
+        status: "pending",
+      }],
+    };
+    const host = createMockFeedHost(state);
+    const renderer = new FeedRenderer(host);
+    const el = mount(renderer);
+
+    expect(el.querySelector(".chatobby-message-attachment")?.textContent).toContain("correction.png");
+    host.getFeedStore().dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: {
+        blocks: [{
+          ...state.blocks[0],
+          status: "queued",
+        }],
+      },
+    });
+    expect(el.querySelector(".chatobby-message-attachment")?.textContent).toContain("correction.png");
+    expect(el.querySelector(".chatobby-queued")?.classList.contains("is-queued")).toBe(true);
+  });
+
   it("copies a complete response from its bottom-right action as source Markdown", () => {
     const state: LegacyFeedState = {
       ...INITIAL_LEGACY_FEED_STATE,

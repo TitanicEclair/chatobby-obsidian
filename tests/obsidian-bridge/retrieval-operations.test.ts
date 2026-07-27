@@ -1,10 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMockApp } from "./helpers/mock-app";
 import { executeOperation } from "../../src/obsidian-bridge/operation-registry";
 import { BridgeError } from "../../src/obsidian-bridge/types";
+import { VaultRetrievalService } from "../../src/obsidian-bridge/retrieval/service";
+import type { SemanticIndexAdapter } from "../../src/obsidian-bridge/retrieval/types";
 
 const signal = new AbortController().signal;
 type Obj = Record<string, unknown>;
@@ -12,6 +14,7 @@ type Obj = Record<string, unknown>;
 const tempRoots: string[] = [];
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
@@ -170,6 +173,84 @@ describe("retrieval provider primitives", () => {
     expect(semanticPaths(semantic)).toEqual(["alpha.md"]);
     expect(semanticPaths(lexical)).toContain("delta.md");
     expect((lexical.semanticHits as Obj[]).find((hit) => hit.path === "delta.md")?.provider).toBe("lexical");
+  });
+
+  it("retrieval.explore lexical search tolerates title typos and unordered content terms", async () => {
+    const root = tempVault();
+    const app = createMockApp(new Map([
+      ["Cerebrum.md", "Project overview"],
+      ["Biology/Answer Review.md", "Review the latest biology practice answers before class."],
+      ["Unrelated.md", "Cooking notes"],
+    ]), { vaultBasePath: root });
+
+    const typo = await executeOperation("retrieval.explore", {
+      query: "cerbrum",
+      provider: "lexical",
+      limit: 10,
+    }, signal, app) as Obj;
+    const unordered = await executeOperation("retrieval.explore", {
+      query: "biology review",
+      provider: "lexical",
+      limit: 10,
+    }, signal, app) as Obj;
+
+    expect(semanticPaths(typo)[0]).toBe("Cerebrum.md");
+    expect(semanticPaths(unordered)).toContain("Biology/Answer Review.md");
+    expect(semanticPaths(unordered)).not.toContain("Unrelated.md");
+  });
+
+  it("retrieval.explore returns bounded partial lexical results when note reads stall", async () => {
+    vi.useFakeTimers();
+    const root = tempVault();
+    const app = createMockApp(new Map([
+      ["Cerebrum.md", "Project overview"],
+      ["Slow.md", "A phrase that should never finish loading"],
+    ]), { vaultBasePath: root });
+    const vault = app.vault as typeof app.vault & { cachedRead(file: import("obsidian").TFile): Promise<string> };
+    const originalCachedRead = vault.cachedRead.bind(vault);
+    vault.cachedRead = (file) => file.path === "Slow.md"
+      ? new Promise<string>(() => undefined)
+      : originalCachedRead(file);
+
+    const pending = executeOperation("retrieval.explore", {
+      query: "cerbrum",
+      provider: "lexical",
+      limit: 10,
+    }, signal, app) as Promise<Obj>;
+    await vi.advanceTimersByTimeAsync(5_000);
+    const result = await pending;
+
+    expect(semanticPaths(result)).toContain("Cerebrum.md");
+    expect(result.partial).toBe(true);
+    expect(result.warnings).toContainEqual(expect.objectContaining({
+      code: "STALE_COMPONENT_DATA",
+      message: expect.stringContaining("time budget elapsed"),
+    }));
+    expect((result.diagnostics as Obj).lexical).toMatchObject({ searchedFileCount: 1, totalFileCount: 2 });
+  });
+
+  it("retrieval.explore does not refresh the AJSON fallback before a live semantic query", async () => {
+    const root = tempVault();
+    const app = createMockApp(new Map(), { vaultBasePath: root });
+    const isStale = vi.fn(async () => true);
+    const refresh = vi.fn(async () => undefined);
+    const semantic: SemanticIndexAdapter = {
+      status: () => ({ available: true, queryEmbedding: true, provider: "smart-connections-live" }),
+      relatedToPath: async () => [],
+      searchText: async () => [{ path: "Cerebrum.md", score: 0.9, provider: "smart-connections-live" }],
+      isStale,
+      refresh,
+    };
+
+    const result = await new VaultRetrievalService(app, semantic).explore(
+      "brain planning",
+      "smart-connections",
+      10,
+    );
+
+    expect(result.semanticHits?.[0]?.path).toBe("Cerebrum.md");
+    expect(isStale).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("retrieval.related returns AJSON note-to-note semantic neighbors", async () => {

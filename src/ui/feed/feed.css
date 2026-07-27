@@ -357,6 +357,100 @@
   color: var(--text-normal);
 }
 
+.chatobby-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-2-2);
+  margin-top: var(--size-2-2);
+}
+
+.chatobby-message-attachment {
+  position: relative;
+  display: grid;
+  width: 112px;
+  height: 88px;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: var(--border-width) solid color-mix(in srgb, var(--chatobby-line) 74%, transparent);
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--chatobby-surface-raised) 86%, var(--chatobby-canvas));
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.chatobby-message-attachment:hover {
+  border-color: color-mix(in srgb, var(--chatobby-accent) 46%, var(--chatobby-line));
+  background: var(--chatobby-surface-hover);
+}
+
+.chatobby-message-attachment:focus-visible {
+  outline: 2px solid var(--chatobby-accent);
+  outline-offset: 2px;
+}
+
+.chatobby-message-attachment__thumb,
+.chatobby-message-attachment__icon {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+}
+
+.chatobby-message-attachment__thumb {
+  display: block;
+  object-fit: cover;
+}
+
+.chatobby-message-attachment__icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.chatobby-message-attachment__icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.chatobby-message-attachment__body {
+  z-index: 1;
+  grid-area: 1 / 1;
+  align-self: end;
+  min-width: 0;
+  padding: 18px var(--size-2-2) var(--size-2-2);
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--chatobby-canvas) 92%, transparent) 44%);
+  text-align: left;
+}
+
+.chatobby-message-attachment__name,
+.chatobby-message-attachment__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-message-attachment__name {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+}
+
+.chatobby-message-attachment__meta {
+  color: var(--text-muted);
+  font-size: var(--chatobby-meta-size);
+  text-transform: uppercase;
+}
+
+.chatobby-message-attachment[data-file-kind="pdf"] .chatobby-message-attachment__icon { color: var(--chatobby-file-pdf); }
+.chatobby-message-attachment[data-file-kind="document"] .chatobby-message-attachment__icon { color: var(--chatobby-file-document); }
+.chatobby-message-attachment[data-file-kind="spreadsheet"] .chatobby-message-attachment__icon { color: var(--chatobby-file-spreadsheet); }
+.chatobby-message-attachment[data-file-kind="presentation"] .chatobby-message-attachment__icon { color: var(--chatobby-file-presentation); }
+.chatobby-message-attachment[data-file-kind="code"] .chatobby-message-attachment__icon { color: var(--chatobby-file-code); }
+.chatobby-message-attachment[data-file-kind="data"] .chatobby-message-attachment__icon { color: var(--chatobby-file-data); }
+.chatobby-message-attachment[data-file-kind="archive"] .chatobby-message-attachment__icon { color: var(--chatobby-file-archive); }
+.chatobby-message-attachment[data-file-kind="audio"] .chatobby-message-attachment__icon { color: var(--chatobby-file-audio); }
+.chatobby-message-attachment[data-file-kind="video"] .chatobby-message-attachment__icon { color: var(--chatobby-file-video); }
+.chatobby-message-attachment[data-file-kind="image"] .chatobby-message-attachment__icon { color: var(--chatobby-file-image); }
+
 /* Code block: position relative so the copy button anchors bottom-right.
    Also hide Obsidian's built-in copy button that comes from MarkdownRenderer. */
 .chatobby-code-block {
@@ -563,12 +657,12 @@ pre.chatobby-code-block .code-block-flair {
 .chatobby-interaction-card {
   display: flex;
   flex-direction: column;
-  gap: var(--size-4-2);
-  padding: var(--size-4-2) var(--size-4-3);
-  border: var(--border-width) solid color-mix(in srgb, var(--chatobby-warning) 26%, var(--chatobby-border));
+  gap: var(--size-2-2);
+  padding: var(--size-2-2) 0 var(--size-2-2) var(--size-4-3);
+  border: 0;
   border-left: 2px solid color-mix(in srgb, var(--chatobby-warning) 72%, var(--chatobby-border));
-  border-radius: var(--radius-s);
-  background: color-mix(in srgb, var(--chatobby-warning) 4%, var(--chatobby-canvas));
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 
@@ -597,7 +691,7 @@ pre.chatobby-code-block .code-block-flair {
 
 .chatobby-interaction-card__heading { min-width: 0; }
 .chatobby-interaction-card__eyebrow {
-  color: var(--text-faint);
+  color: color-mix(in srgb, var(--chatobby-warning) 72%, var(--text-muted));
   font-size: var(--font-ui-smaller);
   line-height: 1.1;
 }
@@ -620,12 +714,11 @@ pre.chatobby-code-block .code-block-flair {
 
 .chatobby-interaction-card__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--size-2-2);
   flex-wrap: wrap;
 }
 
-.chatobby-input-card__input,
 .chatobby-editor-card__textarea {
   width: 100%;
   min-width: 0;
@@ -642,7 +735,6 @@ pre.chatobby-code-block .code-block-flair {
   resize: vertical;
 }
 
-.chatobby-input-card__input:focus,
 .chatobby-editor-card__textarea:focus {
   border-color: color-mix(in srgb, var(--chatobby-accent) 52%, var(--chatobby-border));
   outline: 2px solid color-mix(in srgb, var(--chatobby-accent) 22%, transparent);
@@ -651,25 +743,34 @@ pre.chatobby-code-block .code-block-flair {
 
 .chatobby-select-card__options {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow: hidden;
-  border: var(--border-width) solid var(--chatobby-border);
-  border-radius: var(--radius-s);
-  background: var(--chatobby-border);
+  flex-wrap: wrap;
+  gap: var(--size-2-2);
+  border: 0;
+  background: transparent;
+}
+
+.chatobby-select-card__message,
+.chatobby-input-card__request {
+  margin-bottom: var(--size-2-2);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.chatobby-input-card__hint {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
 }
 
 .chatobby-select-card__option {
-  width: 100%;
-  min-height: 38px;
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  width: auto;
+  min-height: 30px;
+  display: inline-flex;
   align-items: center;
-  gap: var(--size-4-2);
-  padding: var(--size-2-2) var(--size-4-2);
-  border: 0;
-  border-radius: 0;
-  background: var(--chatobby-canvas);
+  gap: var(--size-2-1);
+  padding: var(--size-2-1) var(--size-4-2);
+  border: var(--border-width) solid var(--chatobby-border);
+  border-radius: var(--radius-s);
+  background: transparent;
   color: var(--text-normal);
   text-align: left;
   cursor: pointer;
@@ -681,7 +782,8 @@ pre.chatobby-code-block .code-block-flair {
 }
 
 .chatobby-select-card__option.is-selected {
-  box-shadow: inset 3px 0 0 var(--chatobby-accent);
+  border-color: color-mix(in srgb, var(--chatobby-accent) 58%, var(--chatobby-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--chatobby-accent) 16%, transparent);
 }
 
 .chatobby-select-card__option:focus-visible,
@@ -693,15 +795,14 @@ pre.chatobby-code-block .code-block-flair {
 }
 
 .chatobby-select-card__option-key {
-  width: 24px;
-  height: 24px;
+  width: auto;
+  height: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: var(--border-width) solid var(--chatobby-border);
-  border-radius: var(--radius-s);
-  background: var(--chatobby-surface-muted);
-  color: var(--text-muted);
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
   font-family: var(--font-monospace-theme);
   font-size: var(--font-ui-smaller);
 }
@@ -731,9 +832,9 @@ pre.chatobby-code-block .code-block-flair {
   justify-content: center;
   gap: var(--size-2-2);
   padding: var(--size-2-1) var(--size-4-3);
-  border: var(--border-width) solid var(--chatobby-border);
+  border: 0;
   border-radius: var(--radius-s);
-  background: var(--chatobby-surface-muted);
+  background: transparent;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   cursor: pointer;
@@ -749,8 +850,8 @@ pre.chatobby-code-block .code-block-flair {
 .chatobby-confirm-card__confirm,
 .chatobby-input-card__submit,
 .chatobby-editor-card__submit {
-  border-color: color-mix(in srgb, var(--chatobby-accent) 55%, var(--chatobby-border));
-  background: color-mix(in srgb, var(--chatobby-accent) 18%, var(--chatobby-canvas));
+  color: var(--chatobby-accent);
+  background: transparent;
 }
 
 .chatobby-confirm-card__confirm:hover,
@@ -902,6 +1003,10 @@ pre.chatobby-code-block .code-block-flair {
 .chatobby-queued__status-icon.is-spinning svg { animation: chatobby-spin 1s linear infinite; }
 .chatobby-queued.is-queued .chatobby-queued__status { color: var(--chatobby-warning); }
 .chatobby-queued.is-applied .chatobby-queued__status { color: var(--chatobby-success); }
+.chatobby-queued > .chatobby-message-attachments {
+  flex: 1 0 100%;
+  margin-top: 0;
+}
 
 /* ── Subagent lifecycle block (pi.events extension_event) ── */
 .chatobby-feed__block--subagent {

@@ -60,6 +60,41 @@ describe("runtime settings migration", () => {
     expect(plugin.saveData).toHaveBeenCalledWith(expect.objectContaining({ autoNameStrategy: "truncate" }));
   });
 
+  it.each([
+    "auto",
+    "pwsh",
+    "powershell",
+    "cmd",
+    "bash",
+    "zsh",
+    "fish",
+    "sh",
+    "custom",
+  ] as const)("loads and persists the supported %s command shell", async (commandShell) => {
+    const plugin = fakePlugin({ commandShell, customShellPath: "C:\\tools\\shell.exe" });
+    const settings = defaults();
+    const store = new SettingsStore(plugin.value, settings);
+
+    await store.load();
+    await store.updateSettings({ commandShell });
+
+    expect(settings.commandShell).toBe(commandShell);
+    expect(settings.customShellPath).toBe("C:\\tools\\shell.exe");
+    expect(plugin.saveData).toHaveBeenCalledWith(expect.objectContaining({
+      commandShell,
+      customShellPath: "C:\\tools\\shell.exe",
+    }));
+  });
+
+  it("falls back to automatic shell selection for an unsupported saved value", async () => {
+    const plugin = fakePlugin({ commandShell: "not-a-shell" });
+    const settings = defaults();
+
+    await new SettingsStore(plugin.value, settings).load();
+
+    expect(settings.commandShell).toBe("auto");
+  });
+
   it("fills missing composer shortcuts and preserves valid custom bindings", async () => {
     const plugin = fakePlugin({ composerKeybindings: { stashDraft: "Mod+K" } });
     const settings = defaults();

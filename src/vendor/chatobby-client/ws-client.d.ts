@@ -48,8 +48,8 @@ export declare class ChatobbyWsClient {
     getMcpCredentialReferences(): Promise<readonly string[]>;
     setMcpCredential(reference: string, secret?: string): Promise<void>;
     prompt(message: string, attachments?: WsPromptAttachment[], context?: WsPromptContextPacket, submissionId?: string): Promise<"started" | "retracted">;
-    steer(message: string): Promise<"accepted" | "promoted-to-prompt">;
-    followUp(message: string): Promise<"started" | "promoted-to-prompt">;
+    steer(message: string, attachments?: WsPromptAttachment[]): Promise<"accepted" | "promoted-to-prompt">;
+    followUp(message: string, attachments?: WsPromptAttachment[]): Promise<"started" | "promoted-to-prompt">;
     abort(): Promise<void>;
     retractPrompt(submissionId: string): Promise<{
         retracted: boolean;

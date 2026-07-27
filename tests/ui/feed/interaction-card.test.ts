@@ -12,12 +12,17 @@ describe("interaction cards", () => {
     const host = createMockInteractionHost();
     const card = new SelectCard(host);
     const el = mount(card);
-    card.setState(createInteractionState("ui_1", "select", { options: ["a", "b"] }));
+    card.setState(createInteractionState("ui_1", "select", {
+      title: "Permission required\nAllow access to C:/Private/report.md?",
+      options: ["a", "b"],
+    }));
     card.setOptions(["a", "b"]);
     expect(el.querySelector(".chatobby-select-card__options")).toBeTruthy();
     expect(el.querySelectorAll(".chatobby-select-card__option")).toHaveLength(2);
     expect(el.querySelector(".chatobby-select-card__option-key")?.textContent).toBe("1");
     expect(el.querySelector(".chatobby-select-card__option-label")?.textContent).toBe("a");
+    expect(el.querySelector(".chatobby-interaction-card__title")?.textContent).toBe("Permission required");
+    expect(el.querySelector(".chatobby-select-card__message")?.textContent).toContain("C:/Private/report.md");
     card.select();
     expect(host.respond).toHaveBeenCalledWith("ui_1", "a");
   });
@@ -47,14 +52,19 @@ describe("interaction cards", () => {
     expect(host.respond).toHaveBeenCalledWith("ui_2", true);
   });
 
-  it("renders input and responds with text", () => {
+  it("keeps typed input in the composer-owned interaction state", () => {
     const host = createMockInteractionHost();
     const card = new InputCard(host);
     const el = mount(card);
-    card.setState(createInteractionState("ui_3", "input", { prefill: "seed" }));
-    const input = el.querySelector(".chatobby-input-card__input");
-    expect(input).toBeInstanceOf(HTMLInputElement);
-    if (input instanceof HTMLInputElement) input.value = "typed";
+    card.setState(createInteractionState("ui_3", "input", {
+      title: "Deny with reason",
+      message: "Allow access to a private path?",
+      prefill: "seed",
+    }));
+    expect(el.querySelector(".chatobby-input-card__input")).toBeNull();
+    expect(el.querySelector(".chatobby-input-card__request")?.textContent).toContain("private path");
+    expect(el.querySelector(".chatobby-input-card__hint")?.textContent).toContain("composer");
+    card.setLiveText("typed");
     card.submit();
     expect(host.respond).toHaveBeenCalledWith("ui_3", "typed");
   });

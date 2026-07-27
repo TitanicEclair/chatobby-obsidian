@@ -101,6 +101,14 @@ export interface FrontendToolActivityViewModel {
     readonly completedAt?: number;
     readonly expandable: boolean;
 }
+export interface FrontendFeedAttachment {
+    readonly name: string;
+    readonly kind: "image" | "text" | "binary";
+    readonly mimeType?: string;
+    readonly path?: string;
+    readonly sizeBytes?: number;
+    readonly data?: string;
+}
 export type FrontendFeedBlock = {
     readonly type: "user" | "system";
     readonly id: string;
@@ -110,6 +118,7 @@ export type FrontendFeedBlock = {
         readonly data: string;
         readonly mimeType: string;
     }[];
+    readonly attachments?: readonly FrontendFeedAttachment[];
     readonly timestamp?: number;
 } | {
     readonly type: "text" | "thinking";

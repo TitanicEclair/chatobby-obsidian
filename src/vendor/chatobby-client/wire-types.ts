@@ -73,6 +73,7 @@ export interface WireToolResultMessage {
 	toolName: string;
 	content: WireContentBlock[];
 	isError: boolean;
+	details?: unknown;
 	timestamp: number;
 }
 

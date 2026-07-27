@@ -82,6 +82,9 @@ export interface RuntimeConfiguration {
   developerCommand: string;
   developerArgs: string[];
   shellCommand?: string;
+  documentOcrEngine?: "builtin" | "advanced";
+  documentOcrLanguage?: string;
+  advancedOcrCommand?: string;
 }
 
 export interface RuntimeInstancePaths {

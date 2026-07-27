@@ -1,11 +1,13 @@
 import { INTERACTION_MAX_OPTIONS_VISIBLE } from "../shared/constants";
 import { InteractionCard, type InteractionHost } from "./interaction-card";
 import type { InteractionState } from "../../types";
+import { interactionCopy } from "../shared/interaction-copy";
 
 export class SelectCard extends InteractionCard {
   private options: string[] = [];
   private selectedIndex = 0;
   private optionsEl: HTMLElement | null = null;
+  private messageEl: HTMLElement | null = null;
 
   constructor(host: InteractionHost) {
     super(host);
@@ -13,6 +15,10 @@ export class SelectCard extends InteractionCard {
 
   setState(state: InteractionState): void {
     super.setState(state);
+    if (this.messageEl) {
+      this.messageEl.textContent = interactionCopy(state.params, state.method).message;
+      this.messageEl.toggleClass("is-hidden", !this.messageEl.textContent);
+    }
     const rawOptions = state.params.options;
     if (Array.isArray(rawOptions)) this.setOptions(rawOptions.filter((item): item is string => typeof item === "string"));
   }
@@ -51,6 +57,7 @@ export class SelectCard extends InteractionCard {
 
   protected onRender(container: HTMLElement): void {
     super.onRender(container);
+    this.messageEl = this.bodyEl?.createDiv({ cls: "chatobby-select-card__message is-hidden" }) ?? null;
     this.optionsEl = this.bodyEl?.createDiv({ cls: "chatobby-select-card__options" }) ?? null;
     const cancel = this.actionsEl?.createEl("button", { cls: "chatobby-select-card__cancel", text: "Cancel" });
     if (cancel) cancel.onclick = () => this.cancel();

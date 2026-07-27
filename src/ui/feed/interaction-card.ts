@@ -1,5 +1,6 @@
 import type { InteractionState } from "../../types";
 import { ChatobbyComponent } from "../shared/component";
+import { interactionCopy } from "../shared/interaction-copy";
 import { setIcon } from "obsidian";
 
 export interface InteractionHost {
@@ -47,9 +48,9 @@ export abstract class InteractionCard extends ChatobbyComponent {
     container.setAttr("role", "group");
     const header = container.createDiv({ cls: "chatobby-interaction-card__header" });
     const icon = header.createSpan({ cls: "chatobby-interaction-card__icon" });
-    setIcon(icon, "circle-help");
+    setIcon(icon, "shield-question");
     const heading = header.createDiv({ cls: "chatobby-interaction-card__heading" });
-    heading.createDiv({ cls: "chatobby-interaction-card__eyebrow", text: "Input requested" });
+    heading.createDiv({ cls: "chatobby-interaction-card__eyebrow", text: "Needs your decision" });
     this.titleEl = heading.createDiv({ cls: "chatobby-interaction-card__title" });
     this.bodyEl = container.createDiv({ cls: "chatobby-interaction-card__body" });
     this.actionsEl = container.createDiv({ cls: "chatobby-interaction-card__actions" });
@@ -61,7 +62,5 @@ export abstract class InteractionCard extends ChatobbyComponent {
 }
 
 function interactionTitle(state: InteractionState): string {
-  const title = state.params.title;
-  if (typeof title === "string" && title.trim()) return title;
-  return state.method;
+  return interactionCopy(state.params, state.method).title;
 }

@@ -1,7 +1,9 @@
 import { Notice, type App } from "obsidian";
+import { dirname } from "node:path";
 
 interface ElectronShell {
   openPath?: (target: string) => Promise<string>;
+  showItemInFolder?: (target: string) => void;
 }
 
 /** Open an absolute system path without coupling Electron fallbacks to the Chatobby view. */
@@ -26,6 +28,23 @@ export function openSystemPathExternally(app: App, path: string): void {
     console.error("Chatobby: failed to access Electron shell", error);
   }
   new Notice("Opening system paths is unavailable in this Obsidian environment.");
+}
+
+/** Reveal an absolute attachment path in the operating system file manager. */
+export function revealSystemPathExternally(app: App, path: string): void {
+  const electronRequire = (window as Window & {
+    require?: (module: "electron") => { shell?: ElectronShell };
+  }).require;
+  try {
+    const showItemInFolder = electronRequire?.("electron").shell?.showItemInFolder;
+    if (showItemInFolder) {
+      showItemInFolder(path);
+      return;
+    }
+  } catch (error) {
+    console.error("Chatobby: failed to access Electron shell", error);
+  }
+  openSystemPathExternally(app, dirname(path));
 }
 
 function reportFailure(path: string, error: unknown): void {

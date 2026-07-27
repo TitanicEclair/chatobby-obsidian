@@ -11,6 +11,7 @@ export type ChatViewFeedOwner = Component & {
   scrollFeed(): void;
   openVaultLink(path: string): void;
   openSystemPath(path: string): void;
+  revealSystemPath(path: string): void;
   copyToClipboard(text: string): void;
   handleExtensionPanelAction(action: ExtensionPanelAction): void;
   onAutoScrollChange(enabled: boolean): void;
@@ -34,6 +35,7 @@ export function createChatViewFeedHost(
     scrollFeed: () => owner.scrollFeed(),
     openVaultLink: (path) => owner.openVaultLink(path),
     openSystemPath: (path) => owner.openSystemPath(path),
+    revealSystemPath: (path) => owner.revealSystemPath(path),
     copyToClipboard: (text) => owner.copyToClipboard(text),
     onExtensionPanelAction: (action) => owner.handleExtensionPanelAction(action),
     onAutoScrollChange: (enabled) => owner.onAutoScrollChange(enabled),

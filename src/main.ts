@@ -45,6 +45,7 @@ import { RuntimeUpdateClient } from "./runtime/infrastructure/runtime-update-cli
 import { RuntimeUpdateManager, type RuntimeUpdateState } from "./runtime/public";
 import { RuntimeInstallModal } from "./features/runtime-status/public";
 import { selectChatobbyCommandTarget } from "./ui/controller/view-targeting";
+import { addFileExplorerSessionMenuItems } from "./ui/session/file-explorer-session-menu";
 
 export default class ChatobbyPlugin extends Plugin {
   // ── Persisted settings (public; read by SettingTab, mutated via store) ──
@@ -105,6 +106,9 @@ export default class ChatobbyPlugin extends Plugin {
         : this.settings.commandShell === "custom"
           ? this.settings.customShellPath.trim() || undefined
           : this.settings.commandShell,
+      documentOcrEngine: this.settings.documentOcrEngine,
+      documentOcrLanguage: this.settings.documentOcrLanguage,
+      advancedOcrCommand: this.settings.advancedOcrCommand,
     }),
     getVaultPaths: () => getChatobbyVaultRuntimePaths(this.app),
     resolveManagedCommand: () => this.runtimeResolver.resolve(),
@@ -159,6 +163,16 @@ export default class ChatobbyPlugin extends Plugin {
     this.registerEvent(this.app.vault.on("create", () => this.scheduleVaultDirectoryRefresh()));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleVaultDirectoryRefresh()));
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleVaultDirectoryRefresh()));
+    this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
+      addFileExplorerSessionMenuItems(menu, file, {
+        startNewSession: async (vaultDirectoryPath) => {
+          await this.openBlankView(vaultDirectoryPath);
+        },
+        resumeSession: async (vaultDirectoryPath) => {
+          await this.openSessionPickerView(vaultDirectoryPath);
+        },
+      });
+    }));
     this.addSettingTab(new ChatobbySettingTab(this.app, this));
 
     this.addRibbonIcon("message-circle", "Open Chatobby", () => {
@@ -346,6 +360,29 @@ export default class ChatobbyPlugin extends Plugin {
     const view = leaf.view;
     if (!(view instanceof ChatobbyView)) throw new Error("Obsidian did not create the Chatobby directory view");
     return view;
+  }
+
+  /** Open the stored-session picker at one vault directory without changing another session's cwd. */
+  async openSessionPickerView(vaultDirectoryPath: string): Promise<ChatobbyView> {
+    const normalized = vaultDirectoryPath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)
+      .map((leaf) => leaf.view)
+      .filter((view): view is ChatobbyView => view instanceof ChatobbyView)
+      .find((view) => view.getWorkingDirectoryPath() === normalized);
+    if (existing) {
+      await this.app.workspace.revealLeaf(existing.leaf);
+      await existing.commandResumeSession();
+      return existing;
+    }
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({
+      type: VIEW_TYPE_CHATOBBY,
+      active: true,
+      state: { mode: "session-picker", vaultDirectoryPath: normalized },
+    });
+    await this.app.workspace.revealLeaf(leaf);
+    if (!(leaf.view instanceof ChatobbyView)) throw new Error("Obsidian did not create the Chatobby session picker");
+    return leaf.view;
   }
 
   /** Open a distinct session work surface, or focus the leaf already owning a resumed path. */

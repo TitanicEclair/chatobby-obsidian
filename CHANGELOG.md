@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-27
+
+### Added
+
+- Added native file-explorer actions to start a new Chatobby session in a
+  selected folder, or a selected file's parent folder, and to browse that
+  folder's stored sessions.
+- Kept submitted image and document attachments visible with their user message
+  and made each attachment openable through the operating system.
+
+### Changed
+
+- Made composer attachments compact visual tiles with overlaid names, file
+  metadata, removal controls, and distinct icons and colors for common file
+  families.
+- Reduced the composer’s parent bottom inset by half, reduced its side inset,
+  and tightened the controls row so the input sits closer to Obsidian’s status
+  bar.
+
+### Fixed
+
+- Cleared submitted text before its optimistic feed block is published while
+  retaining draft recovery for failed or immediately cancelled sends.
+- Kept custom shell changes consistent with every built-in shell choice by
+  prompting for the required Chatobby runtime restart after saving.
+- Made fuzzy vault search typo-tolerant for note paths, order-independent for
+  content terms, and bounded under slow note reads while retaining ranked path
+  and metadata matches. Live Smart Connections queries no longer refresh the
+  unrelated disk-vector fallback first.
+
+## [0.2.2] - 2026-07-26
+
 ### Added
 
 - Added a native MCP servers page with Installed and Discover tabs, official

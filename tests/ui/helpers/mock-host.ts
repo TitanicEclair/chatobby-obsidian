@@ -65,6 +65,7 @@ export function createMockFeedHostForStore(getFeedStore: () => FeedStore): FeedH
     scrollFeed: vi.fn(),
     openVaultLink: vi.fn(),
     openSystemPath: vi.fn(),
+    revealSystemPath: vi.fn(),
     copyToClipboard: vi.fn(),
     onAutoScrollChange: vi.fn(),
     onCompactionRequest: vi.fn(),

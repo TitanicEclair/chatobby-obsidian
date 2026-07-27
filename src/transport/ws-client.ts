@@ -186,14 +186,14 @@ export class ChatobbyTransport {
     return client.prompt(message, attachments, context, submissionId);
   }
 
-  async steer(message: string): Promise<"accepted" | "promoted-to-prompt"> {
+  async steer(message: string, attachments?: WsPromptAttachment[]): Promise<"accepted" | "promoted-to-prompt"> {
     const client = this.requireClient();
-    return client.steer(message);
+    return client.steer(message, attachments);
   }
 
-  async followUp(message: string): Promise<"started" | "promoted-to-prompt"> {
+  async followUp(message: string, attachments?: WsPromptAttachment[]): Promise<"started" | "promoted-to-prompt"> {
     const client = this.requireClient();
-    return client.followUp(message);
+    return client.followUp(message, attachments);
   }
 
   async abort(): Promise<void> {

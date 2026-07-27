@@ -18,21 +18,31 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
   switch (block.type) {
     case "user":
     case "system":
+      {
+        const attachments = block.attachments?.length
+          ? block.attachments.map((attachment) => ({ type: "attachment" as const, ...attachment }))
+          : block.images?.map((image, index) => ({
+              type: "attachment" as const,
+              name: `Attached image ${index + 1}`,
+              kind: "image" as const,
+              ...image,
+            }));
       return [{
         type: block.type,
         id: block.id,
         messageId: block.id,
         message: {
           role: "user",
-          content: block.images?.length
+          content: attachments?.length
             ? [
                 ...(block.text ? [{ type: "text" as const, text: block.text }] : []),
-                ...block.images.map((image) => ({ type: "image" as const, ...image })),
+                ...attachments,
               ]
             : block.text,
           timestamp: block.timestamp ?? Date.now(),
         },
       }];
+      }
     case "thinking":
       return [{
         type: "thinking",

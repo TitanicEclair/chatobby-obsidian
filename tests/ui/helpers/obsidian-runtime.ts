@@ -294,6 +294,7 @@ class TestSliderComponent {
 class TestMenuItem {
   title = "";
   icon = "";
+  section = "";
   callback: (() => void) | null = null;
 
   setTitle(title: string): this {
@@ -303,6 +304,11 @@ class TestMenuItem {
 
   setIcon(icon: string): this {
     this.icon = icon;
+    return this;
+  }
+
+  setSection(section: string): this {
+    this.section = section;
     return this;
   }
 

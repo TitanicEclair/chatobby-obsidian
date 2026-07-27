@@ -124,6 +124,46 @@ describe("normalized feed projection", () => {
     expect(store.exportSnapshot().runtime.pendingPromptEchoes).toEqual([]);
   });
 
+  it("atomically replaces an optimistic prompt that includes an attachment", () => {
+    const store = createFeedStore();
+    const attachment = {
+      type: "attachment" as const,
+      name: "diagram.png",
+      kind: "image" as const,
+      mimeType: "image/png",
+      path: "C:/vault/.chatobby/attachments/diagram.png",
+      sizeBytes: 42,
+    };
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "inspect this",
+      attachments: [attachment],
+      startRun: true,
+      submissionId: "submission-attachment",
+    });
+
+    store.dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: {
+        blocks: [{
+          type: "user",
+          id: "runtime-attachment",
+          messageId: "runtime-attachment",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "inspect this" }, attachment],
+            timestamp: 1,
+          },
+        }],
+      },
+    });
+
+    expect(blocks(store)).toEqual([
+      expect.objectContaining({ type: "user", id: "runtime-attachment" }),
+    ]);
+    expect(store.exportSnapshot().runtime.pendingPromptEchoes).toEqual([]);
+  });
+
   it("does not mistake an older identical prompt for the current optimistic submission", () => {
     const store = createFeedStore();
     store.dispatch({
