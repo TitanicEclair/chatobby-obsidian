@@ -1,6 +1,7 @@
 import type { App } from "obsidian";
 import type { OperationDescriptor } from "../../operations/public";
 import type { ChatobbyTransport } from "../../../transport/ws-client";
+import type { WsStoredSessionSelector } from "../../../vendor/chatobby-client/connector-types";
 import { getVaultBasePath } from "../../../ui/session/session-directory";
 
 interface StoredSessionControllerOptions {
@@ -9,43 +10,43 @@ interface StoredSessionControllerOptions {
   runOperation: <T>(descriptor: OperationDescriptor, operation: () => Promise<T>) => Promise<T>;
 }
 
-/** Path-addressed stored-session mutations that never replace the active backend session. */
+/** Stable-ID-first stored-session mutations that never replace the active backend session. */
 export class StoredSessionController {
   constructor(private readonly options: StoredSessionControllerOptions) {}
 
-  async delete(sessionPath: string): Promise<void> {
+  async delete(selector: WsStoredSessionSelector): Promise<void> {
     await this.run("Deleting stored session", async (transport, cwdRoot) => {
-      await transport.deleteSession(sessionPath, cwdRoot);
+      await transport.deleteSession(selector, cwdRoot);
     });
   }
 
-  async rename(sessionPath: string, name: string): Promise<void> {
+  async rename(selector: WsStoredSessionSelector, name: string): Promise<void> {
     await this.run("Renaming stored session", async (transport, cwdRoot) => {
-      await transport.renameStoredSession(sessionPath, cwdRoot, name);
+      await transport.renameStoredSession(selector, cwdRoot, name);
     });
   }
 
-  forkMessages(sessionPath: string): Promise<Array<{ entryId: string; text: string }>> {
+  forkMessages(selector: WsStoredSessionSelector): Promise<Array<{ entryId: string; text: string }>> {
     return this.run("Loading fork points", (transport, cwdRoot) => (
-      transport.getStoredSessionForkMessages(sessionPath, cwdRoot)
+      transport.getStoredSessionForkMessages(selector, cwdRoot)
     ));
   }
 
-  clone(sessionPath: string): Promise<{ sessionId: string; sessionPath: string }> {
+  clone(selector: WsStoredSessionSelector): Promise<{ sessionId: string; sessionPath: string }> {
     return this.run("Cloning stored session", (transport, cwdRoot) => (
-      transport.cloneStoredSession(sessionPath, cwdRoot)
+      transport.cloneStoredSession(selector, cwdRoot)
     ));
   }
 
-  fork(sessionPath: string, entryId: string): Promise<{ sessionId: string; sessionPath: string }> {
+  fork(selector: WsStoredSessionSelector, entryId: string): Promise<{ sessionId: string; sessionPath: string }> {
     return this.run("Forking stored session", (transport, cwdRoot) => (
-      transport.forkStoredSession(sessionPath, cwdRoot, entryId)
+      transport.forkStoredSession(selector, cwdRoot, entryId)
     ));
   }
 
-  export(sessionPath: string, format: "html" | "jsonl", outputPath: string): Promise<string> {
+  export(selector: WsStoredSessionSelector, format: "html" | "jsonl", outputPath: string): Promise<string> {
     return this.run(`Exporting stored session as ${format.toUpperCase()}`, (transport, cwdRoot) => (
-      transport.exportStoredSession(sessionPath, cwdRoot, format, outputPath)
+      transport.exportStoredSession(selector, cwdRoot, format, outputPath)
     ));
   }
 

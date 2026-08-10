@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-11
+
+- Address Project chat actions by stable session ID instead of converting them
+  through historical working-directory paths. Deleting a chat now removes its
+  Project row rather than exposing a stale binding as an untitled chat, and
+  migrated chats can be exported from their current vault.
+- Add **Move chat…** to Project chat context menus. Its searchable picker keeps
+  Vault pinned first, shows every active Project independently of page filters,
+  and moves the stable chat binding without altering its messages.
+- Treat all folders listed in a Project as its working set, with immediate
+  runtime/context updates when folders are added or removed and no duplicate
+  external-directory permission rule required.
+- Redesign Projects discovery controls with independent Project and chat
+  search, explicit full-transcript searching, activity/name/date/count sorts,
+  immediate Enter submission, result counts, and bounded matching excerpts.
+- Keep open Projects catalogues synchronized across Chatobby views and reload
+  the active feature page after leaf session reconciliation, preventing a valid
+  chat list from being replaced by a stuck loading state.
+
 ## [0.3.0] - 2026-08-10
 
 - Route ordinary left clicks through the Web Viewer guest page as a user

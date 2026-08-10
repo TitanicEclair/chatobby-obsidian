@@ -8,6 +8,14 @@
  */
 import type { ObsidianBridgeConnectionConfig } from "@chatobby/obsidian-protocol";
 export type AutoNameStrategy = "truncate" | "model";
+/** Stable ID is preferred; path selection remains for active-session compatibility. */
+export type WsStoredSessionSelector = {
+    readonly sessionId: string;
+    readonly sessionPath?: never;
+} | {
+    readonly sessionPath: string;
+    readonly sessionId?: never;
+};
 export interface WsAutoCompactionSettings {
     enabled: boolean;
     thresholdPercent: number;

@@ -359,7 +359,22 @@ export type FrontendProjectAvailabilityFilter =
 	| "missing"
 	| "conflict"
 	| "relink-required";
-export type FrontendProjectSort = "updated-desc" | "name-asc" | "created-desc";
+export type FrontendProjectSort =
+	| "activity-desc"
+	| "created-desc"
+	| "created-asc"
+	| "name-asc"
+	| "name-desc"
+	| "relevance";
+export type FrontendProjectSessionSort =
+	| "updated-desc"
+	| "created-desc"
+	| "created-asc"
+	| "name-asc"
+	| "name-desc"
+	| "message-count-desc"
+	| "relevance";
+export type FrontendProjectSessionSearchMode = "titles" | "messages";
 
 export interface FrontendProjectRootViewModel {
 	readonly rootId: string;
@@ -378,12 +393,23 @@ export interface FrontendProjectRootViewModel {
 
 export interface FrontendProjectSessionViewModel {
 	readonly sessionId: string;
+	readonly workspaceBindingRevision: number;
+	readonly workspace: { readonly kind: "vault" } | { readonly kind: "project"; readonly projectId: string };
 	readonly name: string;
 	readonly createdAt: string;
 	readonly updatedAt: string;
 	readonly messageCount: number;
 	readonly running: boolean;
 	readonly activeRootId?: string;
+	/** Bounded excerpt emitted only when message-content search matched this chat. */
+	readonly matchSnippet?: string;
+}
+
+export interface FrontendProjectSessionDestinationViewModel {
+	readonly projectId: string;
+	readonly name: string;
+	readonly available: boolean;
+	readonly availabilityLabel: string;
 }
 
 export interface FrontendProjectSummaryViewModel {
@@ -402,6 +428,8 @@ export interface FrontendProjectSummaryViewModel {
 	readonly availabilityLabel: string;
 	readonly createdAt: string;
 	readonly updatedAt: string;
+	/** Latest Project metadata or child-chat activity, whichever is newer. */
+	readonly activityAt: string;
 }
 
 export interface FrontendProjectDetailViewModel {
@@ -413,6 +441,7 @@ export interface FrontendProjectDetailViewModel {
 	readonly creationKind: "directory-session" | "manual" | "migration";
 	readonly primaryRootId?: string;
 	readonly roots: readonly FrontendProjectRootViewModel[];
+	readonly sessionCount: number;
 	readonly sessions: readonly FrontendProjectSessionViewModel[];
 }
 
@@ -435,14 +464,22 @@ export interface FrontendProjectScreenViewModel {
 	readonly lifecycleFilter: FrontendProjectLifecycleFilter;
 	readonly availabilityFilter: FrontendProjectAvailabilityFilter;
 	readonly sort: FrontendProjectSort;
+	readonly sessionQuery: string;
+	readonly sessionSearchMode: FrontendProjectSessionSearchMode;
+	readonly sessionSort: FrontendProjectSessionSort;
 	readonly selectedProjectId?: string;
 	readonly runningIn: FrontendRunningWorkspaceViewModel;
 	readonly projects: readonly FrontendProjectSummaryViewModel[];
+	/** Unfiltered active Projects available to the Move chat picker. */
+	readonly sessionMoveProjects: readonly FrontendProjectSessionDestinationViewModel[];
+	readonly vaultSessionCount: number;
 	readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
 	readonly detail?: FrontendProjectDetailViewModel;
 	readonly lifecycleOptions: readonly FrontendChoiceOption[];
 	readonly availabilityOptions: readonly FrontendChoiceOption[];
 	readonly sortOptions: readonly FrontendChoiceOption[];
+	readonly sessionSearchModeOptions: readonly FrontendChoiceOption[];
+	readonly sessionSortOptions: readonly FrontendChoiceOption[];
 }
 
 export interface FrontendChannelMessageViewModel {
@@ -1633,6 +1670,9 @@ export type FrontendIntent =
 				readonly lifecycleFilter: FrontendProjectLifecycleFilter;
 				readonly availabilityFilter: FrontendProjectAvailabilityFilter;
 				readonly sort: FrontendProjectSort;
+				readonly sessionQuery: string;
+				readonly sessionSearchMode: FrontendProjectSessionSearchMode;
+				readonly sessionSort: FrontendProjectSessionSort;
 				readonly selectedProjectId?: string;
 			};
 	  })
@@ -1703,6 +1743,14 @@ export type FrontendIntent =
 				readonly rootId: string;
 				readonly vaultRelativePath?: string;
 				readonly directoryCandidateRef?: string;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.session-move";
+			readonly payload: {
+				readonly sessionId: string;
+				readonly expectedWorkspaceBindingRevision: number;
+				readonly target: { readonly kind: "vault" } | { readonly kind: "project"; readonly projectId: string };
 			};
 	  })
 	| (FrontendIntentBase & {
@@ -2846,6 +2894,9 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				lifecycleFilter: requireProjectLifecycleFilter(payload.lifecycleFilter),
 				availabilityFilter: requireProjectAvailabilityFilter(payload.availabilityFilter),
 				sort: requireProjectSort(payload.sort),
+				sessionQuery: typeof payload.sessionQuery === "string" ? payload.sessionQuery : "",
+				sessionSearchMode: requireProjectSessionSearchMode(payload.sessionSearchMode),
+				sessionSort: requireProjectSessionSort(payload.sessionSort),
 				selectedProjectId: optionalString(payload.selectedProjectId, "payload.selectedProjectId"),
 			},
 		};
@@ -2992,6 +3043,32 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				rootId: requireString(payload.rootId, "payload.rootId"),
 				vaultRelativePath,
 				directoryCandidateRef,
+			},
+		};
+	}
+	if (input.type === "projects.session-move") {
+		const target = requireRecord(payload.target, "payload.target");
+		const parsedTarget =
+			target.kind === "vault"
+				? ({ kind: "vault" } as const)
+				: target.kind === "project"
+					? {
+							kind: "project" as const,
+							projectId: requireString(target.projectId, "payload.target.projectId"),
+						}
+					: (() => {
+							throw new Error("payload.target.kind is invalid");
+						})();
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				sessionId: requireString(payload.sessionId, "payload.sessionId"),
+				expectedWorkspaceBindingRevision: requireSafeInteger(
+					payload.expectedWorkspaceBindingRevision,
+					"payload.expectedWorkspaceBindingRevision",
+				),
+				target: parsedTarget,
 			},
 		};
 	}
@@ -3148,14 +3225,20 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 		requireProjectLifecycleFilter(input.lifecycleFilter);
 		requireProjectAvailabilityFilter(input.availabilityFilter);
 		requireProjectSort(input.sort);
+		if (typeof input.sessionQuery !== "string") throw new Error("sessionQuery must be a string");
+		requireProjectSessionSearchMode(input.sessionSearchMode);
+		requireProjectSessionSort(input.sessionSort);
 		optionalString(input.selectedProjectId, "selectedProjectId");
 		requireRecord(input.runningIn, "runningIn");
 		requireArray(input.projects, "projects");
+		requireSafeInteger(input.vaultSessionCount, "vaultSessionCount");
 		requireArray(input.vaultSessions, "vaultSessions");
 		if (input.detail !== undefined) requireRecord(input.detail, "detail");
 		requireArray(input.lifecycleOptions, "lifecycleOptions");
 		requireArray(input.availabilityOptions, "availabilityOptions");
 		requireArray(input.sortOptions, "sortOptions");
+		requireArray(input.sessionSearchModeOptions, "sessionSearchModeOptions");
+		requireArray(input.sessionSortOptions, "sessionSortOptions");
 		return value as FrontendProjectScreenViewModel;
 	}
 	if (input.screenId === "channels") {
@@ -3383,8 +3466,35 @@ function requireProjectAvailabilityFilter(value: unknown): FrontendProjectAvaila
 }
 
 function requireProjectSort(value: unknown): FrontendProjectSort {
-	if (value === "updated-desc" || value === "name-asc" || value === "created-desc") return value;
+	if (
+		value === "activity-desc" ||
+		value === "created-desc" ||
+		value === "created-asc" ||
+		value === "name-asc" ||
+		value === "name-desc" ||
+		value === "relevance"
+	)
+		return value;
 	throw new Error("payload.sort is invalid");
+}
+
+function requireProjectSessionSort(value: unknown): FrontendProjectSessionSort {
+	if (
+		value === "updated-desc" ||
+		value === "created-desc" ||
+		value === "created-asc" ||
+		value === "name-asc" ||
+		value === "name-desc" ||
+		value === "message-count-desc" ||
+		value === "relevance"
+	)
+		return value;
+	throw new Error("payload.sessionSort is invalid");
+}
+
+function requireProjectSessionSearchMode(value: unknown): FrontendProjectSessionSearchMode {
+	if (value === "titles" || value === "messages") return value;
+	throw new Error("payload.sessionSearchMode is invalid");
 }
 
 function requireMemoryStatusFilter(value: unknown): FrontendMemoryStatusFilter {

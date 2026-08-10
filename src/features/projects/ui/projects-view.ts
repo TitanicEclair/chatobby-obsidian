@@ -1,4 +1,4 @@
-import { Menu, setIcon, type App } from "obsidian";
+import { Menu, Modal, setIcon, type App } from "obsidian";
 import type {
   FrontendProjectDetailViewModel,
   FrontendProjectRootViewModel,
@@ -22,7 +22,10 @@ export type ProjectsViewIntent =
       readonly query: string;
       readonly lifecycleFilter: "active" | "archived" | "all";
       readonly availabilityFilter: "all" | "available" | "attention" | "missing" | "conflict" | "relink-required";
-      readonly sort: "updated-desc" | "name-asc" | "created-desc";
+      readonly sort: FrontendProjectScreenViewModel["sort"];
+      readonly sessionQuery: string;
+      readonly sessionSearchMode: FrontendProjectScreenViewModel["sessionSearchMode"];
+      readonly sessionSort: FrontendProjectScreenViewModel["sessionSort"];
       readonly selectedProjectId?: string;
     } }
   | { readonly type: "projects.create"; readonly payload: {
@@ -76,6 +79,11 @@ export type ProjectsViewIntent =
       readonly vaultRelativePath?: string;
       readonly systemAbsolutePath?: string;
     } }
+  | { readonly type: "projects.session-move"; readonly payload: {
+      readonly sessionId: string;
+      readonly expectedWorkspaceBindingRevision: number;
+      readonly target: { readonly kind: "vault" } | { readonly kind: "project"; readonly projectId: string };
+    } }
   | { readonly type: "session.create"; readonly payload: {
       readonly workspace:
         | { readonly kind: "vault" }
@@ -95,7 +103,111 @@ interface ProjectsViewProps {
 }
 
 type EditorMode = "create" | "details" | null;
-const SEARCH_DEBOUNCE_MS = 200;
+const SEARCH_DEBOUNCE_MS = 250;
+
+type SessionWorkspace = FrontendProjectSessionViewModel["workspace"];
+
+type SessionMoveDestination =
+  | { readonly kind: "vault"; readonly name: "Vault"; readonly current: boolean; readonly available: true }
+  | {
+      readonly kind: "project";
+      readonly projectId: string;
+      readonly name: string;
+      readonly current: boolean;
+      readonly available: boolean;
+      readonly availabilityLabel: string;
+    };
+
+class MoveSessionModal extends Modal {
+  private settled = false;
+  private query = "";
+
+  constructor(
+    app: App,
+    private readonly sessionName: string,
+    private readonly destinations: readonly SessionMoveDestination[],
+    private readonly resolve: (destination: SessionMoveDestination | null) => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.setTitle("Move chat");
+    this.contentEl.createDiv({
+      cls: "chatobby-projects__move-intro",
+      text: `Choose where “${this.sessionName}” belongs. Its messages stay unchanged.`,
+    });
+    const search = this.contentEl.createEl("input", {
+      cls: "chatobby-projects__move-search",
+      attr: { type: "search", placeholder: "Search Projects", "aria-label": "Search Projects" },
+    });
+    const results = this.contentEl.createDiv({ cls: "chatobby-projects__move-results" });
+    const render = () => {
+      results.empty();
+      const vault = this.destinations.find((destination) => destination.kind === "vault");
+      if (vault) this.renderDestination(results, vault, true);
+      results.createDiv({ cls: "chatobby-projects__move-heading", text: "Projects" });
+      const normalized = this.query.trim().toLocaleLowerCase();
+      const projects = this.destinations.filter(
+        (destination) =>
+          destination.kind === "project" &&
+          (normalized.length === 0 || destination.name.toLocaleLowerCase().includes(normalized)),
+      );
+      if (projects.length === 0) {
+        results.createDiv({ cls: "chatobby-projects__move-empty", text: "No matching Projects." });
+      } else {
+        for (const destination of projects) this.renderDestination(results, destination, false);
+      }
+    };
+    search.addEventListener("input", () => {
+      this.query = search.value;
+      render();
+    });
+    render();
+    window.requestAnimationFrame(() => search.focus());
+  }
+
+  onClose(): void {
+    super.onClose();
+    this.settle(null);
+  }
+
+  private renderDestination(parent: HTMLElement, destination: SessionMoveDestination, sticky: boolean): void {
+    const button = parent.createEl("button", {
+      cls: `chatobby-projects__move-destination${sticky ? " is-sticky" : ""}`,
+      attr: {
+        type: "button",
+        ...(destination.current || !destination.available ? { disabled: "true" } : {}),
+      },
+    });
+    const icon = button.createSpan({ cls: "chatobby-projects__move-icon", attr: { "aria-hidden": "true" } });
+    setIcon(icon, destination.kind === "vault" ? "vault" : "folder-kanban");
+    const copy = button.createDiv({ cls: "chatobby-projects__move-copy" });
+    copy.createDiv({ cls: "chatobby-projects__move-name", text: destination.name });
+    copy.createDiv({
+      cls: "chatobby-projects__move-description",
+      text: destination.current
+        ? "Current location"
+        : destination.kind === "vault"
+          ? "Keep this chat outside Projects"
+          : destination.available
+            ? "Move this chat into this Project"
+            : destination.availabilityLabel,
+    });
+    if (!destination.current && destination.available) {
+      button.addEventListener("click", () => {
+        this.settle(destination);
+        this.close();
+      });
+    }
+  }
+
+  private settle(destination: SessionMoveDestination | null): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.resolve(destination);
+  }
+}
 
 /** Project library and project-scoped chat browser. Browsing never changes the active chat. */
 export class ProjectsView extends ChatobbyComponent {
@@ -104,7 +216,13 @@ export class ProjectsView extends ChatobbyComponent {
   private localError: string | null = null;
   private busyAction: string | null = null;
   private editor: EditorMode = null;
-  private searchTimer: number | null = null;
+  private projectSearchTimer: number | null = null;
+  private sessionSearchTimer: number | null = null;
+  private viewUpdateTail = Promise.resolve();
+  private readonly pendingSessionMoves = new Map<string, {
+    readonly source: SessionWorkspace;
+    readonly target: SessionWorkspace;
+  }>();
 
   constructor(private readonly props: ProjectsViewProps) {
     super();
@@ -133,7 +251,8 @@ export class ProjectsView extends ChatobbyComponent {
   override destroy(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
-    if (this.searchTimer !== null) window.clearTimeout(this.searchTimer);
+    if (this.projectSearchTimer !== null) window.clearTimeout(this.projectSearchTimer);
+    if (this.sessionSearchTimer !== null) window.clearTimeout(this.sessionSearchTimer);
     super.destroy();
   }
 
@@ -180,6 +299,7 @@ export class ProjectsView extends ChatobbyComponent {
       }));
       return;
     }
+    this.reconcilePendingSessionMoves(model);
     shell.setTitle("Projects", "Keep related folders and chats together.");
 		shell.updateBody(
 			this.editor
@@ -227,15 +347,20 @@ export class ProjectsView extends ChatobbyComponent {
     create.addEventListener("click", () => { this.editor = "create"; this.renderState(model); });
     const search = parent.createEl("input", {
       cls: "chatobby-projects__search",
-      attr: { type: "search", placeholder: "Search Projects", "aria-label": "Search Projects" },
+      attr: { type: "search", placeholder: "Search Projects", "aria-label": "Search Projects", enterkeyhint: "search" },
     });
+    search.dataset.pageStateKey = "projects-search";
     search.value = model.query;
-    search.addEventListener("input", () => {
-      if (this.searchTimer !== null) window.clearTimeout(this.searchTimer);
-      this.searchTimer = window.setTimeout(() => {
-        this.searchTimer = null;
-        void this.changeView({ query: search.value });
-      }, SEARCH_DEBOUNCE_MS);
+    this.bindSearchInput(search, "project");
+    const filters = parent.createDiv({ cls: "chatobby-projects__rail-filters" });
+    choiceSelect(filters, model.lifecycleOptions, model.lifecycleFilter, "Project status", (value) => {
+      void this.changeView({ lifecycleFilter: value as FrontendProjectScreenViewModel["lifecycleFilter"] });
+    });
+    choiceSelect(filters, model.availabilityOptions, model.availabilityFilter, "Folder availability", (value) => {
+      void this.changeView({ availabilityFilter: value as FrontendProjectScreenViewModel["availabilityFilter"] });
+    });
+    choiceSelect(filters, model.sortOptions, model.sort, "Project sorting", (value) => {
+      void this.changeView({ sort: value as FrontendProjectScreenViewModel["sort"] });
     });
     const list = parent.createDiv({ cls: "chatobby-projects__rail-list" });
     this.renderVaultRailItem(list, model);
@@ -243,13 +368,6 @@ export class ProjectsView extends ChatobbyComponent {
     if (model.projects.length === 0) {
       list.createDiv({ cls: "chatobby-projects__rail-empty", text: model.query ? "No matching Projects" : "No Projects yet" });
     }
-    const filters = parent.createDiv({ cls: "chatobby-projects__rail-filters" });
-    choiceSelect(filters, model.lifecycleOptions, model.lifecycleFilter, "Project status", (value) => {
-      void this.changeView({ lifecycleFilter: value as FrontendProjectScreenViewModel["lifecycleFilter"] });
-    });
-    choiceSelect(filters, model.sortOptions, model.sort, "Project sorting", (value) => {
-      void this.changeView({ sort: value as FrontendProjectScreenViewModel["sort"] });
-    });
   }
 
   private renderVaultRailItem(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
@@ -263,7 +381,7 @@ export class ProjectsView extends ChatobbyComponent {
     copy.createDiv({ cls: "chatobby-projects__rail-project-name", text: "Vault" });
     copy.createDiv({
       cls: "chatobby-projects__rail-project-meta",
-      text: `${model.vaultSessions.length} ${plural(model.vaultSessions.length, "chat")}`,
+      text: `${model.vaultSessionCount} ${plural(model.vaultSessionCount, "chat")}`,
     });
     button.addEventListener("click", () => void this.changeView({ selectedProjectId: undefined }));
   }
@@ -331,6 +449,9 @@ export class ProjectsView extends ChatobbyComponent {
     addFolders.addEventListener("click", () => void this.addFolders(detail));
 
     this.renderChatSection(parent, detail.sessions, {
+		model,
+		totalCount: detail.sessionCount,
+      workspace: { kind: "project", projectId: detail.projectId },
       emptyTitle: "Start the first chat",
       emptyDescription: "The new chat will keep this Project identity even if it has no folders yet.",
       actionLabel: detail.lifecycle === "active" ? "New chat in Project" : undefined,
@@ -358,6 +479,9 @@ export class ProjectsView extends ChatobbyComponent {
       payload: { workspace: { kind: "vault" } },
     }));
     this.renderChatSection(parent, model.vaultSessions, {
+		model,
+		totalCount: model.vaultSessionCount,
+      workspace: { kind: "vault" },
       emptyTitle: "No Vault chats yet",
       emptyDescription: "Start a chat that works from the vault root without assigning it to a Project.",
       actionLabel: "New chat",
@@ -375,29 +499,73 @@ export class ProjectsView extends ChatobbyComponent {
     parent: HTMLElement,
     sessions: readonly FrontendProjectSessionViewModel[],
     empty: {
+		readonly model: FrontendProjectScreenViewModel;
+		readonly totalCount: number;
+      readonly workspace: SessionWorkspace;
       readonly emptyTitle: string;
       readonly emptyDescription: string;
       readonly actionLabel?: string;
       readonly onAction?: () => void;
     },
   ): void {
+    const visibleSessions = sessions.filter((session) => !this.isPendingMoveSource(session.sessionId, empty.workspace));
+    const hiddenCount = sessions.length - visibleSessions.length;
+    const visibleTotalCount = Math.max(0, empty.totalCount - hiddenCount);
     const chats = createPageSection(parent, {
       title: "Chats",
-      description: sessions.length === 0 ? "No conversations here yet." : `${sessions.length} conversations`,
+      description: empty.model.sessionQuery
+            ? `${visibleSessions.length} of ${visibleTotalCount} conversations`
+            : visibleTotalCount === 0 ? "No conversations here yet." : `${visibleTotalCount} conversations`,
       className: "chatobby-projects__chats",
     });
-    if (sessions.length === 0) {
+	this.renderChatControls(chats.content, empty.model);
+    if (visibleSessions.length === 0) {
       createPageState(chats.content, {
         kind: "empty",
-        title: empty.emptyTitle,
-        description: empty.emptyDescription,
-        actionLabel: empty.actionLabel,
-        onAction: empty.onAction,
+		title: empty.model.sessionQuery ? "No matching chats" : empty.emptyTitle,
+		description: empty.model.sessionQuery
+			? empty.model.sessionSearchMode === "messages"
+				? "No chat names, opening prompts, or message contents matched this search."
+				: "No chat names or opening prompts matched. Turn on message search to look inside conversations."
+			: empty.emptyDescription,
+		actionLabel: empty.model.sessionQuery ? "Clear search" : empty.actionLabel,
+		onAction: empty.model.sessionQuery ? () => void this.changeView({ sessionQuery: "" }) : empty.onAction,
       });
       return;
     }
     const list = chats.content.createDiv({ cls: "chatobby-projects__chat-list" });
-    for (const session of sessions) this.renderSession(list, session);
+    for (const session of visibleSessions) this.renderSession(list, session);
+  }
+
+  private renderChatControls(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
+	const controls = parent.createDiv({ cls: "chatobby-projects__chat-controls" });
+	const search = controls.createEl("input", {
+		cls: "chatobby-projects__chat-search",
+		attr: {
+			type: "search",
+			placeholder: model.sessionSearchMode === "messages" ? "Search chat messages" : "Search chats",
+			"aria-label": "Search chats",
+			enterkeyhint: "search",
+		},
+	});
+	search.dataset.pageStateKey = "project-chats-search";
+	search.value = model.sessionQuery;
+	this.bindSearchInput(search, "session");
+	const messages = controls.createEl("button", {
+		cls: `chatobby-projects__message-search${model.sessionSearchMode === "messages" ? " is-active" : ""}`,
+		text: "Search messages",
+		attr: {
+			type: "button",
+			"aria-label": "Search inside chat messages",
+			"aria-pressed": String(model.sessionSearchMode === "messages"),
+		},
+	});
+	messages.addEventListener("click", () => void this.changeView({
+		sessionSearchMode: model.sessionSearchMode === "messages" ? "titles" : "messages",
+	}));
+	choiceSelect(controls, model.sessionSortOptions, model.sessionSort, "Chat sorting", (value) => {
+		void this.changeView({ sessionSort: value as FrontendProjectScreenViewModel["sessionSort"] });
+	});
   }
 
   private renderRoot(parent: HTMLElement, detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): void {
@@ -448,6 +616,7 @@ export class ProjectsView extends ChatobbyComponent {
     const heading = copy.createDiv({ cls: "chatobby-projects__chat-heading" });
     heading.createSpan({ text: session.name });
     if (session.running) heading.createSpan({ cls: "chatobby-projects__badge", text: "Open" });
+	if (session.matchSnippet) copy.createDiv({ cls: "chatobby-projects__chat-snippet", text: session.matchSnippet });
 		const meta = open.createDiv({ cls: "chatobby-projects__chat-meta" });
 		meta.createSpan({ cls: "chatobby-projects__chat-meta-updated", text: formatRelativeDate(session.updatedAt) });
 		meta.createSpan({ cls: "chatobby-projects__chat-meta-messages", text: `${session.messageCount} ${plural(session.messageCount, "message")}` });
@@ -511,6 +680,7 @@ export class ProjectsView extends ChatobbyComponent {
       type: "session.resume-by-id",
       payload: { sessionId: session.sessionId },
     })));
+	menu.addItem((item) => item.setTitle("Move chat…").setIcon("folder-input").onClick(() => void this.moveSession(session)));
     menu.addSeparator();
     this.addSessionMenuItem(menu, session, "rename", "Rename", "pencil");
     this.addSessionMenuItem(menu, session, "clone", "Clone", "copy");
@@ -521,6 +691,71 @@ export class ProjectsView extends ChatobbyComponent {
     menu.addSeparator();
     menu.addItem((item) => item.setTitle("Delete").setIcon("trash-2").onClick(() => void this.deleteSession(session)));
     menu.showAtMouseEvent(event);
+  }
+
+  private async moveSession(session: FrontendProjectSessionViewModel): Promise<void> {
+    const model = this.props.getModel();
+    if (!model) return;
+    const sourceWorkspace: SessionWorkspace = session.workspace.kind === "vault"
+      ? { kind: "vault" }
+      : { kind: "project", projectId: session.workspace.projectId };
+    const destinations: SessionMoveDestination[] = [
+      {
+        kind: "vault",
+        name: "Vault",
+        current: session.workspace.kind === "vault",
+        available: true,
+      },
+      ...model.sessionMoveProjects.map((project) => ({
+        kind: "project" as const,
+        projectId: project.projectId,
+        name: project.name,
+        current: session.workspace.kind === "project" && session.workspace.projectId === project.projectId,
+        available: project.available,
+        availabilityLabel: project.availabilityLabel,
+      })),
+    ];
+    const destination = await new Promise<SessionMoveDestination | null>((resolve) =>
+      new MoveSessionModal(this.props.app, session.name, destinations, resolve).open(),
+    );
+    if (!destination) return;
+    await this.runAction(`move-chat:${session.sessionId}`, async () => {
+      await this.props.onIntent({
+        type: "projects.session-move",
+        payload: {
+          sessionId: session.sessionId,
+          expectedWorkspaceBindingRevision: session.workspaceBindingRevision,
+          target:
+            destination.kind === "vault"
+              ? { kind: "vault" }
+              : { kind: "project", projectId: destination.projectId },
+        },
+      });
+      this.pendingSessionMoves.set(session.sessionId, {
+        source: sourceWorkspace,
+        target:
+          destination.kind === "vault"
+            ? { kind: "vault" }
+            : { kind: "project", projectId: destination.projectId },
+      });
+      this.renderState(this.props.getModel());
+      await this.props.onRefresh();
+    });
+  }
+
+  private isPendingMoveSource(sessionId: string, workspace: SessionWorkspace): boolean {
+    const pending = this.pendingSessionMoves.get(sessionId);
+    return pending !== undefined && sameSessionWorkspace(workspace, pending.source);
+  }
+
+  private reconcilePendingSessionMoves(model: FrontendProjectScreenViewModel): void {
+    for (const [sessionId, pending] of this.pendingSessionMoves) {
+      const confirmed = pending.target.kind === "vault"
+        ? model.vaultSessions.some((session) => session.sessionId === sessionId)
+        : model.detail?.projectId === pending.target.projectId &&
+          model.detail.sessions.some((session) => session.sessionId === sessionId);
+      if (confirmed) this.pendingSessionMoves.delete(sessionId);
+    }
   }
 
   private addSessionMenuItem(menu: Menu, session: FrontendProjectSessionViewModel, action: SessionAdvancedAction, title: string, icon: string): void {
@@ -700,6 +935,34 @@ export class ProjectsView extends ChatobbyComponent {
     actions.createEl("button", { cls: "mod-cta", text: "Save", attr: { type: "submit" } });
   }
 
+  private bindSearchInput(input: HTMLInputElement, kind: "project" | "session"): void {
+	const submit = (): void => {
+		if (kind === "project") {
+			if (this.projectSearchTimer !== null) window.clearTimeout(this.projectSearchTimer);
+			this.projectSearchTimer = null;
+			void this.changeView({ query: input.value });
+			return;
+		}
+		if (this.sessionSearchTimer !== null) window.clearTimeout(this.sessionSearchTimer);
+		this.sessionSearchTimer = null;
+		void this.changeView({ sessionQuery: input.value });
+	};
+	input.addEventListener("input", () => {
+		if (kind === "project") {
+			if (this.projectSearchTimer !== null) window.clearTimeout(this.projectSearchTimer);
+			this.projectSearchTimer = window.setTimeout(submit, SEARCH_DEBOUNCE_MS);
+			return;
+		}
+		if (this.sessionSearchTimer !== null) window.clearTimeout(this.sessionSearchTimer);
+		this.sessionSearchTimer = window.setTimeout(submit, SEARCH_DEBOUNCE_MS);
+	});
+	input.addEventListener("keydown", (event) => {
+		if (event.key !== "Enter") return;
+		event.preventDefault();
+		submit();
+	});
+  }
+
   private async refresh(): Promise<void> {
     await this.runAction("refresh", () => this.props.onRefresh());
   }
@@ -726,24 +989,52 @@ export class ProjectsView extends ChatobbyComponent {
   }
 
   private async changeView(patch: Partial<Pick<FrontendProjectScreenViewModel,
-    "query" | "lifecycleFilter" | "availabilityFilter" | "sort" | "selectedProjectId">>): Promise<void> {
+    | "query"
+	| "lifecycleFilter"
+	| "availabilityFilter"
+	| "sort"
+	| "sessionQuery"
+	| "sessionSearchMode"
+	| "sessionSort"
+	| "selectedProjectId">>): Promise<void> {
     const model = this.props.getModel();
     if (!model) return;
-    await this.run("change-view", {
+	const intent: ProjectsViewIntent = {
       type: "projects.set-view",
       payload: {
         query: patch.query ?? model.query,
         lifecycleFilter: patch.lifecycleFilter ?? model.lifecycleFilter,
         availabilityFilter: patch.availabilityFilter ?? model.availabilityFilter,
         sort: patch.sort ?? model.sort,
+		sessionQuery: patch.sessionQuery ?? model.sessionQuery,
+		sessionSearchMode: patch.sessionSearchMode ?? model.sessionSearchMode,
+		sessionSort: patch.sessionSort ?? model.sessionSort,
         selectedProjectId: Object.hasOwn(patch, "selectedProjectId") ? patch.selectedProjectId : model.selectedProjectId,
       },
-    });
+	};
+	this.viewUpdateTail = this.viewUpdateTail
+		.catch(() => undefined)
+		.then(async () => {
+			try {
+				await this.props.onIntent(intent);
+				this.localError = null;
+			} catch (error) {
+				this.localError = error instanceof Error ? error.message : String(error);
+				this.renderState(this.props.getModel());
+			}
+		});
+	await this.viewUpdateTail;
   }
 }
 
 function systemPathLabel(path: string): string {
   return path.replace(/[\\/]+$/u, "").split(/[\\/]/u).at(-1) || path;
+}
+
+function sameSessionWorkspace(left: SessionWorkspace, right: SessionWorkspace): boolean {
+  return left.kind === right.kind && (
+    left.kind === "vault" || (right.kind === "project" && left.projectId === right.projectId)
+  );
 }
 
 function confirmDirectoryMarkers(app: App, count: number): Promise<boolean> {

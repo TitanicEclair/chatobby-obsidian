@@ -38,6 +38,7 @@ import type {
   FrontendSubscriptionAck,
   FrontendSubscriptionRequest,
 } from "../vendor/chatobby-client/frontend-contracts.js";
+import type { WsStoredSessionSelector } from "../vendor/chatobby-client/connector-types.js";
 import type {
   WsProjectDirectoryCandidateRequest,
   WsProjectDirectoryCandidateResult,
@@ -234,43 +235,43 @@ export class ChatobbyTransport {
     return sessions.map(sessionListItemFromWire);
   }
 
-  async deleteSession(sessionPath: string, cwdRoot: string): Promise<{ sessionId: string }> {
-    return this.requireClient().deleteSession(sessionPath, cwdRoot);
+  async deleteSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{ sessionId: string }> {
+    return this.requireClient().deleteSession(selector, cwdRoot);
   }
 
   /** Rename a persisted session without replacing the backend's active session. */
-  async renameStoredSession(sessionPath: string, cwdRoot: string, name: string): Promise<void> {
-    await this.requireClient().renameStoredSession(sessionPath, cwdRoot, name);
+  async renameStoredSession(selector: WsStoredSessionSelector, cwdRoot: string, name: string): Promise<void> {
+    await this.requireClient().renameStoredSession(selector, cwdRoot, name);
   }
 
-  /** Read path-addressed fork points without replacing the backend's active session. */
-  async getStoredSessionForkMessages(sessionPath: string, cwdRoot: string): Promise<WsForkMessage[]> {
-    const messages = await this.requireClient().getStoredSessionForkMessages(sessionPath, cwdRoot);
+  /** Read stable-ID-first fork points without replacing the backend's active session. */
+  async getStoredSessionForkMessages(selector: WsStoredSessionSelector, cwdRoot: string): Promise<WsForkMessage[]> {
+    const messages = await this.requireClient().getStoredSessionForkMessages(selector, cwdRoot);
     return messages;
   }
 
   /** Clone a persisted session without replacing the backend's active session. */
-  async cloneStoredSession(sessionPath: string, cwdRoot: string): Promise<{ sessionId: string; sessionPath: string }> {
-    return this.requireClient().cloneStoredSession(sessionPath, cwdRoot);
+  async cloneStoredSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{ sessionId: string; sessionPath: string }> {
+    return this.requireClient().cloneStoredSession(selector, cwdRoot);
   }
 
   /** Fork a persisted session without replacing the backend's active session. */
   async forkStoredSession(
-    sessionPath: string,
+    selector: WsStoredSessionSelector,
     cwdRoot: string,
     entryId: string,
   ): Promise<{ sessionId: string; sessionPath: string }> {
-    return this.requireClient().forkStoredSession(sessionPath, cwdRoot, entryId);
+    return this.requireClient().forkStoredSession(selector, cwdRoot, entryId);
   }
 
   /** Export a persisted session without replacing the backend's active session. */
   async exportStoredSession(
-    sessionPath: string,
+    selector: WsStoredSessionSelector,
     cwdRoot: string,
     format: "html" | "jsonl",
     outputPath?: string,
   ): Promise<string> {
-    return this.requireClient().exportStoredSession(sessionPath, cwdRoot, format, outputPath);
+    return this.requireClient().exportStoredSession(selector, cwdRoot, format, outputPath);
   }
 
   // ── State & messages ───────────────────────────────────────────────

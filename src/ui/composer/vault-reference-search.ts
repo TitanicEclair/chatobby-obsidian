@@ -41,13 +41,18 @@ export function searchVaultReferences(app: App, query: string): readonly Compose
   return ranked.slice(0, MAX_REFERENCE_RESULTS).map((entry) => entry.reference);
 }
 
-function isPrivateChatobbyPath(path: string, configDir: string): boolean {
+function isPrivateChatobbyPath(path: string, configDir: string | undefined): boolean {
   const normalizedPath = path.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "").toLocaleLowerCase();
-  const normalizedConfigDir = configDir.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "").toLocaleLowerCase();
+  const normalizedConfigDir = configDir
+    ?.replaceAll("\\", "/")
+    .replace(/^\/+|\/+$/gu, "")
+    .toLocaleLowerCase();
   return normalizedPath === ".chatobby"
     || normalizedPath.startsWith(".chatobby/")
-    || normalizedPath === normalizedConfigDir
-    || normalizedPath.startsWith(`${normalizedConfigDir}/`);
+    || (normalizedConfigDir !== undefined && (
+      normalizedPath === normalizedConfigDir
+      || normalizedPath.startsWith(`${normalizedConfigDir}/`)
+    ));
 }
 
 function pathDepth(path: string): number {

@@ -1,6 +1,6 @@
-import type { ObsidianBridgeCapability } from "./bridge-capabilities.js";
-import type { ObsidianOperationName } from "./bridge-operations.js";
-import { type ObsidianToolName } from "./mcp-tool-catalog.js";
+import type { ObsidianBridgeCapability } from "./bridge-capabilities.ts";
+import type { ObsidianOperationName } from "./bridge-operations.ts";
+import { type ObsidianToolName } from "./mcp-tool-catalog.ts";
 export type ObsidianPluginKind = "community" | "core";
 /** Installed and enabled state reported by the live Obsidian plugin registry. */
 export interface ObsidianPluginState {

@@ -41,6 +41,7 @@ import {
   runtimeInstallRoot,
 } from "./runtime/infrastructure/runtime-installation";
 import { OperationCoordinator, type ActiveOperation, type OperationDescriptor, type OperationKey } from "./features/operations/public";
+import { activateChatobbyLeaf } from "./ui/controller/active-chatobby-leaf";
 import {
 	ProjectDirectoryObservationService,
 	requestDirectoryProjectDecision,
@@ -186,12 +187,12 @@ export default class ChatobbyPlugin extends Plugin {
       if (leaf?.view instanceof ChatobbyView) {
         const view = leaf.view;
         this._lastChatobbyView = view;
-        void view.activateSessionContext()
-          .then(() => {
-            if (activation === this.activeLeafActivation && this.app.workspace.getActiveViewOfType(ChatobbyView) === view) {
-              view.focusComposer();
-            }
-          })
+        void activateChatobbyLeaf({
+          activateSessionContext: () => view.activateSessionContext(),
+          isCurrent: () => activation === this.activeLeafActivation && this.app.workspace.getActiveViewOfType(ChatobbyView) === view,
+          synchronizeActiveScreen: () => view.synchronizeActiveScreen(),
+          focusComposer: () => view.focusComposer(),
+        })
           .catch((error) => {
             console.error("Chatobby: could not activate leaf session context", error);
           });

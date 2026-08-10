@@ -19,9 +19,15 @@ shown in the active chat header.
 
 You can create a Project from the Projects page or from a folder in Obsidian.
 A Project has one primary folder and may include other working folders. Adding
-a folder makes it part of the Project's workspace; it does not grant permission
-to read, edit, or run anything there. The active permission policy still
-decides what the agent may do.
+a folder makes it part of every chat in the Project immediately. You do not
+need to add the same folder to an external-directory allowlist. This does not
+enable a denied capability: the active permission policy still decides whether
+the agent may read, edit, use a shell, or perform another operation.
+
+To reorganize an existing chat, right-click it and choose **Move chat…**. Vault
+is always the first destination, followed by searchable active Projects. Moving
+a chat changes its workspace and future Project context; it does not rewrite or
+remove any messages.
 
 At Project session start, Chatobby provides the agent with the current Project
 name and a compact list of its working folders. When the Project's folder set

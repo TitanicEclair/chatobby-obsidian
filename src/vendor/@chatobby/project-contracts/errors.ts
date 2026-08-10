@@ -1,0 +1,58 @@
+export const PROJECT_ERROR_CODES = [
+	"PROJECT_CONTRACT_INVALID",
+	"PROJECT_UNKNOWN_SCHEMA_VERSION",
+	"PROJECT_REVISION_CONFLICT",
+	"PROJECT_COMMAND_ID_CONFLICT",
+	"PROJECT_ALREADY_EXISTS",
+	"PROJECT_NOT_FOUND",
+	"PROJECT_ROOT_NOT_FOUND",
+	"PROJECT_ROOT_UNAVAILABLE",
+	"PROJECT_PRIMARY_ROOT_INVALID",
+	"PROJECT_DUPLICATE_ROOT",
+	"PROJECT_CANONICAL_REUSE_CONFLICT",
+	"PROJECT_DIRECTORY_MARKER_INVALID",
+	"PROJECT_DIRECTORY_MARKER_CONFLICT",
+	"PROJECT_DIRECTORY_BINDING_CONFLICT",
+	"PROJECT_DIRECTORY_CANDIDATE_INVALID",
+	"PROJECT_DEVICE_IDENTITY_INVALID",
+	"PROJECT_ROOT_IN_USE",
+	"PROJECT_ROOT_RELINK_REQUIRED",
+	"PROJECT_ROOT_RECOVERY_CANCELLED",
+	"PROJECT_ROOT_RECOVERY_TIMEOUT",
+	"PROJECT_ROOT_OPERATION_BLOCKED",
+	"PROJECT_ROOT_OPERATION_INTERRUPTED",
+	"PROJECT_ROOT_OPERATION_UNRECOVERABLE",
+	"PROJECT_SESSION_PREFLIGHT_REQUIRED",
+	"PROJECT_PATH_UNSAFE",
+	"PROJECT_REFERENCE_MISSING",
+	"PROJECT_BRIEF_CONTENT_CHANGED",
+	"PROJECT_STORE_BUSY",
+	"PROJECT_STORE_CORRUPT",
+	"PROJECT_INTERRUPTED_WRITE",
+] as const;
+
+export type ProjectErrorCode = (typeof PROJECT_ERROR_CODES)[number];
+
+export interface ProjectErrorV1 {
+	readonly schemaVersion: 1;
+	readonly code: ProjectErrorCode;
+	readonly message: string;
+	readonly retryable: boolean;
+	readonly field?: string;
+	readonly expectedRevision?: number;
+	readonly actualRevision?: number;
+}
+
+export class ProjectContractError extends Error {
+	readonly detail: ProjectErrorV1;
+
+	constructor(
+		code: ProjectErrorCode,
+		message: string,
+		detail: Omit<ProjectErrorV1, "schemaVersion" | "code" | "message"> = { retryable: false },
+	) {
+		super(message);
+		this.name = "ProjectContractError";
+		this.detail = Object.freeze({ schemaVersion: 1, code, message, ...detail });
+	}
+}

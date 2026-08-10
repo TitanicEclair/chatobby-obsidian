@@ -120,6 +120,25 @@ for (const path of sourceFiles(publicClientRoot)) {
 	}
 }
 
+const typedContractRoots = [
+	"@chatobby/obsidian-protocol",
+	"@chatobby/platform-paths",
+	"@chatobby/project-contracts",
+];
+for (const relativeRoot of typedContractRoots) {
+	const root = join(vendorRoot, relativeRoot);
+	if (!lstatSync(join(root, "index.ts"), { throwIfNoEntry: false })) {
+		failures.push(`generated contract projection ${relativeRoot} is missing index.ts`);
+	}
+	for (const path of sourceFiles(root)) {
+		if (path.endsWith(".js") || path.endsWith(".mjs")) {
+			failures.push(
+				`generated contract projection ${relative(root, path).replaceAll("\\", "/")} must be typed TypeScript, not JavaScript`,
+			);
+		}
+	}
+}
+
 if (!manifest.excludedExportPaths.includes("data.json")) {
   failures.push("data.json must remain excluded from every reviewable export");
 }

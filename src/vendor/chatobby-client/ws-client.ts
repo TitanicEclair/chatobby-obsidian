@@ -18,6 +18,7 @@ import type {
 	WsRuntimeInfo,
 	WsSessionInfo,
 	WsSessionStats,
+	WsStoredSessionSelector,
 } from "./connector-types.ts";
 
 export type {
@@ -403,42 +404,42 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("list_sessions", { cwdOverride, includeDescendants }), "sessions");
 	}
 
-	async deleteSession(sessionPath: string, cwdRoot: string): Promise<{ sessionId: string }> {
+	async deleteSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{ sessionId: string }> {
 		return {
-			sessionId: resultField<string>(await this.send("delete_session", { sessionPath, cwdRoot }), "sessionId"),
+			sessionId: resultField<string>(await this.send("delete_session", { ...selector, cwdRoot }), "sessionId"),
 		};
 	}
 
-	async renameStoredSession(sessionPath: string, cwdRoot: string, name: string): Promise<void> {
-		await this.send("rename_stored_session", { sessionPath, cwdRoot, name });
+	async renameStoredSession(selector: WsStoredSessionSelector, cwdRoot: string, name: string): Promise<void> {
+		await this.send("rename_stored_session", { ...selector, cwdRoot, name });
 	}
 
-	async getStoredSessionForkMessages(sessionPath: string, cwdRoot: string): Promise<WsForkMessage[]> {
-		return resultField(await this.send("get_stored_session_fork_messages", { sessionPath, cwdRoot }), "messages");
+	async getStoredSessionForkMessages(selector: WsStoredSessionSelector, cwdRoot: string): Promise<WsForkMessage[]> {
+		return resultField(await this.send("get_stored_session_fork_messages", { ...selector, cwdRoot }), "messages");
 	}
 
-	async cloneStoredSession(sessionPath: string, cwdRoot: string): Promise<{ sessionId: string; sessionPath: string }> {
-		const result = await this.send("clone_stored_session", { sessionPath, cwdRoot });
+	async cloneStoredSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{ sessionId: string; sessionPath: string }> {
+		const result = await this.send("clone_stored_session", { ...selector, cwdRoot });
 		return { sessionId: resultField(result, "sessionId"), sessionPath: resultField(result, "sessionPath") };
 	}
 
 	async forkStoredSession(
-		sessionPath: string,
+		selector: WsStoredSessionSelector,
 		cwdRoot: string,
 		entryId: string,
 	): Promise<{ sessionId: string; sessionPath: string }> {
-		const result = await this.send("fork_stored_session", { sessionPath, cwdRoot, entryId });
+		const result = await this.send("fork_stored_session", { ...selector, cwdRoot, entryId });
 		return { sessionId: resultField(result, "sessionId"), sessionPath: resultField(result, "sessionPath") };
 	}
 
 	async exportStoredSession(
-		sessionPath: string,
+		selector: WsStoredSessionSelector,
 		cwdRoot: string,
 		format: "html" | "jsonl",
 		outputPath?: string,
 	): Promise<string> {
 		return resultField(
-			await this.send("export_stored_session", { sessionPath, cwdRoot, format, outputPath }),
+			await this.send("export_stored_session", { ...selector, cwdRoot, format, outputPath }),
 			"path",
 		);
 	}

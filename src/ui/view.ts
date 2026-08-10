@@ -19,7 +19,7 @@ import { SlashMenu } from "./composer/slash-menu";
 import type { SlashArgumentOption, SlashCommandSpec, SlashParsedCommand } from "./composer/slash-command";
 import { TabBar } from "./session/tab-bar";
 import { storeComposerFile } from "../attachments/attachment-store";
-import { getVaultBasePath, normalizeVaultDirectoryInput } from "./session/session-directory";
+import { normalizeVaultDirectoryInput } from "./session/session-directory";
 import { LeafDirectoryRouter } from "./session/leaf-directory-router";
 import { SessionTransitionCoordinator } from "./session/session-transition-coordinator";
 import { StoredSessionActions } from "./session/stored-session-actions";
@@ -229,7 +229,7 @@ export class ChatobbyView extends ItemView {
       getActiveTab: () => this.activeTab(),
       getWorkingDirectory: () => this.sessions.workingDirectoryPath(),
       getForkOptions: () => this.frontendStore.snapshot?.session?.forkOptions ?? [],
-      forkStoredSession: (sessionPath, entryId) => this.storedSessions.fork(sessionPath, entryId),
+      forkStoredSession: (sessionPath, entryId) => this.storedSessions.fork({ sessionPath }, entryId),
       openForkedSession: async (workingDirectory, sessionPath) => (await this.plugin.openSessionView(workingDirectory, sessionPath)).resumeStoredSession(sessionPath),
       dispatchSessionIntent: (request) => this.dispatchFrontendSessionIntent(request),
       runOperation: (descriptor, operation) => this.runOperation(descriptor, operation),
@@ -283,12 +283,11 @@ export class ChatobbyView extends ItemView {
       onClosed: (mode, renderChat) => this.finishOverlayClose(mode, renderChat),
       openSession: async (projectPath, sessionPath) => { await this.plugin.openSessionView(projectPath, sessionPath); },
       deleteSession: async (sessionId) => {
-        const path = await this.resolveStoredSessionPath(sessionId);
-        await this.storedSessions.delete(path);
+        await this.storedSessions.delete({ sessionId });
         this.plugin.notifySessionDirectoryChanged();
       },
       runSessionAction: async (sessionId, action) => {
-        await this.storedSessionActions.run(await this.resolveStoredSessionPath(sessionId), action);
+        await this.storedSessionActions.run({ sessionId }, action);
       },
       navigateMcpPlugin: (pluginId) => this.navigateTo(pluginId ? { mode: "mcp", pluginId } : { mode: "mcp" }),
 		downloadGuide: () => this.onDownloadGuide(),
@@ -781,7 +780,7 @@ export class ChatobbyView extends ItemView {
     this.sessionAgentRail.scheduleRefresh();
 		if (this.viewMode === "projects") this.overlayScreens.projects.synchronize();
   }
-  private synchronizeActiveScreen(): void {
+  synchronizeActiveScreen(): void {
     if (this.viewMode === "channels") this.channelScreen.synchronize();
     else if (this.viewMode === "projects") this.overlayScreens.projects.synchronize();
     else if (this.viewMode === "memory") this.overlayScreens.memory.synchronize();
@@ -911,16 +910,6 @@ export class ChatobbyView extends ItemView {
       if (showNotice) new Notice(`Could not prepare Chatobby before ${action}.`);
       return null;
     }
-  }
-
-  private async resolveStoredSessionPath(sessionId: string): Promise<string> {
-    const transport = await this.ensureConnectedTransport("loading the selected chat");
-    if (!transport) throw new Error("Chatobby backend is not connected");
-    const vaultRoot = getVaultBasePath(this.app);
-    if (!vaultRoot) throw new Error("Chatobby could not resolve the vault base path");
-    const session = (await transport.listSessions(vaultRoot, true)).find((candidate) => candidate.id === sessionId);
-    if (!session) throw new Error("That chat is no longer available.");
-    return session.path;
   }
 
   private renderPromptFailure(input: string, error: unknown): void {

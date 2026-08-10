@@ -1,17 +1,16 @@
 {
   "schemaVersion": 1,
   "sourceRepository": "TitanicEclair/pi-mono",
-  "sourceCommit": "8e438762ccc90ad8110aba3cc051ac50cae98bbf",
+  "sourceCommit": "fa3d765ca39f777184cf243366c49d707e5e8b6f",
   "generator": "scripts/build-vendor-artifacts.mjs",
   "sourceArtifact": "vendor/project-contracts",
   "connectorArtifact": "src/vendor/@chatobby/project-contracts",
   "files": {
-    "errors.d.ts": "2427f8caa3ae33232e83b1d6b957b3457c67ba2890d45cb1839ffad956f514c7",
-    "ids.d.ts": "3cbf370d12532b734aaf7fb8a266682598537f1dc361daee5ee4d76ec1c7286e",
-    "index.d.ts": "5ef61fbd311305fb145b812b74e5cc9e8965d0f0a8b9f6e4be8d9d97dd3fdf7d",
-    "index.js": "230bf2e6b4a77892125f62fd99b772bf86f61615703ba37f86fea4ef78d23604",
-    "models.d.ts": "d4f099b96c7744f8964e7d054d83fff1b101b67966467ddb47d3c574650db580",
-    "operations.d.ts": "3b02eeb0d05501988cf7ceeda74a44f4022f38148cf78239f5bd7a8c4bf2693c",
-    "validation.d.ts": "69b02035ede48726e7a3397057ae1b5f93fc9ce609d9eb84896bc1d4fd4a3e1a"
+    "errors.ts": "3b68f23617a8c2f408ed3ae7ed0424b80aa84812b5e31414631066320b24a336",
+    "ids.ts": "5962153551aad005b9245d8e7d46b17cf37cefac5482c536d34a21de54976a0e",
+    "index.ts": "334cc7047b5d7713df917bdec4bf5b72db64bce46c6d962b6704e2266e0d4c37",
+    "models.ts": "fa78ea3a66dc423a5d54478ee594191f6f73ce0c14994c39378cde71bec5a804",
+    "operations.ts": "988e0df870a66fb40ef07c45a4618b248a199815035a3f51d0c8e1338719225e",
+    "validation.ts": "bb4571c23ca1f970875bbdb096b822366ca293a4cf3be3dbe837f609c6a59099"
   }
 }

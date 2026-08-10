@@ -26,7 +26,8 @@ await Promise.all([
     entryPoints: ["src/main.ts"],
     bundle: true,
     alias: {
-      "@chatobby/obsidian-protocol": resolve("src/vendor/@chatobby/obsidian-protocol/index.js"),
+      "@chatobby/obsidian-protocol": resolve("src/vendor/@chatobby/obsidian-protocol/index.ts"),
+      "@chatobby/project-contracts": resolve("src/vendor/@chatobby/project-contracts/index.ts"),
     },
     external: [
       "obsidian",

@@ -1,4 +1,4 @@
-import type { AutoNameStrategy, WsAutoCompactionSettings, WsBashResult, WsBridgeConfig, WsExtensionUIRequest, WsForkMessage, WsLocalModelProvider, WsLocalModelProviderDocument, WsLocalModelProviderProbeResult, WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, WsPromptAttachment, WsPromptContextPacket, WsProviderInfo, WsRuntimeInfo, WsSessionInfo, WsSessionStats } from "./connector-types.js";
+import type { AutoNameStrategy, WsAutoCompactionSettings, WsBashResult, WsBridgeConfig, WsExtensionUIRequest, WsForkMessage, WsLocalModelProvider, WsLocalModelProviderDocument, WsLocalModelProviderProbeResult, WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, WsPromptAttachment, WsPromptContextPacket, WsProviderInfo, WsRuntimeInfo, WsSessionInfo, WsSessionStats, WsStoredSessionSelector } from "./connector-types.js";
 export type { WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, } from "./connector-types.js";
 import { type RuntimeClientHello, type RuntimeServerActivationRequired } from "./control/contracts.js";
 import { type FrontendBootstrap, type FrontendBootstrapRequest, type FrontendIntent, type FrontendIntentResult, type FrontendPatch, type FrontendScreenRequest, type FrontendScreenViewModel, type FrontendSubscriptionAck, type FrontendSubscriptionRequest } from "./frontend-contracts.js";
@@ -63,20 +63,20 @@ export declare class ChatobbyWsClient {
         reason?: "not-found" | "output-started" | "drain-timeout" | "prompt-failed";
     }>;
     listSessions(cwdOverride?: string, includeDescendants?: boolean): Promise<WsSessionInfo[]>;
-    deleteSession(sessionPath: string, cwdRoot: string): Promise<{
+    deleteSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{
         sessionId: string;
     }>;
-    renameStoredSession(sessionPath: string, cwdRoot: string, name: string): Promise<void>;
-    getStoredSessionForkMessages(sessionPath: string, cwdRoot: string): Promise<WsForkMessage[]>;
-    cloneStoredSession(sessionPath: string, cwdRoot: string): Promise<{
-        sessionId: string;
-        sessionPath: string;
-    }>;
-    forkStoredSession(sessionPath: string, cwdRoot: string, entryId: string): Promise<{
+    renameStoredSession(selector: WsStoredSessionSelector, cwdRoot: string, name: string): Promise<void>;
+    getStoredSessionForkMessages(selector: WsStoredSessionSelector, cwdRoot: string): Promise<WsForkMessage[]>;
+    cloneStoredSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{
         sessionId: string;
         sessionPath: string;
     }>;
-    exportStoredSession(sessionPath: string, cwdRoot: string, format: "html" | "jsonl", outputPath?: string): Promise<string>;
+    forkStoredSession(selector: WsStoredSessionSelector, cwdRoot: string, entryId: string): Promise<{
+        sessionId: string;
+        sessionPath: string;
+    }>;
+    exportStoredSession(selector: WsStoredSessionSelector, cwdRoot: string, format: "html" | "jsonl", outputPath?: string): Promise<string>;
     getSessionStats(): Promise<WsSessionStats>;
     getLastAssistantText(): Promise<string | null>;
     setOperatorViewOpen(open: boolean): Promise<void>;

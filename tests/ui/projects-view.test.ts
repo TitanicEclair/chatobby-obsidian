@@ -18,7 +18,10 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
     query: "",
     lifecycleFilter: "active",
     availabilityFilter: "all",
-    sort: "updated-desc",
+    sort: "activity-desc",
+    sessionQuery: "",
+    sessionSearchMode: "titles",
+    sessionSort: "updated-desc",
     selectedProjectId: "project:alpha",
     runningIn: { kind: "vault", label: "Vault", attachedRootIds: [] },
     projects: [{
@@ -36,7 +39,12 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
       availabilityLabel: "Ready",
       createdAt: "2026-08-01T00:00:00.000Z",
       updatedAt: "2026-08-02T00:00:00.000Z",
+      activityAt: "2026-08-02T00:00:00.000Z",
     }],
+	sessionMoveProjects: [
+	  { projectId: "project:alpha", name: "Alpha", available: true, availabilityLabel: "Ready" },
+	  { projectId: "project:beta", name: "Beta", available: true, availabilityLabel: "Ready" },
+	],
     vaultSessions: [],
     detail: {
       projectId: "project:alpha",
@@ -46,6 +54,7 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
       lifecycle: "active",
       creationKind: "manual",
       primaryRootId: "root:alpha",
+	  sessionCount: 1,
       roots: [{
         rootId: "root:alpha",
         directoryId: "directory:alpha",
@@ -61,6 +70,8 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
       }],
       sessions: [{
         sessionId: "session:one",
+		workspaceBindingRevision: 3,
+		workspace: { kind: "project", projectId: "project:alpha" },
         name: "Plan Alpha",
         createdAt: "2026-08-01T00:00:00.000Z",
         updatedAt: "2026-08-02T00:00:00.000Z",
@@ -69,13 +80,22 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
         activeRootId: "root:alpha",
       }],
     },
+	vaultSessionCount: 0,
     lifecycleOptions: [
       { value: "active", label: "Active projects" },
       { value: "archived", label: "Archived projects" },
       { value: "all", label: "All projects" },
     ],
     availabilityOptions: [{ value: "all", label: "Any availability" }],
-    sortOptions: [{ value: "updated-desc", label: "Recently updated" }],
+    sortOptions: [{ value: "activity-desc", label: "Recent activity" }],
+    sessionSearchModeOptions: [
+	  { value: "titles", label: "Names and opening prompts" },
+	  { value: "messages", label: "Include message contents" },
+	],
+    sessionSortOptions: [
+	  { value: "updated-desc", label: "Last used" },
+	  { value: "relevance", label: "Best match" },
+	],
     ...overrides,
   };
 }
@@ -88,6 +108,7 @@ function harness(options: {
   let model = options.model ?? projectModel();
   const listeners = new Set<(value: FrontendProjectScreenViewModel | null) => void>();
   const onIntent = vi.fn(options.onIntent ?? (async () => {}));
+  const onRefresh = vi.fn(async () => {});
   const view = new ProjectsView({
     app: options.app ?? ({} as App),
     getModel: () => model,
@@ -96,7 +117,7 @@ function harness(options: {
       return () => listeners.delete(listener);
     },
     onBack: vi.fn(),
-    onRefresh: vi.fn(async () => {}),
+    onRefresh,
     onIntent,
     onDeleteSession: vi.fn(async () => {}),
     onSessionAction: vi.fn(async () => {}),
@@ -104,6 +125,7 @@ function harness(options: {
   return {
     view,
     onIntent,
+    onRefresh,
     setModel(value: FrontendProjectScreenViewModel): void {
       model = value;
       for (const listener of listeners) listener(value);
@@ -140,6 +162,42 @@ describe("ProjectsView", () => {
 		expect(root.textContent).not.toContain("Integrations");
   });
 
+	it("keeps Project filters beside Project search and submits immediately on Enter", async () => {
+		const instance = harness();
+		const root = mount(instance.view);
+		const search = root.querySelector<HTMLInputElement>('input[aria-label="Search Projects"]');
+		const filters = root.querySelector(".chatobby-projects__rail-filters");
+		const list = root.querySelector(".chatobby-projects__rail-list");
+		if (!search || !filters || !list) throw new Error("Project discovery controls are unavailable");
+		expect(filters.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+		search.value = "architecture";
+		search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+
+		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
+			type: "projects.set-view",
+			payload: expect.objectContaining({ query: "architecture", sort: "activity-desc" }),
+		}));
+	});
+
+	it("searches the visible chat scope and exposes explicit message-content search", async () => {
+		const instance = harness();
+		const root = mount(instance.view);
+		const search = root.querySelector<HTMLInputElement>('input[aria-label="Search chats"]');
+		if (!search) throw new Error("Chat search is unavailable");
+		search.value = "recovery journal";
+		search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
+			type: "projects.set-view",
+			payload: expect.objectContaining({ sessionQuery: "recovery journal", sessionSearchMode: "titles" }),
+		}));
+
+		button(root, "Search inside chat messages").click();
+		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
+			type: "projects.set-view",
+			payload: expect.objectContaining({ sessionSearchMode: "messages" }),
+		}));
+	});
+
 	it("keeps Create Project available while viewing a Project and opens it immediately", () => {
 		const root = mount(harness().view);
 		button(root, "Create Project").click();
@@ -167,12 +225,15 @@ describe("ProjectsView", () => {
 				detail: undefined,
 				vaultSessions: [{
 					sessionId: "session:vault",
+					workspaceBindingRevision: 1,
+					workspace: { kind: "vault" },
 					name: "Vault planning",
 					createdAt: "2026-08-01T00:00:00.000Z",
 					updatedAt: "2026-08-03T00:00:00.000Z",
 					messageCount: 3,
 					running: true,
 				}],
+				vaultSessionCount: 1,
 				projects: base.projects,
 			}),
 		});
@@ -349,7 +410,59 @@ describe("ProjectsView", () => {
 			type: "session.create",
 			payload: { workspace: { kind: "project", projectId: "project:alpha" } },
 		}));
-  });
+	});
+
+	it("moves a chat through a searchable picker with Vault pinned first", async () => {
+		const instance = harness();
+		const root = mount(instance.view);
+		button(root, "More actions for Plan Alpha").click();
+		clickLastMenuItem("Move chat…");
+		await vi.waitFor(() => expect(document.body.textContent).toContain("Choose where"));
+		const modal = document.body.querySelector<HTMLElement>(".modal");
+		if (!modal) throw new Error("Move chat modal is unavailable");
+		const destinations = modal.querySelectorAll<HTMLButtonElement>(".chatobby-projects__move-destination");
+		expect(destinations[0]?.textContent).toContain("Vault");
+		expect(destinations[0]?.classList.contains("is-sticky")).toBe(true);
+		const search = modal.querySelector<HTMLInputElement>('input[aria-label="Search Projects"]');
+		if (!search) throw new Error("Move chat search is unavailable");
+		search.value = "beta";
+		search.dispatchEvent(new Event("input", { bubbles: true }));
+		expect(modal.textContent).toContain("Vault");
+		expect(modal.textContent).toContain("Beta");
+		expect(
+			[...modal.querySelectorAll<HTMLElement>(".chatobby-projects__move-name")].map((element) => element.textContent),
+		).toEqual(["Vault", "Beta"]);
+		button(modal, "BetaMove this chat into this Project").click();
+
+		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
+			type: "projects.session-move",
+			payload: {
+				sessionId: "session:one",
+				expectedWorkspaceBindingRevision: 3,
+				target: { kind: "project", projectId: "project:beta" },
+			},
+		}));
+		expect(instance.onRefresh).toHaveBeenCalledOnce();
+		await vi.waitFor(() => expect(root.textContent).not.toContain("Plan Alpha"));
+
+		const staleSource = projectModel();
+		const movedSession = {
+			...staleSource.detail!.sessions[0]!,
+			workspace: { kind: "vault" as const },
+		};
+		instance.setModel(projectModel({
+			detail: { ...staleSource.detail!, sessions: [movedSession] },
+		}));
+		expect(root.textContent).not.toContain("Plan Alpha");
+
+		instance.setModel(projectModel({
+			selectedProjectId: undefined,
+			detail: undefined,
+			vaultSessions: [movedSession],
+			vaultSessionCount: 1,
+		}));
+		expect(root.textContent).toContain("Plan Alpha");
+	});
 });
 
 function openProjectMenu(root: HTMLElement, project: string, item: string): void {

@@ -1,19 +1,20 @@
 {
   "name": "chatobby-obsidian",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "scripts": {
-    "build": "tsc --noEmit && node esbuild.config.mjs",
+    "build": "npm run check:community-review && tsc --noEmit && node esbuild.config.mjs",
     "build:release-candidate": "npm run build:release",
-    "build:release": "tsc --noEmit && node esbuild.config.mjs --release && node scripts/verify-release-artifacts.mjs release",
+    "build:release": "npm run check:community-review && tsc --noEmit && node esbuild.config.mjs --release && node scripts/verify-release-artifacts.mjs release",
     "check": "tsc --noEmit && npm run check:architecture",
     "check:architecture": "node scripts/check-public-api.mjs && npm run check:release-boundary && vitest run tests/architecture",
     "check:backend-contract": "node scripts/verify-local-backend.mjs",
     "check:release-boundary": "node scripts/check-reviewable-boundary.mjs",
+    "check:community-review": "eslint . --max-warnings 0 && node scripts/check-review-source.mjs && node scripts/check-reviewable-boundary.mjs",
     "export:reviewable": "node scripts/export-reviewable-source.mjs",
     "test": "vitest run",
     "lint": "eslint .",
-    "lint:review": "eslint . --max-warnings 0 && node scripts/check-review-source.mjs"
+    "lint:review": "npm run check:community-review"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

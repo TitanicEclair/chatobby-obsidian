@@ -1,9 +1,9 @@
-import type { ObsidianBridgeCapability } from "./bridge-capabilities.js";
-import type { ObsidianBridgeErrorPayload } from "./bridge-errors.js";
-import { OBSIDIAN_BRIDGE_PROTOCOL_VERSION } from "./bridge-errors.js";
-import type { ObsidianOperationName } from "./bridge-operations.js";
-import type { ProjectDirectoryObservationResult, ProjectDirectoryObserved, ProjectDirectoryRescanRequested, ProjectDirectoryRescanResult } from "./project-directory-protocol.js";
-import type { ObsidianPluginState, ObsidianRuntimeDependencyState } from "./tool-capabilities.js";
+import type { ObsidianBridgeCapability } from "./bridge-capabilities.ts";
+import type { ObsidianBridgeErrorPayload } from "./bridge-errors.ts";
+import { OBSIDIAN_BRIDGE_PROTOCOL_VERSION } from "./bridge-errors.ts";
+import type { ObsidianOperationName } from "./bridge-operations.ts";
+import type { ProjectDirectoryObservationResult, ProjectDirectoryObserved, ProjectDirectoryRescanRequested, ProjectDirectoryRescanResult } from "./project-directory-protocol.ts";
+import type { ObsidianPluginState, ObsidianRuntimeDependencyState } from "./tool-capabilities.ts";
 export interface ObsidianBridgeVault {
     id: string;
     name: string;

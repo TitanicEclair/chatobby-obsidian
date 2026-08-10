@@ -283,18 +283,18 @@ describe("ChatobbyTransport", () => {
     await transport.disconnect();
   });
 
-  it("keeps stored-session operations narrow and path-addressed", async () => {
+  it("keeps stored-session operations narrow and stable-ID-addressed", async () => {
     const transport = new ChatobbyTransport(externalRuntime());
     const connect = transport.connect();
     const socket = FakeWebSocket.instances[0]!;
     socket.open();
     await connect;
-    const pending = transport.getStoredSessionForkMessages("C:/sessions/s1.jsonl", "C:/vault");
+    const pending = transport.getStoredSessionForkMessages({ sessionId: "s1" }, "C:/vault");
     await waitForSent(socket, 1);
     const frame = JSON.parse(socket.sent[0]!);
     expect(frame).toMatchObject({
       method: "get_stored_session_fork_messages",
-      params: { sessionPath: "C:/sessions/s1.jsonl", cwdRoot: "C:/vault" },
+      params: { sessionId: "s1", cwdRoot: "C:/vault" },
     });
     socket.serverMessage({
       id: frame.id,
