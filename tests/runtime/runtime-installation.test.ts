@@ -137,6 +137,29 @@ describe("runtime installation", () => {
     expect(rolledBack).toContain(join("versions", "1.0.0"));
   });
 
+  it("reclaims only exact orphaned operation directories before staging a retry", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const publicKey = publicKeyPem(keys.publicKey);
+    const installer = new RuntimePackageInstaller(installRoot, publicKey);
+    const manifest = await writeRuntimePackage(source, "1.0.0", "runtime", keys.privateKey);
+    const versionsRoot = join(installRoot, "versions");
+    const orphan = join(
+      versionsRoot,
+      ".0.3.1.11111111-1111-4111-8111-111111111111.staged",
+    );
+    const unrelated = join(versionsRoot, ".0.3.1.operator-note.staged");
+    await mkdir(orphan, { recursive: true });
+    await mkdir(unrelated, { recursive: true });
+    await writeFile(join(orphan, "partial-runtime"), "partial");
+
+    await installer.install(source, manifest, "0.1.0");
+
+    expect(existsSync(orphan)).toBe(false);
+    expect(existsSync(unrelated)).toBe(true);
+  });
+
   it.runIf(process.platform !== "win32")("assigns private fixed modes instead of trusting source modes", async () => {
     const installRoot = await temporaryDirectory();
     const source = await temporaryDirectory();

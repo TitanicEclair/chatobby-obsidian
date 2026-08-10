@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-11
+
+- Make failed runtime updates self-cleaning. A failed package copy removes its
+  incomplete staging directory, and the next retry reclaims only exact
+  Chatobby-owned staged, backup, or failed operation directories when no
+  pending installation journal exists. Unrelated files and lookalike names are
+  preserved.
+
+- Pair the connector with the 0.3.2 runtime recovery path for vaults affected
+  by interrupted or out-of-disk-space Projects migrations.
+
+
 ## [0.3.1] - 2026-08-11
 
 - Address Project chat actions by stable session ID instead of converting them

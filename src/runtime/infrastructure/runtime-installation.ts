@@ -183,24 +183,30 @@ export class RuntimePackageInstaller {
     const failedDirectory = join(versionsRoot, `.${manifest.version}.${operationId}.failed`);
     await mkdir(versionsRoot, { recursive: true, mode: 0o700 });
     await setPrivateDirectoryMode(versionsRoot);
+    await this.pruneOrphanOperationDirectories(versionsRoot);
     await Promise.all([
       this.removeDirectory(stagedDirectory, { recursive: true, force: true }),
       this.removeDirectory(backupDirectory, { recursive: true, force: true }),
     ]);
     await mkdir(stagedDirectory, { recursive: true, mode: 0o700 });
     await setPrivateDirectoryMode(stagedDirectory);
-    for (const file of manifest.files) {
-      const destination = packagePath(stagedDirectory, file.path);
-      await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
-      await setPrivateDirectoryMode(dirname(destination));
-      await copyFile(packagePath(sourceDirectory, file.path), destination);
-      await setPrivateFileMode(destination, file.kind === "executable" ? 0o700 : 0o600);
+    try {
+      for (const file of manifest.files) {
+        const destination = packagePath(stagedDirectory, file.path);
+        await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+        await setPrivateDirectoryMode(dirname(destination));
+        await copyFile(packagePath(sourceDirectory, file.path), destination);
+        await setPrivateFileMode(destination, file.kind === "executable" ? 0o700 : 0o600);
+      }
+      await writeFile(join(stagedDirectory, RUNTIME_PACKAGE_MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      await verifyRuntimePackage(stagedDirectory, manifest, pluginVersion, this.trustedPublicKey, true);
+    } catch (error) {
+      await this.removeDirectory(stagedDirectory, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
     }
-    await writeFile(join(stagedDirectory, RUNTIME_PACKAGE_MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    await verifyRuntimePackage(stagedDirectory, manifest, pluginVersion, this.trustedPublicKey, true);
 
     const current = readPointer(this.installRoot);
     const hadExistingVersion = existsSync(versionDirectory);
@@ -376,6 +382,22 @@ export class RuntimePackageInstaller {
   private operationDirectory(journal: RuntimeInstallJournal, kind: "backup" | "failed"): string {
     return join(this.installRoot, "versions", `.${journal.runtimeVersion}.${journal.operationId}.${kind}`);
   }
+
+  private async pruneOrphanOperationDirectories(versionsRoot: string): Promise<void> {
+    for (const entry of await readdir(versionsRoot, { withFileTypes: true })) {
+      if (!isRuntimeOperationDirectoryName(entry.name)) continue;
+      if (entry.isSymbolicLink() || !entry.isDirectory()) {
+        throw new Error("A Chatobby runtime installation artifact is not an ordinary directory");
+      }
+      await this.removeDirectory(join(versionsRoot, entry.name), { recursive: true, force: true });
+    }
+  }
+}
+
+function isRuntimeOperationDirectoryName(name: string): boolean {
+  return /^\.\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:staged|backup|failed)$/iu.test(
+    name,
+  );
 }
 
 async function resolveInstalledRuntime(
