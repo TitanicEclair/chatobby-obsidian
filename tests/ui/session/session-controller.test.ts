@@ -64,6 +64,29 @@ describe("SessionController", () => {
     expect(renderActiveTab).toHaveBeenCalledOnce();
   });
 
+	it("projects the session title and stable Project identity instead of the cwd", () => {
+		const { controller } = harness();
+		controller.applyRuntimeSession(session("project-session", {
+			name: "Release plan",
+			workingDirectory: "C:\\Vault\\Products\\Chatobby",
+			workspace: { kind: "project", projectId: "project:chatobby", label: "Chatobby" },
+		}));
+		expect(controller.sessionTitle()).toBe("Release plan");
+		expect(controller.workspaceLabel()).toBe("Chatobby");
+	});
+
+	it("falls back to Vault while reconnecting to a runtime without the additive workspace projection", () => {
+		const { controller } = harness();
+		const legacySession = { ...session("legacy-session") } as FrontendSessionViewModel & {
+			workspace?: FrontendSessionViewModel["workspace"];
+		};
+		delete legacySession.workspace;
+
+		controller.applyRuntimeSession(legacySession);
+
+		expect(controller.workspaceLabel()).toBe("Vault");
+	});
+
   it("switches the visible feed when the first runtime session appears", () => {
     const renderActiveTab = vi.fn();
     const { controller } = harness({ renderActiveTab });
@@ -150,6 +173,29 @@ describe("SessionController", () => {
     expect(target.sessionId).toBe("root-directory");
   });
 
+  it("preserves a runtime-bound Project when the legacy vault directory selector differs", async () => {
+    const intents: SessionMutationRequest[] = [];
+    const projectSession = session("project-session", {
+      recoveryPath: "C:/sessions/project-session.jsonl",
+      workingDirectory: "C:\\Vault\\Projects\\Chatobby",
+      workspace: { kind: "project", projectId: "project:chatobby", label: "Chatobby" },
+    });
+    const { controller } = harness({
+      synchronize: async (target) => target.applyRuntimeSession(projectSession),
+      dispatch: async (request) => {
+        intents.push(request);
+        return false;
+      },
+    });
+    controller.applyRuntimeSession(projectSession);
+
+    const target = await controller.ensureActiveSessionTarget();
+
+    expect(target.sessionId).toBe("project-session");
+    expect(controller.workspaceLabel()).toBe("Chatobby");
+    expect(intents).toEqual([]);
+  });
+
   it("clears transient running state when the backend connection is lost", () => {
     const renderActiveTab = vi.fn();
     const { controller } = harness({ renderActiveTab });
@@ -232,7 +278,7 @@ function harness(options: HarnessOptions = {}) {
     refreshTabBar: vi.fn(),
     renderActiveTab,
     persistLeafState,
-    exitSessionPicker: vi.fn(),
+    exitSessionBrowser: vi.fn(),
     runOperation: async (_descriptor, operation) => operation(),
     getActiveOperation: () => null,
     claimSessionOwnership,
@@ -247,6 +293,7 @@ function session(id: string, overrides: Partial<FrontendSessionViewModel> = {}):
   return {
     id,
     workingDirectory: "C:\\Vault",
+		workspace: { kind: "vault", label: "Vault" },
     model: "model-1",
     thinkingLevel: "medium",
     streaming: false,

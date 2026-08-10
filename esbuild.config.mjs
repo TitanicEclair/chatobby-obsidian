@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import { copyFile, mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const isRelease = process.argv.includes("--release");
 const outputDirectory = isRelease ? "release" : ".";
@@ -25,6 +25,9 @@ await Promise.all([
   esbuild.build({
     entryPoints: ["src/main.ts"],
     bundle: true,
+    alias: {
+      "@chatobby/obsidian-protocol": resolve("src/vendor/@chatobby/obsidian-protocol/index.js"),
+    },
     external: [
       "obsidian",
       "electron",

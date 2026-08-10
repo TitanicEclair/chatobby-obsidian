@@ -11,7 +11,7 @@ Resume, create, fork, clone, import, rename, and reload operations enter the `se
 3. the active feed and composer controls reconcile; and
 4. two animation frames allow the new surface to paint.
 
-An empty Chatobby leaf may adopt a resumed session. A leaf with conversation history is not mutated: its session picker closes first, the destination leaf is opened or reused, the destination session is made ready, and that destination is revealed last. This ordering prevents an asynchronous history update in the source leaf from stealing focus back.
+An empty Chatobby leaf may adopt a resumed session. A leaf with conversation history is not mutated: its Projects browser closes first, the destination leaf is opened or reused, the destination session is made ready, and that destination is revealed last. This ordering prevents an asynchronous history update in the source leaf from stealing focus back.
 
 ## Feature-page updates
 

@@ -14,5 +14,5 @@ export function renderViewMode(
   shell.feedWrapEl.toggleClass("is-hidden", overlayOpen);
   shell.taskProgressHostEl.toggleClass("is-view-hidden", overlayOpen);
   shell.composerEl.toggleClass("is-hidden", overlayOpen);
-  shell.sessionPickerHostEl.toggleClass("is-hidden", !overlayOpen);
+	shell.pageHostEl.toggleClass("is-hidden", !overlayOpen);
 }

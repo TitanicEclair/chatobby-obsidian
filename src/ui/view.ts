@@ -12,14 +12,14 @@ import { createChatViewFeedHost } from "./feed/chat-view-feed-host";
 import { Composer, type PromptSubmissionOutcome } from "./composer/composer";
 import { createComposerContextHost } from "./composer/composer-context-host";
 import { ComposerControls } from "./composer/composer-controls";
+import { searchVaultReferences } from "./composer/vault-reference-search";
 import { promptText } from "./modals/modals";
 import { openAutoCompactionSettings, toggleAutoCompaction, type AutoCompactionActionOptions } from "./controller/auto-compaction-controller";
 import { SlashMenu } from "./composer/slash-menu";
 import type { SlashArgumentOption, SlashCommandSpec, SlashParsedCommand } from "./composer/slash-command";
 import { TabBar } from "./session/tab-bar";
 import { storeComposerFile } from "../attachments/attachment-store";
-import { normalizeVaultDirectoryInput } from "./session/session-directory";
-import { SessionPickerModeController } from "./session/session-picker-mode-controller";
+import { getVaultBasePath, normalizeVaultDirectoryInput } from "./session/session-directory";
 import { LeafDirectoryRouter } from "./session/leaf-directory-router";
 import { SessionTransitionCoordinator } from "./session/session-transition-coordinator";
 import { StoredSessionActions } from "./session/stored-session-actions";
@@ -28,11 +28,11 @@ import { gatherVaultContext, toPromptContextPacket } from "../prompt";
 import { errorMessage } from "../utils";
 import type { ChatobbyTransport } from "../transport/ws-client";
 import { LiveStatsController } from "./controller/live-stats-controller";
-import { isThinkingLevel, withTimeout, workingDirectoryLabel } from "./controller/view-utils";
+import { isThinkingLevel, withTimeout } from "./controller/view-utils";
 import { SlashCommandController } from "../features/commands/public";
 import { createChatViewOverlayScreens, type ChatViewOverlayScreens, type OverlayViewMode } from "./screens/chat-view-overlay-screens";
 import { ExtensionUiController } from "./controller/extension-ui-controller";
-import { SessionController, type SessionMutationRequest, type WorkingDirectoryScope } from "./controller/session-controller";
+import { SessionController, type SessionMutationRequest } from "./controller/session-controller";
 import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRailController, type SubagentScreenController, type SubagentScreenTab } from "../features/subagents/public";
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
 import { downloadChatobbyGuide } from "../features/guide/public";
@@ -82,7 +82,6 @@ export class ChatobbyView extends ItemView {
   private runtimeStatusMenu!: RuntimeStatusMenu;
   private runtimeUpdate!: RuntimeUpdateController;
   private viewMode: ChatobbyViewMode = "chat";
-  private readonly sessionPickerMode: SessionPickerModeController;
   private componentsReady = false;
   private stateHydrated = false;
   private pendingNavigation: ChatobbyNavigationState = { mode: "chat" };
@@ -115,12 +114,13 @@ export class ChatobbyView extends ItemView {
   private readonly handleViewKeydown = (event: KeyboardEvent): void => {
     if (event.defaultPrevented) return;
     let handled = false;
-    if (this.viewMode === "session-picker") handled = this.sessionPickerMode.handleKeydown(event);
+		if (this.viewMode === "projects") handled = this.overlayScreens.projects.handleKeydown(event);
     else if (this.viewMode === "permissions") handled = this.overlayScreens.permissions.handleKeydown(event);
     else if (this.viewMode === "memory") handled = this.overlayScreens.memory.handleKeydown(event);
     else if (this.viewMode === "events") handled = this.overlayScreens.events.handleKeydown(event);
     else if (this.viewMode === "queries") handled = this.overlayScreens.queries.handleKeydown(event);
     else if (this.viewMode === "mcp") handled = this.overlayScreens.mcp.handleKeydown(event);
+		else if (this.viewMode === "settings") handled = this.overlayScreens.settings.handleKeydown(event);
     else if (this.viewMode === "subagents") handled = this.subagentScreen.handleKeydown(event);
     else if (this.viewMode === "chat") handled = this.composer.handleViewKeydown(event);
     if (handled) event.stopPropagation();
@@ -142,6 +142,8 @@ export class ChatobbyView extends ItemView {
         this.renderViewMode();
       },
       openPermissions: () => this.overlayScreens.permissions.open(),
+		openProjects: (state) => this.overlayScreens.projects.open(state.projectId),
+		openSettings: () => this.overlayScreens.settings.open(),
       openMemory: () => this.overlayScreens.memory.open(),
       openEvents: () => this.overlayScreens.events.open(),
       openQueries: () => this.overlayScreens.queries.open(),
@@ -150,7 +152,6 @@ export class ChatobbyView extends ItemView {
         this.subagentScreen.open(state.runId, state.subagentTab ?? "runs", state.nodeId, state.feedOnly ?? false);
       },
       openChannels: (state) => this.channelScreen.open(state.channelId, state.messageId),
-      openSessionPicker: () => this.sessionPickerMode.open(),
       getLeafSessionState: () => ({
         vaultDirectoryPath: this.sessions.workingDirectoryPath(),
         sessionPath: this.activeTab()?.sessionFile,
@@ -183,7 +184,7 @@ export class ChatobbyView extends ItemView {
       refreshTabBar: () => this.refreshTabBar(),
       renderActiveTab: () => this.renderActiveTab(),
       persistLeafState: () => { void this.app.workspace.requestSaveLayout(); },
-      exitSessionPicker: () => { void this.viewNavigation.replace({ mode: "chat" }); },
+		exitSessionBrowser: () => { void this.viewNavigation.replace({ mode: "chat" }); },
       runOperation: (descriptor, operation) => this.runOperation(descriptor, operation),
       getActiveOperation: () => this.operations.current("session-transition"),
       claimSessionOwnership: () => this.claimSessionOwnership(),
@@ -210,7 +211,7 @@ export class ChatobbyView extends ItemView {
       openSessionTarget: (path, sessionPath) => this.plugin.openSessionView(path, sessionPath),
       ensureDirectoryTarget: async (target) => { await target.sessions.ensureActiveSessionTarget(); },
       closeCurrentExplorer: () => this.viewNavigation.replace({ mode: "chat" }),
-      resumeInTarget: (target, path) => target.handleSessionPickerSelect(path),
+		resumeInTarget: (target, path) => target.handleStoredSessionSelect(path),
       createInTarget: (target) => target.sessions.createSession(),
       focusTarget: (target) => this.plugin.focusChatView(target),
     });
@@ -218,7 +219,7 @@ export class ChatobbyView extends ItemView {
       app: this.app,
       sessions: this.storedSessions,
       refresh: () => {
-        this.sessionPickerMode.refresh();
+				this.overlayScreens.projects.synchronize();
         this.plugin.notifySessionDirectoryChanged();
       },
     });
@@ -236,31 +237,6 @@ export class ChatobbyView extends ItemView {
       setTab: (tab) => this.sessions.setTab(tab),
       refreshTabs: () => this.refreshTabBar(),
       sessionsChanged: () => this.plugin.notifySessionDirectoryChanged(),
-    });
-    this.sessionPickerMode = new SessionPickerModeController({
-      app: this.app,
-      getHost: () => this.shell.sessionPickerHostEl,
-      getTransport: () => this.ensureConnectedTransport("browsing session directories"),
-      getScope: () => this.resolveWorkingDirectoryScope("browsing session directories"),
-      prepareOpen: () => {
-        this.prepareExclusiveSurface("session-picker");
-      },
-      useDirectory: async (directory) => { await this.directoryRouter.use(directory.vaultDirectoryPath); },
-      resumeSession: (path, directory) => this.directoryRouter.resume(path, directory.vaultDirectoryPath),
-      createSession: (directory) => this.directoryRouter.create(directory.vaultDirectoryPath),
-      deleteSession: async (path) => {
-        await this.storedSessions.delete(path);
-        this.plugin.notifySessionDirectoryChanged();
-      },
-      runAdvancedAction: (path, action) => this.storedSessionActions.run(path, action),
-      onOpened: () => { this.viewMode = "session-picker"; this.renderViewMode(); },
-      onClosed: () => {
-        if (this.viewMode === "session-picker") this.viewMode = "chat";
-        this.renderViewMode();
-        this.renderActiveTab();
-        this.focusComposerSoon();
-      },
-      onComplete: () => { void this.viewNavigation.replace({ mode: "chat" }); },
     });
     this.liveStats = new LiveStatsController({
       getTransport: () => this.getTransport(),
@@ -296,7 +272,8 @@ export class ChatobbyView extends ItemView {
     });
     this.overlayScreens = createChatViewOverlayScreens({
       app: this.app,
-      getHost: () => this.shell.sessionPickerHostEl,
+		plugin: this.plugin,
+		getHost: () => this.shell.pageHostEl,
       getFrontendStore: () => this.frontendStore,
       getFrontendProtocol: () => this.frontendProtocol,
       prepareOpen: () => {
@@ -305,11 +282,20 @@ export class ChatobbyView extends ItemView {
       onOpened: (mode) => { this.viewMode = mode; this.renderViewMode(); },
       onClosed: (mode, renderChat) => this.finishOverlayClose(mode, renderChat),
       openSession: async (projectPath, sessionPath) => { await this.plugin.openSessionView(projectPath, sessionPath); },
+      deleteSession: async (sessionId) => {
+        const path = await this.resolveStoredSessionPath(sessionId);
+        await this.storedSessions.delete(path);
+        this.plugin.notifySessionDirectoryChanged();
+      },
+      runSessionAction: async (sessionId, action) => {
+        await this.storedSessionActions.run(await this.resolveStoredSessionPath(sessionId), action);
+      },
       navigateMcpPlugin: (pluginId) => this.navigateTo(pluginId ? { mode: "mcp", pluginId } : { mode: "mcp" }),
+		downloadGuide: () => this.onDownloadGuide(),
     });
     const subagents = createChatViewSubagentControllers({
       app: this.app,
-      getHost: () => this.shell.sessionPickerHostEl,
+		getHost: () => this.shell.pageHostEl,
       getFrontendStore: () => this.frontendStore,
       getFrontendProtocol: () => this.frontendProtocol,
       prepareOpen: () => {
@@ -333,7 +319,7 @@ export class ChatobbyView extends ItemView {
     this.sessionAgentRail = subagents.rail;
     this.channelScreen = new ChannelScreenController({
       app: this.app,
-      getHost: () => this.shell.sessionPickerHostEl,
+		getHost: () => this.shell.pageHostEl,
       getStore: () => this.frontendStore,
       getProtocol: () => this.frontendProtocol,
       prepareOpen: () => {
@@ -474,7 +460,6 @@ export class ChatobbyView extends ItemView {
     this.extensionUi.dispose();
     this.tabBar.destroy();
     this.toolbar.destroy();
-    this.sessionPickerMode.destroy();
     this.overlayScreens.destroy();
     this.subagentScreen.destroy();
     this.channelScreen.destroy();
@@ -518,12 +503,12 @@ export class ChatobbyView extends ItemView {
   }
   /** Resume a persisted session from the current backend cwd. */
   async commandResumeSession(): Promise<void> {
-    this.navigateTo({ mode: "session-picker" });
+    this.navigateTo({ mode: "projects" });
   }
   /** Choose the vault directory used by later new-session and resume actions. */
   async commandSetWorkingDirectory(rawVaultDirectoryPath?: string): Promise<void> {
     if (rawVaultDirectoryPath === undefined) {
-      this.navigateTo({ mode: "session-picker" });
+			this.navigateTo({ mode: "projects" });
       return;
     }
     await this.directoryRouter.use(rawVaultDirectoryPath).catch((error) => {
@@ -531,7 +516,6 @@ export class ChatobbyView extends ItemView {
       new Notice(`Could not set working directory: ${String(error)}`);
     });
   }
-
   /** Legacy entry point kept for existing registrations during hot reload. */
   commandNewSessionInDirectory(): void {
     void this.commandSetWorkingDirectory();
@@ -544,12 +528,10 @@ export class ChatobbyView extends ItemView {
   commandAbort(): void {
     this.turnAbort.request();
   }
-
   /** Trigger context compaction (command palette), optionally with a custom focus. */
   async commandCompact(customInstructions?: string): Promise<void> {
     await this.sessions.compactContext(customInstructions);
   }
-
   /** Rename the active session (set_session_name). */
   async commandRenameSession(): Promise<void> { await this.activeSessionActions.rename(); }
 
@@ -637,16 +619,12 @@ export class ChatobbyView extends ItemView {
 
     // 2. Create components
     this.tabBar = new TabBar({
-      workingDirectoryLabel: () => workingDirectoryLabel(
-        this.sessions.workingDirectoryPath(),
-        this.app.vault.getName(),
-      ),
+			sessionTitle: () => this.sessions.sessionTitle(),
+			workspaceLabel: () => this.sessions.workspaceLabel(),
 			activeMode: () => ribbonModeForNavigation(this.viewMode, this.viewNavigation.state()),
 			onReturnToChat: () => this.viewNavigation.reset(),
 			onCreateView: () => this.onCreateTab(),
 			onNavigate: (mode) => this.navigateTo({ mode }),
-      onSetWorkingDirectory: () => this.onSetWorkingDirectory(),
-      onDownloadGuide: () => this.onDownloadGuide(),
     });
 
     this.toolbar = new Toolbar({
@@ -694,6 +672,7 @@ export class ChatobbyView extends ItemView {
       cancelInteraction: () => this.extensionUi.cancelActive(),
       focusFeed: () => this.feed?.focusFeed(),
       storeFiles: (files) => this.storeComposerFiles(files),
+      searchVaultReferences: (query) => searchVaultReferences(this.app, query),
     });
 
     this.composerControls = new ComposerControls({
@@ -800,10 +779,11 @@ export class ChatobbyView extends ItemView {
     void this.liveStats.refresh();
     this.liveStats.sync();
     this.sessionAgentRail.scheduleRefresh();
-    if (this.viewMode === "session-picker") this.sessionPickerMode.refresh();
+		if (this.viewMode === "projects") this.overlayScreens.projects.synchronize();
   }
   private synchronizeActiveScreen(): void {
     if (this.viewMode === "channels") this.channelScreen.synchronize();
+    else if (this.viewMode === "projects") this.overlayScreens.projects.synchronize();
     else if (this.viewMode === "memory") this.overlayScreens.memory.synchronize();
     else if (this.viewMode === "permissions") this.overlayScreens.permissions.synchronize();
     else if (this.viewMode === "events") this.overlayScreens.events.synchronize();
@@ -811,13 +791,43 @@ export class ChatobbyView extends ItemView {
     else if (this.viewMode === "mcp") this.overlayScreens.mcp.synchronize();
     else if (this.viewMode === "subagents") this.subagentScreen.synchronize();
   }
+
+	async openProjectSessions(projectId: string): Promise<void> {
+		const transport = await this.ensureConnectedTransport("opening Project sessions");
+		if (!transport) throw new Error("Chatobby runtime is unavailable.");
+		await this.activateSessionContext();
+		await this.frontendProtocol.synchronize(transport);
+		this.navigateTo({ mode: "projects", projectId });
+	}
+
+	async createProjectForCurrentSession(input: {
+		readonly name: string;
+		readonly description?: string;
+		readonly vaultRelativePath: string;
+		readonly gitPolicy?: "off" | "detect" | "offer-initialize";
+	}): Promise<void> {
+		const transport = await this.ensureConnectedTransport("creating a Project");
+		if (!transport) throw new Error("Chatobby runtime is unavailable.");
+		await this.activateSessionContext();
+		await this.frontendProtocol.synchronize(transport);
+		this.overlayScreens.projects.open();
+		await this.overlayScreens.projects.createForCurrentSession(input);
+	}
+
+	async createSessionForProject(projectId: string): Promise<void> {
+		const transport = await this.ensureConnectedTransport("starting a Project chat");
+		if (!transport) throw new Error("Chatobby runtime is unavailable.");
+		await this.activateSessionContext();
+		await this.frontendProtocol.synchronize(transport);
+		await this.overlayScreens.projects.createSession(projectId);
+	}
   private handleRuntimeStateChange(): void {
     this.bindCurrentTransport();
     this.runtimeStatus.render();
     this.toolbar.renderStatus();
     this.composerControls.refresh();
-    if (this.plugin.getRuntimeState().status === "ready" && this.viewMode === "session-picker") {
-      this.sessionPickerMode.refresh();
+		if (this.plugin.getRuntimeState().status === "ready" && this.viewMode === "projects") {
+			this.overlayScreens.projects.synchronize();
     }
   }
   private async sendPrompt(
@@ -901,6 +911,16 @@ export class ChatobbyView extends ItemView {
       if (showNotice) new Notice(`Could not prepare Chatobby before ${action}.`);
       return null;
     }
+  }
+
+  private async resolveStoredSessionPath(sessionId: string): Promise<string> {
+    const transport = await this.ensureConnectedTransport("loading the selected chat");
+    if (!transport) throw new Error("Chatobby backend is not connected");
+    const vaultRoot = getVaultBasePath(this.app);
+    if (!vaultRoot) throw new Error("Chatobby could not resolve the vault base path");
+    const session = (await transport.listSessions(vaultRoot, true)).find((candidate) => candidate.id === sessionId);
+    if (!session) throw new Error("That chat is no longer available.");
+    return session.path;
   }
 
   private renderPromptFailure(input: string, error: unknown): void {
@@ -1248,10 +1268,6 @@ export class ChatobbyView extends ItemView {
     });
   }
 
-  onSetWorkingDirectory(): void {
-    void this.commandSetWorkingDirectory();
-  }
-
   onDownloadGuide(): void {
     void downloadChatobbyGuide({
       app: this.app,
@@ -1284,7 +1300,6 @@ export class ChatobbyView extends ItemView {
   private prepareExclusiveSurface(target: ExclusiveViewSurface): void {
     this.closeSlashMenu();
     closeInactiveViewSurfaces(target, {
-      sessionPicker: () => this.sessionPickerMode.destroy(),
       overlays: () => this.overlayScreens.closeAll(false),
       subagents: () => this.subagentScreen.close(false),
       channels: () => this.channelScreen.close(false),
@@ -1332,22 +1347,18 @@ export class ChatobbyView extends ItemView {
 
   async createSession(): Promise<void> { await this.directoryRouter.create(this.sessions.workingDirectoryPath()); }
 
-  private resolveWorkingDirectoryScope(action: string): WorkingDirectoryScope | null {
-    return this.sessions.resolveWorkingDirectoryScope(action);
-  }
-
-  private async handleSessionPickerSelect(sessionPath: string): Promise<void> {
+	private async handleStoredSessionSelect(sessionPath: string): Promise<void> {
     if (this.hasSessionPath(sessionPath)) {
       await this.sessionTransition.settle();
       return;
     }
-    await this.sessions.handleSessionPickerSelect(sessionPath);
+		await this.sessions.handleStoredSessionSelect(sessionPath);
   }
 
-  async resumeStoredSession(sessionPath: string): Promise<void> { await this.handleSessionPickerSelect(sessionPath); }
+	async resumeStoredSession(sessionPath: string): Promise<void> { await this.handleStoredSessionSelect(sessionPath); }
 
   refreshSessionDirectoryIfOpen(): void {
-    if (this.componentsReady && this.viewMode === "session-picker") this.sessionPickerMode.refresh();
+		if (this.componentsReady && this.viewMode === "projects") this.overlayScreens.projects.synchronize();
   }
 
   async switchToSession(sessionId: string): Promise<void> {

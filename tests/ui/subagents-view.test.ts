@@ -231,6 +231,7 @@ describe("SubagentsView", () => {
 
     workflows.click();
     expect(workflows.getAttribute("aria-selected")).toBe("true");
+    expect(element.textContent).toContain("Flows will be deprecated in Chatobby 0.4.0");
     expect(tabs.find((button) => button.textContent === "Runs")?.getAttribute("aria-selected")).toBe("false");
 
     workflows.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));

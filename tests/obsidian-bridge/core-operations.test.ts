@@ -712,7 +712,7 @@ describe("core operations", () => {
       ];
 
       for (const { op, args } of operations) {
-        const result = await executeOperation(op as import("../../src/vendor/@chatobby/obsidian-protocol/bridge-operations").ObsidianCoreOperationName, args, makeSignal(), app);
+        const result = await executeOperation(op as import("../../src/vendor/@chatobby/obsidian-protocol/index.js").ObsidianCoreOperationName, args, makeSignal(), app);
         const serialized = JSON.stringify(result);
         expect(() => JSON.parse(serialized)).not.toThrow();
       }

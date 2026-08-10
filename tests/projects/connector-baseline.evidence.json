@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "normative": false,
+  "authority": "The source repository Projects SRS and baseline registry remain authoritative.",
+  "requirements": [
+    {
+      "id": "PRJ-BASE-002",
+      "summary": "Characterize connector working-directory and session routing without defining the future Projects model.",
+      "disposition": "migrate",
+      "evidence": [
+        "tests/ui/session/file-explorer-session-menu.test.ts",
+        "tests/ui/session/leaf-directory-router.test.ts",
+        "tests/ui/session/session-controller.test.ts",
+        "tests/ui/session/session-directory.test.ts",
+        "tests/ui/projects-view.test.ts",
+        "tests/ui/projects-screen-controller.test.ts",
+        "tests/prompt/context-packet.test.ts",
+        "tests/projects/connector-baseline.test.ts"
+      ]
+    },
+    {
+      "id": "PRJ-BASE-003",
+      "summary": "Characterize the path-derived runtime vault identity and lease-addressing boundary.",
+      "disposition": "migrate",
+      "evidence": [
+        "tests/runtime/runtime-manager.test.ts",
+        "tests/runtime/runtime-lease-store.test.ts",
+        "tests/projects/connector-baseline.test.ts"
+      ]
+    },
+    {
+      "id": "PRJ-BASE-009",
+      "summary": "Characterize connector folder actions, session browsing, leaf persistence, focus, and multi-view targeting.",
+      "disposition": "replace",
+      "evidence": [
+        "tests/ui/session/file-explorer-session-menu.test.ts",
+        "tests/ui/session/leaf-directory-router.test.ts",
+        "tests/ui/projects-view.test.ts",
+        "tests/ui/projects-screen-controller.test.ts",
+        "tests/ui/view-targeting.test.ts",
+        "tests/runtime/frontend-session-registry.test.ts",
+        "tests/projects/connector-baseline.test.ts"
+      ]
+    },
+    {
+      "id": "PRJ-BASE-010",
+      "summary": "Characterize current connector-owned runtime paths on Windows, macOS, and Linux.",
+      "disposition": "replace",
+      "evidence": [
+        "tests/runtime/platform-paths.test.ts",
+        "tests/projects/connector-baseline.test.ts"
+      ]
+    },
+    {
+      "id": "PRJ-BASE-012",
+      "summary": "Prove connector characterization does not introduce or write authoritative Project state.",
+      "disposition": "preserve",
+      "evidence": [
+        "tests/projects/connector-baseline.test.ts"
+      ]
+    }
+  ]
+}

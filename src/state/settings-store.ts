@@ -41,6 +41,7 @@ interface PersistedData {
   composerKeybindings?: Partial<ComposerKeybindings>;
   autoNameStrategy?: string;
   activeVaultDirectory?: string;
+	directoryProjectLaunchBehavior?: string;
   sessionPreferences?: Partial<SessionPreferences>;
 }
 
@@ -79,6 +80,9 @@ export class SettingsStore {
       composerKeybindings: resolveComposerKeybindings(data.composerKeybindings),
       autoNameStrategy: data.autoNameStrategy === "model" ? "model" : "truncate",
       activeVaultDirectory: data.activeVaultDirectory ?? DEFAULT_PLUGIN_SETTINGS.activeVaultDirectory,
+		directoryProjectLaunchBehavior: isDirectoryProjectLaunchBehavior(data.directoryProjectLaunchBehavior)
+			? data.directoryProjectLaunchBehavior
+			: DEFAULT_PLUGIN_SETTINGS.directoryProjectLaunchBehavior,
     });
 
     this.sessionPrefs = { ...DEFAULT_SESSION_PREFERENCES, ...(data.sessionPreferences ?? {}) };
@@ -106,6 +110,7 @@ export class SettingsStore {
       composerKeybindings: this.settings.composerKeybindings,
       autoNameStrategy: this.settings.autoNameStrategy,
       activeVaultDirectory: this.settings.activeVaultDirectory,
+		directoryProjectLaunchBehavior: this.settings.directoryProjectLaunchBehavior,
       sessionPreferences: this.sessionPrefs,
     } satisfies PersistedData);
   }
@@ -176,6 +181,12 @@ function resolveOnboardingVersion(data: PersistedData): number {
 function isCommandShell(value: string | undefined): value is PluginSettings["commandShell"] {
   return value === "auto" || value === "pwsh" || value === "powershell" || value === "cmd" ||
     value === "bash" || value === "zsh" || value === "fish" || value === "sh" || value === "custom";
+}
+
+function isDirectoryProjectLaunchBehavior(
+	value: string | undefined,
+): value is PluginSettings["directoryProjectLaunchBehavior"] {
+	return value === "ask" || value === "reuse-canonical" || value === "create-new";
 }
 
 function resolveRuntimeMode(data: PersistedData): PluginSettings["runtimeMode"] {

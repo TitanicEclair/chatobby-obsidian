@@ -4,7 +4,7 @@ export declare const OBSIDIAN_PLUGIN_NATIVE_OPERATIONS: readonly ["registry.stat
 export type ObsidianPluginNativeOperationName = (typeof OBSIDIAN_PLUGIN_NATIVE_OPERATIONS)[number];
 export declare const OBSIDIAN_UI_OPERATIONS: readonly ["ui.snapshot", "ui.interact"];
 export type ObsidianUiOperationName = (typeof OBSIDIAN_UI_OPERATIONS)[number];
-export declare const OBSIDIAN_BROWSER_OPERATIONS: readonly ["browser.open", "browser.navigate", "browser.list", "browser.snapshot", "browser.read", "browser.dom", "browser.click", "browser.pointer", "browser.type", "browser.press", "browser.wait", "browser.screenshot", "browser.close"];
+export declare const OBSIDIAN_BROWSER_OPERATIONS: readonly ["browser.open", "browser.navigate", "browser.list", "browser.snapshot", "browser.read", "browser.dom", "browser.click", "browser.pointer", "browser.type", "browser.press", "browser.wait", "browser.screenshot", "browser.diagnostics", "browser.close"];
 export type ObsidianBrowserOperationName = (typeof OBSIDIAN_BROWSER_OPERATIONS)[number];
 export declare const OBSIDIAN_RETRIEVAL_OPERATIONS: readonly ["retrieval.explore", "retrieval.trace", "retrieval.related", "retrieval.hubs", "retrieval.communities", "retrieval.explain"];
 export type ObsidianRetrievalOperationName = (typeof OBSIDIAN_RETRIEVAL_OPERATIONS)[number];

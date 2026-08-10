@@ -35,6 +35,7 @@ import { routePrintableKeyToComposer } from "./view-key-routing";
 import { matchesComposerKeybinding } from "./keybindings";
 import { interactionCopy } from "../shared/interaction-copy";
 import { attachmentMeta, attachmentVisual } from "../attachments/attachment-presentation";
+import type { ComposerVaultReference } from "./vault-reference-search";
 
 const MAX_COMPOSER_ATTACHMENTS = 8;
 const COMPOSER_ATTACHMENT_ACCEPT = [
@@ -109,6 +110,8 @@ export interface ComposerHost {
   focusFeed?(): void;
   /** Persist pasted/dropped files and return prompt-safe attachment refs. */
   storeFiles?(files: readonly File[]): Promise<ComposerAttachment[]>;
+  /** Search file and folder names for an inline @ reference. */
+  searchVaultReferences?(query: string): readonly ComposerVaultReference[];
 }
 
 export class Composer extends ChatobbyComponent {
@@ -122,6 +125,7 @@ export class Composer extends ChatobbyComponent {
   private attachInputEl: HTMLInputElement | null = null;
   private sendBtn: HTMLButtonElement | null = null;
   private stopBtn: HTMLButtonElement | null = null;
+  private referenceMenuEl: HTMLElement | null = null;
 
   private state = createInitialComposerState();
 	private isStreaming = false;
@@ -148,6 +152,9 @@ export class Composer extends ChatobbyComponent {
   private highlightSyncFrame = 0;
   private activeInteraction: InteractionState | null = null;
   private defaultPlaceholder = "";
+  private referenceToken: ReferenceToken | null = null;
+  private referenceMatches: readonly ComposerVaultReference[] = [];
+  private referenceIndex = 0;
 
   constructor(private host: ComposerHost) {
     super();
@@ -178,11 +185,13 @@ export class Composer extends ChatobbyComponent {
     this.inputEl.addEventListener("scroll", () => this.syncHighlightScroll());
     const card = this.inputEl.closest<HTMLElement>(".chatobby-composer-card");
     this.composerCardEl = card;
+    this.referenceMenuEl = card?.createDiv({ cls: "chatobby-reference-menu is-hidden" }) ?? null;
     this.interactionRailEl = card?.createDiv({ cls: "chatobby-interaction-rail is-hidden" }) ?? null;
     this.attachmentRailEl = card?.createDiv({ cls: "chatobby-attachment-rail is-hidden" }) ?? null;
     this.activationRailEl = card?.createDiv({ cls: "chatobby-activation-rail is-hidden" }) ?? null;
     if (this.attachmentRailEl && card) {
       const inputWrap = card.querySelector(".chatobby-input-wrap");
+      if (inputWrap && this.referenceMenuEl) card.insertBefore(this.referenceMenuEl, inputWrap);
       if (inputWrap && this.interactionRailEl) card.insertBefore(this.interactionRailEl, inputWrap);
       if (inputWrap) card.insertBefore(this.attachmentRailEl, inputWrap);
       if (inputWrap && this.activationRailEl) card.insertBefore(this.activationRailEl, inputWrap);
@@ -246,6 +255,7 @@ export class Composer extends ChatobbyComponent {
     this.activations = [];
     this.cancelledToken = null;
     this.pendingArgumentCompletion = null;
+    this.closeReferenceMenu();
     if (this.inputEl) {
       this.inputEl.value = text;
     }
@@ -267,6 +277,7 @@ export class Composer extends ChatobbyComponent {
     this.activations = [];
     this.cancelledToken = null;
     this.pendingArgumentCompletion = null;
+    this.closeReferenceMenu();
     if (this.inputEl) {
       this.inputEl.value = "";
     }
@@ -432,6 +443,13 @@ export class Composer extends ChatobbyComponent {
       if (e.key === "Escape") { e.preventDefault(); this.pendingArgumentCompletion = null; this.host.closeSlash?.(); return; }
     }
 
+    if (this.referenceToken && !this.referenceMenuEl?.hasClass("is-hidden")) {
+      if (e.key === "ArrowDown") { e.preventDefault(); this.moveReference(1); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); this.moveReference(-1); return; }
+      if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); this.commitReference(); return; }
+      if (e.key === "Escape") { e.preventDefault(); this.closeReferenceMenu(); return; }
+    }
+
     if (e.key === " " && !e.shiftKey && this.activateCurrentTokenOnSpace()) {
       this.host.closeSlash?.();
       return;
@@ -530,7 +548,8 @@ export class Composer extends ChatobbyComponent {
       this.state.text = this.inputEl.value;
     }
     this.updateControls();
-    this.refreshSlashState();
+    if (this.refreshReferenceState()) this.host.closeSlash?.();
+    else this.refreshSlashState();
   }
 
   // ── Private helpers ────────────────────────────────────────────
@@ -547,6 +566,93 @@ export class Composer extends ChatobbyComponent {
   private renderState(): void {
     this.isStreaming = this.host.getSessionState()?.isStreaming ?? false;
     this.updateControls();
+  }
+
+  private refreshReferenceState(): boolean {
+    const input = this.inputEl;
+    if (!input || !this.host.searchVaultReferences) {
+      this.closeReferenceMenu();
+      return false;
+    }
+    const token = findReferenceToken(input.value, input.selectionStart ?? input.value.length);
+    if (!token) {
+      this.closeReferenceMenu();
+      return false;
+    }
+    this.referenceToken = token;
+    this.referenceMatches = this.host.searchVaultReferences(token.query);
+    this.referenceIndex = Math.min(this.referenceIndex, Math.max(0, this.referenceMatches.length - 1));
+    this.renderReferenceMenu();
+    return true;
+  }
+
+  private renderReferenceMenu(): void {
+    const menu = this.referenceMenuEl;
+    if (!menu) return;
+    menu.empty();
+    menu.removeClass("is-hidden");
+    menu.createDiv({ cls: "chatobby-reference-menu__title", text: "Reference a file or folder" });
+    if (this.referenceMatches.length === 0) {
+      menu.createDiv({ cls: "chatobby-reference-menu__empty", text: "No matching files or folders" });
+      return;
+    }
+    const list = menu.createDiv({ cls: "chatobby-reference-menu__list", attr: { role: "listbox" } });
+    this.referenceMatches.forEach((reference, index) => {
+      const option = list.createEl("button", {
+        cls: `chatobby-reference-menu__option${index === this.referenceIndex ? " is-active" : ""}`,
+        attr: {
+          type: "button",
+          role: "option",
+          "aria-selected": String(index === this.referenceIndex),
+        },
+      });
+      const icon = option.createSpan({ cls: "chatobby-reference-menu__icon", attr: { "aria-hidden": "true" } });
+      setIcon(icon, reference.kind === "folder" ? "folder" : "file-text");
+      const copy = option.createSpan({ cls: "chatobby-reference-menu__copy" });
+      copy.createSpan({ cls: "chatobby-reference-menu__name", text: reference.label });
+      copy.createSpan({ cls: "chatobby-reference-menu__path", text: reference.path });
+      option.addEventListener("pointerdown", (event) => event.preventDefault());
+      option.addEventListener("click", () => {
+        this.referenceIndex = index;
+        this.commitReference();
+      });
+    });
+    menu.createDiv({
+      cls: "chatobby-reference-menu__hint",
+      text: "A reference names the item; it does not grant Chatobby permission to open or change it.",
+    });
+  }
+
+  private moveReference(delta: 1 | -1): void {
+    if (this.referenceMatches.length === 0) return;
+    this.referenceIndex = (this.referenceIndex + delta + this.referenceMatches.length) % this.referenceMatches.length;
+    this.renderReferenceMenu();
+  }
+
+  private commitReference(): void {
+    const input = this.inputEl;
+    const token = this.referenceToken;
+    const reference = this.referenceMatches[this.referenceIndex];
+    if (!input || !token || !reference) return;
+    const path = reference.kind === "folder" ? `${reference.path.replace(/\/$/u, "")}/` : reference.path;
+    const insertion = `@[[${path}]] `;
+    const cursor = input.selectionStart ?? token.end;
+    input.value = `${input.value.slice(0, token.start)}${insertion}${input.value.slice(cursor)}`;
+    const nextCursor = token.start + insertion.length;
+    input.setSelectionRange(nextCursor, nextCursor);
+    this.state.text = input.value;
+    this.closeReferenceMenu();
+    this.resizeInput();
+    this.refreshSlashState();
+    this.updateControls();
+  }
+
+  private closeReferenceMenu(): void {
+    this.referenceToken = null;
+    this.referenceMatches = [];
+    this.referenceIndex = 0;
+    this.referenceMenuEl?.empty();
+    this.referenceMenuEl?.addClass("is-hidden");
   }
 
   private setPromptInFlight(promptInFlight: boolean): void {
@@ -1225,6 +1331,28 @@ function isTextInput(e: KeyboardEvent): boolean {
 
 function isPromiseLike(value: unknown): value is PromiseLike<void | PromptSubmissionOutcome> {
   return typeof value === "object" && value !== null && "then" in value;
+}
+
+interface ReferenceToken {
+  readonly start: number;
+  readonly end: number;
+  readonly query: string;
+}
+
+function findReferenceToken(text: string, cursor: number): ReferenceToken | null {
+  if (cursor <= 0 || cursor > text.length) return null;
+  let start = cursor - 1;
+  while (start >= 0 && !isReferenceBoundary(text[start])) start -= 1;
+  start += 1;
+  if (text[start] !== "@") return null;
+  if (start > 0 && !isReferenceBoundary(text[start - 1])) return null;
+  const query = text.slice(start + 1, cursor);
+  if (query.includes("[") || query.includes("]")) return null;
+  return { start, end: cursor, query };
+}
+
+function isReferenceBoundary(character: string | undefined): boolean {
+  return character === undefined || character === " " || character === "\n" || character === "\t";
 }
 
 function argumentInsertPoint(text: string, start: number): number {

@@ -34,6 +34,43 @@
   min-width: 0;
 }
 
+.chatobby-feed__sticky-prompt {
+	position: absolute;
+	top: var(--size-2-2);
+	left: 50%;
+	z-index: 3;
+	width: min(calc(100% - 7rem), 720px);
+	min-width: 0;
+	padding: var(--size-2-2) var(--size-4-3);
+	transform: translateX(-50%);
+	overflow: hidden;
+	border: var(--border-width) solid var(--chatobby-border);
+	border-radius: 999px;
+	color: var(--text-muted);
+	background: color-mix(in srgb, var(--chatobby-canvas) 94%, transparent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--chatobby-shadow-color) 32%, transparent);
+	font-size: var(--font-ui-smaller);
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	backdrop-filter: blur(8px);
+}
+
+.chatobby-feed__sticky-prompt:hover,
+.chatobby-feed__sticky-prompt:focus-visible {
+	color: var(--text-normal);
+	border-color: color-mix(in srgb, var(--chatobby-accent) 45%, var(--chatobby-border));
+}
+
+.chatobby-feed__block.is-feed-target {
+	animation: chatobby-feed-target 1s ease-out;
+}
+
+@keyframes chatobby-feed-target {
+	0%, 30% { background: color-mix(in srgb, var(--chatobby-accent) 18%, transparent); }
+	100% { background: transparent; }
+}
+
 .chatobby-feed-viewbar {
   position: absolute;
   top: var(--size-4-2);

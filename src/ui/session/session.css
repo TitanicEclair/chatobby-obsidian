@@ -34,7 +34,9 @@
 }
 
 .chatobby-tab-bar button.chatobby-tab-bar__directory {
-	display: block;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
   flex: 1 1 auto;
   min-width: 0;
   max-width: min(42cqw, 320px);
@@ -49,10 +51,28 @@
   color: var(--text-faint);
   font-size: var(--font-ui-smaller);
   font-weight: var(--font-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 	text-align: left;
 	cursor: pointer;
+}
+
+.chatobby-tab-bar__session-title,
+.chatobby-tab-bar__workspace-label {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chatobby-tab-bar__session-title {
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
+.chatobby-tab-bar__workspace-label {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-normal);
 }
 
 .chatobby-tab-bar button.chatobby-tab-bar__directory:hover,
@@ -120,6 +140,7 @@
 
 @container (max-width: 400px) {
   .chatobby-tab-bar { gap: var(--size-2-1); }
-  .chatobby-tab-bar__directory { display: none; }
+	.chatobby-tab-bar__workspace-label { display: none; }
+	.chatobby-tab-bar button.chatobby-tab-bar__directory { max-width: 24cqw; }
   .chatobby-tab-bar__actions { width: 100%; }
 }

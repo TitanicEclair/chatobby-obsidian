@@ -17,8 +17,10 @@ const SOFT_MAX_CHARS = 32_000;
 const HARD_MAX_CHARS = 96_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 5_000;
 const WEBVIEWER_READY_TIMEOUT_MS = 5_000;
+const DEFAULT_POST_ACTION_SETTLE_MS = 100;
 const PAGE_RUNTIME_KEY = "__chatobbyExecuteBrowserPageV2";
 const browserArtifactStore = new BrowserArtifactStore();
+const MAX_BROWSER_CONSOLE_ENTRIES = 200;
 
 interface WebViewerState {
   url?: string;
@@ -58,8 +60,33 @@ interface BrowserTabInfo {
   canGoBack?: boolean;
   canGoForward?: boolean;
   audible?: boolean;
+  webviewAttached: boolean;
+  ready: boolean;
+  visible: boolean;
+  focused: boolean;
+  throttling: "unknown";
   page?: Record<string, unknown>;
 }
+
+interface BrowserConsoleEntry {
+  sequence: number;
+  capturedAt: string;
+  level: "error" | "warning" | "info" | "debug";
+  message: string;
+  line?: number;
+  sourceId?: string;
+}
+
+interface BrowserConsoleCapture {
+  webview: WebViewElement;
+  observationStartedAt: string;
+  nextSequence: number;
+  dropped: number;
+  entries: BrowserConsoleEntry[];
+  listener: EventListener;
+}
+
+const browserConsoleCaptures = new Map<string, BrowserConsoleCapture>();
 
 interface BrowserCursor {
   documentId: string;
@@ -119,6 +146,67 @@ function safeWebViewValue<T>(read: () => T): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+function redactBrowserConsoleText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/\b(api[_-]?key|access[_-]?token|authorization|password|secret)\s*[:=]\s*\S+/giu, "$1=<redacted>")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+/giu, "Bearer <redacted>")
+    .slice(0, 2_000);
+}
+
+function browserConsoleLevel(value: unknown): BrowserConsoleEntry["level"] {
+  if (value === "error" || value === 3) return "error";
+  if (value === "warning" || value === "warn" || value === 2) return "warning";
+  if (value === "debug" || value === 0) return "debug";
+  return "info";
+}
+
+function ensureBrowserConsoleCapture(leaf: WorkspaceLeaf, webview: WebViewElement): BrowserConsoleCapture {
+  const leafId = getLeafId(leaf);
+  const existing = browserConsoleCaptures.get(leafId);
+  if (existing?.webview === webview) return existing;
+  if (existing) existing.webview.removeEventListener("console-message", existing.listener);
+  const capture: BrowserConsoleCapture = {
+    webview,
+    observationStartedAt: new Date().toISOString(),
+    nextSequence: 1,
+    dropped: 0,
+    entries: [],
+    listener: () => undefined,
+  };
+  capture.listener = (rawEvent: Event) => {
+    const event = rawEvent as Event & {
+      level?: unknown;
+      message?: unknown;
+      line?: unknown;
+      sourceId?: unknown;
+    };
+    const entry: BrowserConsoleEntry = {
+      sequence: capture.nextSequence,
+      capturedAt: new Date().toISOString(),
+      level: browserConsoleLevel(event.level),
+      message: redactBrowserConsoleText(event.message),
+      ...(typeof event.line === "number" ? { line: event.line } : {}),
+      ...(typeof event.sourceId === "string" ? { sourceId: redactBrowserConsoleText(event.sourceId) } : {}),
+    };
+    capture.nextSequence += 1;
+    capture.entries.push(entry);
+    if (capture.entries.length > MAX_BROWSER_CONSOLE_ENTRIES) {
+      capture.entries.splice(0, capture.entries.length - MAX_BROWSER_CONSOLE_ENTRIES);
+      capture.dropped += 1;
+    }
+  };
+  webview.addEventListener("console-message", capture.listener);
+  browserConsoleCaptures.set(leafId, capture);
+  return capture;
+}
+
+function removeBrowserConsoleCapture(leafId: string): void {
+  const capture = browserConsoleCaptures.get(leafId);
+  if (!capture) return;
+  capture.webview.removeEventListener("console-message", capture.listener);
+  browserConsoleCaptures.delete(leafId);
 }
 
 function isWebViewReady(webview: WebViewElement): boolean {
@@ -270,6 +358,7 @@ function findBrowserLeaf(app: App, leafId?: string): WorkspaceLeaf | null {
 
 async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTabInfo> {
   const webview = getWebViewElement(leaf);
+  if (webview) ensureBrowserConsoleCapture(leaf, webview);
   const loading = webview?.isLoading ? safeWebViewValue(() => webview.isLoading?.()) : undefined;
   let page: Record<string, unknown> | undefined;
   if (webview?.executeJavaScript && loading === false) {
@@ -286,10 +375,18 @@ async function browserTabInfo(app: App, leaf: WorkspaceLeaf): Promise<BrowserTab
   const canGoBack = webview?.canGoBack ? safeWebViewValue(() => webview.canGoBack?.()) : undefined;
   const canGoForward = webview?.canGoForward ? safeWebViewValue(() => webview.canGoForward?.()) : undefined;
   const audible = webview?.isCurrentlyAudible ? safeWebViewValue(() => webview.isCurrentlyAudible?.()) : undefined;
+  const container = getLeafContainer(leaf);
+  const visible = Boolean(container && container.isConnected && container.getClientRects().length > 0);
+  const focused = leaf === getCurrentLeaf(app) && Boolean(container?.contains(document.activeElement));
   return {
     leafId: getLeafId(leaf),
     type: getLeafViewType(leaf),
     isActive: leaf === getCurrentLeaf(app),
+    webviewAttached: Boolean(webview && (webview.isConnected || container?.contains(webview))),
+    ready: Boolean(webview && isWebViewReady(webview)),
+    visible,
+    focused,
+    throttling: "unknown",
     ...(url ? { url } : {}),
     ...(title ? { title } : {}),
     ...(loading !== undefined ? { loading } : {}),
@@ -331,6 +428,38 @@ async function browserActionState(app: App, leaf: WorkspaceLeaf): Promise<Record
   };
 }
 
+function pageIdentity(value: Record<string, unknown>): { documentId?: string; revision?: number; url?: string } {
+  const page = asRecord(value.page);
+  return {
+    ...(typeof page.documentId === "string" ? { documentId: page.documentId } : {}),
+    ...(typeof page.revision === "number" ? { revision: page.revision } : {}),
+    ...(typeof page.url === "string" ? { url: page.url } : {}),
+  };
+}
+
+function browserActionReceipt(
+  action: string,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  settleMs: number,
+): Record<string, unknown> {
+  const beforeIdentity = pageIdentity(before);
+  const afterIdentity = pageIdentity(after);
+  const observedPageChange = beforeIdentity.documentId !== afterIdentity.documentId
+    || beforeIdentity.revision !== afterIdentity.revision
+    || beforeIdentity.url !== afterIdentity.url;
+  return {
+    action,
+    dispatch: "confirmed",
+    postActionCapture: "confirmed",
+    observedPageChange,
+    settleMs,
+    interpretation: observedPageChange
+      ? "A page identity, URL, or semantic revision changed after dispatch."
+      : "No page identity, URL, or semantic revision change was observed; this does not prove the application ignored the action.",
+  };
+}
+
 function resolveBrowserTarget(app: App, target: unknown): WorkspaceLeaf {
   switch (target) {
     case "current": return app.workspace.getLeaf(false);
@@ -355,7 +484,7 @@ function requireBrowserLeaf(app: App, leafId: string | undefined): WorkspaceLeaf
   const leaf = findBrowserLeaf(app, leafId);
   if (!leaf) {
     throw new BridgeError(
-      "OBSIDIAN_OPERATION_FAILED",
+      "WEB_VIEWER_NOT_FOUND",
       leafId ? `No Web viewer tab found for leafId ${leafId}` : "No Web viewer tab is open",
     );
   }
@@ -373,16 +502,17 @@ async function runPageOperation(
   webview: WebViewElement,
   action: BrowserPageAction,
   operationInput: Record<string, unknown>,
+  userGesture = false,
 ): Promise<Record<string, unknown>> {
   if (!webview.executeJavaScript) throw new BridgeError("UNSUPPORTED_OPERATION", "Web viewer page scripting is unavailable");
   const input: BrowserPageInput = { action, ...operationInput };
   try {
     const invocation = `window[${JSON.stringify(PAGE_RUNTIME_KEY)}]?window[${JSON.stringify(PAGE_RUNTIME_KEY)}](${safeScriptJson(input)}):({__chatobbyRuntimeMissing:true})`;
-    let result = asRecord(await webview.executeJavaScript(invocation, false));
+    let result = asRecord(await webview.executeJavaScript(invocation, userGesture));
     if (result.__chatobbyRuntimeMissing === true) {
       const install = `window[${JSON.stringify(PAGE_RUNTIME_KEY)}]=(${executeBrowserPageOperation.toString()});true`;
       await webview.executeJavaScript(install, false);
-      result = asRecord(await webview.executeJavaScript(invocation, false));
+      result = asRecord(await webview.executeJavaScript(invocation, userGesture));
     }
     if (result.ok === false) throw new BridgeError("INVALID_INPUT", String(result.message || `browser.${action} failed`));
     return result;
@@ -815,6 +945,8 @@ export const handleBrowserRead: OperationHandler = async (args, signal, app) => 
   const hasMore = Boolean(paged.next) || legacyNextStartIndex !== undefined || artifact.captureTruncated;
   return {
     available: true,
+    captureOrigin: decoded ? "retained" : "live",
+    servedAt: new Date().toISOString(),
     ...(tab ?? { leafId: artifact.leafId }),
     page: artifact.page,
     metadata: artifact.metadata,
@@ -869,29 +1001,34 @@ export const handleBrowserClick: OperationHandler = async (args, signal, app) =>
   assertNotAborted(signal);
   const leaf = requireBrowserLeaf(app, leafIdFrom(args));
   const webview = requireWebView(leaf);
+  const before = await runPageOperation(webview, "page", {});
   const button = args.button === "middle" || args.button === "right" ? args.button : "left";
   const clickCount = args.clickCount === 2 ? 2 : 1;
   let result: Record<string, unknown>;
-  if (webview.sendInputEvent) {
+  if (button === "left" && clickCount === 1) {
+    const clicked = await runPageOperation(webview, "click", targetArguments(args), true);
+    result = { ...clicked, button, clickCount, dispatchMethod: "semantic-user-gesture" };
+  } else if (webview.sendInputEvent) {
     const point = await targetCenter(webview, targetArguments(args));
     await webview.sendInputEvent({ type: "mouseMove", ...point });
     await webview.sendInputEvent({ type: "mouseDown", ...point, button, clickCount });
     await webview.sendInputEvent({ type: "mouseUp", ...point, button, clickCount });
-    result = { clicked: true, button, clickCount, point };
-  } else if (button === "left" && clickCount === 1) {
-    result = await runPageOperation(webview, "click", targetArguments(args));
+    result = { clicked: true, button, clickCount, point, dispatchMethod: "native-pointer" };
   } else {
     throw new BridgeError("UNSUPPORTED_OPERATION", "Native Web Viewer pointer input is unavailable");
   }
   assertNotAborted(signal);
-  if (typeof args.waitAfterMs === "number") await waitLocal(args.waitAfterMs, signal);
-  return { ...(await browserActionState(app, leaf)), ...result };
+  const settleMs = typeof args.waitAfterMs === "number" ? args.waitAfterMs : DEFAULT_POST_ACTION_SETTLE_MS;
+  if (settleMs > 0) await waitLocal(settleMs, signal);
+  const after = await browserActionState(app, leaf);
+  return { ...result, ...after, actionReceipt: browserActionReceipt("click", before, after, settleMs) };
 };
 
 export const handleBrowserPointer: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const leaf = requireBrowserLeaf(app, leafIdFrom(args));
   const webview = requireWebView(leaf);
+  const before = await runPageOperation(webview, "page", {});
   if (!webview.sendInputEvent) throw new BridgeError("UNSUPPORTED_OPERATION", "Native Web Viewer pointer input is unavailable");
   const action = typeof args.action === "string" ? args.action : "";
   const start = args.ref || args.cssSelector || args.role || args.text
@@ -899,13 +1036,16 @@ export const handleBrowserPointer: OperationHandler = async (args, signal, app) 
     : viewportCenter(webview);
   if (action === "hover") {
     await webview.sendInputEvent({ type: "mouseMove", ...start });
-    return { hovered: true, point: start, ...(await browserActionState(app, leaf)) };
+    const after = await browserActionState(app, leaf);
+    return { hovered: true, point: start, ...after, actionReceipt: browserActionReceipt("hover", before, after, 0) };
   }
   if (action === "scroll") {
     const deltaX = typeof args.deltaX === "number" ? args.deltaX : 0;
     const deltaY = typeof args.deltaY === "number" ? args.deltaY : 0;
     await webview.sendInputEvent({ type: "mouseWheel", ...start, deltaX, deltaY, canScroll: true });
-    return { scrolled: true, point: start, deltaX, deltaY, ...(await browserActionState(app, leaf)) };
+    await waitLocal(DEFAULT_POST_ACTION_SETTLE_MS, signal);
+    const after = await browserActionState(app, leaf);
+    return { scrolled: true, point: start, deltaX, deltaY, ...after, actionReceipt: browserActionReceipt("scroll", before, after, DEFAULT_POST_ACTION_SETTLE_MS) };
   }
   if (action === "drag") {
     const end = typeof args.toX === "number" && typeof args.toY === "number"
@@ -925,7 +1065,9 @@ export const handleBrowserPointer: OperationHandler = async (args, signal, app) 
       });
     }
     await webview.sendInputEvent({ type: "mouseUp", ...end, button, clickCount: 1 });
-    return { dragged: true, from: start, to: end, button, steps, ...(await browserActionState(app, leaf)) };
+    await waitLocal(DEFAULT_POST_ACTION_SETTLE_MS, signal);
+    const after = await browserActionState(app, leaf);
+    return { dragged: true, from: start, to: end, button, steps, ...after, actionReceipt: browserActionReceipt("drag", before, after, DEFAULT_POST_ACTION_SETTLE_MS) };
   }
   throw new BridgeError("INVALID_INPUT", `Unknown browser pointer action: ${action}`);
 };
@@ -933,20 +1075,25 @@ export const handleBrowserPointer: OperationHandler = async (args, signal, app) 
 export const handleBrowserType: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const leaf = requireBrowserLeaf(app, leafIdFrom(args));
-  const result = await runPageOperation(requireWebView(leaf), "fill", {
+  const webview = requireWebView(leaf);
+  const before = await runPageOperation(webview, "page", {});
+  const result = await runPageOperation(webview, "fill", {
     ...targetArguments(args),
     value: args.text,
     clear: args.clear,
     submit: args.submit,
   });
   assertNotAborted(signal);
-  return { ...(await browserActionState(app, leaf)), ...result };
+  await waitLocal(DEFAULT_POST_ACTION_SETTLE_MS, signal);
+  const after = await browserActionState(app, leaf);
+  return { ...result, ...after, actionReceipt: browserActionReceipt("type", before, after, DEFAULT_POST_ACTION_SETTLE_MS) };
 };
 
 export const handleBrowserPress: OperationHandler = async (args, signal, app) => {
   assertNotAborted(signal);
   const leaf = requireBrowserLeaf(app, leafIdFrom(args));
   const webview = requireWebView(leaf);
+  const before = await runPageOperation(webview, "page", {});
   if (args.ref || args.cssSelector || args.role || args.text) {
     await runPageOperation(webview, "focus", targetArguments(args));
   }
@@ -957,8 +1104,9 @@ export const handleBrowserPress: OperationHandler = async (args, signal, app) =>
   await webview.sendInputEvent({ type: "keyDown", keyCode: key, modifiers });
   await webview.sendInputEvent({ type: "keyUp", keyCode: key, modifiers });
   assertNotAborted(signal);
-  const page = await runPageOperation(webview, "page", {});
-  return { pressed: true, key, modifiers, ...(await browserActionState(app, leaf)), ...page };
+  await waitLocal(DEFAULT_POST_ACTION_SETTLE_MS, signal);
+  const after = await browserActionState(app, leaf);
+  return { pressed: true, key, modifiers, ...after, actionReceipt: browserActionReceipt("press", before, after, DEFAULT_POST_ACTION_SETTLE_MS) };
 };
 
 export const handleBrowserWait: OperationHandler = async (args, signal, app) => {
@@ -977,6 +1125,38 @@ export const handleBrowserWait: OperationHandler = async (args, signal, app) => 
   });
   assertNotAborted(signal);
   return { ...(await browserTabInfo(app, leaf)), ...result };
+};
+
+export const handleBrowserDiagnostics: OperationHandler = async (args, signal, app) => {
+  assertNotAborted(signal);
+  const leaf = requireBrowserLeaf(app, leafIdFrom(args));
+  const webview = requireWebView(leaf);
+  const capture = ensureBrowserConsoleCapture(leaf, webview);
+  const level = typeof args.level === "string" ? args.level : "all";
+  const sinceSequence = typeof args.sinceSequence === "number" ? args.sinceSequence : 0;
+  const limit = typeof args.limit === "number" ? args.limit : 100;
+  const matching = capture.entries.filter((entry) => (
+    entry.sequence > sinceSequence && (level === "all" || entry.level === level)
+  ));
+  const entries = matching.slice(-limit);
+  const truncated = entries.length < matching.length || capture.dropped > 0;
+  const capturedAt = new Date().toISOString();
+  return {
+    ...(await browserTabInfo(app, leaf)),
+    captureOrigin: "live",
+    capturedAt,
+    observationStartedAt: capture.observationStartedAt,
+    entries,
+    dropped: capture.dropped,
+    lastSequence: capture.nextSequence - 1,
+    emptyMeaning: "No matching Web Viewer guest-console messages were captured since observation began; this does not prove the page emitted no earlier errors.",
+    coverage: {
+      kind: truncated ? "partial" : "sampled",
+      returned: entries.length,
+      total: matching.length,
+      hasMore: entries.length < matching.length,
+    },
+  };
 };
 
 export const handleBrowserScreenshot: OperationHandler = async (args, signal, app) => {
@@ -1019,6 +1199,7 @@ export const handleBrowserClose: OperationHandler = async (args, signal, app) =>
   if (!leaf) return { closed: false, alreadyClosed: true, ...(leafId ? { leafId } : {}) };
   const tab = await browserTabInfo(app, leaf);
   browserArtifactStore.deleteLeaf(getLeafId(leaf));
+  removeBrowserConsoleCapture(getLeafId(leaf));
   leaf.detach();
   return { closed: true, tab };
 };

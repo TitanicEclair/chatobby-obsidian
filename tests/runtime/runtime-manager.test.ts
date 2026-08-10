@@ -13,7 +13,7 @@ import type {
   RuntimeReadyDescriptor,
 } from "../../src/runtime/contracts";
 import type { ManagedProcessLauncher } from "../../src/runtime/infrastructure/managed-process";
-import { deriveRuntimeVaultId } from "../../src/runtime/infrastructure/runtime-lease-store";
+import { deriveLegacyRuntimeVaultId } from "../../src/vault-runtime";
 import type { ChatobbyVaultRuntimePaths } from "../../src/vault-runtime";
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../src/vendor/chatobby-client/ws-client.js";
 
@@ -22,6 +22,8 @@ const VAULT_PATHS: ChatobbyVaultRuntimePaths = {
   chatobbyRoot: "C:\\vault\\.chatobby",
   agentDir: "C:\\vault\\.chatobby\\agent",
   attachmentDir: "C:\\vault\\.chatobby\\attachments",
+	vaultId: "vault-expected",
+	legacyVaultId: deriveLegacyRuntimeVaultId("C:\\vault"),
 };
 
 const DESCRIPTOR: RuntimeReadyDescriptor = {
@@ -94,6 +96,52 @@ describe("DefaultChatobbyRuntimeManager", () => {
     expect(connectRuntime).toHaveBeenCalledWith(runtime);
   });
 
+	it("retires an authenticated path-addressed lease before using the stable Vault lease", async () => {
+		const legacyCandidate: RuntimeLeaseCandidate = {
+			...CANDIDATE,
+			descriptor: { ...DESCRIPTOR, instanceId: "legacy-instance", vaultId: VAULT_PATHS.legacyVaultId, pid: 91 },
+		};
+		const leaseStore = fakeLeaseStore(null);
+		vi.mocked(leaseStore.readCandidate).mockImplementation(async (vaultId) =>
+			vaultId === VAULT_PATHS.legacyVaultId ? legacyCandidate : CANDIDATE
+		);
+		const controlClient = fakeControlClient();
+		const manager = createManager({ leaseStore, controlClient });
+
+		await expect(manager.ensureReady({ reason: "view-open" })).resolves.toMatchObject({
+			session: { vaultId: VAULT_PATHS.vaultId },
+		});
+		expect(controlClient.shutdown).toHaveBeenCalledWith(
+			legacyCandidate.descriptor,
+			legacyCandidate.controlToken,
+		);
+		expect(leaseStore.discardStaleDescriptor).toHaveBeenCalledWith(VAULT_PATHS.legacyVaultId);
+	});
+
+	it("refuses to start a stable lease when a live path-addressed runtime cannot be stopped", async () => {
+		const legacyCandidate: RuntimeLeaseCandidate = {
+			...CANDIDATE,
+			descriptor: { ...DESCRIPTOR, instanceId: "legacy-instance", vaultId: VAULT_PATHS.legacyVaultId, pid: 91 },
+		};
+		const leaseStore = fakeLeaseStore(null);
+		vi.mocked(leaseStore.readCandidate).mockImplementation(async (vaultId) =>
+			vaultId === VAULT_PATHS.legacyVaultId ? legacyCandidate : null
+		);
+		const controlClient = fakeControlClient();
+		vi.mocked(controlClient.shutdown).mockRejectedValue(new Error("legacy control unavailable"));
+		const processLauncher = fakeProcessLauncher();
+		const manager = createManager({
+			leaseStore,
+			controlClient,
+			processLauncher,
+			isProcessAlive: (pid) => pid === legacyCandidate.descriptor.pid,
+		});
+
+		await expect(manager.ensureReady({ reason: "view-open" })).rejects.toThrow(/could not be stopped safely/u);
+		expect(processLauncher.spawn).not.toHaveBeenCalled();
+		expect(leaseStore.discardStaleDescriptor).not.toHaveBeenCalledWith(VAULT_PATHS.legacyVaultId);
+	});
+
   it("replaces a live runtime whose package fingerprint does not match the signed release", async () => {
     const mismatched = {
       ...CANDIDATE,
@@ -113,7 +161,7 @@ describe("DefaultChatobbyRuntimeManager", () => {
     await manager.ensureReady({ reason: "view-open" });
 
     expect(controlClient.shutdown).toHaveBeenCalledWith(mismatched.descriptor, mismatched.controlToken);
-    expect(leaseStore.discardStaleDescriptor).toHaveBeenCalledWith(deriveRuntimeVaultId(VAULT_PATHS.vaultRoot));
+    expect(leaseStore.discardStaleDescriptor).toHaveBeenCalledWith(VAULT_PATHS.vaultId);
     expect(processLauncher.spawn).toHaveBeenCalledOnce();
   });
 
@@ -126,7 +174,7 @@ describe("DefaultChatobbyRuntimeManager", () => {
     const leaseStore: RuntimeLeaseStoreLike = {
       ...fakeLeaseStore(null),
       readCandidate: vi.fn(async () => spawned ? CANDIDATE : null),
-      readLegacyShutdownTarget: vi.fn(async () => legacy),
+      readLegacyShutdownTarget: vi.fn(async (vaultId) => vaultId === VAULT_PATHS.vaultId ? legacy : null),
     };
     const processLauncher = fakeProcessLauncher();
     vi.mocked(processLauncher.spawn).mockImplementation(async () => {
@@ -139,7 +187,7 @@ describe("DefaultChatobbyRuntimeManager", () => {
     await manager.ensureReady({ reason: "view-open" });
 
     expect(controlClient.shutdown).toHaveBeenCalledWith(legacy.descriptor, legacy.controlToken);
-    expect(leaseStore.discardStaleDescriptor).toHaveBeenCalledWith(deriveRuntimeVaultId(VAULT_PATHS.vaultRoot));
+    expect(leaseStore.discardStaleDescriptor).toHaveBeenCalledWith(VAULT_PATHS.vaultId);
     expect(processLauncher.spawn).toHaveBeenCalledOnce();
   });
 
@@ -196,6 +244,7 @@ describe("DefaultChatobbyRuntimeManager", () => {
     expect(launch.args).not.toContain("9222");
     expect(launch.env.CHATOBBY_RUNTIME_PUBLIC_KEY).toBe("test-public-key");
     expect(launch.env.CHATOBBY_SHELL).toBe("bash");
+		expect(launch.env.CHATOBBY_LEGACY_VAULT_ID).toBe(VAULT_PATHS.legacyVaultId);
   });
 
   it("reattaches through the websocket when a live runtime control probe is transiently unavailable", async () => {
@@ -254,6 +303,27 @@ describe("DefaultChatobbyRuntimeManager", () => {
       const ready = manager.ensureReady({ reason: "view-open" });
       await vi.advanceTimersByTimeAsync(20);
       await expect(ready).rejects.toThrow("authentication timed out");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not preempt a valid startup-admission handshake at the former 15-second bound", async () => {
+    vi.useFakeTimers();
+    try {
+      const connected = deferred<void>();
+      const manager = createManager({
+        leaseStore: fakeLeaseStore(CANDIDATE),
+        connectRuntime: vi.fn(() => connected.promise),
+      });
+
+      const ready = manager.ensureReady({ reason: "view-open" });
+      await vi.advanceTimersByTimeAsync(15_000);
+      connected.resolve();
+
+      await expect(ready).resolves.toMatchObject({
+        endpoint: "ws://127.0.0.1:43125",
+      });
     } finally {
       vi.useRealTimers();
     }

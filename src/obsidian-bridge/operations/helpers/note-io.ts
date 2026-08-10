@@ -4,7 +4,7 @@
 // See docs/tooling/bridge-executor.md §8 for the Obsidian API mapping.
 
 import type { App, TAbstractFile, TFile, TFolder } from "obsidian";
-import { normalizeVaultFolderPath } from "../../../vendor/@chatobby/obsidian-protocol/vault-paths";
+import { normalizeVaultFolderPath } from "../../../vendor/@chatobby/obsidian-protocol/index.js";
 import { BridgeError } from "../../types";
 import { pageTextLines } from "./paging";
 import { computeDiff, type DiffHunk } from "../../../utils/diff";

@@ -8,8 +8,8 @@
 // docs/tooling/operation-catalog.md for the full catalog.
 
 import type { App } from "obsidian";
-import type { ObsidianOperationName } from "../vendor/@chatobby/obsidian-protocol/bridge-operations";
-import { isOperationName } from "../vendor/@chatobby/obsidian-protocol/bridge-operations";
+import type { ObsidianOperationName } from "../vendor/@chatobby/obsidian-protocol/index.js";
+import { isOperationName } from "../vendor/@chatobby/obsidian-protocol/index.js";
 import type { OperationHandler } from "./types";
 import { BridgeError } from "./types";
 
@@ -79,6 +79,7 @@ import {
   handleBrowserPress,
   handleBrowserWait,
   handleBrowserScreenshot,
+  handleBrowserDiagnostics,
   handleBrowserClose,
 } from "./operations/browser-operations";
 
@@ -153,6 +154,7 @@ const HANDLERS: Record<string, OperationHandler> = {
   "browser.press": handleBrowserPress,
   "browser.wait": handleBrowserWait,
   "browser.screenshot": handleBrowserScreenshot,
+  "browser.diagnostics": handleBrowserDiagnostics,
   "browser.close": handleBrowserClose,
 
   // ── Retrieval (Phase D) ──

@@ -28,12 +28,13 @@ import type {
   RuntimeDetachReason,
   RuntimeLifecycleState,
 } from "./contracts";
+import type { ManagedCommand } from "./application/runtime-manager";
 
 /** Stable lifecycle surface consumed by plugin composition and product UI. */
 export interface ChatobbyRuntimeManager {
   readonly state: RuntimeLifecycleState;
   onStateChange(listener: (state: RuntimeLifecycleState) => void): () => void;
-  ensureReady(request: EnsureRuntimeRequest): Promise<ReadyRuntime>;
+  ensureReady(request: EnsureRuntimeRequest, managedCommand?: ManagedCommand): Promise<ReadyRuntime>;
 	reportConnectionFailure(message: string): Promise<void>;
   restart(reason: RuntimeActionReason): Promise<ReadyRuntime>;
   stop(reason: RuntimeActionReason): Promise<void>;

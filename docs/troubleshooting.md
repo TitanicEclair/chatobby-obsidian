@@ -21,10 +21,11 @@ Obsidian, and Windows versions in a support report.
 
 ## No providers or models appear
 
-Open **Settings → Chatobby** and wait for provider discovery. Connect the
-provider you intend to use. Chatobby stores the credential in the local runtime
-credential store, not in the Obsidian plugin folder. Provider availability,
-quotas, billing, and outages remain the provider's responsibility.
+Open Chatobby, select the **Settings** gear, and wait for provider discovery.
+Connect the provider or local model server you intend to use. Chatobby stores a
+hosted-provider credential in the local runtime credential store, not in the
+Obsidian plugin folder or page state. Provider availability, quotas, billing,
+and outages remain the provider's responsibility.
 
 ## Windows warns about an unknown publisher
 

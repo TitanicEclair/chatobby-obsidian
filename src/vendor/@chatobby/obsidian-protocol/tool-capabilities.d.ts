@@ -27,6 +27,7 @@ export interface ObsidianToolCapabilityDescriptor {
     toolName: ObsidianToolName;
     operation: ObsidianOperationName;
     capability: ObsidianBridgeCapability;
+    executionOwner: "connector" | "runtime";
     requiredPlugins: readonly string[];
     requiredRuntimeDependencies: readonly string[];
     enhancedByPlugins: readonly string[];

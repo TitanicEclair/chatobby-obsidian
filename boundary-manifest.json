@@ -15,6 +15,7 @@
     { "path": "attachments", "authority": ["vault", "filesystem"] },
     { "path": "backend", "authority": ["process"] },
     { "path": "commands", "authority": ["obsidian", "vault"] },
+    { "path": "credentials", "authority": ["obsidian", "network"] },
     { "path": "features", "authority": ["obsidian", "vault", "network"] },
     { "path": "frontend", "authority": ["network"] },
     { "path": "obsidian-bridge", "authority": ["obsidian", "vault", "filesystem", "process", "network"] },
@@ -29,7 +30,9 @@
   ],
   "reviewableExportFiles": [
     ".gitignore",
+    "AGENTS.md",
     "CHANGELOG.md",
+    "CLAUDE.md",
     "README.md",
     "boundary-manifest.json",
     "esbuild.config.mjs",

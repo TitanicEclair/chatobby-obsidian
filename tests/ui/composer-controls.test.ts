@@ -73,6 +73,14 @@ function control(root: HTMLElement, label: string): HTMLButtonElement {
 }
 
 describe("ComposerControls", () => {
+  it("renders semantic icons and a compact overflow trigger for responsive layouts", () => {
+    const { controls, root } = renderControls(makeHost());
+
+    expect(root.querySelector(".chatobby-control--permission .chatobby-control-button__icon")?.getAttribute("data-icon")).toBe("shield-check");
+    expect(root.querySelector(".chatobby-control--model .chatobby-control-button__icon")?.getAttribute("data-icon")).toBe("bot");
+    expect(root.querySelector(".chatobby-control-overflow")?.getAttribute("aria-label")).toBe("More composer options");
+    controls.destroy();
+  });
   it("renders four compact runtime-projected picker triggers", () => {
     const { controls, root } = renderControls(makeHost());
 

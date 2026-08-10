@@ -17,7 +17,7 @@ describe("frontend feature boundaries", () => {
     const settings = readFileSync(join(sourceRoot, "settings.ts"), "utf8");
     expect(settings).not.toMatch(/\.createEl\(["']h[1-6]["']/);
     expect(settings).not.toMatch(/\.setName\(["']Chatobby["']\)[\s\S]{0,80}\.setHeading\(\)/);
-    expect(settings.match(/\.setHeading\(\)/g)).toHaveLength(5);
+    expect(settings.match(/\.setHeading\(\)/g)).toHaveLength(6);
   });
 
   it("prevents source outside the feed feature from deep-importing feed internals", () => {
@@ -120,7 +120,8 @@ describe("frontend feature boundaries", () => {
       ["features", "events", "ui", "events-view.ts"],
       ["features", "channels", "ui", "channels-view.ts"],
       ["features", "subagents", "ui", "subagents-view.ts"],
-      ["ui", "session", "session-picker.ts"],
+      ["features", "projects", "ui", "projects-view.ts"],
+      ["features", "settings", "application", "settings-screen-controller.ts"],
     ];
     for (const segments of pages) {
       expect(readFileSync(join(sourceRoot, ...segments), "utf8")).toContain("new PageShell(");
@@ -160,7 +161,7 @@ describe("frontend feature boundaries", () => {
 
   it("documents the temporary size ceilings for lifecycle adapters", () => {
     const ceilings = new Map<string, { max: number; reason: string }>([
-      ["src/ui/view.ts", { max: 1400, reason: "Obsidian lifecycle and public command adapter; coordinates native leaf navigation, ribbon screens, and session-local feed notices while stateful policies live in controllers." }],
+      ["src/ui/view.ts", { max: 1450, reason: "Obsidian lifecycle and public command adapter; coordinates native leaf navigation, ribbon screens, Project launches, and session-local feed notices while stateful policies live in controllers." }],
       ["src/ui/feed/index.ts", { max: 650, reason: "Commit-driven DOM adapter with block-specific view construction and reader scroll-intent tracking (detaches on upward motion, re-pins via ResizeObserver on late content growth) so streaming never yanks a scrolled-up view back to the bottom." }],
       ["src/ui/memory/memory-view.ts", { max: 650, reason: "Stateful library/detail coordinator; operations and policy sections are extracted." }],
       ["src/features/feed/state/feed-transaction.ts", { max: 500, reason: "Atomic reducer capability surface with private normalized state." }],

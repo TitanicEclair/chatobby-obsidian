@@ -10,9 +10,13 @@ import type {
   ObsidianBridgePing,
   ObsidianBridgeInvoke,
   ObsidianBridgeCancel,
-} from "../vendor/@chatobby/obsidian-protocol/bridge-protocol";
-import { parseServerToPluginMessage } from "../vendor/@chatobby/obsidian-protocol/bridge-protocol";
-import type { ObsidianBridgeErrorPayload } from "../vendor/@chatobby/obsidian-protocol/bridge-errors";
+  ProjectDirectoryObservationResult,
+  ProjectDirectoryRescanResult,
+} from "../vendor/@chatobby/obsidian-protocol/index.js";
+import {
+  parseServerToPluginMessage,
+} from "../vendor/@chatobby/obsidian-protocol/index.js";
+import type { ObsidianBridgeErrorPayload } from "../vendor/@chatobby/obsidian-protocol/index.js";
 import type { InFlightRequest } from "./types";
 import { executeOperation } from "./operation-registry";
 import { toBridgeErrorPayload, deadlineExceededError } from "./bridge-errors";
@@ -24,6 +28,12 @@ export interface RouteResult {
   outbound: Array<ObsidianBridgeResult | ObsidianBridgeError | ObsidianBridgePing>;
 }
 
+/** Optional consumers for authenticated bridge control-plane results. */
+export interface BridgeInboundResultHandlers {
+  onProjectDirectoryObservationResult?: (result: ProjectDirectoryObservationResult) => void;
+  onProjectDirectoryRescanResult?: (result: ProjectDirectoryRescanResult) => void;
+}
+
 /**
  * Process a raw inbound WebSocket frame.
  * Mutates the in-flight table directly for invoke/cancel.
@@ -33,6 +43,7 @@ export async function routeInboundFrame(
   raw: unknown,
   app: App,
   inFlight: Map<string, InFlightRequest>,
+  handlers: BridgeInboundResultHandlers = {},
 ): Promise<RouteResult> {
   let parsed;
   try {
@@ -58,6 +69,14 @@ export async function routeInboundFrame(
 
     case "pong":
       // Pong is a keepalive ack — no action needed.
+      return { outbound: [] };
+
+    case "project_directory_observation_result":
+      handlers.onProjectDirectoryObservationResult?.(parsed);
+      return { outbound: [] };
+
+    case "project_directory_rescan_result":
+      handlers.onProjectDirectoryRescanResult?.(parsed);
       return { outbound: [] };
   }
 }

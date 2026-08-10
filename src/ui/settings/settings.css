@@ -31,6 +31,20 @@
   line-height: var(--line-height-normal);
 }
 
+.chatobby-settings-note--moved {
+	margin-block: var(--size-4-4);
+	padding: var(--size-4-3);
+	border: var(--border-width) solid var(--chatobby-border);
+	border-radius: var(--radius-m);
+	background: var(--chatobby-surface-muted);
+}
+
+.chatobby-settings-note--moved > strong {
+	display: block;
+	margin-block-end: var(--size-2-1);
+	color: var(--text-normal);
+}
+
 .chatobby-settings__provider-state {
   padding: var(--size-4-3) 0;
 }
@@ -53,6 +67,30 @@
 
 .chatobby-provider-modal .setting-item {
   padding-inline: 0;
+}
+
+.chatobby-local-model-modal {
+  width: min(680px, calc(100vw - var(--size-4-8)));
+}
+
+.chatobby-local-model-modal textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.chatobby-local-model-modal__status {
+  min-height: 1.5em;
+  margin-block-start: var(--size-4-3);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.chatobby-local-model-modal__status.is-success {
+  color: var(--text-success);
+}
+
+.chatobby-local-model-modal__status.is-error {
+  color: var(--text-error);
 }
 
 @media (max-width: 520px) {

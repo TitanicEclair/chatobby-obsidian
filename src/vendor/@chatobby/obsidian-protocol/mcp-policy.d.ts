@@ -29,7 +29,7 @@ export declare const OBSIDIAN_DEFAULT_DIRECT_TOOLS: readonly ObsidianDirectToolN
  * Create an Obsidian MCP server policy from the given options.
  *
  * This is a browser-safe pure function that constructs a plain object
- * representing the server entry for pi-mcp-adapter. Defaults:
+ * representing the server entry for @chatobby/mcp-client. Defaults:
  * - lifecycle: "eager"
  * - idleTimeout: 10 minutes
  * - bridge timeout: 30000 ms

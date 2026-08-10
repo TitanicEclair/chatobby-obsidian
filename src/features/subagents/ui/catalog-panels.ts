@@ -1,6 +1,7 @@
 import type {
   FrontendSubagentAgentDefinition as AgentDefinition,
   FrontendSubagentSettingsViewModel as ResolvedSubagentSettings,
+  FrontendSubagentUserAgentDefinition as UserAgentDefinition,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import type { SubagentScreenActions } from "../domain/screen-model";
 import type { SubagentViewState } from "../state/subagent-store";
@@ -35,7 +36,7 @@ export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, a
     meta.createSpan({ text: definition.policy.executionMode ?? "Automatic executor" });
     meta.createSpan({ text: definition.policy.contextMode ?? "Fresh context" });
     meta.createSpan({ text: permissionPolicyLabel(state, definition) });
-    if (!definition.builtIn) {
+    if (isUserAgentDefinition(definition)) {
       const controls = card.createDiv({ cls: "chatobby-subagents__catalog-actions" });
       const edit = controls.createEl("button", { text: "Edit", attr: { type: "button" } });
       edit.addEventListener("click", () => renderAgentEditor(editor, definition, state, actions));
@@ -47,6 +48,10 @@ export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, a
 }
 
 export function renderWorkflowsPanel(host: HTMLElement, state: SubagentViewState, actions: SubagentScreenActions): void {
+	host.createDiv({
+		cls: "chatobby-subagents__deprecation-note",
+		text: "Flows will be deprecated in Chatobby 0.4.0. Existing definitions remain available while Chatobby moves to general-purpose workflows.",
+	});
   const toolbar = host.createDiv({ cls: "chatobby-subagents__catalog-header" });
   toolbar.createDiv({ cls: "chatobby-subagents__detail-title", text: "Flows" });
   const add = toolbar.createEl("button", { text: "New", attr: { type: "button" } });
@@ -123,7 +128,7 @@ export function renderSettingsPanel(host: HTMLElement, state: SubagentViewState,
 
 function renderAgentEditor(
   host: HTMLElement,
-  existing: AgentDefinition | null,
+  existing: UserAgentDefinition | null,
   state: SubagentViewState,
   actions: SubagentScreenActions,
 ): void {
@@ -131,7 +136,7 @@ function renderAgentEditor(
   host.removeClass("is-hidden");
   const draftId = existing?.id ?? "$new";
   const storedDraft = actions.getAgentEditorDraft(draftId);
-  const initialDefinition: AgentDefinition = storedDraft?.definition ?? existing ?? {
+  const initialDefinition: UserAgentDefinition = storedDraft?.definition ?? existing ?? {
     id: "",
     name: "",
     description: "",
@@ -236,7 +241,7 @@ function renderAgentEditor(
     const draft = actions.getAgentEditorDraft(draftId);
     if (!draft) throw new Error("Agent role draft is unavailable");
     const roleId = draft.definition.id.trim() || slug(draft.definition.name);
-    const definition: AgentDefinition = {
+    const definition: UserAgentDefinition = {
       ...draft.definition,
       id: roleId,
       name: draft.definition.name.trim(),
@@ -504,7 +509,13 @@ function assignedPermissionPolicy(state: SubagentViewState, roleId: string | und
 
 function roleAvailabilityLabel(definition: AgentDefinition): string {
   if (definition.builtIn) return "Chatobby role";
-  return definition.scope === "directory" ? "Project" : "Vault";
+  if (definition.scope === "directory") return "Project";
+  if (definition.scope === "vault") return "Vault";
+  return definition.scope === "session" ? "Session" : "Runtime";
+}
+
+function isUserAgentDefinition(definition: AgentDefinition): definition is UserAgentDefinition {
+  return definition.builtIn !== true && (definition.scope === "vault" || definition.scope === "directory");
 }
 
 function humanize(value: string): string {

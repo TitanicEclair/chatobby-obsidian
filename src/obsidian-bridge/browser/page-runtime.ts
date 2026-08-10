@@ -24,6 +24,7 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
   interface PageRuntimeState {
     documentId: string;
     revision: number;
+    captureSequence: number;
     nextRef: number;
     elementRefs: WeakMap<Element, string>;
     refElements: Map<string, Element>;
@@ -44,10 +45,14 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
 
   function pageState(): PageRuntimeState {
     const existing = globalRecord[stateKey] as PageRuntimeState | undefined;
-    if (existing?.documentId && existing.elementRefs && existing.refElements && existing.refFingerprints) return existing;
+    if (existing?.documentId && existing.elementRefs && existing.refElements && existing.refFingerprints) {
+      if (!Number.isSafeInteger(existing.captureSequence)) existing.captureSequence = 0;
+      return existing;
+    }
     const created: PageRuntimeState = {
       documentId: createDocumentId(),
       revision: 0,
+      captureSequence: 0,
       nextRef: 1,
       elementRefs: new WeakMap<Element, string>(),
       refElements: new Map<string, Element>(),
@@ -123,12 +128,17 @@ export async function executeBrowserPageOperation(input: BrowserPageInput): Prom
   function pageEnvelope(): Record<string, unknown> {
     const root = document.documentElement;
     const body = document.body;
+    state.captureSequence += 1;
     return {
       documentId: state.documentId,
       revision: state.revision,
+      captureSequence: state.captureSequence,
+      capturedAt: new Date().toISOString(),
       url: location.href,
       title: document.title || "",
       readyState: document.readyState,
+      visibilityState: document.visibilityState || "unknown",
+      hasFocus: typeof document.hasFocus === "function" ? document.hasFocus() : undefined,
       language: root?.lang || "",
       viewport: {
         width: window.innerWidth,

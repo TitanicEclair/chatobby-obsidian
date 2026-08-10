@@ -14,7 +14,7 @@ export const CHATOBBY_GUIDE_MARKDOWN = `# Chatobby Guide
 
 Chatobby gives you an AI workspace inside Obsidian. You can have a normal conversation, ask it to work with your notes, let it carry out a longer plan, or connect it to optional services. You remain in control of the project, model, and permissions it uses.
 
-You do not need to learn every feature before starting. Open a session, choose a folder, and describe what you want in ordinary language.
+You do not need to learn every feature before starting. Open a Vault chat or choose a Project, then describe what you want in ordinary language.
 
 ## Start with what you want to do
 
@@ -41,7 +41,7 @@ That request is useful because Chatobby knows the folder, the outcome, and the s
 ## Three ideas that make Chatobby easier to use
 
 1. **Begin read-only when you are unsure.** Ask Chatobby to inspect and explain before it changes anything.
-2. **Use projects to set boundaries.** The directory shown at the top of a Chatobby view tells you which part of the vault the session belongs to.
+2. **Use Projects to keep work together.** A Project groups its chats and attached folders without silently granting access to those folders.
 3. **Use permission policies for repeatable trust.** A policy can let one session research freely while keeping another session read-only.
 
 ## What Chatobby cannot promise
@@ -58,16 +58,16 @@ export const CHATOBBY_GUIDE_FILES: readonly GuideFile[] = [
     title: "Sessions and vault work",
     content: `# Sessions and vault work
 
-A Chatobby session is a conversation with its own project folder, model, permission policy, history, and ongoing work. Think of each Obsidian tab as a separate desk: one can organize a course while another researches a trip without mixing their files or instructions.
+A Chatobby session is a conversation with its own Vault or Project identity, model, permission policy, history, and ongoing work. Think of each Obsidian tab as a separate desk: one can organize a course while another researches a trip without mixing their files or instructions.
 
 ## Start a session
 
 1. Open Chatobby from the ribbon or command palette.
-2. Choose the folder that best represents the work. Choose the vault root only when the work genuinely spans the whole vault.
+2. Use a Vault chat for general vault work, or open **Projects** and choose the Project that should own the chat. A Project may contain one or more attached folders.
 3. Below the composer, choose a permission policy, provider, model, and effort level.
 4. Describe the outcome in normal language.
 
-The directory name at the top is clickable and returns you to that session’s main conversation. If you start work in another folder, Chatobby opens another view instead of silently changing the current session’s meaning.
+The chat name and Vault/Project label at the top are clickable and return you to that conversation. Browsing Projects does not silently move the current chat; **New chat in Project** creates a separate Project-scoped conversation.
 
 ## What you can ask Chatobby to do
 
@@ -83,13 +83,13 @@ The task strip above the composer shows which step is currently active. It disap
 
 ## Moving between sessions
 
-Use Obsidian tabs for separate main sessions. The agent rail at the top switches between the main agent and its subagents. Opening Memory, Events, Permissions, Channels, or Plugins should not cancel a running turn.
+Use Obsidian tabs for separate main sessions. The agent rail at the top switches between the main agent and its subagents. Opening Projects, Memory, Events, Permissions, Channels, Plugins, or Settings should not cancel a running turn.
 
 Use **Stop** when you want active work to end. If you press Escape immediately after sending and the agent has not begun meaningful output or tool use, Chatobby can return that message to the composer.
 
 ## Give a project lasting instructions
 
-Create a \`.chatobby.md\` file in a project folder when rules should apply every time Chatobby works there. This is useful for:
+Create a visible \`chatobby.md\` file at the active Project root when rules should apply every time Chatobby works there. Chatobby migrates a lone former \`.chatobby.md\` without overwriting a visible file. This is useful for:
 
 - required note templates;
 - naming or linking conventions;
@@ -195,12 +195,12 @@ Examples:
 
 ## Memory or project instructions?
 
-Use **memory** when information should be retrieved when relevant. Use \`.chatobby.md\` when a rule must always guide work in that project.
+Use **memory** when information should be retrieved when relevant. Use \`chatobby.md\` when a rule must always guide work in that Project.
 
 | You want Chatobby to… | Use |
 |---|---|
 | Remember a preference that may matter later | Memory |
-| Always follow a project naming rule | \`.chatobby.md\` |
+| Always follow a project naming rule | \`chatobby.md\` |
 | Run a calculation at the start of sessions | Context query |
 | Repeat work on a schedule | Event |
 | Learn a reusable procedure with supporting files | Skill |
@@ -356,7 +356,7 @@ A context query is not a scheduled task and should not change your notes. It onl
 
 ## Choose the right feature
 
-- Permanent project rule: \`.chatobby.md\`
+- Permanent project rule: \`chatobby.md\`
 - Relevant fact or preference: Memory
 - Current computed value: Context query
 - Work that should happen later or repeatedly: Event
@@ -435,7 +435,7 @@ A provider is the company or service that supplies the AI model. The model is th
 
 ## First-time setup
 
-Open Chatobby settings, choose a provider, and follow its credential instructions. Ordinary setup should not require editing configuration files. Keep keys in the provided secure fields; never put them in a note or message.
+Open Chatobby and select the **Settings** gear in its top bar. Choose a provider and follow its credential instructions. Ordinary setup should not require editing configuration files. Keep keys in the provided secure fields; never put them in a note or message. The value is sent to the existing protected credential service and is not retained in the page.
 
 The controls below the composer apply to the current session:
 
@@ -460,11 +460,27 @@ Example for a stronger model:
 
 > Compare these project notes, identify contradictions, research any current claims, propose a resolution, and wait for approval before editing.
 
+## Use a model running on your computer
+
+Chatobby can connect to a local model server without sending the model request to a hosted provider. The server must already be running; Chatobby does not download models or keep the server alive.
+
+Open Chatobby's **Settings** page, find **Local model servers**, select the matching preset, and enter the exact model ID shown by your server. The built-in presets cover Ollama, LM Studio, vLLM, and llama.cpp. You can also configure an OpenAI-compatible Chat Completions or Responses endpoint, or an Anthropic Messages-compatible endpoint.
+
+Select **Test connection** before saving. The test sends one very small request using the selected model and API format. If it succeeds, save the server and choose its model from the composer. A successful connection does not guarantee that a small local model can follow complex instructions or use every tool reliably.
+
+Most servers running only on this computer need no credential. If your server requires one, choose the matching **Provider API key** or **Bearer token** option. Do not expose an unauthenticated model server to the internet.
+
 ## Costs and limits
 
 Pricing, context limits, rate limits, retention, and data handling come from your provider. Chatobby cannot override them. Long conversations, large tool results, many subagents, and repeated context can increase usage.
 
 If a response stops unexpectedly, check provider status, available credit, rate limits, model availability, and Chatobby runtime diagnostics before repeatedly retrying.
+
+## Web research
+
+Basic public-web search works without another account. For stronger freshness, language, region, and date filtering, open Chatobby's **Settings** page and find **Web research**. You may connect your own Brave Search API key there. The value stays in Obsidian's secret storage rather than a note, message, or plugin setting.
+
+Chatobby reports whether a search used basic search, enhanced search, or a fallback. Basic search with no enhanced provider connected is normal and does not mean a provider failed. Search results are ranked rather than an exhaustive copy of the web, so ask Chatobby to continue or refine the query when coverage matters.
 
 [[00 - Start Here|Guide index]] · [[01 - Sessions and vault work|Start a session]] · [[09 - Troubleshooting and limits|Troubleshoot failures]]
 `,
@@ -498,7 +514,7 @@ These examples are starting points. Replace folder and note names with your own.
 
 ## Add a project rule
 
-> Draft a short \`.chatobby.md\` for this folder. Require YYYY-MM-DD dates, preserve quoted text, and verify Dataview blocks after edits. Show me the draft before saving.
+> Draft a short \`chatobby.md\` for this Project root. Require YYYY-MM-DD dates, preserve quoted text, and verify Dataview blocks after edits. Show me the draft before saving.
 
 ## Schedule a weekly review
 
@@ -529,7 +545,7 @@ Most problems fall into one of four areas: the Chatobby runtime, the chosen mode
 ## First checks
 
 1. If work is stuck, press Stop once and wait for the state to settle.
-2. Check the provider, model, project directory, and policy shown below the composer.
+2. Check the provider, model, Vault/Project label, and policy shown below the composer.
 3. Open the relevant page and read its visible status.
 4. Use **Copy diagnostics** when the runtime or plugin offers it.
 5. Retry once after addressing the likely cause.

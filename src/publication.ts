@@ -8,6 +8,8 @@ export const CHATOBBY_RUNTIME_UPDATE_DESCRIPTOR_URL =
   "https://github.com/TitanicEclair/chatobby-runtime/releases/latest/download/runtime-update.json";
 export const CHATOBBY_SUPPORT_URL = "https://github.com/TitanicEclair/chatobby-obsidian/issues";
 export const CHATOBBY_PATREON_URL = "https://www.patreon.com/cw/MadelynCruzTan/membership";
+export const BRAVE_SEARCH_API_DOCUMENTATION_URL =
+  "https://api-dashboard.search.brave.com/app/documentation/web-search/get-started";
 
 /** Open a documented public Chatobby location outside the current Obsidian view. */
 export function openChatobbyUrl(url: string): void {

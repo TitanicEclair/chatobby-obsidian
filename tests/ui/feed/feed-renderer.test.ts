@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { feedSelectors, INITIAL_LEGACY_FEED_STATE, type LegacyFeedState } from "../../../src/features/feed/public";
+import { createFeedStore, feedSelectors, INITIAL_LEGACY_FEED_STATE, type LegacyFeedState } from "../../../src/features/feed/public";
 import { FeedRenderer } from "../../../src/ui/feed";
 import { createMockFeedHost } from "../helpers/mock-host";
 import { mount } from "../helpers/mount";
@@ -152,6 +152,55 @@ describe("FeedRenderer", () => {
     host.feedViewActions.setScroll(true, 0);
 
     expect(pill?.classList.contains("is-hidden")).toBe(true);
+  });
+
+  it("pins the preceding prompt and returns to it from the reading position", async () => {
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      blocks: [
+        {
+          type: "user",
+          id: "prompt-one",
+          messageId: "message-one",
+          message: { role: "user", content: "Review the architecture and list the important gaps." },
+        },
+        {
+          type: "text",
+          id: "answer-one",
+          turnId: "turn-one",
+          text: "Working through the architecture.",
+          startIndex: 0,
+          endIndex: 0,
+          status: "complete",
+        },
+        {
+          type: "user",
+          id: "prompt-two",
+          messageId: "message-two",
+          message: { role: "user", content: "Now verify the tests." },
+        },
+      ],
+    };
+    const renderer = new FeedRenderer(createMockFeedHost(state));
+    const element = mount(renderer);
+    const scroll = element.querySelector<HTMLElement>(".chatobby-feed__scroll");
+    const first = element.querySelector<HTMLElement>("[data-block-id='prompt-one']");
+    const second = element.querySelector<HTMLElement>("[data-block-id='prompt-two']");
+    if (!scroll || !first || !second) throw new Error("prompt fixtures did not render");
+    scroll.getBoundingClientRect = () => ({ top: 0 } as DOMRect);
+    first.getBoundingClientRect = () => ({ top: -120 } as DOMRect);
+    second.getBoundingClientRect = () => ({ top: 120 } as DOMRect);
+    first.scrollIntoView = vi.fn();
+
+    scroll.dispatchEvent(new Event("scroll"));
+    await flushScrollFrame();
+
+    const sticky = element.querySelector<HTMLButtonElement>(".chatobby-feed__sticky-prompt");
+    expect(sticky?.classList.contains("is-hidden")).toBe(false);
+    expect(sticky?.textContent).toBe("Review the architecture and list the important gaps.");
+    sticky?.click();
+    expect(first.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    expect(first.classList.contains("is-feed-target")).toBe(true);
   });
 
   it("renders feed blocks through block components and markdown host", () => {
@@ -410,7 +459,7 @@ describe("FeedRenderer", () => {
     expect(clipboardData.getData("text/markdown")).toBe("**Bold** and *italic*");
   });
 
-  it("renders one compact named supervisor run block", () => {
+  it("keeps supervisor lifecycle blocks out of the conversation feed", () => {
     const state: LegacyFeedState = {
       ...INITIAL_LEGACY_FEED_STATE,
       blocks: [{
@@ -433,13 +482,8 @@ describe("FeedRenderer", () => {
     const renderer = new FeedRenderer(createMockFeedHost(state));
     const el = mount(renderer);
 
-    expect(el.querySelector(".chatobby-subagent__label")?.textContent).toBe("General purpose");
-	expect(el.querySelector(".chatobby-subagent__status")).toBeNull();
-	expect(el.querySelector(".chatobby-subagent__icon")).toBeNull();
-    expect(el.querySelector(".chatobby-subagent__detail")).toBeNull();
-    const open = el.querySelector<HTMLButtonElement>(".chatobby-subagent__open");
-	expect(open?.getAttribute("aria-label")).toBe("Open agent feed");
-    expect(open?.parentElement?.classList.contains("chatobby-subagent__header")).toBe(true);
+    expect(el.querySelector(".chatobby-subagent")).toBeNull();
+    expect(el.querySelector(".chatobby-feed__empty")).not.toBeNull();
   });
 
   it("does not install block-level navigation or synthetic cursor mode in reading view", () => {
@@ -509,6 +553,32 @@ describe("FeedRenderer", () => {
 		expect(host.renderMarkdown).toHaveBeenCalledTimes(1);
 		renderer.setActive(true);
 		expect(host.renderMarkdown).toHaveBeenCalledTimes(1);
+	});
+
+	it("fully replaces hidden feed DOM when the active session store changes", () => {
+		const host = createMockFeedHost({
+			...INITIAL_LEGACY_FEED_STATE,
+			blocks: [{
+				type: "text",
+				id: "previous-session-response",
+				turnId: "turn-previous",
+				text: "Previous session response",
+				startIndex: 0,
+				endIndex: 0,
+				status: "complete",
+			}],
+		});
+		const renderer = new FeedRenderer(host);
+		const element = mount(renderer);
+		expect(element.textContent).toContain("Previous session response");
+
+		renderer.setActive(false);
+		const emptySessionStore = createFeedStore();
+		renderer.switchStore(emptySessionStore);
+		renderer.setActive(true);
+
+		expect(element.textContent).not.toContain("Previous session response");
+		expect(element.querySelectorAll(".chatobby-feed__empty")).toHaveLength(1);
 	});
 
   it("toggles to a read-only source view of the feed", () => {
@@ -766,7 +836,7 @@ describe("FeedRenderer", () => {
     expect(toolGroup?.classList.contains("is-tool-expanded")).toBe(true);
   });
 
-  it("renders subagent lifecycle blocks", () => {
+  it("keeps legacy subagent lifecycle blocks in state but not in the feed", () => {
     const state: LegacyFeedState = {
       ...INITIAL_LEGACY_FEED_STATE,
       blocks: [{
@@ -806,12 +876,8 @@ describe("FeedRenderer", () => {
     const renderer = new FeedRenderer(host);
     const el = mount(renderer);
 
-    expect(el.querySelector(".chatobby-subagent__label")?.textContent).toBe("Research");
-    expect(el.querySelector(".chatobby-subagent__description")?.textContent).toBe("Map the API surface");
-	expect(el.querySelector(".chatobby-subagent__status")).toBeNull();
-	expect(el.querySelector(".chatobby-subagent__icon")).toBeNull();
-    expect(el.querySelector(".chatobby-subagent__meta")?.textContent).toContain("30 tokens");
-    expect(el.querySelector(".chatobby-subagent__detail")?.textContent).toContain("Found the relevant event bus route.");
+    expect(el.querySelector(".chatobby-subagent")).toBeNull();
+    expect(host.getFeedStore().select(feedSelectors.blockById("block-subagent"))?.type).toBe("subagent");
   });
 
   it("persists summary, nested tool group, and tool item expansion across rerenders", () => {

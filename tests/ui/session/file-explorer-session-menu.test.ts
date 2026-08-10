@@ -25,6 +25,7 @@ describe("file explorer Chatobby session menu", () => {
   it("routes both native menu actions through the resolved directory", async () => {
     const startNewSession = vi.fn(async () => {});
     const resumeSession = vi.fn(async () => {});
+		const createProject = vi.fn(async () => {});
     const file = new TFile("Projects/Research/brief.md") as unknown as TFile & { parent: TFolder | null };
     file.parent = new TFolder("Projects/Research");
     const menu = new Menu();
@@ -32,17 +33,21 @@ describe("file explorer Chatobby session menu", () => {
     addFileExplorerSessionMenuItems(menu, file as unknown as TAbstractFile, {
       startNewSession,
       resumeSession,
+			createProject,
     });
 
     expect(menu.items.map((item) => [item.title, item.icon, item.section])).toEqual([
       ["New Chatobby session here", "message-square-plus", "chatobby"],
-      ["Resume Chatobby session here", "history", "chatobby"],
+			["View Chatobby sessions here", "history", "chatobby"],
+			["Create Chatobby Project from folder", "folder-kanban", "chatobby"],
     ]);
     menu.items[0]?.callback?.();
     menu.items[1]?.callback?.();
+		menu.items[2]?.callback?.();
     await vi.waitFor(() => {
       expect(startNewSession).toHaveBeenCalledWith("Projects/Research");
       expect(resumeSession).toHaveBeenCalledWith("Projects/Research");
+			expect(createProject).toHaveBeenCalledWith("Projects/Research");
     });
   });
 });

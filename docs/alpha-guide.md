@@ -6,7 +6,8 @@ unlock features, raise limits, or change the data Chatobby can access.
 ## A safe first session
 
 1. Use a backed-up vault or copied test folder.
-2. Connect one model provider in **Settings → Chatobby**.
+2. Open Chatobby's **Settings** page from its top bar and connect one model
+   provider or local model server.
 3. Keep the default permission policy for the first session.
 4. Ask Chatobby to summarize the active test note without changing it.
 5. Request one small edit and inspect the result before expanding permissions.
@@ -43,4 +44,3 @@ in [Security](../SECURITY.md).
 
 Optional development support is available through
 [Patreon](https://www.patreon.com/cw/MadelynCruzTan/membership).
-

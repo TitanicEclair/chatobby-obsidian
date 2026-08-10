@@ -13,15 +13,13 @@ import {
 describe("ViewNavigationController", () => {
   it("closes every inactive full-view surface during page transitions", () => {
     const closers = {
-      sessionPicker: vi.fn(),
       overlays: vi.fn(),
       subagents: vi.fn(),
       channels: vi.fn(),
     };
 
-    closeInactiveViewSurfaces("session-picker", closers);
-    expect(closers.sessionPicker).not.toHaveBeenCalled();
-    expect(closers.overlays).toHaveBeenCalledOnce();
+    closeInactiveViewSurfaces("overlays", closers);
+    expect(closers.overlays).not.toHaveBeenCalled();
     expect(closers.subagents).toHaveBeenCalledOnce();
     expect(closers.channels).toHaveBeenCalledOnce();
 
@@ -43,9 +41,10 @@ describe("ViewNavigationController", () => {
       openEvents: vi.fn(),
       openQueries: vi.fn(),
       openMcp: vi.fn(),
+      openProjects: vi.fn(),
+      openSettings: vi.fn(),
       openSubagents: vi.fn(),
       openChannels: vi.fn(),
-      openSessionPicker: vi.fn(async () => {}),
       getLeafSessionState: () => ({ vaultDirectoryPath: "project", sessionPath: "session.jsonl" }),
       onError: vi.fn(),
     });
@@ -120,7 +119,7 @@ describe("ViewNavigationController", () => {
   it("handles every directed top-level route transition exactly once", async () => {
     const routes: ChatobbyNavigationState[] = [
       { mode: "chat" },
-      { mode: "session-picker" },
+      { mode: "projects" },
       { mode: "subagents" },
       { mode: "channels" },
       { mode: "permissions" },
@@ -128,6 +127,7 @@ describe("ViewNavigationController", () => {
       { mode: "events" },
       { mode: "queries" },
       { mode: "mcp" },
+      { mode: "settings" },
     ];
 
     for (const from of routes) {
@@ -164,11 +164,37 @@ describe("ViewNavigationController", () => {
     await controller.apply(restored);
     expect(openMcp).toHaveBeenCalledWith(restored);
   });
+
+  it("persists a Project selection as one Obsidian history route", async () => {
+    const leaf = { setViewState: vi.fn(async () => {}) } as unknown as WorkspaceLeaf;
+    const openProjects = vi.fn();
+    const controller = createController(leaf, vi.fn(), openProjects);
+
+    controller.navigate({ mode: "projects", projectId: "project:alpha" });
+    expect(leaf.setViewState).toHaveBeenCalledWith({
+      type: "chatobby-view",
+      state: {
+        mode: "projects",
+        projectId: "project:alpha",
+        vaultDirectoryPath: "project",
+        sessionPath: "session.jsonl",
+      },
+      active: true,
+    });
+
+    const restored = parseNavigationState({
+      mode: "projects",
+      projectId: "project:alpha",
+    });
+    await controller.apply(restored);
+    expect(openProjects).toHaveBeenCalledWith(restored);
+  });
 });
 
 function createController(
   leaf: WorkspaceLeaf,
   openMcp: (state: ChatobbyNavigationState) => void = vi.fn(),
+  openProjects: (state: ChatobbyNavigationState) => void = vi.fn(),
 ): ViewNavigationController {
   return new ViewNavigationController(leaf, "chatobby-view", {
     openChat: vi.fn(),
@@ -177,9 +203,10 @@ function createController(
     openEvents: vi.fn(),
     openQueries: vi.fn(),
     openMcp,
+    openProjects,
+    openSettings: vi.fn(),
     openSubagents: vi.fn(),
     openChannels: vi.fn(),
-    openSessionPicker: vi.fn(async () => {}),
     getLeafSessionState: () => ({ vaultDirectoryPath: "project", sessionPath: "session.jsonl" }),
     onError: vi.fn(),
   });

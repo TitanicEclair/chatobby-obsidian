@@ -4,7 +4,7 @@
 
 [![Install Chatobby in Obsidian](https://img.shields.io/badge/Install%20in-Obsidian-7C3AED?style=for-the-badge&logo=obsidian&logoColor=white)](https://obsidian.md/plugins?id=chatobby)
 [![Public alpha](https://img.shields.io/badge/release-public%20alpha-2F81F7?style=for-the-badge)](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/alpha-guide.md)
-[![Windows and macOS desktop](https://img.shields.io/badge/platform-Windows%20%2B%20macOS-4B5563?style=for-the-badge)](#platform-and-alpha-status)
+[![Desktop platforms](https://img.shields.io/badge/platform-Windows%20%2B%20macOS%20%2B%20Linux%20alpha-4B5563?style=for-the-badge)](#platform-and-alpha-status)
 [![Star Chatobby on GitHub](https://img.shields.io/github/stars/TitanicEclair/chatobby-obsidian?style=for-the-badge&logo=github&label=Star%20Chatobby)](https://github.com/TitanicEclair/chatobby-obsidian)
 
 **Community:** [GitHub Discussions](https://github.com/TitanicEclair/chatobby-obsidian/discussions) · [Issue tracker](https://github.com/TitanicEclair/chatobby-obsidian/issues) · [Documentation](https://github.com/TitanicEclair/chatobby-obsidian/tree/main/docs)
@@ -18,9 +18,10 @@ Your conversations, permissions, context, scheduled work, and delegated work all
 remain visible inside Obsidian.
 
 Only **model calls** are sent to a provider of your choosing,
-with continuous updated support for OpenAI, Anthropic, Deepseek, Google Gemini,
-Z.AI, Xiaomi, OpenRouter, Hugging Face, and many more! Just **connect your API key** and
-everything works out of the box. *In our roadmap: We plan to add **local model** support.*
+with continuously updated support for OpenAI, Anthropic, DeepSeek, Google Gemini,
+Z.AI, Xiaomi, OpenRouter, Hugging Face, and many more. You can also connect a
+running local server that offers an OpenAI-compatible or Anthropic
+Messages-compatible API.
 
 | Provider group | Supported services |
 | --- | --- |
@@ -58,7 +59,7 @@ and longer-running projects while you retain control over what it may do.
 Support is completely optional. It does not unlock features or change the free
 alpha experience.
 
-#### **Chatobby is available on Windows and macOS. macOS support is experimental and has not yet been fully tested on physical Mac hardware. Linux is not yet supported.**
+#### **Chatobby is available on Windows, macOS, and Linux. macOS and Linux support are experimental and have not yet been fully tested on physical hardware.**
 
 ## Contents
 
@@ -68,7 +69,7 @@ alpha experience.
 - [Install](#install)
 - [A guided first fifteen minutes](#a-guided-first-fifteen-minutes)
 - [User guides](#user-guides)
-- [Project guidance: `.chatobby.md` and `AGENTS.md`](#project-guidance-chatobbymd-and-agentsmd)
+- [Project guidance: `chatobby.md` and `AGENTS.md`](#project-guidance-chatobbymd-and-agentsmd)
 - [Memory](#memory)
 - [Context Queries](#context-queries)
 - [Skills](#skills)
@@ -234,6 +235,15 @@ supported built-in providers and custom model metadata. The provider account,
 subscription, API key, and usage charges remain between you and that provider;
 Chatobby does not resell model tokens during the free alpha.
 
+### Research the current web
+
+Chatobby includes account-free public-web search. In Chatobby **Settings -> Web
+research**, you can optionally connect your own Brave Search API key for
+stronger freshness, language, region, and date filtering. The key stays in
+Obsidian's secret storage. Search results identify whether basic search,
+enhanced search, or a genuine fallback was used, so an unconfigured provider is
+not reported as an outage.
+
 ## Install
 
 ### Recommended: install through Obsidian
@@ -244,8 +254,9 @@ Chatobby does not resell model tokens during the free alpha.
 4. If the local runtime is missing, select **Install runtime** in the Chatobby
    view.
 5. Review the requested installation and alpha notices, then confirm.
-6. Open **Settings -> Chatobby**, choose a provider, and add the credential that
-   provider requires.
+6. Open Chatobby, select the **Settings** gear in its top bar, then connect a
+   provider or local model server. Credential values continue to use
+   Chatobby's protected local credential store.
 7. Return to Chatobby and send your first message.
 
 The plugin downloads the runtime only after confirmation. It cryptographically
@@ -297,10 +308,12 @@ it or connect it to the current note.
 
 ### 5. Explore the workspace
 
-Use the top ribbon to open Sessions, Permissions, Memory, Events, Queries,
-Channels, Subagents, and Plugins. The guide button can copy a linked Chatobby
-Guide into the vault. These pages are part of the same agent workspace; you do
-not need to move configuration into the message composer.
+Use the top ribbon to open Projects, Permissions, Memory, Events, Queries,
+Channels, Subagents, Plugins, and Settings. Projects replaces the former
+directory session picker with one searchable Vault/Project chat library. At the
+top of Settings, **Add guide to vault** can copy or update the linked Chatobby
+Guide. These pages are part of the same agent workspace; opening them does not
+change the Project or chat currently running.
 
 ## User guides
 
@@ -309,17 +322,19 @@ the agent to create or manage the feature for you:
 
 | Guide | Use it for |
 |---|---|
+| [Projects](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/projects.md) | Keep related chats and working folders together without confusing Project membership with permission. |
 | [Providers and models](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/providers-and-models.md) | Connect a supported provider and check how to find the models available in your installed Chatobby version. |
+| [MCP connections](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/mcp-connections.md) | Add verified or custom online and local connections, test them, and permission their discovered tools deliberately. |
 | [Context Queries](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/context-queries.md) | Safely compute small typed project data at session start or before a turn, including the complete supported script and SDK contract. |
 | [Subagents](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md) | Launch bounded specialist workers with appropriate roles, policies, limits, communication, and lifecycle handling. |
-| [Workflows](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md) | Design, validate, preview, and supervise reusable dependency-aware multi-agent execution. |
+| [Workflows](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md) | Review the existing subagent-flow feature while it remains available. It is scheduled for deprecation in 0.4.0 in favor of general-purpose workflows. |
 | [Events](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/events.md) | Create deliberate one-off or repeating automated work with schedules, policies, limits, and inspectable history. |
 
 You can build these features through their pages or describe the outcome to
 Chatobby and ask it to use the dedicated management tools. Chatobby never needs
 to inspect its own product source to use them.
 
-## Project guidance: `.chatobby.md` and `AGENTS.md`
+## Project guidance: `chatobby.md` and `AGENTS.md`
 
 Chatobby supports both its own project-guidance file and the standard
 coding-agent instruction files. They overlap slightly, but they have different
@@ -327,17 +342,17 @@ discovery rules and are most useful for different kinds of projects.
 
 | File | Best use | Discovery |
 |---|---|---|
-| `.chatobby.md` | Chatobby-specific project behavior, vault conventions, and optional prompt/workspace configuration | Loaded only from the exact directory selected as the Chatobby project root |
+| `chatobby.md` | Chatobby-specific project behavior, vault conventions, and optional prompt/workspace configuration | Loaded from the active Project root; a lone former `.chatobby.md` is migrated without overwriting a visible file |
 | `AGENTS.md` | Repository instructions, development commands, code conventions, verification requirements, and directory-scoped guidance | Discovered from the selected project directory and its ancestors by the agent runtime |
 | `CLAUDE.md` | Existing compatible project instructions when a repository already uses this convention | Discovered through the same context-file mechanism as `AGENTS.md` |
 
 Neither file grants permission, and neither should contain secrets. Built-in
 safety, evidence, and permission behavior remains authoritative.
 
-### A simple `.chatobby.md`
+### A simple `chatobby.md`
 
-Create `.chatobby.md` directly inside the directory selected in the Chatobby
-view. Plain Markdown is enough:
+Create `chatobby.md` directly inside the active Project root. Plain Markdown is
+enough:
 
 ```markdown
 # Project guidance
@@ -353,7 +368,7 @@ The body becomes lower-priority project guidance for sessions created in that
 project. Start a new session after changing the file if an existing session does
 not reflect the update.
 
-Use `.chatobby.md` for durable conventions. Do not use it for:
+Use `chatobby.md` for durable conventions. Do not use it for:
 
 - API keys or other secrets;
 - a temporary one-turn request;
@@ -362,7 +377,7 @@ Use `.chatobby.md` for durable conventions. Do not use it for:
 - changing or bypassing built-in safety instructions;
 - data that should be calculated afresh.
 
-### Advanced `.chatobby.md` configuration
+### Advanced `chatobby.md` configuration
 
 Most users should keep every built-in prompt section enabled. If you need a
 specialized project, frontmatter can independently control Chatobby prompt
@@ -410,7 +425,7 @@ For a repository, put instructions such as these in `AGENTS.md`:
 
 Use additional `AGENTS.md` files in nested directories when a particular part
 of a repository needs more specific guidance. Avoid duplicating contradictory
-rules across `.chatobby.md`, `AGENTS.md`, and `CLAUDE.md`.
+rules across `chatobby.md`, `AGENTS.md`, and `CLAUDE.md`.
 
 ## Memory
 
@@ -508,6 +523,20 @@ Use a project skill when the procedure belongs only to one project. Use a user
 skill when the procedure is genuinely reusable across projects. Do not put
 personal assumptions into a skill intended for other users.
 
+## Obsidian views and Web Viewer pages
+
+Chatobby treats Obsidian itself and a webpage opened in Web Viewer as two
+separate interactive surfaces. Obsidian panes, tabs, editors, plugin pages,
+Chatobby pages, focus, and workspace layout belong to the Obsidian host. The
+webpage inside a Web Viewer runs in its own page context with different
+content, controls, console messages, and element references.
+
+This distinction lets Chatobby inspect or operate the intended surface without
+mistaking an Obsidian control for a webpage control. A Web Viewer tab can still
+be selected or closed as an Obsidian pane, but reading, clicking, typing, and
+page diagnostics happen inside its webpage. Host-interface and webpage
+references are not interchangeable.
+
 ## Tasks, roles, subagents, workflows, and channels
 
 Full instructions: [Subagents guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md) and
@@ -585,7 +614,7 @@ When customizing a policy:
 5. Select the policy explicitly for the session or role that should use it.
 6. Verify the saved rules after changing them.
 
-Permission instructions do not belong in `.chatobby.md`, memory, Context Query
+Permission instructions do not belong in `chatobby.md`, memory, Context Query
 output, or an agent message. The Permissions page and permission tools are the
 authority-bearing surfaces.
 
@@ -627,15 +656,23 @@ credentials or a personal filesystem path.
 
 ## Platform and alpha status
 
-The current alpha supports desktop Obsidian on Windows 10 or 11 x64 and macOS
-11 or later on Apple Silicon and Intel. macOS support is experimental and has
-not yet been fully tested on physical Mac hardware.
+The current alpha supports desktop Obsidian on Windows 10 or 11 x64, macOS 11
+or later on Apple Silicon and Intel, and glibc-based Linux on x64 and arm64.
+macOS and Linux packages are built and exercised on native GitHub runners, but
+neither platform has completed representative physical-device acceptance.
+Flatpak, Snap, musl, and other confined Linux environments remain unverified.
 
 Important limitations:
 
 - Chatobby uses a separate local runtime in addition to the Community plugin.
 - The runtime executable is cryptographically verified by Chatobby but is not
   currently Authenticode-signed, so Windows may show a publisher warning.
+- macOS uses an ad-hoc code signature rather than Apple notarization and may
+  require one explicit **Open Anyway** approval. Chatobby never changes
+  Gatekeeper or quarantine settings.
+- Linux support currently targets ordinary glibc desktop installations. A
+  libc or confinement mismatch fails before execution and keeps the previous
+  runtime available.
 - Provider availability, multimodal support, and tool calling depend on the
   selected model and provider.
 - Agent actions can modify files or run commands when permitted. Begin with a
@@ -659,7 +696,7 @@ Important limitations:
   and conversation content is not included in that check.
 - **Telemetry:** The plugin contains no client-side product telemetry. Chatobby
   does not currently collect product analytics or server-side telemetry.
-- **Secrets:** Do not put credentials in notes, `.chatobby.md`, `AGENTS.md`,
+- **Secrets:** Do not put credentials in notes, `chatobby.md`, `AGENTS.md`,
   memory, Context Query output, or chat messages. Use supported credential
   storage and settings.
 

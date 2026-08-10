@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  assertSupportedLinuxRuntime,
   extractRuntimeBundle,
   verifyRuntimeUpdateDescriptor,
   type RuntimeUpdateDescriptor,
@@ -19,6 +20,12 @@ afterEach(async () => {
 });
 
 describe("runtime update client", () => {
+  it("fails fast on unsupported Linux libc environments", () => {
+    expect(() => assertSupportedLinuxRuntime(undefined)).toThrow(/glibc-based distribution/u);
+    expect(() => assertSupportedLinuxRuntime("2.27")).toThrow(/requires glibc 2\.28 or later/u);
+    expect(() => assertSupportedLinuxRuntime("2.28")).not.toThrow();
+    expect(() => assertSupportedLinuxRuntime("2.39")).not.toThrow();
+  });
   it("accepts only a compatible descriptor signed by the embedded trust anchor", () => {
     const keys = generateKeyPairSync("ed25519");
     const descriptor = signedDescriptor(keys.privateKey);
@@ -50,8 +57,15 @@ describe("runtime update client", () => {
       index,
       "0.1.16",
       publicKeyPem(keys.publicKey),
+      { platform: "freebsd", arch: "x64" },
+    )).toThrow("No Chatobby runtime is available for freebsd-x64");
+
+    expect(verifyRuntimeUpdateDescriptor(
+      index,
+      "0.1.16",
+      publicKeyPem(keys.publicKey),
       { platform: "linux", arch: "x64" },
-    )).toThrow("No Chatobby runtime is available for linux-x64");
+    )).toMatchObject({ platform: "linux", arch: "x64" });
   });
 
   it("extracts a complete sorted bundle and rejects traversal before writing outside staging", async () => {
@@ -116,7 +130,7 @@ function signedDescriptor(privateKey: KeyObject): RuntimeUpdateDescriptor {
 }
 
 function signedIndex(privateKey: KeyObject): RuntimeReleaseIndex {
-  const target = (platform: "win32" | "darwin", arch: "x64" | "arm64") => ({
+  const target = (platform: "win32" | "darwin" | "linux", arch: "x64" | "arm64") => ({
     platform,
     arch,
     bundle: {
@@ -135,7 +149,13 @@ function signedIndex(privateKey: KeyObject): RuntimeReleaseIndex {
     protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
     minimumPluginVersion: "0.1.0",
     maximumPluginVersion: "0.1.x",
-    targets: [target("darwin", "arm64"), target("darwin", "x64"), target("win32", "x64")],
+    targets: [
+      target("darwin", "arm64"),
+      target("darwin", "x64"),
+      target("linux", "arm64"),
+      target("linux", "x64"),
+      target("win32", "x64"),
+    ],
   };
   return {
     ...unsigned,

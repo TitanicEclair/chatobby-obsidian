@@ -1,4 +1,4 @@
-import type { ObsidianGraphComponent, ObsidianRetrievalBackendStatus, ObsidianRetrievalWarning } from "../../vendor/@chatobby/obsidian-protocol/retrieval-protocol";
+import type { ObsidianGraphComponent, ObsidianRetrievalBackendStatus, ObsidianRetrievalWarning } from "../../vendor/@chatobby/obsidian-protocol/index.js";
 
 export interface GraphifyNode {
   id: string;

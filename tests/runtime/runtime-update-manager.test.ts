@@ -35,21 +35,33 @@ describe("RuntimeUpdateManager", () => {
         order.push("install");
         return {
           executable: "runtime",
-          commit: async () => { order.push("commit"); },
+          runtimeVersion: "0.1.3",
+          runtimePackageFingerprint: "f".repeat(64),
+          activate: async () => { order.push("activate"); },
+          finalize: async () => { order.push("finalize"); },
           rollback: async () => { order.push("rollback"); },
         };
       }),
     };
-    const manager = new RuntimeUpdateManager({
+    let manager!: RuntimeUpdateManager;
+    manager = new RuntimeUpdateManager({
       ...deps(client, installer, "0.1.2"),
       stopRuntime: async () => { order.push("stop"); },
-      startRuntime: async () => { order.push("start"); },
+      startRuntime: async (command) => {
+        order.push("start");
+        expect(command).toMatchObject({ runtimeActivationRequired: true });
+        await manager.activatePendingRuntime({
+          runtimeVersion: "0.1.3",
+          runtimePackageFingerprint: "f".repeat(64),
+          operation: "activate",
+        });
+      },
     });
 
     await manager.check();
     await expect(manager.install()).resolves.toBe("0.1.3");
 
-    expect(order).toEqual(["stage", "stop", "install", "start", "commit", "cleanup"]);
+    expect(order).toEqual(["stage", "stop", "install", "start", "activate", "finalize", "cleanup"]);
     expect(manager.state).toMatchObject({ status: "current", installedVersion: "0.1.3" });
   });
 
@@ -84,7 +96,17 @@ describe("RuntimeUpdateManager", () => {
   it("offers a verified same-version package when repair is requested", async () => {
     const update = descriptor("0.1.3");
     const installer = installerFor();
-    const manager = new RuntimeUpdateManager(deps(clientFor(update), installer, "0.1.3"));
+    let manager!: RuntimeUpdateManager;
+    manager = new RuntimeUpdateManager({
+      ...deps(clientFor(update), installer, "0.1.3"),
+      startRuntime: async () => {
+        await manager.activatePendingRuntime({
+          runtimeVersion: "0.1.3",
+          runtimePackageFingerprint: "f".repeat(64),
+          operation: "activate",
+        });
+      },
+    });
 
     await manager.check();
     expect(manager.state).toMatchObject({ status: "current", installedVersion: "0.1.3" });
@@ -98,14 +120,22 @@ describe("RuntimeUpdateManager", () => {
 
   it("rolls back the pending package when the replacement cannot reconnect", async () => {
     const update = descriptor("0.1.3");
-    const commit = vi.fn(async () => {});
+    const activate = vi.fn(async () => {});
+    const finalize = vi.fn(async () => {});
     const rollback = vi.fn(async () => {});
     const startRuntime = vi.fn()
       .mockRejectedValueOnce(new Error("replacement failed to start"))
       .mockResolvedValueOnce(undefined);
     const manager = new RuntimeUpdateManager({
       ...deps(clientFor(update), {
-        prepareInstall: vi.fn(async () => ({ executable: "runtime", commit, rollback })),
+        prepareInstall: vi.fn(async () => ({
+          executable: "runtime",
+          runtimeVersion: "0.1.3",
+          runtimePackageFingerprint: "f".repeat(64),
+          activate,
+          finalize,
+          rollback,
+        })),
       }, "0.1.2"),
       startRuntime,
     });
@@ -113,9 +143,114 @@ describe("RuntimeUpdateManager", () => {
     await manager.check();
     await expect(manager.install()).rejects.toThrow("replacement failed to start");
 
-    expect(commit).not.toHaveBeenCalled();
+    expect(activate).not.toHaveBeenCalled();
+    expect(finalize).not.toHaveBeenCalled();
     expect(rollback).toHaveBeenCalledOnce();
     expect(startRuntime).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows only the authenticated candidate identity to activate or roll back", async () => {
+    const installation = {
+      executable: "runtime",
+      runtimeVersion: "0.1.3",
+      runtimePackageFingerprint: "f".repeat(64),
+      activate: vi.fn(async () => {}),
+      finalize: vi.fn(async () => {}),
+      rollback: vi.fn(async () => {}),
+    };
+    let manager!: RuntimeUpdateManager;
+    manager = new RuntimeUpdateManager({
+      ...deps(clientFor(descriptor("0.1.3")), { prepareInstall: vi.fn(async () => installation) }, "0.1.2"),
+      startRuntime: async () => {
+        await expect(manager.activatePendingRuntime({
+          runtimeVersion: "0.1.4",
+          runtimePackageFingerprint: installation.runtimePackageFingerprint,
+          operation: "activate",
+        })).rejects.toThrow("does not match");
+        await manager.activatePendingRuntime({
+          runtimeVersion: installation.runtimeVersion,
+          runtimePackageFingerprint: installation.runtimePackageFingerprint,
+          operation: "activate",
+        });
+      },
+    });
+
+    await manager.check();
+    await manager.install();
+
+    expect(installation.activate).toHaveBeenCalledOnce();
+    expect(installation.finalize).toHaveBeenCalledOnce();
+    expect(installation.rollback).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a recovered prepared installation before runtime startup", async () => {
+    const rollback = vi.fn(async () => {});
+    const stopRuntime = vi.fn(async () => {});
+    const manager = new RuntimeUpdateManager({
+      ...deps(clientFor(descriptor("0.1.3")), installerFor(), "0.1.2"),
+      installer: {
+        prepareInstall: installerFor().prepareInstall,
+        resumePendingInstall: vi.fn(async () => ({
+          executable: "runtime",
+          runtimeVersion: "0.1.3",
+          runtimePackageFingerprint: "f".repeat(64),
+          activationState: "prepared" as const,
+          activate: vi.fn(async () => {}),
+          finalize: vi.fn(async () => {}),
+          rollback,
+        })),
+      },
+      stopRuntime,
+    });
+
+    await expect(manager.recoverInterruptedInstallation()).resolves.toBe("rolled-back");
+    expect(stopRuntime).toHaveBeenCalledOnce();
+    expect(rollback).toHaveBeenCalledOnce();
+  });
+
+  it("finalizes only the exact recovered activated runtime identity", async () => {
+    const finalize = vi.fn(async () => {});
+    const rollback = vi.fn(async () => {});
+    const fingerprint = "f".repeat(64);
+    const manager = new RuntimeUpdateManager({
+      ...deps(clientFor(descriptor("0.1.3")), installerFor(), "0.1.2"),
+      installer: {
+        prepareInstall: installerFor().prepareInstall,
+        resumePendingInstall: vi.fn(async () => ({
+          executable: "runtime",
+          runtimeVersion: "0.1.3",
+          runtimePackageFingerprint: fingerprint,
+          activationState: "activated" as const,
+          activate: vi.fn(async () => {}),
+          finalize,
+          rollback,
+        })),
+      },
+    });
+
+    await expect(manager.recoverInterruptedInstallation()).resolves.toBe("awaiting-runtime");
+    await expect(manager.finalizeRecoveredRuntime({
+      instanceId: "instance",
+      vaultId: "vault",
+      pid: 1,
+      startedAt: 1,
+      runtimeVersion: "0.1.2",
+      protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+      runtimePackageFingerprint: fingerprint,
+    })).rejects.toThrow("does not match");
+    expect(finalize).not.toHaveBeenCalled();
+
+    await manager.finalizeRecoveredRuntime({
+      instanceId: "instance",
+      vaultId: "vault",
+      pid: 1,
+      startedAt: 1,
+      runtimeVersion: "0.1.3",
+      protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+      runtimePackageFingerprint: fingerprint,
+    });
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(rollback).not.toHaveBeenCalled();
   });
 });
 
@@ -126,7 +261,14 @@ function deps(
       source: string,
       manifest: RuntimePackageManifest,
       pluginVersion: string,
-    ) => Promise<{ executable: string; commit(): Promise<void>; rollback(): Promise<void> }>;
+    ) => Promise<{
+      executable: string;
+      runtimeVersion: string;
+      runtimePackageFingerprint: string;
+      activate(): Promise<void>;
+      finalize(): Promise<void>;
+      rollback(): Promise<void>;
+    }>;
   },
   installedVersion: string | null,
 ) {
@@ -134,7 +276,13 @@ function deps(
     pluginVersion: "0.1.2",
     enabled: true,
     client,
-    installer,
+    installer: {
+      resumePendingInstall: vi.fn(async () => null),
+      prepareInstall: async (source: string, manifest: RuntimePackageManifest, pluginVersion: string) => ({
+        activationState: "prepared" as const,
+        ...await installer.prepareInstall(source, manifest, pluginVersion),
+      }),
+    },
     getInstalledVersion: () => installedVersion,
     hasActiveWork: () => false,
     stopRuntime: vi.fn(async () => {}),
@@ -144,9 +292,14 @@ function deps(
 
 function installerFor() {
   return {
+    resumePendingInstall: vi.fn(async () => null),
     prepareInstall: vi.fn(async () => ({
       executable: "runtime",
-      commit: vi.fn(async () => {}),
+      runtimeVersion: "0.1.3",
+      runtimePackageFingerprint: "f".repeat(64),
+      activationState: "prepared" as const,
+      activate: vi.fn(async () => {}),
+      finalize: vi.fn(async () => {}),
       rollback: vi.fn(async () => {}),
     })),
   };

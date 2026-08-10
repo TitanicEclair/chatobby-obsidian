@@ -10,6 +10,9 @@ import type {
   WsExtensionUIResponse,
   WsSessionStats,
   WsProviderInfo,
+  WsLocalModelProvider,
+  WsLocalModelProviderDocument,
+  WsLocalModelProviderProbeResult,
   WsBashResult,
   WsAttachmentCapabilities,
   WsPromptAttachment,
@@ -30,6 +33,9 @@ export type {
   WsExtensionUIResponse,
   WsSessionStats,
   WsProviderInfo,
+  WsLocalModelProvider,
+  WsLocalModelProviderDocument,
+  WsLocalModelProviderProbeResult,
   WsBashResult,
   WsAttachmentCapabilities,
   WsPromptAttachment,
@@ -154,6 +160,8 @@ export interface PluginSettings {
   composerKeybindings: ComposerKeybindings;
   /** Vault-relative directory used for new sessions and resume listing. Empty string = vault root. */
   activeVaultDirectory: string;
+	/** Per-vault behavior when a folder already has a canonical directory-session Project. */
+	directoryProjectLaunchBehavior: "ask" | "reuse-canonical" | "create-new";
   /** How new sessions are auto-named: "truncate" (first 5 words) or "model" (LLM call). */
   autoNameStrategy: AutoNameStrategy;
 }
@@ -176,6 +184,7 @@ export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   autoScroll: true,
   composerKeybindings: { ...DEFAULT_COMPOSER_KEYBINDINGS },
   activeVaultDirectory: "",
+	directoryProjectLaunchBehavior: "ask",
   autoNameStrategy: "truncate",
 };
 

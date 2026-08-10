@@ -270,5 +270,6 @@ function formatBytes(bytes: number): string {
 function formatTarget(platform: NodeJS.Platform, arch: string): string {
   if (platform === "darwin") return arch === "arm64" ? "macOS · Apple Silicon" : "macOS · Intel";
   if (platform === "win32") return `Windows · ${arch === "x64" ? "64-bit" : arch}`;
+  if (platform === "linux") return `Linux alpha · ${arch === "x64" ? "64-bit" : "ARM64"}`;
   return `${platform} · ${arch}`;
 }

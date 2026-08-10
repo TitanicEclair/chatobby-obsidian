@@ -34,7 +34,7 @@ export interface SessionControllerOptions {
   refreshTabBar: () => void;
   renderActiveTab: () => void;
   persistLeafState: () => void;
-  exitSessionPicker: () => void;
+	exitSessionBrowser: () => void;
   runOperation: <T>(descriptor: OperationDescriptor, operation: () => Promise<T>) => Promise<T>;
   getActiveOperation: () => ActiveOperation | null;
   claimSessionOwnership: () => void;
@@ -58,6 +58,7 @@ export class SessionController {
   private readonly workingDirectory: WorkingDirectoryController;
   private runtimeMessageCount = 0;
   private runtimeWorkingDirectory: string | null = null;
+	private runtimeWorkspace: FrontendSessionViewModel["workspace"] = { kind: "vault", label: "Vault" };
 
   constructor(private readonly options: SessionControllerOptions) {
     this.workingDirectory = new WorkingDirectoryController(options.app, options.plugin);
@@ -102,6 +103,10 @@ export class SessionController {
     });
     this.runtimeMessageCount = session.messageCount;
     this.runtimeWorkingDirectory = session.workingDirectory;
+		// A connector can briefly reconnect to an older development runtime while
+		// the backend is being replaced. Treat a missing additive projection as a
+		// Vault session until the matched runtime publishes its first snapshot.
+		this.runtimeWorkspace = session.workspace ?? { kind: "vault", label: "Vault" };
     this.options.refreshTabBar();
     // A newly projected runtime session owns a different feed store. Switch the
     // visible renderer immediately so the first prompt and its live patches do
@@ -123,6 +128,8 @@ export class SessionController {
     return !active || this.isReusableBlankSession(active);
   }
   workingDirectoryPath(): string { return this.workingDirectory.current(); }
+	sessionTitle(): string { return this.activeTab()?.name?.trim() || "New chat"; }
+	workspaceLabel(): string { return this.runtimeWorkspace.label; }
 
   restoreWorkingDirectory(rawVaultDirectoryPath: string): void {
     this.workingDirectory.restore(rawVaultDirectoryPath);
@@ -199,10 +206,10 @@ export class SessionController {
   }
 
   async restoreSession(sessionPath: string): Promise<void> {
-    await this.handleSessionPickerSelect(sessionPath);
+		await this.handleStoredSessionSelect(sessionPath);
   }
 
-  async handleSessionPickerSelect(sessionPath: string): Promise<void> {
+	async handleStoredSessionSelect(sessionPath: string): Promise<void> {
     await this.runSessionTransition("Resuming session", async () => {
       const preferences = this.options.plugin.getSessionPreferences();
       const changed = await this.options.dispatchSessionIntent({
@@ -216,7 +223,7 @@ export class SessionController {
       if (!changed) return;
       this.options.claimSessionOwnership();
       this.options.renderActiveTab();
-      this.options.exitSessionPicker();
+			this.options.exitSessionBrowser();
     }).catch((error) => {
       console.error("Chatobby: resume session failed", error);
       new Notice(`Could not resume session: ${error instanceof Error ? error.message : String(error)}`);
@@ -227,7 +234,7 @@ export class SessionController {
     const target = this.tabs.get(sessionId);
     if (!target || target.sessionId === this.activeTabId()) return;
     if (!target.sessionFile) throw new Error("The target session is missing its recovery path");
-    await this.handleSessionPickerSelect(target.sessionFile);
+		await this.handleStoredSessionSelect(target.sessionFile);
   }
 
   reconcileActiveSession(): Promise<void> {
@@ -241,7 +248,13 @@ export class SessionController {
     if (!this.activeTab()) await this.createSession();
     else {
       await this.reconcileActiveSession();
-      const scope = this.resolveWorkingDirectoryScope("preparing the selected directory");
+      // Project sessions are explicitly bound by the runtime. The legacy vault
+      // directory selector is only authoritative for vault-scoped sessions;
+      // comparing it with a Project root would silently replace the selected
+      // Project with a new Vault session before the first prompt.
+      const scope = this.runtimeWorkspace.kind === "vault"
+        ? this.resolveWorkingDirectoryScope("preparing the selected directory")
+        : null;
       if (scope && this.runtimeWorkingDirectory && !sameWorkingDirectory(this.runtimeWorkingDirectory, scope.cwd)) {
         await this.createSession();
       }

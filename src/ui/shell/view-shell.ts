@@ -34,7 +34,7 @@ export interface ViewShell {
   connectionEl: HTMLElement;
   widgetEl: HTMLElement;
   statsEl: HTMLElement;
-  sessionPickerHostEl: HTMLElement;
+	pageHostEl: HTMLElement;
   // Feed
   feedWrapEl: HTMLElement;
   feedEl: HTMLElement;
@@ -122,7 +122,7 @@ export function buildViewShell(container: HTMLElement, handlers: ShellHandlers):
   const tabBarHostEl = container.createDiv({ cls: "chatobby-session-bar" });
   const subagentRailHostEl = container.createDiv({ cls: "chatobby-session-agent-rail-host" });
 
-  const sessionPickerHostEl = container.createDiv({ cls: "chatobby-session-picker-host is-hidden" });
+	const pageHostEl = container.createDiv({ cls: "chatobby-page-host is-hidden" });
   const sessionTransitionHostEl = container.createDiv({ cls: "chatobby-session-transition-host is-hidden" });
 
   // ── Feed ─────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ export function buildViewShell(container: HTMLElement, handlers: ShellHandlers):
     connectionEl,
     widgetEl,
     statsEl,
-    sessionPickerHostEl,
+		pageHostEl,
     feedWrapEl: feedWrap,
     feedEl,
     taskProgressHostEl,

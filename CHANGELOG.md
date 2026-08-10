@@ -2,8 +2,70 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-10
+
+- Route ordinary left clicks through the Web Viewer guest page as a user
+  gesture, while retaining native pointer input for double, middle, and right
+  clicks. This keeps page-element activation separate from Obsidian host-leaf
+  controls and makes click receipts verifiable.
+- Added bounded, redacted Web Viewer guest-console capture, explicit live page
+  timestamps and capture sequences, visible/focus/loading/crash state, and
+  action receipts that distinguish dispatch from observed page changes.
+- Return a distinct typed closed-Web-Viewer error and keep browser validation
+  and bridge failures inside the semantic-v2 result contract.
+- Added public user guides for Projects and MCP connections, expanded local
+  model guidance with permissioned device-aware recommendations, and aligned
+  the README with visible `chatobby.md` Project guidance.
+
+- Remove a redundant Project-screen assertion so release linting uses the
+  discriminated frontend screen contract consistently on every platform.
 ### Added
 
+- Added optional enhanced web search through a user-supplied Brave Search API
+  key stored in Obsidian's secret storage. Basic account-free search remains
+  available, and search results now distinguish an unconfigured enhanced
+  provider from an actual provider failure.
+- Added an inline `@` picker for referencing Vault files and folders from the
+  composer. References remain plain prompt context and never grant file access.
+- Added a guided MCP connection form that separates online services from local
+  programs, keeps advanced lifecycle and environment fields optional, and
+  explains the disabled-first review flow.
+- Added a first-class Settings page inside Chatobby for provider API keys,
+  local model servers, conversation preferences, Project behavior, the linked
+  user guide, documentation, support, and Patreon discovery. Obsidian plugin
+  settings retain runtime, document, and help discovery and explain what moved.
+- Added a one-line sticky prompt navigator that tracks the preceding user
+  message while reading and returns to it with a brief highlight.
+- Added the native system folder chooser for Project creation, root addition,
+  and relinking. External paths are exchanged only through a transient
+  connector/runtime registration and replaced by operation-scoped opaque
+  candidates before frontend mutation.
+- Added best-effort Linux x64 and arm64 managed-runtime selection, XDG-aware
+  installation paths, Linux target labels, and installer/update regression
+  coverage. Linux remains an experimental alpha target pending representative
+  hardware acceptance.
+- Added Local model servers settings for Ollama, LM Studio, vLLM, llama.cpp,
+  generic OpenAI-compatible endpoints, and Anthropic Messages-compatible
+  endpoints, including no-auth, provider API-key, and bearer-token modes,
+  configured model lists, real model-request testing, editing, and removal.
+- Added confirmed Project archive/restore actions and truthful folder recovery
+  states.
+- Added an Obsidian-native Vault/Projects chat library with a persistent left
+  rail, focused folders and chats detail, direct Vault and Project chat
+  creation, and no duplicated Instructions, Memory, Integrations, or Git tabs.
+- Added folder lifecycle controls and file-explorer Project launches, including
+  canonical Project reuse, an explicit create-another-Project flow, a per-vault
+  prompt preference, and Project-scoped session browsing.
+- Added one plugin-global Obsidian bridge coordinator and a bounded Project
+  directory observation queue. Folder renames and moves now carry stable
+  observation identities, typed receipts, retry limits, and authoritative
+  rescan recovery without starting a stopped runtime.
+- Added the generated browser-safe Project contract projection and exact
+  source/connector parity gate. The connector does not yet import the contracts
+  into product behavior or persist authoritative Project state.
+- Added the exact generated platform-path projection and source/connector
+  parity gate. The projection remains unused by connector behavior until the
+  later Projects migration replaces the characterized legacy resolver.
 - Added one event-cached semantic Obsidian context service shared by prompt
   injection and bridge tools, with live editor state, workspace revisions,
   bounded paging, and accessible visible-view inspection.
@@ -12,6 +74,53 @@
 
 ### Changed
 
+- Improved agent routing for Obsidian CLI-backed operations and live developer
+  verification so rendered Dataview, CSS, plugin, and UI changes are normally
+  checked against current errors and live state rather than file output alone.
+- Kept composer controls on one row across supported widths, using semantic
+  icons, a compact overflow menu, and icon-only essential controls as space
+  narrows.
+- Tightened Project chat-list rhythm with more usable padding inside each row
+  and no added spacing between conversations.
+- Replaced the legacy directory session picker with the full-width Projects
+  library, including dense left-aligned chat rows, responsive metadata, and
+  narrow-pane truncation.
+- Kept subagent lifecycle state in the agent rail without duplicating a large
+  lifecycle card in the conversation feed, and marked subagent Flows for
+  deprecation in 0.4.0 ahead of general-purpose workflows.
+- Project folders now expose direct remove and make-primary actions, the Add
+  folders affordance spans the folder section, and the active chat header shows
+  the session title with its actual Vault/Project identity without repeated
+  directory labels.
+- Project mutation forms now close through the shared editor lifecycle so
+  Project pages immediately return to their updated detail state. Folder-event
+  admission also has a regression benchmark for the sub-10 ms p95 UI budget.
+- Reworked the global Sessions surface into complete session history by
+  default, kept old directory scopes as explicit recovery filters, and linked
+  the history page to Projects without changing the active session workspace.
+- The newest valid view-provided bridge configuration now owns one shared
+  connection; closing that view promotes the newest remaining owner. Bridge
+  hello and Project observations use the runtime-projected stable vault
+  identity rather than a connector-derived path identity.
+- Refreshed the generated Project and platform-path contract projections to
+  the accepted Phase 2 source authority. The connector can type-check
+  directory-centric device bindings, root-scoped reuse, recovery,
+  root-operation contracts, and their device-local path roles without
+  activating Project stores or live behavior.
+- Refreshed the generated Project contract projection to the exact Phase 1
+  source authority. This exposes the reviewable record, brief, event, command,
+  and receipt contracts without activating connector Project behavior.
+- Synchronized the reviewable connector client with the 0.3.0 runtime
+  contracts, including generated product identity constants and the separated
+  user-authoring versus internal-resolution subagent scopes.
+- Replaced the overlapping Memory filter chips with independent scope, type,
+  status, optional lesson-type, search, and sort controls. The default
+  `Available here` scope now explains which project or vault context is being
+  viewed and each memory identifies its location relationship.
+- Standardized private connector development through `dev`, temporary
+  `release/<version>` stabilization, and `main` public-ready promotion; added
+  CI branch-route checks and made the public publisher inert in the private
+  repository.
 - Simplified user-created agent roles to Vault or Project availability, moved
   that choice into the primary form, hid the internal role key, and made role
   cards show their effective availability.
@@ -20,6 +129,23 @@
 
 ### Fixed
 
+- Allowed authenticated startup admission and one-time migration work to use
+  its own bounded lifecycle instead of being preempted by the connector's old
+  15-second outer authentication timeout.
+- Preserved a newly created Project session when its first prompt is sent,
+  instead of comparing it with the legacy Vault directory selector and
+  silently replacing it with a Vault session.
+- Fully replaced hidden feed content when switching sessions from a covering
+  page, preventing a new session's empty state from appearing below messages
+  from the previous session.
+- Preserved the complete versioned Obsidian bridge configuration while it
+  crosses the generated runtime client, and extended the paired backend gate
+  to verify every manifest-declared protocol file. Connector behavior now uses
+  only the generated protocol entry point instead of stale parallel sources.
+- Kept managed-runtime verification aligned with the signed product inventory
+  after removal of the unreachable browser-proxy bridge asset. Install and
+  rollback checks now require only files that the current runtime actually
+  executes or loads.
 - Preserved unsaved editor content, active-leaf focus, panel state, and
   non-Markdown view context while bounding automatic prompt context.
 - Kept prompt and tool context synchronized through the same revisioned

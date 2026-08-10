@@ -11,20 +11,13 @@ import {
 import { ChatobbyComponent } from "../shared/component";
 import { SCROLL_BOTTOM_THRESHOLD_PX, STREAM_TEXT_DEBOUNCE_MS } from "../shared/constants";
 import { isDomNodeOfType } from "../shared/dom";
-import { DividerBlockView } from "./divider-block";
-import { ExtensionPanelBlockView } from "./extension-panel-block";
+import { canReuseBlockView, createBlockView, updateBlockView } from "./block-view-factory";
 import { preserveComposerFocusForFeedControl } from "./feed-focus";
 import { blocksToSource } from "./source-serializer";
 import type { InteractionCard } from "./interaction-card";
-import { QueuedMessageBlockView } from "./queued-message-block";
-import { SubagentBlockView } from "./subagent-block";
-import { SubagentCommunicationBlockView } from "./subagent-communication-block";
-import { TextBlockView } from "./text-block";
-import { ThinkingBlockView } from "./thinking-block";
-import { ToolBlockView } from "./tools/tool-block";
-import { TurnSummaryView } from "./turn-summary";
 import { UserBlockView } from "./user-block";
 import { hasLiveTiming, isInteractiveTarget, isTickable, renderKeyForCommit } from "./feed-render-policy";
+import { StickyPromptController } from "./sticky-prompt-controller";
 export interface FeedViewActions {
   setScroll(isAtBottom: boolean, scrollTop: number): void;
   setThinkingDisplay(blockIdValue: string, mode: ThinkingDisplayMode): void;
@@ -71,6 +64,11 @@ export class FeedRenderer extends ChatobbyComponent {
   private interactionsEl: HTMLElement | null = null;
   private sourceEl: HTMLTextAreaElement | null = null;
   private jumpPillEl: HTMLElement | null = null;
+	private readonly stickyPrompt = new StickyPromptController({
+		getScroll: () => this.scrollEl,
+		getOrderedBlocks: () => this.currentBlocks(),
+		getBlockElement: (id) => this.blockMounts.get(id)?.element ?? null,
+	});
   private readonly blockMounts = new Map<string, BlockMount>();
   private store: FeedStore;
   private storeSubscription: FeedSubscription | null = null;
@@ -96,6 +94,7 @@ export class FeedRenderer extends ChatobbyComponent {
   private sourceDirty = true;
   private active = true;
   private dirtyWhileInactive = false;
+	private fullRenderWhileInactive = false;
 	private pendingInteraction: InteractionCard | null | undefined;
 
   constructor(private readonly host: FeedHost) {
@@ -117,7 +116,10 @@ export class FeedRenderer extends ChatobbyComponent {
     this.storeSubscription = store.subscribe((commit) => this.onCommit(commit));
     this.resetPendingCommit();
     if (this.blocksEl && this.active) this.renderFullStore();
-    else this.dirtyWhileInactive = true;
+    else {
+		this.dirtyWhileInactive = true;
+		this.fullRenderWhileInactive = true;
+	}
   }
 
   /** Suspend presentation work while another Chatobby screen covers the feed. */
@@ -141,7 +143,9 @@ export class FeedRenderer extends ChatobbyComponent {
 	}
     if (this.dirtyWhileInactive) {
       this.dirtyWhileInactive = false;
-      this.flushPendingCommit();
+      if (this.fullRenderWhileInactive) this.renderFullStore();
+      else this.flushPendingCommit();
+		this.fullRenderWhileInactive = false;
     }
     const blocks = this.currentBlocks();
     this.syncLiveTimer(blocks);
@@ -229,6 +233,7 @@ export class FeedRenderer extends ChatobbyComponent {
     this.interactionsEl = null;
     this.sourceEl = null;
     this.jumpPillEl = null;
+		this.stickyPrompt.clear();
     this.destroyBlockMounts();
     this.stopRenderTimer();
     this.contentResizeObserver?.disconnect();
@@ -242,6 +247,7 @@ export class FeedRenderer extends ChatobbyComponent {
   protected onRender(container: HTMLElement): void {
     const regionLabel = container.createSpan({ cls: "chatobby-visually-hidden", text: "Conversation feed" });
     regionLabel.id = `chatobby-feed-region-${++feedRegionLabelSequence}`;
+		this.stickyPrompt.mount(container);
     this.scrollEl = container.createDiv({ cls: "chatobby-feed__scroll" });
     this.scrollEl.tabIndex = 0;
     this.scrollEl.setAttr("role", "region");
@@ -319,7 +325,7 @@ export class FeedRenderer extends ChatobbyComponent {
       this.dirtyWhileInactive = true;
       return;
     }
-    const order = this.store.select(feedSelectors.orderedBlockIds);
+		const order = this.visibleOrder();
     const visibleIds = new Set(order);
     this.blocksEl.querySelector(".chatobby-feed__empty")?.remove();
     for (const id of this.pendingRemovedIds) this.removeMount(id);
@@ -340,13 +346,14 @@ export class FeedRenderer extends ChatobbyComponent {
     this.resetPendingCommit();
 	chatobbyPerformance.recordRetainedDomNodes(this.blocksEl.querySelectorAll("*").length);
     this.maybeScrollToBottom();
+		this.stickyPrompt.update(this.viewMode === "reading");
   }
 
   private renderFullStore(): void {
     if (!this.blocksEl) return;
     this.destroyBlockMounts();
     this.blocksEl.empty();
-    const order = this.store.select(feedSelectors.orderedBlockIds);
+		const order = this.visibleOrder();
     for (const id of order) {
       const block = this.store.select(feedSelectors.blockById(id));
       if (!block) continue;
@@ -364,13 +371,21 @@ export class FeedRenderer extends ChatobbyComponent {
     this.syncLiveTimer(blocks);
     this.scrollEl?.setAttr("aria-busy", String(hasLiveTiming(this.store, blocks)));
 	chatobbyPerformance.recordRetainedDomNodes(this.blocksEl.querySelectorAll("*").length);
+		this.stickyPrompt.update(this.viewMode === "reading");
   }
 
   private currentBlocks(): FeedBlock[] {
-    return this.store.select(feedSelectors.orderedBlockIds)
+		return this.visibleOrder()
       .map((id) => this.store.select(feedSelectors.blockById(id)))
       .filter((block): block is FeedBlock => block !== undefined);
   }
+
+	private visibleOrder() {
+		return this.store.select(feedSelectors.orderedBlockIds).filter((id) => {
+			const block = this.store.select(feedSelectors.blockById(id));
+			return block?.type !== "subagent";
+		});
+	}
 
   private mountForBlock(block: FeedBlock): BlockMount {
     const existing = this.blockMounts.get(block.id);
@@ -389,13 +404,13 @@ export class FeedRenderer extends ChatobbyComponent {
   private renderBlock(element: HTMLElement, block: FeedBlock, mount: BlockMount): void {
     element.className = `chatobby-feed__block chatobby-feed__block--${block.type}`;
     const existing = mount.view;
-    if (existing && canReuseView(block, existing)) {
-      updateView(existing, block);
+    if (existing && canReuseBlockView(block, existing)) {
+      updateBlockView(existing, block);
       return;
     }
     existing?.destroy();
     element.empty();
-    const view = createView(this.host, block);
+    const view = createBlockView(this.host, block);
     view.render(element);
     if (view instanceof UserBlockView && (block.type === "user" || block.type === "system")) {
       view.setMessage(block.message, block.type);
@@ -493,6 +508,7 @@ export class FeedRenderer extends ChatobbyComponent {
     const sourceMode = this.viewMode === "source";
     this.container?.toggleClass("is-source-mode", sourceMode);
     this.container?.toggleClass("is-reading-mode", !sourceMode);
+		this.stickyPrompt.update(!sourceMode);
   }
 
   private syncSourceTextIfVisible(blocks: readonly FeedBlock[], force = false): void {
@@ -512,6 +528,7 @@ export class FeedRenderer extends ChatobbyComponent {
       const explicitUserScroll = Date.now() <= this.userScrollIntentUntil;
       const explicitlyScrolledUp = explicitUserScroll && scrollTop < this.lastObservedScrollTop - 1;
       this.lastObservedScrollTop = scrollTop;
+			this.stickyPrompt.update(true);
       if (this.bottomPinned && !explicitUserScroll) {
         if (this.autoScroll && distanceFromBottom >= SCROLL_BOTTOM_THRESHOLD_PX) this.onContentResized();
         this.commitScroll(true, scrollTop);
@@ -550,6 +567,7 @@ export class FeedRenderer extends ChatobbyComponent {
   private updateJumpPill(isAtBottom: boolean): void {
     this.jumpPillEl?.toggleClass("is-hidden", isAtBottom);
   }
+
 
   private commitScroll(isAtBottom: boolean, scrollTop: number): void {
     const current = this.store.select(feedSelectors.scroll);
@@ -606,44 +624,5 @@ export class FeedRenderer extends ChatobbyComponent {
     this.pendingOrderChanged = false;
     this.pendingDocumentChanged = false;
     this.contentDirty = false;
-  }
-}
-function canReuseView(block: FeedBlock, view: unknown): boolean {
-  switch (block.type) {
-    case "user":
-    case "system": return view instanceof UserBlockView;
-    case "text": return view instanceof TextBlockView;
-    case "thinking": return view instanceof ThinkingBlockView;
-    case "tools": return view instanceof ToolBlockView;
-    case "summary": return view instanceof TurnSummaryView;
-    case "queued": return view instanceof QueuedMessageBlockView;
-    case "divider": return view instanceof DividerBlockView;
-    default: return false;
-  }
-}
-function updateView(view: unknown, block: FeedBlock): void {
-  switch (block.type) {
-    case "text": (view as TextBlockView).setBlock(block); return;
-    case "thinking": (view as ThinkingBlockView).setBlock(block); return;
-    case "tools": (view as ToolBlockView).setBlock(block); return;
-    case "summary": (view as TurnSummaryView).setSummary(block); return;
-    case "user":
-    case "system": (view as UserBlockView).setMessage(block.message, block.type); return;
-    case "queued": (view as QueuedMessageBlockView).setBlock(block); return;
-    case "divider": (view as DividerBlockView).setBlock(block); return;
-  }
-}
-function createView(host: FeedHost, block: FeedBlock): ChatobbyComponent {
-  switch (block.type) {
-    case "user": case "system": return new UserBlockView(host);
-    case "text": return new TextBlockView(host, block);
-    case "thinking": return new ThinkingBlockView(host, block);
-    case "tools": return new ToolBlockView(host, block);
-    case "summary": return new TurnSummaryView(host, block);
-    case "queued": return new QueuedMessageBlockView(host, block);
-    case "divider": return new DividerBlockView(block);
-    case "subagent": return new SubagentBlockView(block);
-    case "subagent-communication": return new SubagentCommunicationBlockView(block, host);
-    case "extension-panel": return new ExtensionPanelBlockView(host, block);
   }
 }

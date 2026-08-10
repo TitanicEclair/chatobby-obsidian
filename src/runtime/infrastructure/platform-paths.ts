@@ -6,7 +6,7 @@ export interface RuntimePlatformEnvironment {
   home: string;
   localAppData?: string;
   xdgDataHome?: string;
-  xdgRuntimeDir?: string;
+  xdgStateHome?: string;
 }
 
 export interface ChatobbyPlatformPaths {
@@ -48,13 +48,15 @@ export function resolveChatobbyPlatformPaths(
     environment.xdgDataHome ?? posix.join(environment.home, ".local", "share"),
     "Chatobby",
   );
+  const stateRoot = posix.join(
+    environment.xdgStateHome ?? posix.join(environment.home, ".local", "state"),
+    "Chatobby",
+  );
   return {
     applicationSupportRoot,
     runtimeInstallRoot: posix.join(applicationSupportRoot, "runtime"),
-    runtimeLeasesRoot: environment.xdgRuntimeDir
-      ? posix.join(environment.xdgRuntimeDir, "Chatobby", "runtimes")
-      : posix.join(environment.home, ".chatobby", "runtimes"),
-    runtimeLogsRoot: posix.join(applicationSupportRoot, "logs"),
+    runtimeLeasesRoot: posix.join(applicationSupportRoot, "runtimes"),
+    runtimeLogsRoot: stateRoot,
   };
 }
 
@@ -86,6 +88,6 @@ function currentRuntimePlatformEnvironment(): RuntimePlatformEnvironment {
     home: homedir(),
     localAppData: process.env.LOCALAPPDATA,
     xdgDataHome: process.env.XDG_DATA_HOME,
-    xdgRuntimeDir: process.env.XDG_RUNTIME_DIR,
+    xdgStateHome: process.env.XDG_STATE_HOME,
   };
 }

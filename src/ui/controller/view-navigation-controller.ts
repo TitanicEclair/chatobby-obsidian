@@ -1,11 +1,10 @@
 import type { WorkspaceLeaf } from "obsidian";
 
-export type ChatobbyViewMode = "chat" | "session-picker" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp";
+export type ChatobbyViewMode = "chat" | "projects" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp" | "settings";
 export type ChatobbySubagentTab = "runs" | "inbox" | "agents" | "workflows" | "settings";
-export type ExclusiveViewSurface = "chat" | "session-picker" | "overlays" | "subagents" | "channels";
+export type ExclusiveViewSurface = "chat" | "overlays" | "subagents" | "channels";
 
 export interface ExclusiveViewSurfaceClosers {
-  sessionPicker(): void;
   overlays(): void;
   subagents(): void;
   channels(): void;
@@ -20,6 +19,7 @@ export interface ChatobbyNavigationState {
   channelId?: string;
   messageId?: string;
   pluginId?: string;
+  projectId?: string;
 }
 
 /** Map internal routes onto the page ribbon without treating child feeds as management pages. */
@@ -35,7 +35,6 @@ export function closeInactiveViewSurfaces(
   target: ExclusiveViewSurface,
   closers: ExclusiveViewSurfaceClosers,
 ): void {
-  if (target !== "session-picker") closers.sessionPicker();
   if (target !== "overlays") closers.overlays();
   if (target !== "subagents") closers.subagents();
   if (target !== "channels") closers.channels();
@@ -48,9 +47,10 @@ interface NavigationHandlers {
   openEvents: () => void;
   openQueries: () => void;
   openMcp: (state: ChatobbyNavigationState) => void;
+  openProjects: (state: ChatobbyNavigationState) => void;
+  openSettings: () => void;
   openSubagents: (state: ChatobbyNavigationState) => void;
   openChannels: (state: ChatobbyNavigationState) => void;
-  openSessionPicker: () => Promise<void>;
   getLeafSessionState?: () => { vaultDirectoryPath?: string; sessionPath?: string };
   onError: (error: unknown) => void;
 }
@@ -130,9 +130,10 @@ export class ViewNavigationController {
     else if (state.mode === "events") this.handlers.openEvents();
     else if (state.mode === "queries") this.handlers.openQueries();
     else if (state.mode === "mcp") this.handlers.openMcp(state);
+    else if (state.mode === "projects") this.handlers.openProjects(state);
+    else if (state.mode === "settings") this.handlers.openSettings();
     else if (state.mode === "subagents") this.handlers.openSubagents(state);
     else if (state.mode === "channels") this.handlers.openChannels(state);
-    else await this.handlers.openSessionPicker();
   }
 }
 
@@ -155,7 +156,7 @@ export function parseNavigationState(value: unknown): ChatobbyNavigationState {
   if (!value || typeof value !== "object") return { mode: "chat" };
   const record = value as Record<string, unknown>;
   return {
-    mode: isViewMode(record.mode) ? record.mode : "chat",
+    mode: record.mode === "session-picker" ? "projects" : isViewMode(record.mode) ? record.mode : "chat",
     runId: typeof record.runId === "string" ? record.runId : undefined,
     nodeId: typeof record.nodeId === "string" ? record.nodeId : undefined,
     subagentTab: isSubagentTab(record.subagentTab) ? record.subagentTab : undefined,
@@ -163,6 +164,7 @@ export function parseNavigationState(value: unknown): ChatobbyNavigationState {
     channelId: typeof record.channelId === "string" ? record.channelId : undefined,
     messageId: typeof record.messageId === "string" ? record.messageId : undefined,
     pluginId: typeof record.pluginId === "string" ? record.pluginId : undefined,
+    projectId: typeof record.projectId === "string" ? record.projectId : undefined,
   };
 }
 
@@ -188,14 +190,15 @@ export function shouldActivateLeafSession(
 
 function isViewMode(value: unknown): value is ChatobbyViewMode {
   return value === "chat"
-    || value === "session-picker"
+    || value === "projects"
     || value === "subagents"
     || value === "channels"
     || value === "permissions"
     || value === "memory"
     || value === "events"
     || value === "queries"
-    || value === "mcp";
+    || value === "mcp"
+    || value === "settings";
 }
 
 function isSubagentTab(value: unknown): value is ChatobbySubagentTab {
@@ -210,5 +213,6 @@ function sameNavigationState(left: ChatobbyNavigationState, right: ChatobbyNavig
     && left.feedOnly === right.feedOnly
     && left.channelId === right.channelId
     && left.messageId === right.messageId
-    && left.pluginId === right.pluginId;
+    && left.pluginId === right.pluginId
+    && left.projectId === right.projectId;
 }

@@ -2,8 +2,7 @@
 // See docs/tooling/bridge-executor.md for architecture.
 
 import type { App } from "obsidian";
-import type { ObsidianBridgeErrorCode } from "../vendor/@chatobby/obsidian-protocol/bridge-errors";
-import type { ObsidianOperationName } from "../vendor/@chatobby/obsidian-protocol/bridge-operations";
+import type { ObsidianBridgeErrorCode, ObsidianOperationName } from "../vendor/@chatobby/obsidian-protocol/index.js";
 
 // ── Bridge connection state machine ────────────────────────────────────
 

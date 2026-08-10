@@ -1,7 +1,7 @@
 // Bridge error mapping — Obsidian errors → ObsidianBridgeErrorCode.
 // See docs/tooling/bridge-executor.md for the error code table.
 
-import type { ObsidianBridgeErrorPayload } from "../vendor/@chatobby/obsidian-protocol/bridge-errors";
+import type { ObsidianBridgeErrorPayload } from "../vendor/@chatobby/obsidian-protocol/index.js";
 import { BridgeError } from "./types";
 
 /**

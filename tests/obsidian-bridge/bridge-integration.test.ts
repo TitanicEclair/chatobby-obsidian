@@ -10,6 +10,7 @@ import { createMockApp } from "./helpers/mock-app";
 import { MockBridgeWs } from "./helpers/mock-bridge-ws";
 import { WebSocket } from "ws";
 import type { App } from "obsidian";
+import type { ObsidianBridgeConnectionConfig } from "../../src/vendor/@chatobby/obsidian-protocol/index.js";
 
 // Inject ws WebSocket for Node.js test environment
 function createTestClient(app: App, url: string, token: string): ObsidianBridgeClient {
@@ -106,6 +107,41 @@ describe("ObsidianBridgeClient integration", () => {
       await client.disconnect();
     });
 
+    it("uses the stable vault identity and root supplied by bridge_config", async () => {
+      const url = await mockBridge.start();
+      const config: ObsidianBridgeConnectionConfig = {
+        type: "bridge_config",
+        schemaVersion: 1,
+        url,
+        token: "stable-token",
+        protocolVersion: 2,
+        vaultId: "vault-stable-1",
+        vaultRoot: "C:/Final_Updated_Second_Brain",
+      };
+      const client = new ObsidianBridgeClient(
+        app,
+        config.url,
+        config.token,
+        "1.0.0",
+        "0.3.0",
+        WebSocket,
+        config,
+      );
+
+      await client.connect();
+      await waitForReady(client);
+      const hello = mockBridge.getReceivedMessages().find(
+        (message: unknown) => (message as { type?: string }).type === "hello",
+      ) as { protocolVersion?: number; vault?: { id?: string; root?: string } } | undefined;
+
+      expect(hello?.protocolVersion).toBe(2);
+      expect(hello?.vault).toEqual(expect.objectContaining({
+        id: "vault-stable-1",
+        root: "C:/Final_Updated_Second_Brain",
+      }));
+      await client.disconnect();
+    });
+
     it("publishes plugin enablement changes without reconnecting", async () => {
       const url = await mockBridge.start();
       const client = createTestClient(app, url, "test-token");
@@ -181,8 +217,12 @@ describe("ObsidianBridgeClient integration", () => {
       // Send the invoke from the mock bridge to the connected client (server→plugin)
       mockBridge.sendToClients(invokeFrame);
 
-      // Wait for processing
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // The WebSocket roundtrip can exceed a fixed delay when the full suite is
+      // sharing the event loop. Wait for the exact protocol outcome instead.
+      await vi.waitFor(
+        () => expect(mockBridge.getOutboundFrames()).toHaveLength(1),
+        { timeout: 5_000, interval: 10 },
+      );
 
       // Client should have executed the operation and sent exactly one result frame
       const outboundFrames = mockBridge.getOutboundFrames();

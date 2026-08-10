@@ -41,6 +41,37 @@ describe("routeInboundFrame", () => {
     expect(result.outbound).toHaveLength(0);
   });
 
+  it("routes typed Project directory results without treating them as operations", async () => {
+    const onObservation = vi.fn();
+    const onRescan = vi.fn();
+    const observation = {
+      type: "project_directory_observation_result",
+      schemaVersion: 1,
+      requestId: "request-1",
+      observationId: "observation-1",
+      status: "applied",
+      resultingSequence: 4,
+      retryable: false,
+    } as const;
+    const rescan = {
+      type: "project_directory_rescan_result",
+      schemaVersion: 1,
+      requestId: "request-2",
+      rescanId: "rescan-1",
+      status: "no-op",
+      retryable: false,
+    } as const;
+
+    expect((await routeInboundFrame(observation, app, makeInFlight(), {
+      onProjectDirectoryObservationResult: onObservation,
+    })).outbound).toEqual([]);
+    expect((await routeInboundFrame(rescan, app, makeInFlight(), {
+      onProjectDirectoryRescanResult: onRescan,
+    })).outbound).toEqual([]);
+    expect(onObservation).toHaveBeenCalledWith(observation);
+    expect(onRescan).toHaveBeenCalledWith(rescan);
+  });
+
   it("handles cancel frames and aborts in-flight entry without emitting", async () => {
     const inFlight = makeInFlight();
     const abortController = new AbortController();

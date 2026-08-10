@@ -1,5 +1,5 @@
 import type {
-  FrontendSubagentAgentDefinition as AgentDefinition,
+  FrontendSubagentUserAgentDefinition as UserAgentDefinition,
   FrontendSubagentControlAction as SubagentControlAction,
   FrontendSubagentMessageViewModel as SubagentMessage,
   FrontendSubagentRunFilter,
@@ -24,7 +24,7 @@ export interface SubagentStartDraft {
 }
 
 export interface SubagentAgentEditorDraft {
-  definition: AgentDefinition;
+  definition: UserAgentDefinition;
   permissionProfileId: string;
 }
 
@@ -72,8 +72,8 @@ export interface SubagentScreenActions {
   ) => Promise<void>;
   decideAcceptance: (runId: string, nodeId: string, approved: boolean, note?: string) => Promise<void>;
   promoteArtifact: (artifactId: string, expectedRevision: number, targetVaultPath: string) => Promise<void>;
-  saveDefinition: (definition: AgentDefinition, permissionProfileId: string) => Promise<void>;
-  deleteDefinition: (definition: AgentDefinition) => Promise<void>;
+  saveDefinition: (definition: UserAgentDefinition, permissionProfileId: string) => Promise<void>;
+  deleteDefinition: (definition: UserAgentDefinition) => Promise<void>;
   saveWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
   deleteWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
   updateSettings: (settings: ResolvedSubagentSettings) => Promise<void>;

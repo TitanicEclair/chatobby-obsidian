@@ -1,0 +1,807 @@
+import { Menu, setIcon, type App } from "obsidian";
+import type {
+  FrontendProjectDetailViewModel,
+  FrontendProjectRootViewModel,
+  FrontendProjectScreenViewModel,
+  FrontendProjectSessionViewModel,
+  FrontendProjectSummaryViewModel,
+} from "../../../vendor/chatobby-client/frontend-contracts.js";
+import { ChatobbyComponent } from "../../../ui/shared/component";
+import { confirmAction, pickItem, promptText } from "../../../ui/modals/modals";
+import type { SessionAdvancedAction } from "../../../ui/session/session-maintenance";
+import { chooseSystemDirectories } from "../infrastructure/system-directory-picker";
+import {
+  createPageIconButton,
+  createPageSection,
+  createPageState,
+  PageShell,
+} from "../../../ui/shared/page-shell";
+
+export type ProjectsViewIntent =
+  | { readonly type: "projects.set-view"; readonly payload: {
+      readonly query: string;
+      readonly lifecycleFilter: "active" | "archived" | "all";
+      readonly availabilityFilter: "all" | "available" | "attention" | "missing" | "conflict" | "relink-required";
+      readonly sort: "updated-desc" | "name-asc" | "created-desc";
+      readonly selectedProjectId?: string;
+    } }
+  | { readonly type: "projects.create"; readonly payload: {
+      readonly name: string;
+      readonly description?: string;
+      readonly vaultRelativePath?: string;
+      readonly systemAbsolutePath?: string;
+      readonly directoryReuse: "canonical" | "none";
+      readonly markerPolicy: "required";
+      readonly useForCurrentSession?: boolean;
+    } }
+  | { readonly type: "projects.replace-details"; readonly payload: {
+      readonly projectId: string;
+      readonly expectedProjectRevision: number;
+      readonly name: string;
+      readonly description?: string;
+    } }
+  | { readonly type: "projects.archive" | "projects.restore"; readonly payload: {
+      readonly projectId: string;
+      readonly expectedProjectRevision: number;
+    } }
+  | { readonly type: "projects.root-add"; readonly payload: {
+      readonly projectId: string;
+      readonly expectedProjectRevision: number;
+      readonly label: string;
+      readonly vaultRelativePath?: string;
+      readonly systemAbsolutePath?: string;
+      readonly directoryReuse: "none";
+      readonly markerPolicy: "required";
+    } }
+  | { readonly type: "projects.root-relabel"; readonly payload: {
+      readonly projectId: string;
+      readonly expectedProjectRevision: number;
+      readonly rootId: string;
+      readonly label: string;
+    } }
+  | { readonly type: "projects.root-set-primary" | "projects.root-remove"; readonly payload: {
+      readonly projectId: string;
+      readonly expectedProjectRevision: number;
+      readonly rootId: string;
+      readonly replacementRootId?: string;
+    } }
+  | { readonly type: "projects.root-recover"; readonly payload: {
+      readonly projectId: string;
+      readonly rootId: string;
+    } }
+  | { readonly type: "projects.root-relink"; readonly payload: {
+      readonly projectId: string;
+      readonly expectedProjectRevision: number;
+      readonly rootId: string;
+      readonly vaultRelativePath?: string;
+      readonly systemAbsolutePath?: string;
+    } }
+  | { readonly type: "session.create"; readonly payload: {
+      readonly workspace:
+        | { readonly kind: "vault" }
+        | { readonly kind: "project"; readonly projectId: string };
+    } }
+  | { readonly type: "session.resume-by-id"; readonly payload: { readonly sessionId: string } };
+
+interface ProjectsViewProps {
+  app: App;
+  getModel(): FrontendProjectScreenViewModel | null;
+  subscribe(listener: (model: FrontendProjectScreenViewModel | null) => void): () => void;
+  onBack(): void;
+  onRefresh(): Promise<void>;
+  onIntent(intent: ProjectsViewIntent): Promise<void>;
+  onDeleteSession(sessionId: string): Promise<void>;
+  onSessionAction(sessionId: string, action: SessionAdvancedAction): Promise<void>;
+}
+
+type EditorMode = "create" | "details" | null;
+const SEARCH_DEBOUNCE_MS = 200;
+
+/** Project library and project-scoped chat browser. Browsing never changes the active chat. */
+export class ProjectsView extends ChatobbyComponent {
+  private shell: PageShell | null = null;
+  private unsubscribe: (() => void) | null = null;
+  private localError: string | null = null;
+  private busyAction: string | null = null;
+  private editor: EditorMode = null;
+  private searchTimer: number | null = null;
+
+  constructor(private readonly props: ProjectsViewProps) {
+    super();
+  }
+
+  protected componentClass(): string {
+    return "chatobby-page chatobby-projects";
+  }
+
+  protected onRender(container: HTMLElement): void {
+    container.tabIndex = -1;
+    this.shell = new PageShell(container, {
+      title: "Projects",
+      subtitle: "Keep related folders and chats together.",
+			width: "full",
+			bodyClass: "chatobby-projects__body",
+    });
+    createPageIconButton(this.shell.actions, "refresh-cw", "Refresh Projects")
+      .addEventListener("click", () => void this.refresh());
+    createPageIconButton(this.shell.actions, "x", "Close Projects")
+      .addEventListener("click", () => this.props.onBack());
+    this.unsubscribe = this.props.subscribe((model) => this.renderState(model));
+    this.renderState(this.props.getModel());
+  }
+
+  override destroy(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    if (this.searchTimer !== null) window.clearTimeout(this.searchTimer);
+    super.destroy();
+  }
+
+  focusContainer(): void {
+    this.container?.focus();
+  }
+
+  setLocalError(error: string | null): void {
+    this.localError = error;
+    this.renderState(this.props.getModel());
+  }
+
+  async selectProject(projectId: string): Promise<void> {
+    await this.changeView({ selectedProjectId: projectId });
+  }
+
+  handleKeydown(event: KeyboardEvent): boolean {
+    if (event.key !== "Escape" && event.key !== "BrowserBack") return false;
+    if (this.editor) {
+      this.editor = null;
+      this.renderState(this.props.getModel());
+      event.preventDefault();
+      return true;
+    }
+    return false;
+  }
+
+  private renderState(model: FrontendProjectScreenViewModel | null): void {
+    const shell = this.shell;
+    if (!shell) return;
+    shell.setBusy(this.busyAction !== null || model?.loading === true);
+    const error = this.localError ?? model?.error;
+    shell.setStatus(error
+      ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.refresh() }
+      : model?.statusMessage
+        ? { tone: "success", message: model.statusMessage }
+        : null);
+    shell.setTabs([]);
+    if (!model) {
+      shell.updateBody("projects:loading", (body) => createPageState(body, {
+        kind: error ? "error" : "loading",
+        title: error ? "Projects are unavailable" : "Loading Projects",
+        description: error ? "Reconnect Chatobby and try again." : "Reading your Projects and chats.",
+      }));
+      return;
+    }
+    shell.setTitle("Projects", "Keep related folders and chats together.");
+		shell.updateBody(
+			this.editor
+				? `projects:${model.selectedProjectId ?? "none"}:${this.editor}`
+				: `projects:${model.selectedProjectId ?? "none"}:view:${model.revision}`,
+      (body) => this.renderWorkspace(body, model),
+    );
+  }
+
+  private renderWorkspace(body: HTMLElement, model: FrontendProjectScreenViewModel): void {
+    const layout = body.createDiv({ cls: "chatobby-projects__workspace" });
+    this.renderRail(layout.createEl("aside", { cls: "chatobby-projects__rail" }), model);
+    const detail = layout.createEl("main", { cls: "chatobby-projects__detail" });
+    if (this.editor === "create") {
+      this.renderCreateForm(detail);
+      return;
+    }
+    if (!model.detail && !model.selectedProjectId) {
+      this.renderVaultDetail(detail, model);
+      return;
+    }
+    if (!model.detail) {
+      createPageState(detail, {
+        kind: "empty",
+        title: "Project unavailable",
+        description: "This Project is no longer in the current view. Choose another Project or refresh.",
+        actionLabel: "Create Project",
+        onAction: () => { this.editor = "create"; this.renderState(model); },
+      });
+      return;
+    }
+    if (this.editor === "details") this.renderDetailsForm(detail, model.detail);
+    else this.renderDetail(detail, model, model.detail);
+  }
+
+  private renderRail(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
+    const top = parent.createDiv({ cls: "chatobby-projects__rail-top" });
+    top.createEl("strong", { text: "Chats and Projects" });
+    const create = top.createEl("button", {
+      cls: "clickable-icon",
+      attr: { type: "button", "aria-label": "Create Project" },
+    });
+		create.disabled = this.editor === "create";
+    setIcon(create, "plus");
+    create.addEventListener("click", () => { this.editor = "create"; this.renderState(model); });
+    const search = parent.createEl("input", {
+      cls: "chatobby-projects__search",
+      attr: { type: "search", placeholder: "Search Projects", "aria-label": "Search Projects" },
+    });
+    search.value = model.query;
+    search.addEventListener("input", () => {
+      if (this.searchTimer !== null) window.clearTimeout(this.searchTimer);
+      this.searchTimer = window.setTimeout(() => {
+        this.searchTimer = null;
+        void this.changeView({ query: search.value });
+      }, SEARCH_DEBOUNCE_MS);
+    });
+    const list = parent.createDiv({ cls: "chatobby-projects__rail-list" });
+    this.renderVaultRailItem(list, model);
+    for (const project of model.projects) this.renderRailProject(list, project, model);
+    if (model.projects.length === 0) {
+      list.createDiv({ cls: "chatobby-projects__rail-empty", text: model.query ? "No matching Projects" : "No Projects yet" });
+    }
+    const filters = parent.createDiv({ cls: "chatobby-projects__rail-filters" });
+    choiceSelect(filters, model.lifecycleOptions, model.lifecycleFilter, "Project status", (value) => {
+      void this.changeView({ lifecycleFilter: value as FrontendProjectScreenViewModel["lifecycleFilter"] });
+    });
+    choiceSelect(filters, model.sortOptions, model.sort, "Project sorting", (value) => {
+      void this.changeView({ sort: value as FrontendProjectScreenViewModel["sort"] });
+    });
+  }
+
+  private renderVaultRailItem(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
+    const button = parent.createEl("button", {
+      cls: `chatobby-projects__rail-project${model.selectedProjectId ? "" : " is-active"}`,
+      attr: { type: "button", "aria-label": "Open Vault chats" },
+    });
+    const icon = button.createSpan({ cls: "chatobby-projects__rail-project-icon", attr: { "aria-hidden": "true" } });
+    setIcon(icon, "vault");
+    const copy = button.createDiv({ cls: "chatobby-projects__rail-project-copy" });
+    copy.createDiv({ cls: "chatobby-projects__rail-project-name", text: "Vault" });
+    copy.createDiv({
+      cls: "chatobby-projects__rail-project-meta",
+      text: `${model.vaultSessions.length} ${plural(model.vaultSessions.length, "chat")}`,
+    });
+    button.addEventListener("click", () => void this.changeView({ selectedProjectId: undefined }));
+  }
+
+  private renderRailProject(parent: HTMLElement, project: FrontendProjectSummaryViewModel, model: FrontendProjectScreenViewModel): void {
+    const button = parent.createEl("button", {
+      cls: `chatobby-projects__rail-project${project.projectId === model.selectedProjectId ? " is-active" : ""}`,
+      attr: { type: "button", "aria-label": `Open ${project.name}` },
+    });
+    const icon = button.createSpan({ cls: "chatobby-projects__rail-project-icon", attr: { "aria-hidden": "true" } });
+    setIcon(icon, project.availability === "available" ? "folder-kanban" : "triangle-alert");
+    const copy = button.createDiv({ cls: "chatobby-projects__rail-project-copy" });
+    copy.createDiv({ cls: "chatobby-projects__rail-project-name", text: project.name });
+    copy.createDiv({
+      cls: "chatobby-projects__rail-project-meta",
+      text: `${project.sessionCount} ${plural(project.sessionCount, "chat")} · ${project.rootCount} ${plural(project.rootCount, "folder")}`,
+    });
+    button.addEventListener("click", () => void this.changeView({ selectedProjectId: project.projectId }));
+  }
+
+  private renderDetail(parent: HTMLElement, model: FrontendProjectScreenViewModel, detail: FrontendProjectDetailViewModel): void {
+    const header = parent.createEl("header", { cls: "chatobby-projects__detail-header" });
+    const title = header.createDiv({ cls: "chatobby-projects__detail-title" });
+    title.createEl("h2", { text: detail.name });
+    if (detail.description) title.createEl("p", { text: detail.description });
+    const actions = header.createDiv({ cls: "chatobby-projects__detail-actions" });
+    if (detail.lifecycle === "active") {
+      const newChat = actions.createEl("button", { cls: "mod-cta", text: "New chat in Project", attr: { type: "button" } });
+      newChat.disabled = this.busyAction !== null;
+      newChat.addEventListener("click", () => void this.run("new-chat", {
+        type: "session.create",
+        payload: { workspace: { kind: "project", projectId: detail.projectId } },
+      }));
+    }
+    const more = actions.createEl("button", {
+      cls: "clickable-icon",
+      attr: { type: "button", "aria-label": `More actions for ${detail.name}` },
+    });
+    setIcon(more, "more-horizontal");
+    more.addEventListener("click", (event) => this.openProjectMenu(event, detail));
+
+    const folders = createPageSection(parent, {
+      title: "Folders",
+      description: detail.roots.length === 0
+        ? "This Project currently uses the vault root. Add folders when you need a narrower workspace."
+        : "Folders available to chats in this Project. Permissions still decide what agents may access.",
+      className: "chatobby-projects__folders",
+    });
+    if (detail.roots.length === 0) {
+      createPageState(folders.content, {
+        kind: "empty",
+        title: "No folders attached",
+        description: "New chats still belong to this Project and run from the vault root.",
+      });
+    } else {
+      const list = folders.content.createDiv({ cls: "chatobby-projects__folder-list" });
+      for (const root of detail.roots) this.renderRoot(list, detail, root);
+    }
+    const addFolders = folders.content.createEl("button", {
+      cls: "chatobby-projects__add-folders",
+      text: "Add folders",
+      attr: { type: "button" },
+    });
+    addFolders.disabled = detail.lifecycle !== "active" || this.busyAction !== null;
+    addFolders.addEventListener("click", () => void this.addFolders(detail));
+
+    this.renderChatSection(parent, detail.sessions, {
+      emptyTitle: "Start the first chat",
+      emptyDescription: "The new chat will keep this Project identity even if it has no folders yet.",
+      actionLabel: detail.lifecycle === "active" ? "New chat in Project" : undefined,
+      onAction: detail.lifecycle === "active" ? () => void this.run("new-chat", {
+        type: "session.create",
+        payload: { workspace: { kind: "project", projectId: detail.projectId } },
+      }) : undefined,
+    });
+
+    if (model.runningIn.projectId === detail.projectId) {
+      parent.createDiv({ cls: "chatobby-projects__current-note", text: "The current chat belongs to this Project." });
+    }
+  }
+
+  private renderVaultDetail(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
+    const header = parent.createEl("header", { cls: "chatobby-projects__detail-header" });
+    const title = header.createDiv({ cls: "chatobby-projects__detail-title" });
+    title.createEl("h2", { text: "Vault" });
+    title.createEl("p", { text: "Chats that are not assigned to a Project." });
+    const actions = header.createDiv({ cls: "chatobby-projects__detail-actions" });
+    const newChat = actions.createEl("button", { cls: "mod-cta", text: "New chat", attr: { type: "button" } });
+    newChat.disabled = this.busyAction !== null;
+    newChat.addEventListener("click", () => void this.run("new-vault-chat", {
+      type: "session.create",
+      payload: { workspace: { kind: "vault" } },
+    }));
+    this.renderChatSection(parent, model.vaultSessions, {
+      emptyTitle: "No Vault chats yet",
+      emptyDescription: "Start a chat that works from the vault root without assigning it to a Project.",
+      actionLabel: "New chat",
+      onAction: () => void this.run("new-vault-chat", {
+        type: "session.create",
+        payload: { workspace: { kind: "vault" } },
+      }),
+    });
+    if (model.runningIn.kind === "vault") {
+      parent.createDiv({ cls: "chatobby-projects__current-note", text: "The current chat belongs to the Vault." });
+    }
+  }
+
+  private renderChatSection(
+    parent: HTMLElement,
+    sessions: readonly FrontendProjectSessionViewModel[],
+    empty: {
+      readonly emptyTitle: string;
+      readonly emptyDescription: string;
+      readonly actionLabel?: string;
+      readonly onAction?: () => void;
+    },
+  ): void {
+    const chats = createPageSection(parent, {
+      title: "Chats",
+      description: sessions.length === 0 ? "No conversations here yet." : `${sessions.length} conversations`,
+      className: "chatobby-projects__chats",
+    });
+    if (sessions.length === 0) {
+      createPageState(chats.content, {
+        kind: "empty",
+        title: empty.emptyTitle,
+        description: empty.emptyDescription,
+        actionLabel: empty.actionLabel,
+        onAction: empty.onAction,
+      });
+      return;
+    }
+    const list = chats.content.createDiv({ cls: "chatobby-projects__chat-list" });
+    for (const session of sessions) this.renderSession(list, session);
+  }
+
+  private renderRoot(parent: HTMLElement, detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): void {
+    const row = parent.createDiv({ cls: `chatobby-projects__folder is-${root.availability}` });
+    const icon = row.createSpan({ cls: "chatobby-projects__folder-icon", attr: { "aria-hidden": "true" } });
+    setIcon(icon, root.availability === "available" ? "folder" : "triangle-alert");
+    const copy = row.createDiv({ cls: "chatobby-projects__folder-copy" });
+    const heading = copy.createDiv({ cls: "chatobby-projects__folder-heading" });
+    heading.createSpan({ text: root.label });
+    if (root.primary) heading.createSpan({ cls: "chatobby-projects__badge", text: "Primary" });
+    if (root.vaultRelativePath) copy.createDiv({ cls: "chatobby-projects__folder-path", text: root.vaultRelativePath });
+    if (root.availability !== "available") {
+      copy.createDiv({ cls: "chatobby-projects__folder-warning", text: root.availabilityLabel });
+    }
+    const rowActions = row.createDiv({ cls: "chatobby-projects__row-actions" });
+    if (!root.primary) {
+      const primary = rowActions.createEl("button", {
+        cls: "clickable-icon",
+        attr: { type: "button", "aria-label": `Make ${root.label} primary` },
+      });
+      setIcon(primary, "star");
+      primary.addEventListener("click", () => void this.run(`primary:${root.rootId}`, {
+        type: "projects.root-set-primary",
+        payload: { projectId: detail.projectId, expectedProjectRevision: detail.revision, rootId: root.rootId },
+      }));
+    }
+    const remove = rowActions.createEl("button", {
+      cls: "clickable-icon",
+      attr: { type: "button", "aria-label": `Remove ${root.label} from Project` },
+    });
+    setIcon(remove, "x");
+    remove.addEventListener("click", () => void this.removeRoot(detail, root));
+    const more = rowActions.createEl("button", {
+      cls: "clickable-icon",
+      attr: { type: "button", "aria-label": `Folder actions for ${root.label}` },
+    });
+    setIcon(more, "more-horizontal");
+    more.addEventListener("click", (event) => this.openRootMenu(event, detail, root));
+  }
+
+  private renderSession(parent: HTMLElement, session: FrontendProjectSessionViewModel): void {
+    const row = parent.createDiv({ cls: `chatobby-projects__chat${session.running ? " is-running" : ""}` });
+    const open = row.createEl("button", {
+      cls: "chatobby-projects__chat-open",
+      attr: { type: "button", "aria-label": `Resume ${session.name}` },
+    });
+    const copy = open.createDiv({ cls: "chatobby-projects__chat-copy" });
+    const heading = copy.createDiv({ cls: "chatobby-projects__chat-heading" });
+    heading.createSpan({ text: session.name });
+    if (session.running) heading.createSpan({ cls: "chatobby-projects__badge", text: "Open" });
+		const meta = open.createDiv({ cls: "chatobby-projects__chat-meta" });
+		meta.createSpan({ cls: "chatobby-projects__chat-meta-updated", text: formatRelativeDate(session.updatedAt) });
+		meta.createSpan({ cls: "chatobby-projects__chat-meta-messages", text: `${session.messageCount} ${plural(session.messageCount, "message")}` });
+    open.addEventListener("click", () => void this.run("resume-chat", {
+      type: "session.resume-by-id",
+      payload: { sessionId: session.sessionId },
+    }));
+    const more = row.createEl("button", {
+      cls: "clickable-icon chatobby-projects__row-action",
+      attr: { type: "button", "aria-label": `More actions for ${session.name}` },
+    });
+    setIcon(more, "more-horizontal");
+    const openMenu = (event: MouseEvent) => this.openSessionMenu(event, session);
+    more.addEventListener("click", openMenu);
+    row.addEventListener("contextmenu", openMenu);
+  }
+
+  private openProjectMenu(event: MouseEvent, detail: FrontendProjectDetailViewModel): void {
+    event.preventDefault();
+    const menu = new Menu();
+    menu.addItem((item) => item.setTitle("Edit name and description").setIcon("pencil").onClick(() => {
+      this.editor = "details";
+      this.renderState(this.props.getModel());
+    }));
+    menu.addSeparator();
+    if (detail.lifecycle === "active") {
+      menu.addItem((item) => item.setTitle("Archive Project").setIcon("archive").onClick(() => void this.changeLifecycle(detail, "archive")));
+    } else {
+      menu.addItem((item) => item.setTitle("Restore Project").setIcon("rotate-ccw").onClick(() => void this.changeLifecycle(detail, "restore")));
+    }
+    menu.showAtMouseEvent(event);
+  }
+
+  private openRootMenu(event: MouseEvent, detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): void {
+    event.preventDefault();
+    const menu = new Menu();
+    menu.addItem((item) => item.setTitle("Rename folder label").setIcon("pencil").onClick(() => void this.renameRoot(detail, root)));
+    if (!root.primary) {
+      menu.addItem((item) => item.setTitle("Make primary").setIcon("star").onClick(() => void this.run(`primary:${root.rootId}`, {
+        type: "projects.root-set-primary",
+        payload: { projectId: detail.projectId, expectedProjectRevision: detail.revision, rootId: root.rootId },
+      })));
+    }
+    if (root.recoveryAction === "relink") {
+      menu.addItem((item) => item.setTitle("Choose folder again").setIcon("folder-sync").onClick(() => void this.relinkRoot(detail, root)));
+    } else if (root.recoveryAction) {
+      menu.addItem((item) => item.setTitle("Repair folder connection").setIcon("wrench").onClick(() => void this.run(`recover:${root.rootId}`, {
+        type: "projects.root-recover",
+        payload: { projectId: detail.projectId, rootId: root.rootId },
+      })));
+    }
+    menu.addSeparator();
+    menu.addItem((item) => item.setTitle("Remove from Project").setIcon("trash-2").onClick(() => void this.removeRoot(detail, root)));
+    menu.showAtMouseEvent(event);
+  }
+
+  private openSessionMenu(event: MouseEvent, session: FrontendProjectSessionViewModel): void {
+    event.preventDefault();
+    const menu = new Menu();
+    menu.addItem((item) => item.setTitle("Resume").setIcon("message-square").onClick(() => void this.run("resume-chat", {
+      type: "session.resume-by-id",
+      payload: { sessionId: session.sessionId },
+    })));
+    menu.addSeparator();
+    this.addSessionMenuItem(menu, session, "rename", "Rename", "pencil");
+    this.addSessionMenuItem(menu, session, "clone", "Clone", "copy");
+    this.addSessionMenuItem(menu, session, "fork", "Fork from a message", "git-fork");
+    menu.addSeparator();
+    this.addSessionMenuItem(menu, session, "export-html", "Export as HTML", "file-code");
+    this.addSessionMenuItem(menu, session, "export-jsonl", "Export as JSONL", "file-json");
+    menu.addSeparator();
+    menu.addItem((item) => item.setTitle("Delete").setIcon("trash-2").onClick(() => void this.deleteSession(session)));
+    menu.showAtMouseEvent(event);
+  }
+
+  private addSessionMenuItem(menu: Menu, session: FrontendProjectSessionViewModel, action: SessionAdvancedAction, title: string, icon: string): void {
+    menu.addItem((item) => item.setTitle(title).setIcon(icon).onClick(() => void this.runAction(`session:${action}`, async () => {
+      await this.props.onSessionAction(session.sessionId, action);
+      await this.props.onRefresh();
+    })));
+  }
+
+  private async addFolders(detail: FrontendProjectDetailViewModel): Promise<void> {
+    const folders = await chooseSystemDirectories("Add folders to Project", true);
+    if (folders.length === 0 || !await confirmDirectoryMarkers(this.props.app, folders.length)) return;
+    await this.runAction("add-folders", async () => {
+      for (const folder of folders) {
+        const current = this.props.getModel()?.detail;
+        if (!current || current.projectId !== detail.projectId) throw new Error("The Project changed while adding folders.");
+        await this.props.onIntent({
+          type: "projects.root-add",
+          payload: {
+            projectId: current.projectId,
+            expectedProjectRevision: current.revision,
+            label: systemPathLabel(folder),
+            systemAbsolutePath: folder,
+            directoryReuse: "none",
+            markerPolicy: "required",
+          },
+        });
+        await this.props.onRefresh();
+      }
+    });
+  }
+
+  private async renameRoot(detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): Promise<void> {
+    const label = await promptText(this.props.app, { title: "Rename folder label", value: root.label, submitLabel: "Rename" });
+    if (!label?.trim()) return;
+    await this.run(`rename-root:${root.rootId}`, {
+      type: "projects.root-relabel",
+      payload: { projectId: detail.projectId, expectedProjectRevision: detail.revision, rootId: root.rootId, label: label.trim() },
+    });
+  }
+
+  private async relinkRoot(detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): Promise<void> {
+    const [folder] = await chooseSystemDirectories(`Choose ${root.label}`, false);
+    if (!folder) return;
+    if (!await confirmDirectoryMarkers(this.props.app, 1)) return;
+    await this.run(`relink:${root.rootId}`, {
+      type: "projects.root-relink",
+      payload: {
+        projectId: detail.projectId,
+        expectedProjectRevision: detail.revision,
+        rootId: root.rootId,
+        systemAbsolutePath: folder,
+      },
+    });
+  }
+
+  private async removeRoot(detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): Promise<void> {
+    if (!await confirmAction(this.props.app, {
+      title: "Remove folder from Project?",
+      message: `Remove “${root.label}” from this Project? The folder and its files will not be deleted.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    })) return;
+    let replacementRootId: string | undefined;
+    if (root.primary && detail.roots.length > 1) {
+      const replacement = await pickItem(
+        this.props.app,
+        detail.roots.filter((candidate) => candidate.rootId !== root.rootId),
+        (candidate) => candidate.label,
+        "Choose the new primary folder",
+      );
+      if (!replacement) return;
+      replacementRootId = replacement.rootId;
+    }
+    await this.run(`remove-root:${root.rootId}`, {
+      type: "projects.root-remove",
+      payload: {
+        projectId: detail.projectId,
+        expectedProjectRevision: detail.revision,
+        rootId: root.rootId,
+        ...(replacementRootId ? { replacementRootId } : {}),
+      },
+    });
+  }
+
+  private async deleteSession(session: FrontendProjectSessionViewModel): Promise<void> {
+    if (!await confirmAction(this.props.app, {
+      title: "Delete chat?",
+      message: `Delete “${session.name}”? This removes its stored conversation and subagent run data.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    })) return;
+    await this.runAction("delete-chat", async () => {
+      await this.props.onDeleteSession(session.sessionId);
+      await this.props.onRefresh();
+    });
+  }
+
+  private async changeLifecycle(detail: FrontendProjectDetailViewModel, action: "archive" | "restore"): Promise<void> {
+    if (action === "archive" && !await confirmAction(this.props.app, {
+      title: "Archive Project?",
+      message: "Its folders and chats are preserved and can be restored later.",
+      confirmLabel: "Archive",
+    })) return;
+    await this.run(action, {
+      type: action === "archive" ? "projects.archive" : "projects.restore",
+      payload: { projectId: detail.projectId, expectedProjectRevision: detail.revision },
+    });
+  }
+
+  private renderCreateForm(parent: HTMLElement): void {
+    const section = createPageSection(parent, {
+      title: "Create Project",
+      description: "Choose an existing folder, or leave it blank and Chatobby will create one in the vault root.",
+    });
+    const form = section.content.createEl("form", { cls: "chatobby-projects__form" });
+    const name = textField(form, "Project name", "Project name", true);
+    const description = textAreaField(form, "Description", "What are you working on?", "");
+    const selectedFolder = form.createDiv({ cls: "chatobby-projects__folder-choice" });
+    selectedFolder.createSpan({ text: "No folder selected" });
+    let folderPath: string | undefined;
+    const choose = form.createEl("button", { text: "Choose folder", attr: { type: "button" } });
+    choose.addEventListener("click", () => void chooseSystemDirectories("Choose Project folder", false).then(([folder]) => {
+      folderPath = folder;
+      selectedFolder.setText(folder ?? "No folder selected");
+    }));
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+			void (async () => {
+				if (folderPath !== undefined && !await confirmDirectoryMarkers(this.props.app, 1)) return;
+				const applied = await this.run("create-project", {
+					type: "projects.create",
+					payload: {
+						name: name.value,
+						description: description.value.trim() || undefined,
+						...(folderPath === undefined ? {} : { systemAbsolutePath: folderPath }),
+						directoryReuse: "none",
+						markerPolicy: "required",
+					},
+				});
+				if (!applied) return;
+				this.editor = null;
+				this.renderState(this.props.getModel());
+			})();
+    });
+    const actions = form.createDiv({ cls: "chatobby-projects__form-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    cancel.addEventListener("click", () => { this.editor = null; this.renderState(this.props.getModel()); });
+    actions.createEl("button", { cls: "mod-cta", text: "Create Project", attr: { type: "submit" } });
+    window.requestAnimationFrame(() => name.focus());
+  }
+
+  private renderDetailsForm(parent: HTMLElement, detail: FrontendProjectDetailViewModel): void {
+    const section = createPageSection(parent, { title: "Edit Project", description: "Change how this Project appears in Chatobby." });
+    const form = section.content.createEl("form", { cls: "chatobby-projects__form" });
+    const name = textField(form, "Project name", "Project name", true, detail.name);
+    const description = textAreaField(form, "Description", "What are you working on?", detail.description ?? "");
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this.run("edit-project", {
+        type: "projects.replace-details",
+        payload: {
+          projectId: detail.projectId,
+          expectedProjectRevision: detail.revision,
+          name: name.value,
+          description: description.value.trim() || undefined,
+        },
+		}).then((applied) => {
+			if (!applied) return;
+			this.editor = null;
+			this.renderState(this.props.getModel());
+		});
+    });
+    const actions = form.createDiv({ cls: "chatobby-projects__form-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    cancel.addEventListener("click", () => { this.editor = null; this.renderState(this.props.getModel()); });
+    actions.createEl("button", { cls: "mod-cta", text: "Save", attr: { type: "submit" } });
+  }
+
+  private async refresh(): Promise<void> {
+    await this.runAction("refresh", () => this.props.onRefresh());
+  }
+
+  private async run(action: string, intent: ProjectsViewIntent): Promise<boolean> {
+    return this.runAction(action, () => this.props.onIntent(intent));
+  }
+
+  private async runAction(action: string, operation: () => Promise<void>): Promise<boolean> {
+    if (this.busyAction) return false;
+    this.busyAction = action;
+    this.renderState(this.props.getModel());
+    try {
+      await operation();
+      this.localError = null;
+      return true;
+    } catch (error) {
+      this.localError = error instanceof Error ? error.message : String(error);
+      return false;
+    } finally {
+      this.busyAction = null;
+      this.renderState(this.props.getModel());
+    }
+  }
+
+  private async changeView(patch: Partial<Pick<FrontendProjectScreenViewModel,
+    "query" | "lifecycleFilter" | "availabilityFilter" | "sort" | "selectedProjectId">>): Promise<void> {
+    const model = this.props.getModel();
+    if (!model) return;
+    await this.run("change-view", {
+      type: "projects.set-view",
+      payload: {
+        query: patch.query ?? model.query,
+        lifecycleFilter: patch.lifecycleFilter ?? model.lifecycleFilter,
+        availabilityFilter: patch.availabilityFilter ?? model.availabilityFilter,
+        sort: patch.sort ?? model.sort,
+        selectedProjectId: Object.hasOwn(patch, "selectedProjectId") ? patch.selectedProjectId : model.selectedProjectId,
+      },
+    });
+  }
+}
+
+function systemPathLabel(path: string): string {
+  return path.replace(/[\\/]+$/u, "").split(/[\\/]/u).at(-1) || path;
+}
+
+function confirmDirectoryMarkers(app: App, count: number): Promise<boolean> {
+  return confirmAction(app, {
+    title: count === 1 ? "Add this folder?" : `Add ${count} folders?`,
+    message:
+      "Chatobby will keep the folders in place and may write a small .chatobby-root.json identity file inside each one. " +
+      "This does not grant agents access; the active permission policy still applies.",
+    confirmLabel: count === 1 ? "Add folder" : "Add folders",
+  });
+}
+
+function choiceSelect(
+  parent: HTMLElement,
+  options: readonly { readonly value: string; readonly label: string }[],
+  selected: string,
+  label: string,
+  onChange: (value: string) => void,
+): HTMLSelectElement {
+  const select = parent.createEl("select", { cls: "chatobby-projects__select dropdown" });
+  select.setAttr("aria-label", label);
+  for (const option of options) {
+    const element = select.createEl("option", { value: option.value, text: option.label });
+    element.selected = option.value === selected;
+  }
+  select.addEventListener("change", () => onChange(select.value));
+  return select;
+}
+
+function textField(parent: HTMLElement, label: string, placeholder: string, required: boolean, value = ""): HTMLInputElement {
+  const field = parent.createEl("label", { cls: "chatobby-projects__field" });
+  field.createSpan({ cls: "chatobby-projects__field-label", text: label });
+  const input = field.createEl("input", { attr: { type: "text", placeholder, "aria-label": label } });
+	input.dataset.pageStateKey = label;
+  input.required = required;
+  input.value = value;
+  return input;
+}
+
+function textAreaField(parent: HTMLElement, label: string, placeholder: string, value: string): HTMLTextAreaElement {
+  const field = parent.createEl("label", { cls: "chatobby-projects__field" });
+  field.createSpan({ cls: "chatobby-projects__field-label", text: label });
+  const input = field.createEl("textarea", { attr: { placeholder, "aria-label": label } });
+	input.dataset.pageStateKey = label;
+  input.value = value;
+  return input;
+}
+
+function plural(count: number, word: string): string {
+  return count === 1 ? word : `${word}s`;
+}
+
+function formatRelativeDate(value: string): string {
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return "Date unavailable";
+  const elapsed = Math.max(0, Date.now() - time);
+  if (elapsed < 60_000) return "just now";
+  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)}m ago`;
+  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)}h ago`;
+  return new Date(time).toLocaleDateString();
+}

@@ -8,7 +8,7 @@
 // bridge-capabilities.ts. Drift between this list and the implemented operation
 // handlers is guarded by tests/obsidian-bridge/capability-coverage.test.ts.
 
-import type { ObsidianBridgeCapability } from "../vendor/@chatobby/obsidian-protocol";
+import type { ObsidianBridgeCapability } from "../vendor/@chatobby/obsidian-protocol/index.js";
 
 /**
  * Capability families advertised in the bridge hello frame.

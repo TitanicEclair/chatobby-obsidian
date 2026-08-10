@@ -205,8 +205,17 @@ describe("ChatobbyTransport", () => {
     const socket = FakeWebSocket.instances[0]!;
     socket.open();
     await connect;
-    socket.serverMessage({ type: "bridge_config", url: "http://127.0.0.1:1", token: "scoped" });
-    expect(configs).toEqual([{ type: "bridge_config", url: "http://127.0.0.1:1", token: "scoped" }]);
+    const config = {
+      type: "bridge_config",
+      schemaVersion: 1,
+      url: "ws://127.0.0.1:1",
+      token: "scoped",
+      protocolVersion: 2,
+      vaultId: "vault_test",
+      vaultRoot: "C:\\Vault",
+    };
+    socket.serverMessage(config);
+    expect(configs).toEqual([config]);
     await transport.disconnect();
   });
 

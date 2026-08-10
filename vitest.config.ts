@@ -5,6 +5,9 @@ export default defineConfig({
   resolve: {
     alias: {
       obsidian: fileURLToPath(new URL("./tests/ui/helpers/obsidian-runtime.ts", import.meta.url)),
+      "@chatobby/obsidian-protocol": fileURLToPath(
+        new URL("./src/vendor/@chatobby/obsidian-protocol/index.js", import.meta.url),
+      ),
     },
   },
   test: {

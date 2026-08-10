@@ -20,6 +20,8 @@ Feature domain and state modules cannot depend on Obsidian or DOM presentation. 
 | `features/session/public.ts` | Per-tab session contract and constructor. |
 | `features/commands/public.ts` | Slash-command controller and host capability contract. |
 | `features/operations/public.ts` | Cross-surface operation domains, active-operation read models, and coordinator. |
+| `features/projects/public.ts` | Runtime-projected Project library, Project-scoped chat browsing, and typed Project/session intents. |
+| `features/settings/public.ts` | Chatobby-local Settings page that reuses connector credential and runtime services. |
 
 Every export statement requires API documentation, enforced by `scripts/check-public-api.mjs` using the installed TypeScript compiler.
 
@@ -43,7 +45,9 @@ acquires the relevant operation domain and returns a typed conflict.
 
 `FeedRenderer` binds to a `FeedStore`, subscribes to commits, and owns keyed DOM mounts. Block views receive projected entities and `FeedViewActions`. Memory presentation is divided into coordinator, model/action definitions, and controls/operations section renderers.
 
-`SessionPickerComponent` is the directory/session browser. It accepts typed directory options, queries the transport for the selected cwd, and emits intent callbacks; it does not persist working-directory state or switch backend sessions itself.
+The Projects page is the user-facing Project and chat browser. It consumes the runtime-owned Projects projection and dispatches typed intents; it never infers Project identity from a path or silently changes the active chat while the user is browsing.
+
+The Settings page hosts everyday provider, model-server, conversation, and Project preferences inside Chatobby. The Obsidian plugin settings page keeps installation, document-processing, and support discovery while linking to the in-product page. Both surfaces call the same credential and runtime services, so secret values never move into frontend state.
 
 CSS is colocated with presentation. `ui/shared/tokens.css` is the only raw Obsidian-theme mapping layer; component CSS consumes semantic Chatobby tokens.
 

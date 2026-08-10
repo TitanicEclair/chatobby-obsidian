@@ -1,7 +1,7 @@
 import type { App } from "obsidian";
 import type { VaultContext } from "../types";
 import type { WsPromptContextPacket } from "../vendor/chatobby-client/connector-types.js";
-import { OBSIDIAN_TOOL_CAPABILITY_CATALOG } from "../vendor/@chatobby/obsidian-protocol/tool-capabilities";
+import { OBSIDIAN_TOOL_CAPABILITY_CATALOG } from "../vendor/@chatobby/obsidian-protocol/index.js";
 import { getObsidianSemanticContextService, getObsidianUiSnapshotService } from "../obsidian-context";
 import { gatherEnvironmentContext } from "./environment";
 import {

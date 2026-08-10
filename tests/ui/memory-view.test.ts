@@ -59,6 +59,8 @@ describe("MemoryView", () => {
     const el = mount(harness.view);
 
     expect(el.textContent).toContain("Vault profile");
+    expect(el.textContent).toContain("Available here");
+    expect(el.textContent).toContain("Current project and inherited vault memory");
     expect(el.textContent).toContain("Prefers concise technical answers");
     expect(el.textContent).toContain("Use Obsidian-aware tools for note edits");
     expect(el.textContent).not.toContain("Memory tools");
@@ -67,15 +69,19 @@ describe("MemoryView", () => {
     expect(el.querySelector(".chatobby-memory__detail")).toBeNull();
     expect(el.querySelectorAll(".chatobby-memory__record-category")).toHaveLength(2);
     expect(el.querySelectorAll(".chatobby-memory__record-divider")).toHaveLength(2);
+    expect(el.querySelector(".chatobby-memory__filters")).toBeNull();
   });
 
   it("dispatches runtime filtering and search intents instead of filtering records locally", async () => {
     const harness = createHarness();
     const el = mount(harness.view);
-    buttonWithText(el, "Project").click();
+    const scope = el.querySelector<HTMLSelectElement>('select[aria-label="Memory scope"]');
+    if (!scope) throw new Error("scope filter missing");
+    scope.value = "vault";
+    scope.dispatchEvent(new Event("change"));
     await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
       type: "memory.set-view",
-      payload: { filter: "project", query: "", category: "all", sort: "updated-desc" },
+      payload: { scopeFilter: "vault", collection: "all", status: "active", query: "", lessonCategory: "all", sort: "updated-desc" },
     }));
 
     const input = el.querySelector<HTMLInputElement>(".chatobby-memory__search-input");
@@ -84,17 +90,17 @@ describe("MemoryView", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
     await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
       type: "memory.set-view",
-      payload: { filter: "all", query: "concise", category: "all", sort: "updated-desc" },
+      payload: { scopeFilter: "available", collection: "all", status: "active", query: "concise", lessonCategory: "all", sort: "updated-desc" },
     }));
     const categoryHarness = createHarness();
     const categoryEl = mount(categoryHarness.view);
-    const category = categoryEl.querySelector<HTMLSelectElement>('select[aria-label="Memory category"]');
-    if (!category) throw new Error("category filter missing");
-    category.value = "preference";
-    category.dispatchEvent(new Event("change"));
+    const collection = categoryEl.querySelector<HTMLSelectElement>('select[aria-label="Memory type"]');
+    if (!collection) throw new Error("memory type filter missing");
+    collection.value = "profile";
+    collection.dispatchEvent(new Event("change"));
     await vi.waitFor(() => expect(categoryHarness.onIntent).toHaveBeenCalledWith({
       type: "memory.set-view",
-      payload: { filter: "all", query: "", category: "preference", sort: "updated-desc" },
+      payload: { scopeFilter: "available", collection: "profile", status: "active", query: "", lessonCategory: "all", sort: "updated-desc" },
     }));
 
     const sortHarness = createHarness();
@@ -105,7 +111,24 @@ describe("MemoryView", () => {
     sort.dispatchEvent(new Event("change"));
     await vi.waitFor(() => expect(sortHarness.onIntent).toHaveBeenCalledWith({
       type: "memory.set-view",
-      payload: { filter: "all", query: "", category: "all", sort: "last-used-desc" },
+      payload: { scopeFilter: "available", collection: "all", status: "active", query: "", lessonCategory: "all", sort: "last-used-desc" },
+    }));
+  });
+
+  it("shows lesson subtypes only while the lesson collection is selected", async () => {
+    const allHarness = createHarness();
+    const allEl = mount(allHarness.view);
+    expect(allEl.querySelector('select[aria-label="Lesson type"]')).toBeNull();
+
+    const lessonHarness = createHarness({ model: memoryModel({ collection: "lessons" }) });
+    const lessonEl = mount(lessonHarness.view);
+    const lessonType = lessonEl.querySelector<HTMLSelectElement>('select[aria-label="Lesson type"]');
+    if (!lessonType) throw new Error("lesson type filter missing");
+    lessonType.value = "tool-quirk";
+    lessonType.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(lessonHarness.onIntent).toHaveBeenCalledWith({
+      type: "memory.set-view",
+      payload: { scopeFilter: "available", collection: "lessons", status: "active", query: "", lessonCategory: "tool-quirk", sort: "updated-desc" },
     }));
   });
 
@@ -185,29 +208,43 @@ describe("MemoryView", () => {
   });
 });
 
-function memoryModel(): FrontendMemoryScreenViewModel {
+function memoryModel(overrides: Partial<FrontendMemoryScreenViewModel> = {}): FrontendMemoryScreenViewModel {
   return {
     screenId: "memory",
     revision: 1,
     loading: false,
-    filter: "all",
-    category: "all",
-    categoryOptions: [
-      { value: "all", label: "All categories" },
-      { value: "preference", label: "Preferences" },
+    scope: {
+      label: "Available here",
+      path: "Projects/Chatobby",
+      description: "Current project and inherited vault memory",
+    },
+    scopeFilter: "available",
+    scopeOptions: [
+      { value: "available", label: "Available here" },
+      { value: "vault", label: "Vault only" },
+      { value: "current-project", label: "Current project only" },
+    ],
+    collection: "all",
+    collectionOptions: [
+      { value: "all", label: "All memory" },
+      { value: "profile", label: "Vault profile" },
+      { value: "lessons", label: "Lessons" },
+    ],
+    status: "active",
+    statusOptions: [
+      { value: "active", label: "Active" },
+      { value: "archived", label: "Archived" },
+      { value: "all", label: "Any status" },
+    ],
+    lessonCategory: "all",
+    lessonCategoryOptions: [
+      { value: "all", label: "All lesson types" },
+      { value: "tool-quirk", label: "Tool quirks" },
     ],
     sort: "updated-desc",
     sortOptions: [
       { value: "updated-desc", label: "Recently updated" },
       { value: "last-used-desc", label: "Recently used" },
-    ],
-    filters: [
-      { id: "all", label: "Active", selected: true },
-      { id: "profile", label: "Vault profile", selected: false },
-      { id: "vault", label: "Vault memory", selected: false },
-      { id: "project", label: "Project", selected: false },
-      { id: "lessons", label: "Lessons", selected: false },
-      { id: "archived", label: "Archived", selected: false },
     ],
     query: "",
     records: [
@@ -216,6 +253,8 @@ function memoryModel(): FrontendMemoryScreenViewModel {
         revision: 1,
         iconToken: "user-round",
         label: "Vault profile",
+        locationLabel: "This vault",
+        scopeRelationLabel: "Available here",
         content: "Prefers concise technical answers",
         provenanceLabel: "Saved explicitly",
         createdAt: "2026-07-01T00:00:00Z",
@@ -231,11 +270,13 @@ function memoryModel(): FrontendMemoryScreenViewModel {
         revision: 1,
         iconToken: "folder-kanban",
         label: "vault-a",
+        locationLabel: "Projects/Chatobby",
+        scopeRelationLabel: "Current project",
         content: "Use Obsidian-aware tools for note edits",
         provenanceLabel: "Imported from an earlier memory format",
         createdAt: "2026-07-02T00:00:00Z",
         updatedAt: "2026-07-10T00:00:00Z",
-        lastReferencedAt: null,
+        lastReferencedAt: "2026-07-10T00:00:00Z",
         sensitivityLabel: "Unspecified",
         status: "active",
         availableActions: ["edit", "archive", "delete"],
@@ -268,5 +309,6 @@ function memoryModel(): FrontendMemoryScreenViewModel {
       technicalLines: ["Database: C:/vault/.chatobby/memory.db"],
     },
     helpItems: ["Project memory never flows from a child into its parent."],
+    ...overrides,
   };
 }

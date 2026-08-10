@@ -1,9 +1,17 @@
 // Generated from packages/chatobby/src/control/contracts.ts. Do not edit.
-export const CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION = 2 as const;
-export const CHATOBBY_RUNTIME_PROTOCOL_VERSION = 3 as const;
-export const CHATOBBY_RUNTIME_VERSION = "0.2.4";
+import {
+	CHATOBBY_PRODUCT_VERSION,
+	CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION,
+	CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+} from "./product.generated.ts";
+
+export { CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION, CHATOBBY_RUNTIME_PROTOCOL_VERSION };
+export const CHATOBBY_RUNTIME_VERSION = CHATOBBY_PRODUCT_VERSION;
 export const CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS = 5_000;
+export const CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS = 10 * 60 * 1000;
 export const CHATOBBY_RUNTIME_REATTACH_GRACE_MS = 15_000;
+/** Allows the five-minute engine deadline to settle and report before the transport gives up. */
+export const CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS = 5 * 60 * 1000 + 30_000;
 
 export const RUNTIME_CLOSE_CODES = {
 	authenticationFailed: 4401,
@@ -53,6 +61,39 @@ export interface RuntimeServerHello {
 	vaultId: string;
 }
 
+/** Authenticated runtime that is completing a host-controlled startup gate. */
+export interface RuntimeServerPending {
+	type: "hello_pending";
+	protocolVersion: number;
+	runtimeVersion: string;
+	instanceId: string;
+	vaultId: string;
+	phase: "migration";
+}
+
+/** Request that the connector atomically activate this verified runtime package. */
+export interface RuntimeServerActivationRequired {
+	type: "runtime_activation_required";
+	protocolVersion: number;
+	runtimeVersion: string;
+	instanceId: string;
+	vaultId: string;
+	runtimePackageFingerprint: string;
+	activationId: string;
+	operation: "activate" | "rollback";
+}
+
+/** Connector acknowledgement for one exact runtime-package activation. */
+export interface RuntimeClientActivationResult {
+	type: "runtime_activation_result";
+	protocolVersion: number;
+	instanceId: string;
+	vaultId: string;
+	activationId: string;
+	operation: "activate" | "rollback";
+	status: "applied" | "failed";
+}
+
 export function parseRuntimeClientHello(value: unknown): RuntimeClientHello | null {
 	if (!isRecord(value) || value.type !== "hello") return null;
 	if (!Number.isInteger(value.protocolVersion) || typeof value.protocolVersion !== "number") return null;
@@ -84,6 +125,59 @@ export function parseRuntimeServerHello(value: unknown): RuntimeServerHello | nu
 		runtimeVersion: value.runtimeVersion,
 		instanceId: value.instanceId,
 		vaultId: value.vaultId,
+	};
+}
+
+export function parseRuntimeServerPending(value: unknown): RuntimeServerPending | null {
+	if (!isRecord(value) || value.type !== "hello_pending" || value.phase !== "migration") return null;
+	if (!Number.isInteger(value.protocolVersion) || typeof value.protocolVersion !== "number") return null;
+	if (!isNonEmptyString(value.runtimeVersion)) return null;
+	if (!isNonEmptyString(value.instanceId)) return null;
+	if (!isNonEmptyString(value.vaultId)) return null;
+	return {
+		type: "hello_pending",
+		protocolVersion: value.protocolVersion,
+		runtimeVersion: value.runtimeVersion,
+		instanceId: value.instanceId,
+		vaultId: value.vaultId,
+		phase: "migration",
+	};
+}
+
+export function parseRuntimeServerActivationRequired(value: unknown): RuntimeServerActivationRequired | null {
+	if (!isRecord(value) || value.type !== "runtime_activation_required") return null;
+	if (!Number.isInteger(value.protocolVersion) || typeof value.protocolVersion !== "number") return null;
+	if (!isNonEmptyString(value.runtimeVersion)) return null;
+	if (!isNonEmptyString(value.instanceId) || !isNonEmptyString(value.vaultId)) return null;
+	if (!isSha256Fingerprint(value.runtimePackageFingerprint) || !isNonEmptyString(value.activationId)) return null;
+	if (value.operation !== "activate" && value.operation !== "rollback") return null;
+	return {
+		type: "runtime_activation_required",
+		protocolVersion: value.protocolVersion,
+		runtimeVersion: value.runtimeVersion,
+		instanceId: value.instanceId,
+		vaultId: value.vaultId,
+		runtimePackageFingerprint: value.runtimePackageFingerprint,
+		activationId: value.activationId,
+		operation: value.operation,
+	};
+}
+
+export function parseRuntimeClientActivationResult(value: unknown): RuntimeClientActivationResult | null {
+	if (!isRecord(value) || value.type !== "runtime_activation_result") return null;
+	if (!Number.isInteger(value.protocolVersion) || typeof value.protocolVersion !== "number") return null;
+	if (!isNonEmptyString(value.instanceId) || !isNonEmptyString(value.vaultId)) return null;
+	if (!isNonEmptyString(value.activationId)) return null;
+	if (value.operation !== "activate" && value.operation !== "rollback") return null;
+	if (value.status !== "applied" && value.status !== "failed") return null;
+	return {
+		type: "runtime_activation_result",
+		protocolVersion: value.protocolVersion,
+		instanceId: value.instanceId,
+		vaultId: value.vaultId,
+		activationId: value.activationId,
+		operation: value.operation,
+		status: value.status,
 	};
 }
 

@@ -30,7 +30,10 @@ The WebSocket and Obsidian bridge are the product boundary. The backend is the a
 - A presentation-only frontend document per visible session; runtime feed
   projections remain authoritative.
 - One leaf-local working directory, active session recovery path, authenticated
-  transport, extension stream, and bridge client per Chatobby Obsidian tab.
+  frontend transport, and extension stream per Chatobby Obsidian tab.
+- One plugin-global Obsidian bridge connection coordinated across all live
+  Chatobby tabs. The newest valid runtime configuration owns it; owner removal
+  promotes a remaining configuration without requesting runtime startup.
 - Local UI commands that open screens and dispatch typed runtime intents.
 - Inline extension interaction cards and extension UI responses.
 - Native memory, permission, event, channel, and subagent screen rendering,
@@ -67,6 +70,22 @@ catalogues, supervisor, and indexes, but creates a separate authenticated
 transport and backend main-runtime lease. Leaves can prompt and stream
 simultaneously. Closing one leaf disposes only its channel; it cannot disconnect
 or retarget another leaf.
+
+## Project directory observation route
+
+The connector observes Obsidian folder rename/move events and sends only
+normalized vault-relative paths through the browser-safe protocol. Files and
+unrelated vault refresh listeners remain unaffected. A bounded FIFO permits one
+request in flight; retries keep a stable observation identity while using a new
+request identity. Startup, disconnect gaps, queue overflow, and exhausted
+observation retries collapse into one typed authoritative-rescan request.
+
+The connector never interprets directory markers, chooses Project identity,
+persists Project bindings, or grants permissions. The runtime supplies the
+stable vault identity and registered vault root in `bridge_config`, and
+`@chatobby/projects` verifies real paths and markers before any durable
+mutation. A folder event while the runtime is stopped records no local durable
+claim and does not start the runtime.
 
 ## Runtime route
 

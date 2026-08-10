@@ -10,6 +10,9 @@ import type {
   WsAutoCompactionSettings,
   WsSessionStats,
   WsProviderInfo,
+  WsLocalModelProvider,
+  WsLocalModelProviderDocument,
+  WsLocalModelProviderProbeResult,
   WsForkMessage,
   WsBashResult,
   WsPromptAttachment,
@@ -35,6 +38,11 @@ import type {
   FrontendSubscriptionAck,
   FrontendSubscriptionRequest,
 } from "../vendor/chatobby-client/frontend-contracts.js";
+import type {
+  WsProjectDirectoryCandidateRequest,
+  WsProjectDirectoryCandidateResult,
+} from "../vendor/chatobby-client/ws-client.js";
+import type { RuntimeServerActivationRequired } from "../vendor/chatobby-client/ws-client.js";
 
 export type McpCredentialSource = (reference: string) => string | null;
 
@@ -52,7 +60,11 @@ export class ChatobbyTransport {
   private runtimeSession: RuntimeSessionCredentials | undefined;
   private readonly mcpCredentialSource: McpCredentialSource | undefined;
 
-  constructor(runtime: ReadyRuntime, mcpCredentialSource?: McpCredentialSource) {
+  constructor(
+    runtime: ReadyRuntime,
+    mcpCredentialSource?: McpCredentialSource,
+    private readonly activateRuntime?: (request: RuntimeServerActivationRequired) => Promise<void>,
+  ) {
     this.serverUrl = runtime.endpoint;
     this.runtimeSession = runtime.session;
     this.mcpCredentialSource = mcpCredentialSource;
@@ -111,6 +123,7 @@ export class ChatobbyTransport {
       autoReconnect: false,
       onClose: () => this.handleClientClose(client),
       runtime: this.runtimeSession,
+      activateRuntime: this.activateRuntime,
     });
     this.client = client;
     client.onFrontendPatch((patch) => this.emitFrontendPatch(patch));
@@ -168,6 +181,12 @@ export class ChatobbyTransport {
 
   async dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult> {
     return this.requireClient().dispatchFrontendIntent(intent);
+  }
+
+  async registerProjectDirectoryCandidate(
+    request: WsProjectDirectoryCandidateRequest,
+  ): Promise<WsProjectDirectoryCandidateResult> {
+    return this.requireClient().registerProjectDirectoryCandidate(request);
   }
 
   async synchronizeMcpCredential(reference: string, secret: string | null): Promise<void> {
@@ -281,6 +300,33 @@ export class ChatobbyTransport {
   async getProviders(): Promise<WsProviderInfo[]> {
     const client = this.requireClient();
     return client.getProviders();
+  }
+
+  async getLocalModelProviders(): Promise<WsLocalModelProviderDocument> {
+    return this.requireClient().getLocalModelProviders();
+  }
+
+  async saveLocalModelProvider(
+    expectedRevision: number,
+    provider: WsLocalModelProvider,
+    apiKey?: string,
+  ): Promise<WsLocalModelProviderDocument> {
+    return this.requireClient().saveLocalModelProvider(expectedRevision, provider, apiKey);
+  }
+
+  async deleteLocalModelProvider(
+    expectedRevision: number,
+    providerId: string,
+    removeCredential = true,
+  ): Promise<WsLocalModelProviderDocument> {
+    return this.requireClient().deleteLocalModelProvider(expectedRevision, providerId, removeCredential);
+  }
+
+  async testLocalModelProvider(
+    provider: WsLocalModelProvider,
+    apiKey?: string,
+  ): Promise<WsLocalModelProviderProbeResult> {
+    return this.requireClient().testLocalModelProvider(provider, apiKey);
   }
 
   // ── Session settings ───────────────────────────────────────────────

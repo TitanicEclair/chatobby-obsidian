@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   release:
+    if: github.repository == 'TitanicEclair/chatobby-obsidian'
     runs-on: ubuntu-latest
     steps:
       - name: Check out tagged source

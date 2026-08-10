@@ -5,16 +5,21 @@ import {
   type ComposerKeybindings,
   type PluginSettings,
   type ThinkingDisplay,
+  type WsLocalModelProvider,
+  type WsLocalModelProviderDocument,
+  type WsLocalModelProviderProbeResult,
   type WsProviderInfo,
 } from "./types";
 import { formatCommandArgs, splitCommandArgs } from "./backend/command-line";
 import {
+  BRAVE_SEARCH_API_DOCUMENTATION_URL,
   CHATOBBY_CONNECTOR_REPOSITORY_URL,
   CHATOBBY_PATREON_URL,
   CHATOBBY_SUPPORT_URL,
   openChatobbyUrl,
 } from "./publication";
 import type { RuntimeLifecycleState } from "./runtime/public";
+import { confirmAction } from "./ui/modals/modals";
 import {
   composerKeybindingFromEvent,
   composerKeybindingLabel,
@@ -46,10 +51,12 @@ const SETTINGS_SEARCH_ALIASES = [
 
 export class ChatobbySettingTab extends PluginSettingTab {
   private providerCatalog: WsProviderInfo[] | null = null;
+  private localProviderDocument: WsLocalModelProviderDocument | null = null;
   private providerCatalogLoading = false;
   private providerCatalogError: string | null = null;
   private providerCatalogAttempted = false;
   private settingsHost: HTMLElement | null = null;
+	private settingsSurface: "plugin" | "chatobby" = "plugin";
 
   constructor(app: App, private readonly plugin: ChatobbyPlugin) {
     super(app, plugin);
@@ -61,13 +68,14 @@ export class ChatobbySettingTab extends PluginSettingTab {
       cls: "chatobby-settings",
       items: [{
         name: "Chatobby settings",
-        desc: "Runtime, model providers, conversation preferences, shortcuts, and support.",
+        desc: "Runtime, document handling, and support, with everyday settings available inside Chatobby.",
         aliases: SETTINGS_SEARCH_ALIASES,
         render: (setting) => {
           setting.settingEl.empty();
           setting.settingEl.addClass("chatobby-settings__definition-host");
           this.settingsHost = setting.settingEl;
-          this.renderSettings(setting.settingEl);
+					this.settingsSurface = "plugin";
+          this.renderSettings(setting.settingEl, "plugin");
         },
       }],
     }];
@@ -75,10 +83,23 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
   display(): void {
     this.settingsHost = this.containerEl;
-    this.renderSettings(this.containerEl);
+		this.settingsSurface = "plugin";
+    this.renderSettings(this.containerEl, "plugin");
   }
 
-  private renderSettings(containerEl: HTMLElement): void {
+	/** Render the full user-facing Settings page without changing credential ownership. */
+	renderChatobbySettings(containerEl: HTMLElement): void {
+		this.settingsHost = containerEl;
+		this.settingsSurface = "chatobby";
+		this.renderSettings(containerEl, "chatobby");
+	}
+
+	/** Detach an embedded surface so an asynchronous provider refresh cannot repaint another page. */
+	detachChatobbySettings(containerEl: HTMLElement | null): void {
+		if (containerEl && this.settingsHost === containerEl) this.settingsHost = null;
+	}
+
+  private renderSettings(containerEl: HTMLElement, surface: "plugin" | "chatobby"): void {
     containerEl.empty();
     containerEl.addClass("chatobby-settings");
 
@@ -87,11 +108,28 @@ export class ChatobbySettingTab extends PluginSettingTab {
       text: "Local AI sessions, tools, and automations for this vault.",
     });
 
-		this.renderFirstRunSection(containerEl);
-    this.renderConnectionSection(containerEl);
-    this.renderCredentialsSection(containerEl);
-    this.renderDocumentSection(containerEl);
-		this.renderDisplaySection(containerEl);
+		if (surface === "plugin") {
+			const moved = containerEl.createDiv({ cls: "chatobby-settings-note chatobby-settings-note--moved" });
+			moved.createEl("strong", { text: "Everyday Chatobby settings moved into Chatobby" });
+			moved.createDiv({
+				text: "Model providers, API keys, local model servers, conversation preferences, and Project behavior are now easier to find from Chatobby's Settings page.",
+			});
+			new Setting(moved)
+				.setName("Open Chatobby Settings")
+				.setDesc("Open a Chatobby view and manage these options there.")
+				.addButton((button) => button.setButtonText("Open Settings").setCta().onClick(() => {
+					void this.plugin.openChatobbySettings();
+				}));
+		}
+		if (surface === "chatobby") {
+			this.renderFirstRunSection(containerEl);
+			this.renderCredentialsSection(containerEl);
+			this.renderWebResearchSection(containerEl);
+			this.renderDisplaySection(containerEl);
+			this.renderProjectsSection(containerEl);
+		}
+		this.renderConnectionSection(containerEl);
+		this.renderDocumentSection(containerEl);
     this.renderHelpSection(containerEl);
   }
 
@@ -437,6 +475,29 @@ export class ChatobbySettingTab extends PluginSettingTab {
       .setDesc("Use Obsidian Settings → Hotkeys and search for Chatobby to bind page navigation, session actions, draft stashing, exports, and runtime controls.");
   }
 
+	private renderProjectsSection(containerEl: HTMLElement): void {
+		new Setting(containerEl)
+			.setName("Starting from a Project folder")
+			.setDesc(
+				"Choose what happens when you start a session from a folder that already has Chatobby's canonical Project.",
+			)
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption("ask", "Ask each time")
+					.addOption("reuse-canonical", "Continue existing Project")
+					.addOption("create-new", "Create a new Project")
+					.setValue(this.plugin.settings.directoryProjectLaunchBehavior)
+					.onChange((value) => {
+						this.updateSettings({
+							directoryProjectLaunchBehavior: value as PluginSettings["directoryProjectLaunchBehavior"],
+						}).catch((error: unknown) => {
+							console.error("Chatobby: failed to update Project folder behavior", error);
+							new Notice("Failed to update Project folder behavior");
+						});
+					});
+			});
+	}
+
   private renderComposerKeybinding(
     containerEl: HTMLElement,
     action: ComposerKeybindingAction,
@@ -489,6 +550,25 @@ export class ChatobbySettingTab extends PluginSettingTab {
       text: "Connect the providers you want to use. Keys stay in Chatobby's local runtime credential store and are never saved in the Obsidian plugin folder.",
     });
 
+    new Setting(containerEl)
+      .setName("Local model servers")
+      .setDesc("Connect a model server already running on this computer or network. Chatobby does not start or install the server.")
+      .addButton((button) => button
+        .setButtonText("Add server")
+        .setCta()
+        .onClick(() => this.openLocalProviderModal()));
+
+    for (const provider of this.localProviderDocument?.providers ?? []) {
+      this.renderLocalProviderRow(containerEl, provider);
+    }
+
+    if (this.localProviderDocument && this.localProviderDocument.providers.length === 0) {
+      containerEl.createDiv({
+        cls: "chatobby-settings-note",
+        text: "No local servers configured. Ollama, LM Studio, vLLM, llama.cpp, and compatible OpenAI or Anthropic Messages endpoints are supported.",
+      });
+    }
+
     this.requestProviderCatalog();
 
     if (this.providerCatalogLoading) {
@@ -519,9 +599,121 @@ export class ChatobbySettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName("Custom provider")
-      .setDesc("Connect a provider declared by a custom models.json configuration.")
-      .addButton((button) => button.setButtonText("Add provider").onClick(() => this.openProviderModal()));
+      .setName("Advanced provider credential")
+      .setDesc("Connect a provider id that you manage manually in models.json.")
+      .addButton((button) => button.setButtonText("Add credential").onClick(() => this.openProviderModal()));
+  }
+
+  private renderWebResearchSection(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName("Web research").setHeading();
+    containerEl.createDiv({
+      cls: "chatobby-settings-note",
+      text: "Basic public-web search works without an account. You can optionally connect Brave Search for stronger freshness, language, region, and date filtering. Chatobby always reports which provider mode a search used.",
+    });
+    const configured = this.plugin.hasEnhancedWebSearch();
+    const setting = new Setting(containerEl)
+      .setName("Enhanced Brave Search")
+      .setDesc(configured
+        ? "Connected through an Obsidian-stored secret. The key is sent only to Chatobby's built-in web-search process."
+        : "Optional. Requires your own Brave Search API account and key; provider pricing and allowances are controlled by Brave.")
+      .addButton((button) => button
+        .setButtonText(configured ? "Update key" : "Connect")
+        .setCta()
+        .onClick(() => new WebSearchCredentialModal(
+          this.app,
+          (key) => this.plugin.setEnhancedWebSearchKey(key),
+          () => this.refreshSettingsSurface(),
+        ).open()))
+      .addButton((button) => button
+        .setButtonText("Brave API docs")
+        .onClick(() => openChatobbyUrl(BRAVE_SEARCH_API_DOCUMENTATION_URL)));
+    if (configured) {
+      setting.addButton((button) => {
+        button.setButtonText("Disconnect");
+        button.buttonEl.addClass("mod-warning");
+        button.onClick(() => {
+          void this.plugin.removeEnhancedWebSearchKey()
+            .then(() => {
+              new Notice("Enhanced web search disconnected");
+              this.refreshSettingsSurface();
+            })
+            .catch((error: unknown) => {
+              console.error("Chatobby: failed to disconnect enhanced web search", error);
+              new Notice("Could not disconnect enhanced web search");
+            });
+        });
+      });
+    }
+    setting.settingEl.addClass("chatobby-settings__provider", configured ? "is-connected" : "is-available");
+  }
+
+  private renderLocalProviderRow(containerEl: HTMLElement, provider: WsLocalModelProvider): void {
+    const api = localModelApiLabel(provider.api);
+    const setting = new Setting(containerEl)
+      .setName(provider.name)
+      .setDesc(`${localModelPresetLabel(provider.preset)} · ${api} · ${provider.models.length} model${provider.models.length === 1 ? "" : "s"} · ${provider.baseUrl}`)
+      .addButton((button) => button.setButtonText("Test").onClick(() => {
+        void this.testLocalProvider(provider).then((result) => {
+          new Notice(`${provider.name}: ${result.message}`);
+        }).catch((error: unknown) => {
+          console.error("Chatobby: local model server test failed", error);
+          new Notice(error instanceof Error ? error.message : "Local model server test failed");
+        });
+      }))
+      .addButton((button) => button.setButtonText("Edit").onClick(() => this.openLocalProviderModal(provider)))
+      .addButton((button) => {
+        button.setButtonText("Remove");
+        button.buttonEl.addClass("mod-warning");
+        button.onClick(() => void this.removeLocalProvider(provider));
+      });
+    setting.settingEl.addClass("chatobby-settings__provider", "is-connected");
+  }
+
+  private openLocalProviderModal(provider?: WsLocalModelProvider): void {
+    const revision = this.localProviderDocument?.revision ?? 0;
+    new LocalModelProviderModal(
+      this.app,
+      provider,
+      async (candidate, apiKey) => {
+        const transport = await this.runtimeTransport();
+        this.localProviderDocument = await transport.saveLocalModelProvider(revision, candidate, apiKey);
+        await this.refreshProviderCatalog(false, false);
+        new Notice(`${candidate.name} saved`);
+      },
+      async (candidate, apiKey) => this.testLocalProvider(candidate, apiKey),
+    ).open();
+  }
+
+  private async testLocalProvider(
+    provider: WsLocalModelProvider,
+    apiKey?: string,
+  ): Promise<WsLocalModelProviderProbeResult> {
+    return (await this.runtimeTransport()).testLocalModelProvider(provider, apiKey);
+  }
+
+  private async removeLocalProvider(provider: WsLocalModelProvider): Promise<void> {
+    const confirmed = await confirmAction(this.app, {
+      title: `Remove ${provider.name}?`,
+      message: "This removes the server and its stored credential from Chatobby. It does not stop or uninstall the local model server.",
+      confirmLabel: "Remove server",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const transport = await this.runtimeTransport();
+    this.localProviderDocument = await transport.deleteLocalModelProvider(
+      this.localProviderDocument?.revision ?? 0,
+      provider.id,
+      true,
+    );
+    await this.refreshProviderCatalog(false, false);
+    new Notice(`${provider.name} removed`);
+  }
+
+  private async runtimeTransport() {
+    await this.plugin.startBackend();
+    const transport = this.plugin.createTransport();
+    if (!transport.isConnected) await transport.connect();
+    return transport;
   }
 
   private renderHelpSection(containerEl: HTMLElement): void {
@@ -597,7 +789,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
   private refreshSettingsSurface(): void {
     const host = this.settingsHost?.isConnected ? this.settingsHost : this.containerEl;
-    this.renderSettings(host);
+		this.renderSettings(host, this.settingsSurface);
   }
 
   private requestProviderCatalog(): void {
@@ -625,7 +817,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
         if (!startBackend) throw new Error("Chatobby backend is not connected");
         await transport.connect();
       }
-      this.providerCatalog = await transport.getProviders();
+      [this.providerCatalog, this.localProviderDocument] = await Promise.all([
+        transport.getProviders(),
+        transport.getLocalModelProviders(),
+      ]);
     } catch (error) {
       this.providerCatalogError = error instanceof Error ? error.message : String(error);
       if (showFailureNotice) new Notice("Could not discover Chatobby providers");
@@ -644,6 +839,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
   private providerRows(): WsProviderInfo[] {
     const byId = new Map<string, WsProviderInfo>();
     for (const provider of this.providerCatalog ?? []) {
+      if (this.localProviderDocument?.providers.some((local) => local.id === provider.id)) continue;
       byId.set(provider.id, provider);
     }
 
@@ -730,6 +926,302 @@ class ProviderCredentialModal extends Modal {
     } finally {
       this.saving = false;
     }
+  }
+}
+
+class WebSearchCredentialModal extends Modal {
+  private key = "";
+  private saving = false;
+
+  constructor(
+    app: App,
+    private readonly save: (key: string) => Promise<void>,
+    private readonly afterSave: () => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("chatobby-provider-modal");
+    this.titleEl.setText("Connect Brave Search");
+    this.contentEl.empty();
+    this.contentEl.createDiv({
+      cls: "chatobby-provider-modal__intro",
+      text: "Paste a Brave Search API key. Chatobby stores it in Obsidian's secret storage and does not save it in plugin settings, logs, or diagnostics.",
+    });
+    let keyInput: HTMLInputElement | null = null;
+    new Setting(this.contentEl).setName("API key").addText((text) => {
+      keyInput = text.inputEl;
+      text.inputEl.type = "password";
+      text.setPlaceholder("Paste Brave Search API key").onChange((value) => { this.key = value.trim(); });
+    });
+    const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    const connect = actions.createEl("button", { cls: "mod-cta", text: "Connect", attr: { type: "button" } });
+    connect.addEventListener("click", () => void this.connect(connect, cancel));
+    window.requestAnimationFrame(() => keyInput?.focus());
+  }
+
+  private async connect(connect: HTMLButtonElement, cancel: HTMLButtonElement): Promise<void> {
+    if (this.saving) return;
+    if (!this.key) {
+      new Notice("A Brave Search API key is required");
+      return;
+    }
+    this.saving = true;
+    connect.disabled = true;
+    cancel.disabled = true;
+    try {
+      await this.save(this.key);
+      this.afterSave();
+      new Notice("Enhanced web search connected");
+      this.close();
+    } catch (error) {
+      console.error("Chatobby: failed to connect enhanced web search", error);
+      new Notice("Could not connect enhanced web search");
+      connect.disabled = false;
+      cancel.disabled = false;
+    } finally {
+      this.saving = false;
+    }
+  }
+}
+
+class LocalModelProviderModal extends Modal {
+  private candidate: WsLocalModelProvider;
+  private modelLines: string;
+  private apiKey = "";
+  private saving = false;
+
+  constructor(
+    app: App,
+    provider: WsLocalModelProvider | undefined,
+    private readonly saveProvider: (provider: WsLocalModelProvider, apiKey?: string) => Promise<void>,
+    private readonly testProvider: (
+      provider: WsLocalModelProvider,
+      apiKey?: string,
+    ) => Promise<WsLocalModelProviderProbeResult>,
+  ) {
+    super(app);
+    this.candidate = provider ? structuredClone(provider) : defaultLocalModelProvider("ollama");
+    this.modelLines = this.candidate.models.map((model) => (
+      model.name === model.id ? model.id : `${model.id} | ${model.name}`
+    )).join("\n");
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("chatobby-provider-modal", "chatobby-local-model-modal");
+    this.render();
+  }
+
+  private render(): void {
+    this.titleEl.setText(this.candidate.id ? `Local model server: ${this.candidate.name}` : "Add local model server");
+    this.contentEl.empty();
+    this.contentEl.createDiv({
+      cls: "chatobby-provider-modal__intro",
+      text: "Chatobby connects to a server you run separately. Configuration is stored locally; bearer tokens stay in the runtime credential store.",
+    });
+
+    new Setting(this.contentEl).setName("Server type").addDropdown((dropdown) => dropdown
+      .addOption("ollama", "Ollama")
+      .addOption("lm-studio", "LM Studio")
+      .addOption("vllm", "vLLM")
+      .addOption("llama-cpp", "llama.cpp")
+      .addOption("openai-compatible", "OpenAI-compatible")
+      .addOption("anthropic-compatible", "Anthropic Messages-compatible")
+      .setValue(this.candidate.preset)
+      .onChange((value) => {
+        const preset = value as WsLocalModelProvider["preset"];
+        const defaults = defaultLocalModelProvider(preset);
+        this.candidate = {
+          ...this.candidate,
+          preset,
+          api: defaults.api,
+          baseUrl: defaults.baseUrl,
+          authentication: defaults.authentication,
+        };
+        this.render();
+      }));
+
+    new Setting(this.contentEl).setName("Name").addText((text) => text
+      .setValue(this.candidate.name)
+      .setPlaceholder("My local server")
+      .onChange((value) => { this.candidate = { ...this.candidate, name: value }; }));
+    new Setting(this.contentEl)
+      .setName("Provider id")
+      .setDesc("Stable lowercase id used in model selectors. Changing it creates a different provider.")
+      .addText((text) => text
+        .setValue(this.candidate.id)
+        .setPlaceholder("local-models")
+        .onChange((value) => { this.candidate = { ...this.candidate, id: value.trim().toLowerCase() }; }));
+    new Setting(this.contentEl).setName("Server URL").addText((text) => text
+      .setValue(this.candidate.baseUrl)
+      .setPlaceholder("http://127.0.0.1:11434/v1")
+      .onChange((value) => { this.candidate = { ...this.candidate, baseUrl: value.trim() }; }));
+    new Setting(this.contentEl).setName("API format").addDropdown((dropdown) => dropdown
+      .addOption("openai-completions", "OpenAI Chat Completions")
+      .addOption("openai-responses", "OpenAI Responses")
+      .addOption("anthropic-messages", "Anthropic Messages")
+      .setValue(this.candidate.api)
+      .onChange((value) => {
+        this.candidate = { ...this.candidate, api: value as WsLocalModelProvider["api"] };
+      }));
+    new Setting(this.contentEl).setName("Authentication").addDropdown((dropdown) => dropdown
+      .addOption("none", "None")
+      .addOption("api-key", "Provider API key")
+      .addOption("bearer", "Bearer token")
+      .setValue(this.candidate.authentication)
+      .onChange((value) => {
+        this.candidate = { ...this.candidate, authentication: value as WsLocalModelProvider["authentication"] };
+        this.render();
+      }));
+    if (this.candidate.authentication !== "none") {
+      new Setting(this.contentEl)
+        .setName(this.candidate.authentication === "api-key" ? "Provider API key" : "Bearer token")
+        .setDesc("Optional when editing: leave blank to keep the existing credential.")
+        .addText((text) => {
+          text.inputEl.type = "password";
+          text.setPlaceholder("Token").onChange((value) => { this.apiKey = value.trim(); });
+        });
+    }
+    new Setting(this.contentEl)
+      .setName("Models")
+      .setDesc("One model per line. Use model-id or model-id | Display name.")
+      .addTextArea((text) => {
+        text.inputEl.rows = 4;
+        text.setValue(this.modelLines).setPlaceholder("model-id | Friendly name").onChange((value) => {
+          this.modelLines = value;
+        });
+      });
+
+    const first = this.candidate.models[0] ?? defaultLocalModelProvider(this.candidate.preset).models[0]!;
+    new Setting(this.contentEl).setName("Context window").addText((text) => text
+      .setValue(String(first.contextWindow))
+      .onChange((value) => this.updateModelDefaults({ contextWindow: Number(value) })));
+    new Setting(this.contentEl).setName("Maximum output tokens").addText((text) => text
+      .setValue(String(first.maxTokens))
+      .onChange((value) => this.updateModelDefaults({ maxTokens: Number(value) })));
+    new Setting(this.contentEl).setName("Reasoning model").addToggle((toggle) => toggle
+      .setValue(first.reasoning)
+      .onChange((value) => this.updateModelDefaults({ reasoning: value })));
+    new Setting(this.contentEl).setName("Accepts images").addToggle((toggle) => toggle
+      .setValue(first.imageInput)
+      .onChange((value) => this.updateModelDefaults({ imageInput: value })));
+
+    const status = this.contentEl.createDiv({ cls: "chatobby-local-model-modal__status" });
+    const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
+    const test = actions.createEl("button", { text: "Test connection", attr: { type: "button" } });
+    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    const save = actions.createEl("button", { cls: "mod-cta", text: "Save", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    test.addEventListener("click", () => void this.test(test, save, status));
+    save.addEventListener("click", () => void this.save(save, test, cancel));
+  }
+
+  private updateModelDefaults(patch: Partial<WsLocalModelProvider["models"][number]>): void {
+    const current = this.candidate.models[0] ?? defaultLocalModelProvider(this.candidate.preset).models[0]!;
+    this.candidate = { ...this.candidate, models: [{ ...current, ...patch }] };
+  }
+
+  private assembledCandidate(): WsLocalModelProvider {
+    const defaults = this.candidate.models[0] ?? defaultLocalModelProvider(this.candidate.preset).models[0]!;
+    const models = this.modelLines.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [idPart, ...nameParts] = line.split("|");
+      const id = idPart?.trim() ?? "";
+      const name = nameParts.join("|").trim() || id;
+      return { ...defaults, id, name };
+    });
+    return { ...this.candidate, name: this.candidate.name.trim(), models };
+  }
+
+  private async test(
+    test: HTMLButtonElement,
+    save: HTMLButtonElement,
+    status: HTMLElement,
+  ): Promise<void> {
+    test.disabled = true;
+    save.disabled = true;
+    status.setText("Testing connection…");
+    try {
+      const result = await this.testProvider(this.assembledCandidate(), this.apiKey || undefined);
+      status.setText(`${result.message} ${result.latencyMs} ms.`);
+      status.toggleClass("is-success", result.status === "reachable");
+      status.toggleClass("is-error", result.status !== "reachable");
+    } catch (error) {
+      status.setText(error instanceof Error ? error.message : "Connection test failed");
+      status.removeClass("is-success");
+      status.addClass("is-error");
+    } finally {
+      test.disabled = false;
+      save.disabled = false;
+    }
+  }
+
+  private async save(
+    save: HTMLButtonElement,
+    test: HTMLButtonElement,
+    cancel: HTMLButtonElement,
+  ): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    save.disabled = true;
+    test.disabled = true;
+    cancel.disabled = true;
+    try {
+      await this.saveProvider(this.assembledCandidate(), this.apiKey || undefined);
+      this.close();
+    } catch (error) {
+      console.error("Chatobby: failed to save local model server", error);
+      new Notice(error instanceof Error ? error.message : "Could not save local model server");
+      save.disabled = false;
+      test.disabled = false;
+      cancel.disabled = false;
+    } finally {
+      this.saving = false;
+    }
+  }
+}
+
+function defaultLocalModelProvider(preset: WsLocalModelProvider["preset"]): WsLocalModelProvider {
+  const common = {
+    id: preset,
+    name: localModelPresetLabel(preset),
+    preset,
+    models: [{ id: "model", name: "model", contextWindow: 32_768, maxTokens: 4_096, reasoning: false, imageInput: false }],
+  };
+  switch (preset) {
+    case "ollama":
+      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:11434/v1", authentication: "none" };
+    case "lm-studio":
+      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:1234/v1", authentication: "none" };
+    case "vllm":
+      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:8000/v1", authentication: "none" };
+    case "llama-cpp":
+      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:8080/v1", authentication: "none" };
+    case "openai-compatible":
+      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:8000/v1", authentication: "bearer" };
+    case "anthropic-compatible":
+      return { ...common, api: "anthropic-messages", baseUrl: "http://127.0.0.1:8000/v1", authentication: "api-key" };
+  }
+}
+
+function localModelPresetLabel(preset: WsLocalModelProvider["preset"]): string {
+  switch (preset) {
+    case "ollama": return "Ollama";
+    case "lm-studio": return "LM Studio";
+    case "vllm": return "vLLM";
+    case "llama-cpp": return "llama.cpp";
+    case "openai-compatible": return "OpenAI-compatible";
+    case "anthropic-compatible": return "Anthropic Messages-compatible";
+  }
+}
+
+function localModelApiLabel(api: WsLocalModelProvider["api"]): string {
+  switch (api) {
+    case "openai-completions": return "Chat Completions";
+    case "openai-responses": return "Responses API";
+    case "anthropic-messages": return "Messages API";
   }
 }
 

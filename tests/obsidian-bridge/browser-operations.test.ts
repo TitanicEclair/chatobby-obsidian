@@ -258,8 +258,29 @@ describe("browser operations", () => {
     expect(snapshot).toMatchObject({ available: true });
     expect(Number(snapshot.returnedElements)).toBeGreaterThanOrEqual(2);
 
+    const button = document.querySelector("button");
+    if (!button) throw new Error("Expected button fixture");
+    const semanticClick = vi.fn();
+    button.addEventListener("click", semanticClick);
+    const webview = app.leaf.view.containerEl?.querySelector("webview") as FakeWebView;
     const clicked = await executeOperation("browser.click", { leafId: "leaf-1", role: "button", name: "Continue", strict: true }, signal, app) as Record<string, unknown>;
-    expect(clicked).toMatchObject({ clicked: true, button: "left", clickCount: 1 });
+    expect(clicked).toMatchObject({
+      clicked: true,
+      button: "left",
+      clickCount: 1,
+      dispatchMethod: "semantic-user-gesture",
+      actionReceipt: {
+        action: "click",
+        dispatch: "confirmed",
+        postActionCapture: "confirmed",
+        observedPageChange: expect.any(Boolean),
+      },
+    });
+    expect(semanticClick).toHaveBeenCalledOnce();
+    expect(webview.sendInputEvent).not.toHaveBeenCalled();
+    expect(vi.mocked(webview.executeJavaScript).mock.calls.some(([code, userGesture]) => (
+      typeof code === "string" && code.includes('"action":"click"') && userGesture === true
+    ))).toBe(true);
 
     const rightClicked = await executeOperation(
       "browser.click",
@@ -267,7 +288,13 @@ describe("browser operations", () => {
       signal,
       app,
     ) as Record<string, unknown>;
-    expect(rightClicked).toMatchObject({ clicked: true, button: "right", clickCount: 2 });
+    expect(rightClicked).toMatchObject({
+      clicked: true,
+      button: "right",
+      clickCount: 2,
+      dispatchMethod: "native-pointer",
+    });
+    expect(webview.sendInputEvent).toHaveBeenCalled();
 
     const hovered = await executeOperation(
       "browser.pointer",
@@ -327,6 +354,56 @@ describe("browser operations", () => {
     await executeOperation("browser.navigate", { action: "back" }, signal, app);
     const webview = app.leaf.view.containerEl?.querySelector("webview") as FakeWebView;
     expect(webview.goBack).toHaveBeenCalledOnce();
+  });
+
+  it("reports capture freshness, Web Viewer state, and bounded guest-console diagnostics", async () => {
+    const app = createBrowserApp();
+    const opened = await executeOperation("browser.open", { url: "https://example.com" }, signal, app) as {
+      page: Record<string, unknown>;
+      webviewAttached: boolean;
+      ready: boolean;
+      throttling: string;
+    };
+    expect(opened.page).toMatchObject({
+      capturedAt: expect.any(String),
+      captureSequence: expect.any(Number),
+      visibilityState: expect.any(String),
+    });
+    expect(opened).toMatchObject({ webviewAttached: true, ready: true, throttling: "unknown" });
+
+    const webview = app.leaf.view.containerEl?.querySelector("webview") as FakeWebView;
+    const event = new Event("console-message") as Event & {
+      level?: string;
+      message?: string;
+      line?: number;
+      sourceId?: string;
+    };
+    event.level = "error";
+    event.message = "authorization=abc123 request failed";
+    event.line = 12;
+    event.sourceId = "https://example.com/app.js";
+    webview.dispatchEvent(event);
+
+    const diagnostics = await executeOperation(
+      "browser.diagnostics",
+      { leafId: "leaf-1", level: "error" },
+      signal,
+      app,
+    ) as Record<string, unknown>;
+    expect(diagnostics).toMatchObject({
+      captureOrigin: "live",
+      observationStartedAt: expect.any(String),
+      capturedAt: expect.any(String),
+      entries: [{ level: "error", message: "authorization=<redacted> request failed", line: 12 }],
+      coverage: { kind: "sampled", returned: 1, total: 1, hasMore: false },
+    });
+  });
+
+  it("distinguishes a closed Web Viewer leaf from a generic operation failure", async () => {
+    const app = createBrowserApp();
+    await expect(
+      executeOperation("browser.snapshot", { leafId: "closed-leaf" }, signal, app),
+    ).rejects.toMatchObject({ code: "WEB_VIEWER_NOT_FOUND", retryable: false });
   });
 
   it("retains read continuations and keeps refs stable across unrelated page mutations", async () => {

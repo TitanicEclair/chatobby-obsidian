@@ -4,10 +4,30 @@ export class Notice {
 
 export class TFile {
   constructor(readonly path: string) {}
+  get name(): string { return this.path.split("/").at(-1) ?? this.path; }
 }
 
 export class TFolder {
   constructor(readonly path: string) {}
+  get name(): string { return this.path.split("/").at(-1) ?? this.path; }
+}
+
+export function prepareFuzzySearch(query: string): (text: string) => { score: number; matches: readonly [number, number][] } | null {
+  const needle = query.toLocaleLowerCase();
+  return (text) => {
+    const haystack = text.toLocaleLowerCase();
+    let cursor = 0;
+    const matches: [number, number][] = [];
+    for (const character of needle) {
+      const index = haystack.indexOf(character, cursor);
+      if (index < 0) return null;
+      matches.push([index, index + 1]);
+      cursor = index + 1;
+    }
+    // Obsidian ranks better fuzzy matches with a larger score (normally a
+    // value closer to zero), so later and more scattered matches are lower.
+    return { score: -matches.reduce((score, [start]) => score + start, 0), matches };
+  };
 }
 
 export class Component {

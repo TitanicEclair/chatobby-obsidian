@@ -23,6 +23,7 @@ describe("subagent role catalogue", () => {
     } as unknown as SubagentScreenActions;
     const definitions: FrontendSubagentAgentDefinition[] = [
       definition({ id: "project-role", name: "Project role", scope: "directory", scopeId: "C:/vault/project" }),
+      definition({ id: "session-role", name: "Resolved session role", scope: "session", scopeId: "session-1" }),
       definition({
         id: "researcher",
         name: "Researcher",
@@ -42,8 +43,11 @@ describe("subagent role catalogue", () => {
 
     expect([...host.querySelectorAll(".chatobby-subagents__scope")].map((item) => item.textContent)).toEqual([
       "Project",
+      "Session",
       "Chatobby role",
     ]);
+    expect([...host.querySelectorAll<HTMLButtonElement>("button")].filter((button) => button.textContent === "Edit"))
+      .toHaveLength(1);
     const newRole = [...host.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent === "New");
     if (!newRole) throw new Error("New-role button missing");

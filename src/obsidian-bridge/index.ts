@@ -2,6 +2,7 @@
 // See docs/tooling/bridge-executor.md for architecture.
 
 export { ObsidianBridgeClient } from "./bridge-client";
+export { BridgeConnectionCoordinator } from "./bridge-connection-coordinator";
 export { transitionBridgeConnection, canRetryBridge } from "./bridge-connection-state";
 export { routeInboundFrame, serializeOutbound } from "./bridge-router";
 export { executeOperation } from "./operation-registry";
@@ -13,3 +14,5 @@ export type {
   InFlightRequest,
   OperationHandler,
 } from "./types";
+export type { BridgeClientFactory, CoordinatedBridgeClient } from "./bridge-connection-coordinator";
+export type { BridgeInboundResultHandlers } from "./bridge-router";

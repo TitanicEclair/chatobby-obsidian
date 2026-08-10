@@ -7,6 +7,10 @@ import type {
   FrontendScreenRequest,
   FrontendScreenViewModel,
 } from "../vendor/chatobby-client/frontend-contracts.js";
+import type {
+  WsProjectDirectoryCandidateRequest,
+  WsProjectDirectoryCandidateResult,
+} from "../vendor/chatobby-client/ws-client.js";
 import { FRONTEND_RESYNC_MIN_INTERVAL_MS } from "../ui/shared/constants";
 import { FrontendResyncRequiredError, FrontendStore } from "./frontend-store";
 import { chatobbyPerformance } from "./performance-monitor";
@@ -51,6 +55,14 @@ export class FrontendProtocolController {
     const transport = this.transport;
     if (!transport?.isConnected) throw new Error("Chatobby runtime is not connected");
     return transport.dispatchFrontendIntent(intent);
+  }
+
+  async registerProjectDirectoryCandidate(
+    request: WsProjectDirectoryCandidateRequest,
+  ): Promise<WsProjectDirectoryCandidateResult> {
+    const transport = this.transport;
+    if (!transport?.isConnected) throw new Error("Chatobby runtime is not connected");
+    return transport.registerProjectDirectoryCandidate(request);
   }
 
   async loadScreen(request: FrontendScreenRequest): Promise<FrontendScreenViewModel> {

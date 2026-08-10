@@ -2,6 +2,8 @@ import type {
   PendingRuntimePackageInstallation,
   RuntimePackageInstaller,
 } from "../infrastructure/runtime-installation";
+import type { ManagedCommand } from "./runtime-manager";
+import type { RuntimeIdentity } from "../contracts";
 import {
   compareRuntimeVersions,
   RuntimeUpdateError,
@@ -44,11 +46,11 @@ export interface RuntimeUpdateManagerDeps {
   pluginVersion: string;
   enabled: boolean;
   client: RuntimeUpdateClientLike;
-  installer: Pick<RuntimePackageInstaller, "prepareInstall">;
+  installer: Pick<RuntimePackageInstaller, "prepareInstall" | "resumePendingInstall">;
   getInstalledVersion(): string | null;
   hasActiveWork(): boolean;
   stopRuntime(): Promise<void>;
-  startRuntime(): Promise<void>;
+  startRuntime(command?: ManagedCommand): Promise<void>;
   now?: () => number;
 }
 
@@ -61,6 +63,8 @@ export class RuntimeUpdateManager {
   private checked = false;
   private checkPromise: Promise<RuntimeUpdateDescriptor | null> | null = null;
   private installPromise: Promise<string> | null = null;
+  private pendingInstallation: PendingRuntimePackageInstallation | null = null;
+  private pendingInstallationRecovered = false;
   private progressKey: string | null = null;
 
   constructor(private readonly deps: RuntimeUpdateManagerDeps) {}
@@ -110,6 +114,68 @@ export class RuntimeUpdateManager {
     });
     this.installPromise = operation;
     return operation;
+  }
+
+  /** Activate only the exact candidate that requested startup admission. */
+  async activatePendingRuntime(input: {
+    runtimeVersion: string;
+    runtimePackageFingerprint: string | null;
+    operation: "activate" | "rollback";
+  }): Promise<void> {
+    const installation = this.pendingInstallation;
+    if (!installation) throw new Error("No Chatobby runtime installation is awaiting activation");
+    if (
+      input.runtimeVersion !== installation.runtimeVersion
+      || input.runtimePackageFingerprint !== installation.runtimePackageFingerprint
+    ) {
+      throw new Error("Runtime activation identity does not match the prepared package");
+    }
+    if (input.operation === "activate") await installation.activate();
+    else await installation.rollback();
+  }
+
+  /** Restore the rollback handle that cannot safely live only in plugin memory. */
+  async recoverInterruptedInstallation(): Promise<"none" | "rolled-back" | "awaiting-runtime"> {
+    if (!this.deps.enabled) return "none";
+    if (this.pendingInstallation) throw new Error("A Chatobby runtime installation is already active");
+    const installation = await this.deps.installer.resumePendingInstall(this.deps.pluginVersion);
+    if (!installation) return "none";
+    if (installation.activationState === "prepared") {
+      await this.deps.stopRuntime();
+      await installation.rollback();
+      return "rolled-back";
+    }
+    this.pendingInstallation = installation;
+    this.pendingInstallationRecovered = true;
+    return "awaiting-runtime";
+  }
+
+  /** Seal an activated recovered package only after its exact runtime reconnects. */
+  async finalizeRecoveredRuntime(identity: RuntimeIdentity): Promise<void> {
+    if (!this.pendingInstallationRecovered) return;
+    const installation = this.pendingInstallation;
+    if (!installation) throw new Error("Recovered Chatobby runtime installation state is unavailable");
+    if (
+      identity.runtimeVersion !== installation.runtimeVersion
+      || identity.runtimePackageFingerprint !== installation.runtimePackageFingerprint
+    ) {
+      throw new Error("The reconnected runtime does not match the interrupted installation");
+    }
+    await installation.finalize();
+    if (this.pendingInstallation === installation) this.pendingInstallation = null;
+    this.pendingInstallationRecovered = false;
+  }
+
+  /** Restore the previous package when a recovered activated candidate cannot reconnect. */
+  async rollbackRecoveredRuntime(): Promise<boolean> {
+    if (!this.pendingInstallationRecovered) return false;
+    const installation = this.pendingInstallation;
+    if (!installation) throw new Error("Recovered Chatobby runtime installation state is unavailable");
+    await this.deps.stopRuntime();
+    await installation.rollback();
+    if (this.pendingInstallation === installation) this.pendingInstallation = null;
+    this.pendingInstallationRecovered = false;
+    return true;
   }
 
   private async checkInternal(repair = false): Promise<RuntimeUpdateDescriptor | null> {
@@ -173,10 +239,19 @@ export class RuntimeUpdateManager {
       await this.deps.stopRuntime();
       stopped = true;
       installation = await this.deps.installer.prepareInstall(staged.directory, staged.manifest, this.deps.pluginVersion);
+      this.pendingInstallation = installation;
+      this.pendingInstallationRecovered = false;
       this.emitInstall(descriptor, installedVersion, kind, "reconnecting", 1, 1);
-      await this.deps.startRuntime();
+      await this.deps.startRuntime({
+        command: installation.executable,
+        args: [],
+        runtimePackageFingerprint: installation.runtimePackageFingerprint,
+        runtimeActivationRequired: true,
+      });
       stopped = false;
-      await installation.commit();
+      if (this.pendingInstallation === installation) this.pendingInstallation = null;
+      this.pendingInstallationRecovered = false;
+      await installation.finalize();
       this.checked = true;
       this.emit({ status: "current", installedVersion: descriptor.version, checkedAt: (this.deps.now ?? Date.now)() });
       return descriptor.version;
@@ -184,6 +259,8 @@ export class RuntimeUpdateManager {
       let recoveryError: unknown = null;
       if (installation) {
         try {
+          if (this.pendingInstallation === installation) this.pendingInstallation = null;
+          this.pendingInstallationRecovered = false;
           await this.deps.stopRuntime();
           await installation.rollback();
           await this.deps.startRuntime();
@@ -214,6 +291,8 @@ export class RuntimeUpdateManager {
       }
       throw failure;
     } finally {
+      if (this.pendingInstallation === installation) this.pendingInstallation = null;
+      if (installation) this.pendingInstallationRecovered = false;
       await staged?.cleanup().catch(() => undefined);
     }
   }

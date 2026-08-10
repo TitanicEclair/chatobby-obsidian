@@ -90,6 +90,8 @@ const expectedPublicClientFiles = [
 	"connector-types.ts",
 	"control/contracts.d.ts",
 	"control/contracts.ts",
+	"control/product.generated.d.ts",
+	"control/product.generated.ts",
 	"frontend-contracts.d.ts",
 	"frontend-contracts.ts",
 	"frontend-plugin-contracts.d.ts",

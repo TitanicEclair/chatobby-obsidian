@@ -6,6 +6,7 @@
  * prompting context, session-library metadata, and operator utilities that
  * cannot be represented as a frontend intent.
  */
+import type { ObsidianBridgeConnectionConfig } from "@chatobby/obsidian-protocol";
 export type AutoNameStrategy = "truncate" | "model";
 export interface WsAutoCompactionSettings {
     enabled: boolean;
@@ -198,6 +199,54 @@ export interface WsProviderInfo {
     modelCount: number;
     availableModelCount: number;
 }
+export interface WsLocalModelDefinition {
+    id: string;
+    name: string;
+    contextWindow: number;
+    maxTokens: number;
+    reasoning: boolean;
+    imageInput: boolean;
+}
+export interface WsLocalModelProvider {
+    id: string;
+    name: string;
+    preset: "ollama" | "lm-studio" | "vllm" | "llama-cpp" | "openai-compatible" | "anthropic-compatible";
+    api: "openai-completions" | "openai-responses" | "anthropic-messages";
+    baseUrl: string;
+    authentication: "none" | "api-key" | "bearer";
+    models: WsLocalModelDefinition[];
+}
+export interface WsLocalModelProviderDocument {
+    schemaVersion: 1;
+    revision: number;
+    providers: WsLocalModelProvider[];
+    updatedAt: string;
+    containsSecretValues: false;
+}
+export interface WsLocalModelProviderProbeResult {
+    status: "reachable" | "unreachable" | "invalid-response";
+    latencyMs: number;
+    advertisedModelIds: string[];
+    message: string;
+}
+/**
+ * Privileged connector-to-runtime handoff for a directory selected through the
+ * host operating system. The absolute path is transient transport input; the
+ * returned reference is the only value accepted by browser-facing mutations.
+ */
+export interface WsProjectDirectoryCandidateRequest {
+    readonly schemaVersion: 1;
+    readonly intentId: string;
+    readonly operation: "create" | "root-add" | "root-relink";
+    readonly absolutePath: string;
+}
+export interface WsProjectDirectoryCandidateResult {
+    readonly schemaVersion: 1;
+    readonly directoryCandidateRef: string;
+    readonly label: string;
+    readonly locationKind: "vault-relative" | "external";
+    readonly vaultRelativePath?: string;
+}
 export interface WsExtensionUIRequest {
     id: string;
     method: "select" | "confirm" | "input" | "editor" | "notify" | "setWidget" | "setTitle";
@@ -207,11 +256,7 @@ export interface WsExtensionUIResponse {
     id: string;
     result: unknown;
 }
-export interface WsBridgeConfig {
-    type: "bridge_config";
-    url: string;
-    token: string;
-}
+export type WsBridgeConfig = ObsidianBridgeConnectionConfig;
 export interface WsForkMessage {
     entryId: string;
     text: string;

@@ -30,6 +30,7 @@ const MAX_REDIRECTS = 5;
 const REQUEST_INACTIVITY_TIMEOUT_MS = 30_000;
 const DESCRIPTOR_TIMEOUT_MS = 30_000;
 const BUNDLE_TIMEOUT_MS = 10 * 60_000;
+const MINIMUM_LINUX_GLIBC_VERSION = "2.28";
 
 export interface LegacyRuntimeUpdateDescriptor {
   schemaVersion: 1;
@@ -53,7 +54,7 @@ export interface LegacyRuntimeUpdateDescriptor {
 }
 
 export interface RuntimeReleaseTarget {
-  platform: "win32" | "darwin";
+  platform: "win32" | "darwin" | "linux";
   arch: "x64" | "arm64";
   bundle: LegacyRuntimeUpdateDescriptor["bundle"];
 }
@@ -78,7 +79,12 @@ export interface SelectedRuntimeRelease extends RuntimeReleaseIndex {
 
 export type RuntimeUpdateDescriptor = LegacyRuntimeUpdateDescriptor | SelectedRuntimeRelease;
 
-export type RuntimeTargetKey = "win32-x64" | "darwin-arm64" | "darwin-x64";
+export type RuntimeTargetKey =
+  | "win32-x64"
+  | "darwin-arm64"
+  | "darwin-x64"
+  | "linux-arm64"
+  | "linux-x64";
 
 export class RuntimeUpdateError extends Error {
   readonly code: "runtime_target_unavailable" | "runtime_architecture_mismatch" | "runtime_package_invalid";
@@ -137,6 +143,9 @@ export class RuntimeUpdateClient implements RuntimeUpdateClientLike {
   }
 
   async fetchLatest(pluginVersion: string, signal?: AbortSignal): Promise<RuntimeUpdateDescriptor> {
+    if (process.platform === "linux") {
+      assertSupportedLinuxRuntime(currentLinuxGlibcVersion());
+    }
     const bytes = await this.http.read(CHATOBBY_RUNTIME_INDEX_URL, MAX_DESCRIPTOR_BYTES, signal);
     let value: unknown;
     try {
@@ -182,6 +191,42 @@ export class RuntimeUpdateClient implements RuntimeUpdateClientLike {
       throw error;
     }
   }
+}
+
+/** Fail before downloading an executable that the current Linux libc cannot run. */
+export function assertSupportedLinuxRuntime(glibcVersion: string | undefined): void {
+  if (!glibcVersion) {
+    throw new RuntimeUpdateError(
+      "runtime_target_unavailable",
+      "Chatobby's Linux alpha currently requires a glibc-based distribution; musl and unknown libc environments are not yet supported.",
+    );
+  }
+  if (compareDottedVersions(glibcVersion, MINIMUM_LINUX_GLIBC_VERSION) < 0) {
+    throw new RuntimeUpdateError(
+      "runtime_target_unavailable",
+      `Chatobby's Linux alpha requires glibc ${MINIMUM_LINUX_GLIBC_VERSION} or later; this system reports ${glibcVersion}.`,
+    );
+  }
+}
+
+function currentLinuxGlibcVersion(): string | undefined {
+  const report = process.report?.getReport();
+  if (!report || typeof report === "string") return undefined;
+  const reportObject = report as { header?: unknown };
+  if (!reportObject.header || typeof reportObject.header !== "object") return undefined;
+  const header = reportObject.header as { glibcVersionRuntime?: unknown };
+  return typeof header.glibcVersionRuntime === "string" ? header.glibcVersionRuntime : undefined;
+}
+
+function compareDottedVersions(left: string, right: string): number {
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 /** Validate the signed update envelope before trusting any download metadata. */
@@ -631,7 +676,8 @@ function isRuntimeReleaseIndex(value: unknown): value is RuntimeReleaseIndex {
 function isRuntimeReleaseTarget(value: unknown): value is RuntimeReleaseTarget {
   if (!isRecord(value)) return false;
   const supportedTarget = (value.platform === "win32" && value.arch === "x64")
-    || (value.platform === "darwin" && (value.arch === "x64" || value.arch === "arm64"));
+    || ((value.platform === "darwin" || value.platform === "linux")
+      && (value.arch === "x64" || value.arch === "arm64"));
   return supportedTarget
     && isRecord(value.bundle)
     && isRuntimeBundle(value.bundle);

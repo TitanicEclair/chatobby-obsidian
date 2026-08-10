@@ -8,12 +8,13 @@
 //   - command actions       → src/commands/actions/* (registered via CommandRegistry)
 //   - obsidian:// handler   → src/uri-handler.ts
 //
-// The plugin still owns the WS transport + ObsidianBridgeClient and their
-// bridge_config wiring (tightly coupled; not extracted yet).
+// The plugin composes one global Obsidian bridge coordinator. View transports
+// contribute ownership, while Project observation policy remains feature-owned.
 
 import { MarkdownView, Plugin } from "obsidian";
 import { join } from "node:path";
-import { ObsidianBridgeClient } from "./obsidian-bridge";
+import { BridgeConnectionCoordinator, ObsidianBridgeClient } from "./obsidian-bridge";
+import { parseObsidianBridgeConnectionConfig } from "./vendor/@chatobby/obsidian-protocol/index.js";
 import { disposeVaultRetrievalService } from "./obsidian-bridge/retrieval/service";
 import { ChatobbyView } from "./ui/view";
 import { CommandRegistry, type ChatobbyServices } from "./commands/registry";
@@ -23,9 +24,9 @@ import { ChatobbyTransport } from "./transport/ws-client";
 import { ChatobbySettingTab } from "./settings";
 import { VIEW_TYPE_CHATOBBY } from "./view-type";
 import { handleChatobbyUri } from "./uri-handler";
-import type { PluginSettings, SessionPreferences, WsBridgeConfig } from "./types";
+import type { PluginSettings, SessionPreferences } from "./types";
 import { DEFAULT_PLUGIN_SETTINGS } from "./types";
-import { getChatobbyVaultRuntimePaths } from "./vault-runtime";
+import { getChatobbyVaultRuntimePaths, initializeChatobbyVaultIdentity } from "./vault-runtime";
 import { DefaultChatobbyRuntimeManager } from "./runtime/application/runtime-manager";
 import type { ReadyRuntime, RuntimeActionReason, RuntimeLifecycleState } from "./runtime/public";
 import type { RuntimeDemandHandle, RuntimeDemandKind } from "./runtime/public";
@@ -40,16 +41,24 @@ import {
   runtimeInstallRoot,
 } from "./runtime/infrastructure/runtime-installation";
 import { OperationCoordinator, type ActiveOperation, type OperationDescriptor, type OperationKey } from "./features/operations/public";
+import {
+	ProjectDirectoryObservationService,
+	requestDirectoryProjectDecision,
+	requestDirectoryProjectDraft,
+} from "./features/projects/public";
 import { FrontendSessionRegistry } from "./runtime/application/frontend-session-registry";
 import { RuntimeUpdateClient } from "./runtime/infrastructure/runtime-update-client";
 import { RuntimeUpdateManager, type RuntimeUpdateState } from "./runtime/public";
 import { RuntimeInstallModal } from "./features/runtime-status/public";
 import { selectChatobbyCommandTarget } from "./ui/controller/view-targeting";
 import { addFileExplorerSessionMenuItems } from "./ui/session/file-explorer-session-menu";
+import { createFrontendBootstrapRequest } from "./ui/controller/frontend-bootstrap-request";
+import type { FrontendProjectSummaryViewModel } from "./vendor/chatobby-client/frontend-contracts.js";
 import {
   disposeObsidianSemanticContextService,
   disposeObsidianUiSnapshotService,
 } from "./obsidian-context";
+import { WebSearchCredentialService } from "./credentials/web-search";
 
 export default class ChatobbyPlugin extends Plugin {
   // ── Persisted settings (public; read by SettingTab, mutated via store) ──
@@ -61,10 +70,23 @@ export default class ChatobbyPlugin extends Plugin {
   );
   private readonly runtimeDemands = new DefaultRuntimeDemandRegistry();
   private readonly operations = new OperationCoordinator();
-  private readonly bridgeClients = new Map<string, ObsidianBridgeClient>();
+  private readonly bridgeCoordinator = new BridgeConnectionCoordinator((config) => new ObsidianBridgeClient(
+    this.app,
+    config.url,
+    config.token,
+    "1.0.0",
+    this.manifest.version,
+    undefined,
+    config,
+  ));
+  private readonly projectDirectoryObservations = new ProjectDirectoryObservationService(this.bridgeCoordinator);
   private readonly frontendSessions = new FrontendSessionRegistry({
     createTransport: (runtime) =>
-      new ChatobbyTransport(runtime, (reference) => this.app.secretStorage.getSecret(reference)),
+      new ChatobbyTransport(
+        runtime,
+        (reference) => this.app.secretStorage.getSecret(reference),
+        (request) => this.runtimeUpdates.activatePendingRuntime(request),
+      ),
     bindTransport: (channelId, transport) => {
       const unsubscribeConnection = transport.onConnectionChange((state) => {
         if (state.status === "error") {
@@ -75,17 +97,25 @@ export default class ChatobbyPlugin extends Plugin {
         }
       });
       const unsubscribeBridge = transport.onBridgeConfig((config) => {
-        void this.handleBridgeConfig(channelId, config).catch((error) => {
+        void this.acceptBridgeConfig(channelId, config).catch((error) => {
           console.error(`Chatobby channel ${channelId}: bridge config error`, error);
         });
       });
       return () => {
         unsubscribeConnection();
         unsubscribeBridge();
-        void this.disconnectBridge(channelId);
+        void this.bridgeCoordinator.removeOwner(channelId);
       };
     },
   });
+  private readonly webSearchCredentials = new WebSearchCredentialService(
+    this.app.secretStorage,
+    async (reference, secret) => {
+      await this.ensureRuntime("user-action");
+      const transport = this.transport ?? await this.frontendSessions.ensureUtility();
+      await transport.synchronizeMcpCredential(reference, secret);
+    },
+  );
   private readonly buildMode = connectorBuildMode();
   private readonly runtimePublicKey = connectorTrustedRuntimePublicKey();
   private readonly runtimeResolver = new ManagedRuntimeResolver(
@@ -129,7 +159,7 @@ export default class ChatobbyPlugin extends Plugin {
     getInstalledVersion: () => readInstalledRuntimeVersion(),
     hasActiveWork: () => this.hasActiveRuntimeWork(),
     stopRuntime: () => this.runtimeManager.stop("user-action"),
-    startRuntime: () => this.runtimeManager.ensureReady({ reason: "manual-restart" }).then(() => undefined),
+    startRuntime: (command) => this.runtimeManager.ensureReady({ reason: "manual-restart" }, command).then(() => undefined),
   });
 
   private readonly visibleChatViews = new Set<ChatobbyView>();
@@ -144,6 +174,11 @@ export default class ChatobbyPlugin extends Plugin {
   async onload(): Promise<void> {
     this.unloading = false;
     await this.store.load();
+		// Runtime leases, bridge registration, permissions, and Projects must all
+		// use the same path-independent identity before any connection starts.
+		await initializeChatobbyVaultIdentity(this.app);
+    await this.runtimeUpdates.recoverInterruptedInstallation();
+    this.projectDirectoryObservations.start();
 
     this.registerView(VIEW_TYPE_CHATOBBY, (leaf) => new ChatobbyView(leaf, this));
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
@@ -166,14 +201,20 @@ export default class ChatobbyPlugin extends Plugin {
     }));
     this.registerEvent(this.app.vault.on("create", () => this.scheduleVaultDirectoryRefresh()));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleVaultDirectoryRefresh()));
-    this.registerEvent(this.app.vault.on("rename", () => this.scheduleVaultDirectoryRefresh()));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      this.scheduleVaultDirectoryRefresh();
+      this.projectDirectoryObservations.observeRename(file, oldPath);
+    }));
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       addFileExplorerSessionMenuItems(menu, file, {
         startNewSession: async (vaultDirectoryPath) => {
-          await this.openBlankView(vaultDirectoryPath);
+			await this.startSessionFromVaultDirectory(vaultDirectoryPath);
         },
         resumeSession: async (vaultDirectoryPath) => {
-          await this.openSessionPickerView(vaultDirectoryPath);
+			await this.openSessionsFromVaultDirectory(vaultDirectoryPath);
+        },
+        createProject: async (vaultDirectoryPath) => {
+			await this.createProjectFromVaultDirectory(vaultDirectoryPath);
         },
       });
     }));
@@ -209,8 +250,9 @@ export default class ChatobbyPlugin extends Plugin {
   private async disposePluginResources(): Promise<void> {
     // Plugin reloads must not terminate session-owned work in the backend.
     await this.runtimeManager.detach("plugin-unload").catch(() => {});
+    this.projectDirectoryObservations.dispose();
     await this.frontendSessions.dispose();
-    await Promise.all([...this.bridgeClients.keys()].map((channelId) => this.disconnectBridge(channelId)));
+    await this.bridgeCoordinator.dispose();
     // Detach retrieval-service vault listeners so hot-reload doesn't leak them.
     disposeVaultRetrievalService(this.app);
     disposeObsidianUiSnapshotService(this.app);
@@ -305,7 +347,7 @@ export default class ChatobbyPlugin extends Plugin {
   /** Release only this leaf's runtime without disturbing concurrent leaves. */
   async unregisterChatView(view: ChatobbyView): Promise<void> {
     await this.frontendSessions.unregister(view.runtimeChannelId);
-    await this.disconnectBridge(view.runtimeChannelId);
+    await this.bridgeCoordinator.removeOwner(view.runtimeChannelId);
   }
 
   getViewTransport(view: ChatobbyView): ChatobbyTransport | null {
@@ -368,28 +410,93 @@ export default class ChatobbyPlugin extends Plugin {
     return view;
   }
 
-  /** Open the stored-session picker at one vault directory without changing another session's cwd. */
-  async openSessionPickerView(vaultDirectoryPath: string): Promise<ChatobbyView> {
-    const normalized = vaultDirectoryPath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
-    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)
-      .map((leaf) => leaf.view)
-      .filter((view): view is ChatobbyView => view instanceof ChatobbyView)
-      .find((view) => view.getWorkingDirectoryPath() === normalized);
-    if (existing) {
-      await this.app.workspace.revealLeaf(existing.leaf);
-      await existing.commandResumeSession();
-      return existing;
-    }
-    const leaf = this.app.workspace.getLeaf("tab");
-    await leaf.setViewState({
-      type: VIEW_TYPE_CHATOBBY,
-      active: true,
-      state: { mode: "session-picker", vaultDirectoryPath: normalized },
-    });
-    await this.app.workspace.revealLeaf(leaf);
-    if (!(leaf.view instanceof ChatobbyView)) throw new Error("Obsidian did not create the Chatobby session picker");
-    return leaf.view;
-  }
+	private async startSessionFromVaultDirectory(vaultDirectoryPath: string): Promise<void> {
+		const canonical = await this.findCanonicalDirectoryProject(vaultDirectoryPath);
+		if (!canonical) {
+			const view = await this.openBlankView(vaultDirectoryPath);
+			await view.createProjectForCurrentSession({
+				name: projectNameFromDirectory(vaultDirectoryPath),
+				vaultRelativePath: vaultDirectoryPath,
+			});
+			return;
+		}
+
+		let action = this.settings.directoryProjectLaunchBehavior;
+		if (action === "ask") {
+			const decision = await requestDirectoryProjectDecision(this.app, {
+				projectName: canonical.name,
+				vaultRelativePath: vaultDirectoryPath,
+			});
+			if (!decision) return;
+			action = decision.action;
+			if (decision.remember) {
+				await this.updateSettings({ directoryProjectLaunchBehavior: decision.action });
+			}
+		}
+
+		if (action === "reuse-canonical") {
+			const view = await this.openBlankView(vaultDirectoryPath);
+			await view.createSessionForProject(canonical.projectId);
+			return;
+		}
+
+		const draft = await requestDirectoryProjectDraft(this.app, vaultDirectoryPath);
+		if (!draft) return;
+		const view = await this.openBlankView(vaultDirectoryPath);
+		await view.createProjectForCurrentSession({
+			name: draft.name,
+			...(draft.description ? { description: draft.description } : {}),
+			vaultRelativePath: vaultDirectoryPath,
+		});
+	}
+
+	private async createProjectFromVaultDirectory(vaultDirectoryPath: string): Promise<void> {
+		const draft = await requestDirectoryProjectDraft(this.app, vaultDirectoryPath);
+		if (!draft) return;
+		const view = await this.openBlankView(vaultDirectoryPath);
+		await view.createProjectForCurrentSession({
+			name: draft.name,
+			...(draft.description ? { description: draft.description } : {}),
+			vaultRelativePath: vaultDirectoryPath,
+		});
+	}
+
+	private async openSessionsFromVaultDirectory(vaultDirectoryPath: string): Promise<void> {
+		const canonical = await this.findCanonicalDirectoryProject(vaultDirectoryPath);
+		if (!canonical) {
+			const view = this.getActiveView() ?? await this.openBlankView();
+			await this.app.workspace.revealLeaf(view.leaf);
+			view.commandOpenPage("projects");
+			return;
+		}
+		const view = await this.openBlankView(vaultDirectoryPath);
+		await view.openProjectSessions(canonical.projectId);
+	}
+
+	private async findCanonicalDirectoryProject(
+		vaultDirectoryPath: string,
+	): Promise<FrontendProjectSummaryViewModel | undefined> {
+		await this.ensureRuntime("user-action");
+		const transport = await this.frontendSessions.ensureUtility();
+		if (!transport.isConnected) throw new Error("Chatobby runtime did not connect.");
+		const viewId = "chatobby-project-directory-probe";
+		await transport.getFrontendBootstrap(createFrontendBootstrapRequest(this.app, this, viewId, {
+			frontend: "obsidian",
+			vault: this.app.vault.getName(),
+		}));
+		const screen = await transport.getFrontendScreen({
+			schemaVersion: 1,
+			viewId,
+			screenId: "projects",
+		});
+		if (screen.screenId !== "projects") throw new Error("Chatobby returned the wrong Project screen.");
+		const normalized = normalizeVaultDirectoryPath(vaultDirectoryPath);
+		return screen.projects.find(
+			(project) =>
+				project.lifecycle === "active" &&
+				normalizeVaultDirectoryPath(project.canonicalVaultRelativePath ?? "") === normalized,
+		);
+	}
 
   /** Open a distinct session work surface, or focus the leaf already owning a resumed path. */
   async openSessionView(vaultDirectoryPath: string, sessionPath?: string): Promise<ChatobbyView> {
@@ -513,12 +620,30 @@ export default class ChatobbyPlugin extends Plugin {
   async restartRuntime(): Promise<void> {
     await this.runOperation(
       { key: "backend-lifecycle", id: "backend:restart", label: "Restarting Chatobby" },
-      () => this.runtimeManager.restart("manual-restart"),
+      async () => {
+        await this.runtimeManager.stop("user-action");
+        await this.ensureRuntime("manual-restart");
+      },
     );
   }
 
   async ensureRuntime(reason: RuntimeActionReason): Promise<ReadyRuntime> {
-    return this.runtimeManager.ensureReady({ reason });
+    try {
+      const runtime = await this.runtimeManager.ensureReady({ reason });
+      await this.runtimeUpdates.finalizeRecoveredRuntime(runtime.identity);
+      return runtime;
+    } catch (error) {
+      let rolledBack = false;
+      try {
+        rolledBack = await this.runtimeUpdates.rollbackRecoveredRuntime();
+      } catch (rollbackError) {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)} Automatic runtime recovery also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+        );
+      }
+      if (!rolledBack) throw error;
+      return this.runtimeManager.ensureReady({ reason });
+    }
   }
 
   acquireRuntimeDemand(kind: RuntimeDemandKind, ownerId: string): RuntimeDemandHandle {
@@ -549,6 +674,14 @@ export default class ChatobbyPlugin extends Plugin {
 		};
 		app.setting?.open();
 		app.setting?.openTabById(this.manifest.id);
+	}
+
+	/** Open the primary in-Chatobby settings surface. */
+	async openChatobbySettings(): Promise<void> {
+		const app = this.app as typeof this.app & { setting?: { close?(): void } };
+		app.setting?.close?.();
+		await this.activateView();
+		this.getActiveView()?.commandOpenPage("settings");
 	}
 
 	async completeOnboarding(): Promise<void> {
@@ -598,6 +731,18 @@ export default class ChatobbyPlugin extends Plugin {
     this.getActiveView()?.refreshAvailableModels();
   }
 
+  hasEnhancedWebSearch(): boolean {
+    return this.webSearchCredentials.isConfigured();
+  }
+
+  async setEnhancedWebSearchKey(key: string): Promise<void> {
+    await this.webSearchCredentials.set(key);
+  }
+
+  async removeEnhancedWebSearchKey(): Promise<void> {
+    await this.webSearchCredentials.remove();
+  }
+
   private async writeProviderCredential(provider: string, apiKey: string | null): Promise<void> {
     await this.ensureRuntime("user-action");
     const transport = this.transport ?? await this.frontendSessions.ensureUtility();
@@ -631,37 +776,13 @@ export default class ChatobbyPlugin extends Plugin {
   /** Detach frontend clients without waiting on an in-flight agent command. */
   private async closeFrontendSession(): Promise<void> {
     await this.frontendSessions.disconnectRuntime();
-    await Promise.all([...this.bridgeClients.keys()].map((channelId) => this.disconnectBridge(channelId)));
+    await this.bridgeCoordinator.clearOwners();
   }
 
-  /** Handle a bridge_config push from the server. */
-  private async handleBridgeConfig(channelId: string, config: WsBridgeConfig): Promise<void> {
-    await this.disconnectBridge(channelId);
-
-    // Obsidian app version is not exposed via the API, so we use a placeholder.
-    const bridgeClient = new ObsidianBridgeClient(
-      this.app,
-      config.url,
-      config.token,
-      "1.0.0",
-      this.manifest.version,
-    );
-
-    this.bridgeClients.set(channelId, bridgeClient);
-    bridgeClient.onConnectionChange((state) => {
-      if (state.status === "error") {
-        console.error(`Chatobby bridge: connection error: ${state.error}`);
-      }
-    });
-
-    await bridgeClient.connect();
-  }
-
-  private async disconnectBridge(channelId: string): Promise<void> {
-    const bridgeClient = this.bridgeClients.get(channelId);
-    if (!bridgeClient) return;
-    this.bridgeClients.delete(channelId);
-    await bridgeClient.disconnect().catch(() => {});
+  /** Accept only the canonical, stable-vault bridge configuration. */
+  private async acceptBridgeConfig(channelId: string, config: unknown): Promise<void> {
+    const parsed = parseObsidianBridgeConnectionConfig(config);
+    await this.bridgeCoordinator.setOwnerConfig(channelId, parsed);
   }
 }
 
@@ -678,4 +799,12 @@ function containsRuntimeEndpointOverride(patch: Partial<PluginSettings>): boolea
     || patch.externalServerUrl !== undefined
     || patch.developerCommand !== undefined
     || patch.developerArgs !== undefined;
+}
+
+function normalizeVaultDirectoryPath(value: string): string {
+	return value.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
+}
+
+function projectNameFromDirectory(value: string): string {
+	return normalizeVaultDirectoryPath(value).split("/").filter(Boolean).at(-1) ?? "New Project";
 }

@@ -142,10 +142,16 @@ export type WireSessionEvent = {
     type: string;
     [field: string]: unknown;
 };
-/** Normalized event emitted by a Pi extension over the shared extension event bus. */
-export interface WireExtensionEvent {
-    channel: string;
-    source: string;
+/** Product-owned, versioned event envelope safe to project over the frontend wire. */
+export interface WireDomainEvent {
+    envelopeVersion: 1;
+    id: string;
+    eventSchemaVersion: number;
+    sourceDomain: string;
+    sequence: number;
+    sourceRevision?: string | number;
     timestamp: number;
-    data: Record<string, unknown>;
+    traceId: string;
+    idempotencyKey?: string;
+    payload: unknown;
 }

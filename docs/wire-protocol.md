@@ -48,6 +48,15 @@ session token from `ChatobbyRuntimeManager`. The hello must complete before the
 backend allocates a session runtime. Control status/detach/shutdown use a
 separate scoped token and are not JSON-RPC agent commands.
 
+The second Obsidian bridge uses protocol version 2. Its `bridge_config` carries
+the stable vault identity and registered vault root. The connector uses one
+plugin-global bridge client even when several Chatobby views have independent
+frontend transports. Project folder changes use
+`project_directory_observed`/`project_directory_observation_result`; bounded
+gap recovery uses `project_directory_rescan_requested` and its typed result.
+The connector supplies observations only. Marker verification, Project
+reconciliation, receipts, and durable mutation remain runtime responsibilities.
+
 ---
 
 ## Command Reference

@@ -2,7 +2,7 @@
 
 .chatobby-memory__toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(132px, auto) minmax(132px, auto) auto;
+  grid-template-columns: minmax(180px, 1fr) repeat(5, minmax(112px, auto)) auto;
   align-items: center;
 }
 .chatobby-memory__search {
@@ -29,25 +29,11 @@
   max-width: 190px;
 }
 
-.chatobby-memory__filters {
-  display: flex;
-  max-width: 100%;
-  gap: var(--size-2-1);
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-.chatobby-memory__filters button {
-  flex: 0 0 auto;
-  padding: var(--size-2-1) var(--size-4-2);
-  border-radius: 999px;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-}
-.chatobby-memory__filters button.is-active {
-  border-color: var(--chatobby-accent);
-  color: var(--text-on-accent);
-  background: var(--chatobby-accent);
-}
+.chatobby-memory__scope-context { min-width: 0; color: var(--text-muted); }
+.chatobby-memory__scope-label { color: var(--text-normal); font-size: var(--font-ui-small); font-weight: var(--font-semibold); }
+.chatobby-memory__scope-description,
+.chatobby-memory__scope-path { margin-top: 2px; font-size: var(--font-ui-smaller); overflow-wrap: anywhere; }
+.chatobby-memory__scope-path { color: var(--text-faint); }
 .chatobby-memory__result-summary { color: var(--text-faint); font-size: var(--font-ui-smaller); }
 
 .chatobby-memory__create {
@@ -95,7 +81,8 @@
 }
 .chatobby-memory__record-icon { display: inline-flex; align-self: center; color: var(--text-muted); }
 .chatobby-memory__record-category {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, auto) auto;
   min-width: 0;
   max-width: 12rem;
   align-items: center;
@@ -106,6 +93,12 @@
 }
 .chatobby-memory__record-label { overflow: hidden; text-overflow: ellipsis; }
 .chatobby-memory__record-state { color: var(--chatobby-accent); }
+.chatobby-memory__record-location {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--text-faint);
+  text-overflow: ellipsis;
+}
 .chatobby-memory__record-divider { width: 1px; height: 1.25em; background: var(--chatobby-border); }
 .chatobby-memory__record-content {
   display: -webkit-box;

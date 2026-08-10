@@ -1,0 +1,69 @@
+name: Chatobby connector CI
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+      - "release/**"
+  pull_request:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: chatobby-connector-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  branch-policy:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Validate pull request branch route
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_BRANCH" == "main" ]]; then
+            [[ "$HEAD_BRANCH" == release/* ]] || {
+              echo "Pull requests to main must come from release/<version>." >&2
+              exit 1
+            }
+          elif [[ "$BASE_BRANCH" == "dev" ]]; then
+            case "$HEAD_BRANCH" in
+              feature/*|fix/*|docs/*|chore/*|automation/*|codex/*) ;;
+              *)
+                echo "Pull requests to dev must use an approved development branch." >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Check connector
+        run: npm run check
+      - name: Run connector tests
+        run: npm test

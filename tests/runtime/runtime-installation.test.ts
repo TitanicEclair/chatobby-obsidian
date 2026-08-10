@@ -1,12 +1,13 @@
 import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   connectorRuntimeMode,
   ManagedRuntimeResolver,
+  PENDING_RUNTIME_INSTALLATION_FILE,
   RUNTIME_PACKAGE_MANIFEST_FILE,
   RuntimePackageInstaller,
   type RuntimePackageFile,
@@ -148,7 +149,7 @@ describe("runtime installation", () => {
 
     expect((await stat(versionRoot)).mode & 0o777).toBe(0o700);
     expect((await stat(executable)).mode & 0o777).toBe(0o700);
-    expect((await stat(join(versionRoot, "assets", "app-bridge.bundle.js"))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(versionRoot, "assets", "photon_rs_bg.wasm"))).mode & 0o777).toBe(0o600);
     expect((await stat(join(versionRoot, RUNTIME_PACKAGE_MANIFEST_FILE))).mode & 0o777).toBe(0o600);
   });
 
@@ -194,6 +195,72 @@ describe("runtime installation", () => {
 
     expect(await readFile(pending.executable, "utf8")).toBe("runtime-original");
     expect(JSON.parse(await readFile(join(installRoot, "current.json"), "utf8"))).toEqual({ version: "1.0.0" });
+  });
+
+  it("keeps the previous version active until an authenticated candidate activates", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const installer = new RuntimePackageInstaller(installRoot, publicKeyPem(keys.publicKey));
+    const originalManifest = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+    await installer.install(source, originalManifest, "0.1.0");
+    const candidateManifest = await writeRuntimePackage(source, "1.1.0", "runtime-candidate", keys.privateKey);
+
+    const pending = await installer.prepareInstall(source, candidateManifest, "0.1.0");
+    expect(JSON.parse(await readFile(join(installRoot, "current.json"), "utf8"))).toEqual({ version: "1.0.0" });
+
+    await pending.activate();
+    expect(JSON.parse(await readFile(join(installRoot, "current.json"), "utf8"))).toEqual({
+      version: "1.1.0",
+      previousVersion: "1.0.0",
+    });
+
+    await pending.rollback();
+    expect(JSON.parse(await readFile(join(installRoot, "current.json"), "utf8"))).toEqual({ version: "1.0.0" });
+  });
+
+  it("recovers a prepared installation after plugin memory is lost", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const publicKey = publicKeyPem(keys.publicKey);
+    const installer = new RuntimePackageInstaller(installRoot, publicKey);
+    const original = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+    await installer.install(source, original, "0.1.0");
+    const candidate = await writeRuntimePackage(source, "1.1.0", "runtime-candidate", keys.privateKey);
+
+    await installer.prepareInstall(source, candidate, "0.1.0");
+    expect(existsSync(join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE))).toBe(true);
+
+    const recovered = await new RuntimePackageInstaller(installRoot, publicKey).resumePendingInstall("0.1.0");
+    expect(recovered?.activationState).toBe("prepared");
+    await recovered?.rollback();
+
+    expect(JSON.parse(await readFile(join(installRoot, "current.json"), "utf8"))).toEqual({ version: "1.0.0" });
+    expect(existsSync(join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE))).toBe(false);
+    expect(existsSync(join(installRoot, "versions", "1.1.0"))).toBe(false);
+  });
+
+  it("finalizes the exact activated repair after plugin memory is lost", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const publicKey = publicKeyPem(keys.publicKey);
+    const installer = new RuntimePackageInstaller(installRoot, publicKey);
+    const original = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+    await installer.install(source, original, "0.1.0");
+    const repaired = await writeRuntimePackage(source, "1.0.0", "runtime-repaired", keys.privateKey);
+    const pending = await installer.prepareInstall(source, repaired, "0.1.0");
+    await pending.activate();
+
+    const recovered = await new RuntimePackageInstaller(installRoot, publicKey).resumePendingInstall("0.1.0");
+    expect(recovered?.activationState).toBe("activated");
+    expect(recovered?.runtimePackageFingerprint).toBe(packageFingerprint(repaired));
+    await recovered?.finalize();
+
+    expect(await readFile(join(installRoot, "versions", "1.0.0", executableName()), "utf8")).toBe("runtime-repaired");
+    expect(existsSync(join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE))).toBe(false);
+    expect((await readdir(join(installRoot, "versions"))).some((entry) => entry.endsWith(".backup"))).toBe(false);
   });
 
   it("rejects a package whose signature is not trusted", async () => {
@@ -246,7 +313,6 @@ async function writeRuntimePackage(
 ): Promise<RuntimePackageManifest> {
   const contents = new Map<string, string | Buffer>([
     [executableName(), executableContent],
-    ["assets/app-bridge.bundle.js", "bridge"],
     ["assets/photon_rs_bg.wasm", Buffer.from([0, 97, 115, 109])],
     ["assets/tree-sitter-bash.wasm", Buffer.from([0, 97, 115, 109])],
     ["assets/web-tree-sitter.wasm", Buffer.from([0, 97, 115, 109])],

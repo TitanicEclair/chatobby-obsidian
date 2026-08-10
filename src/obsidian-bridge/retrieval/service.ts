@@ -4,7 +4,7 @@ import type {
   ObsidianRetrievalDiagnostics,
   ObsidianRetrievalEnvelope,
   ObsidianRetrievalWarning,
-} from "../../vendor/@chatobby/obsidian-protocol/retrieval-protocol";
+} from "../../vendor/@chatobby/obsidian-protocol/index.js";
 import {
   buildAdjacency,
   connectedComponents,

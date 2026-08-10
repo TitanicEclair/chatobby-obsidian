@@ -4,7 +4,7 @@ import { confirmAction } from "../../../ui/modals/modals";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type {
   FrontendIntent,
-  FrontendSubagentAgentDefinition as AgentDefinition,
+  FrontendSubagentUserAgentDefinition as UserAgentDefinition,
   FrontendSubagentControlAction as SubagentControlAction,
   FrontendSubagentMessageViewModel as SubagentMessage,
   FrontendSubagentRunFilter,
@@ -215,7 +215,7 @@ export class SubagentScreenController {
     });
   }
 
-  private async deleteDefinition(definition: AgentDefinition): Promise<void> {
+  private async deleteDefinition(definition: UserAgentDefinition): Promise<void> {
     if (!await confirmAction(this.options.app, {
       title: "Delete agent role?",
       message: `Delete agent role “${definition.name}”?`,

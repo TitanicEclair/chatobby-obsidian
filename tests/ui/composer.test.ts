@@ -672,6 +672,49 @@ describe("Composer", () => {
     ]);
   });
 
+  it("fuzzily references Vault files from @ without granting access", () => {
+    const searchVaultReferences = vi.fn(() => [{
+      kind: "file" as const,
+      label: "Cerebrum.md",
+      path: "Notes/Cerebrum.md",
+    }]);
+    const { composer, input, card } = bindComposer(createHost({ searchVaultReferences }));
+    input.value = "Please review @cer";
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    composer.handleInput();
+
+    expect(searchVaultReferences).toHaveBeenCalledWith("cer");
+    expect(card.querySelector(".chatobby-reference-menu__name")?.textContent).toBe("Cerebrum.md");
+    expect(card.textContent).toContain("does not grant Chatobby permission");
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+
+    expect(input.value).toBe("Please review @[[Notes/Cerebrum.md]] ");
+    expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(true);
+  });
+
+  it("marks selected folders explicitly in an @ reference", () => {
+    const { composer, input } = bindComposer(createHost({
+      searchVaultReferences: () => [{ kind: "folder", label: "Plans", path: "Projects/Plans" }],
+    }));
+    input.value = "Use @pla";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Tab", cancelable: true }));
+    expect(input.value).toBe("Use @[[Projects/Plans/]] ");
+  });
+
+  it("does not treat an email address as a Vault reference", () => {
+    const searchVaultReferences = vi.fn();
+    const { composer, input, card } = bindComposer(createHost({ searchVaultReferences }));
+    input.value = "me@example.com";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    expect(searchVaultReferences).not.toHaveBeenCalled();
+    expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(true);
+  });
+
   it("autocompletes the selected slash command and marks it active", () => {
     const reload = command("reload");
     const { composer, input, highlight } = bindComposer(createHost({

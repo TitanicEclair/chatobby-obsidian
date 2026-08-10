@@ -3,16 +3,16 @@
 // See docs/tooling/bridge-executor.md §7.2 for the Hello message.
 
 import type { App } from "obsidian";
-import type { ObsidianBridgeVault } from "../../../vendor/@chatobby/obsidian-protocol/bridge-protocol";
+import type { ObsidianBridgeVault } from "../../../vendor/@chatobby/obsidian-protocol/index.js";
+import { getCachedChatobbyVaultIdentity } from "../../../vault-runtime";
 
 /**
  * Get the vault identity for the current Obsidian vault.
  * Used in the bridge Hello message and context.get responses.
  *
- * `id`/`root` use the vault's absolute base path — the only stable, unique id
- * Obsidian exposes. Using the vault NAME as the id would cause 4000 (replaced)
- * or OBSIDIAN_VAULT_AMBIGUOUS on shared-name or multi-window vaults, since the
- * backend keys connection registration on whatever id we send.
+ * `id` uses Chatobby's path-independent identity after plugin startup, while
+ * `root` remains the current absolute location. A vault rename therefore does
+ * not replace its bridge or Project identity.
  */
 export function getVaultIdentity(app: App): ObsidianBridgeVault {
   // The bundled obsidian typings predate DataAdapter.getBasePath; cast through
@@ -23,7 +23,10 @@ export function getVaultIdentity(app: App): ObsidianBridgeVault {
     ?? "Obsidian Vault";
 
   return {
-    id: basePath,
+		// Plugin startup activates this record before any bridge connects. The
+		// fallback keeps isolated operation tests usable without pretending that
+		// an uninitialized product connection has a durable identity.
+    id: getCachedChatobbyVaultIdentity(app)?.vaultId ?? basePath,
     name: vaultName,
     root: basePath,
   };

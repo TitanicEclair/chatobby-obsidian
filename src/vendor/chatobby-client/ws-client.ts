@@ -1,4 +1,5 @@
 // Generated from packages/chatobby/src/frontend-client.ts. Do not edit.
+import { parseObsidianBridgeConnectionConfig } from "@chatobby/obsidian-protocol";
 import type {
 	AutoNameStrategy,
 	WsAutoCompactionSettings,
@@ -6,6 +7,11 @@ import type {
 	WsBridgeConfig,
 	WsExtensionUIRequest,
 	WsForkMessage,
+	WsLocalModelProvider,
+	WsLocalModelProviderDocument,
+	WsLocalModelProviderProbeResult,
+	WsProjectDirectoryCandidateRequest,
+	WsProjectDirectoryCandidateResult,
 	WsPromptAttachment,
 	WsPromptContextPacket,
 	WsProviderInfo,
@@ -13,12 +19,25 @@ import type {
 	WsSessionInfo,
 	WsSessionStats,
 } from "./connector-types.ts";
+
+export type {
+	WsProjectDirectoryCandidateRequest,
+	WsProjectDirectoryCandidateResult,
+} from "./connector-types.ts";
+
 import {
+	CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS,
 	CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS,
+	CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS,
+	parseRuntimeServerActivationRequired,
 	parseRuntimeServerHello,
+	parseRuntimeServerPending,
 	RUNTIME_CLOSE_CODES,
+	type RuntimeClientActivationResult,
 	type RuntimeClientHello,
+	type RuntimeServerActivationRequired,
 	type RuntimeServerHello,
+	type RuntimeServerPending,
 } from "./control/contracts.ts";
 import {
 	type FrontendBootstrap,
@@ -41,7 +60,9 @@ export type {
 	RuntimeClientHello,
 	RuntimeIdentity,
 	RuntimeReadyDescriptor,
+	RuntimeServerActivationRequired,
 	RuntimeServerHello,
+	RuntimeServerPending,
 	RuntimeStatusResponse,
 } from "./control/contracts.ts";
 export {
@@ -71,6 +92,8 @@ export interface WsClientOptions {
 	onClose?: () => void;
 	runtime?: Omit<RuntimeClientHello, "type">;
 	helloTimeout?: number;
+	startupAdmissionTimeout?: number;
+	activateRuntime?: (request: RuntimeServerActivationRequired) => Promise<void>;
 	connectTimeout?: number;
 	requestTimeout?: number;
 	disconnectTimeout?: number;
@@ -78,11 +101,15 @@ export interface WsClientOptions {
 
 export class ChatobbyWsError extends Error {
 	readonly code: string;
+	readonly diagnosticId?: string;
+	readonly retryable: boolean;
 
-	constructor(code: string, message: string) {
+	constructor(code: string, message: string, diagnosticId?: string, retryable = false) {
 		super(message);
 		this.name = "ChatobbyWsError";
 		this.code = code;
+		this.diagnosticId = diagnosticId;
+		this.retryable = retryable;
 	}
 }
 
@@ -102,7 +129,13 @@ interface ResponseFrame {
 	id: string;
 	type: "response" | "error";
 	result?: unknown;
-	error?: { code?: string; message?: string };
+	error?: {
+		code?: string;
+		publicMessage?: string;
+		message?: string;
+		diagnosticId?: string;
+		retryable?: boolean;
+	};
 }
 
 type ExtensionUIHandler = (request: WsExtensionUIRequest) => Promise<unknown>;
@@ -153,6 +186,8 @@ export class ChatobbyWsClient {
 			const socket = new WebSocketConstructor(this.options.url);
 			let opened = false;
 			let ready = false;
+			let startupAdmissionPending = false;
+			const activationRequests = new Set<string>();
 			let helloTimer: number | undefined;
 			const connectTimer = window.setTimeout(() => {
 				socket.close();
@@ -195,11 +230,36 @@ export class ChatobbyWsClient {
 			};
 			socket.onmessage = (event) => {
 				if (!ready && this.options.runtime) {
-					const acknowledgement = parseRuntimeServerHelloData(event.data);
-					if (!acknowledgement || !matchesExpectedRuntimeHello(acknowledgement, this.options.runtime)) {
+					const activation = parseRuntimeServerActivationData(event.data);
+					if (activation) {
+						if (!matchesExpectedRuntimeHandshake(activation, this.options.runtime)) {
+							socket.close(RUNTIME_CLOSE_CODES.identityMismatch, "invalid runtime activation request");
+							reject(new Error("Chatobby runtime returned an invalid activation identity"));
+							return;
+						}
+						if (!activationRequests.has(activation.activationId)) {
+							activationRequests.add(activation.activationId);
+							void this.respondToRuntimeActivation(socket, activation);
+						}
+						return;
+					}
+					const response = parseRuntimeServerHandshakeData(event.data);
+					if (!response || !matchesExpectedRuntimeHandshake(response, this.options.runtime)) {
 						clearHelloTimer();
 						socket.close(RUNTIME_CLOSE_CODES.identityMismatch, "invalid hello acknowledgement");
 						reject(new Error("Chatobby runtime returned an invalid hello acknowledgement"));
+						return;
+					}
+					if (response.type === "hello_pending") {
+						if (!startupAdmissionPending) {
+							startupAdmissionPending = true;
+							clearConnectTimer();
+							clearHelloTimer();
+							helloTimer = window.setTimeout(() => {
+								socket.close(RUNTIME_CLOSE_CODES.helloTimeout, "startup admission timeout");
+								reject(new Error(`Chatobby runtime startup admission timed out for ${this.options.url}`));
+							}, this.options.startupAdmissionTimeout ?? CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS);
+						}
 						return;
 					}
 					acceptConnection();
@@ -228,6 +288,32 @@ export class ChatobbyWsClient {
 		} finally {
 			this.connecting = undefined;
 		}
+	}
+
+	private async respondToRuntimeActivation(
+		socket: WebSocket,
+		request: RuntimeServerActivationRequired,
+	): Promise<void> {
+		let status: RuntimeClientActivationResult["status"] = "failed";
+		try {
+			if (!this.options.activateRuntime) throw new Error("Runtime activation is unavailable");
+			await this.options.activateRuntime(request);
+			status = "applied";
+		} catch {
+			// The runtime receives only the bounded outcome. Connector diagnostics
+			// retain the underlying local failure without crossing the wire.
+		}
+		if (socket.readyState !== WebSocket.OPEN) return;
+		const response: RuntimeClientActivationResult = {
+			type: "runtime_activation_result",
+			protocolVersion: request.protocolVersion,
+			instanceId: request.instanceId,
+			vaultId: request.vaultId,
+			activationId: request.activationId,
+			operation: request.operation,
+			status,
+		};
+		socket.send(JSON.stringify(response));
 	}
 
 	async disconnect(): Promise<void> {
@@ -263,6 +349,12 @@ export class ChatobbyWsClient {
 
 	async dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult> {
 		return resultField(await this.send("frontend_intent", intent), "outcome");
+	}
+
+	async registerProjectDirectoryCandidate(
+		request: WsProjectDirectoryCandidateRequest,
+	): Promise<WsProjectDirectoryCandidateResult> {
+		return resultField(await this.send("projects_directory_candidate", request), "candidate");
 	}
 
 	async getMcpCredentialReferences(): Promise<readonly string[]> {
@@ -367,6 +459,39 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("get_providers", {}), "providers");
 	}
 
+	async getLocalModelProviders(): Promise<WsLocalModelProviderDocument> {
+		return resultField(await this.send("get_local_model_providers", {}), "document");
+	}
+
+	async saveLocalModelProvider(
+		expectedRevision: number,
+		provider: WsLocalModelProvider,
+		apiKey?: string,
+	): Promise<WsLocalModelProviderDocument> {
+		return resultField(
+			await this.send("save_local_model_provider", { expectedRevision, provider, apiKey }),
+			"document",
+		);
+	}
+
+	async deleteLocalModelProvider(
+		expectedRevision: number,
+		providerId: string,
+		removeCredential = true,
+	): Promise<WsLocalModelProviderDocument> {
+		return resultField(
+			await this.send("delete_local_model_provider", { expectedRevision, providerId, removeCredential }),
+			"document",
+		);
+	}
+
+	async testLocalModelProvider(
+		provider: WsLocalModelProvider,
+		apiKey?: string,
+	): Promise<WsLocalModelProviderProbeResult> {
+		return resultField(await this.send("test_local_model_provider", { provider, apiKey }), "result");
+	}
+
 	async setAutoCompaction(settings: {
 		enabled?: boolean;
 		thresholdPercent?: number;
@@ -461,7 +586,9 @@ export class ChatobbyWsClient {
 				pending.reject(
 					new ChatobbyWsError(
 						parsed.error?.code ?? "handler_error",
-						parsed.error?.message ?? "Chatobby runtime request failed",
+						parsed.error?.publicMessage ?? parsed.error?.message ?? "Chatobby runtime request failed",
+						parsed.error?.diagnosticId,
+						parsed.error?.retryable ?? false,
 					),
 				);
 			} else {
@@ -479,9 +606,13 @@ export class ChatobbyWsClient {
 			}
 			return;
 		}
-		if (parsed.type === "bridge_config" && typeof parsed.url === "string" && typeof parsed.token === "string") {
-			const config: WsBridgeConfig = { type: "bridge_config", url: parsed.url, token: parsed.token };
-			for (const listener of this.bridgeConfigListeners) listener(config);
+		if (parsed.type === "bridge_config") {
+			try {
+				const config: WsBridgeConfig = parseObsidianBridgeConnectionConfig(parsed);
+				for (const listener of this.bridgeConfigListeners) listener(config);
+			} catch {
+				return;
+			}
 			return;
 		}
 		const request = parsed.request;
@@ -519,9 +650,11 @@ export class ChatobbyWsClient {
 				frontendIntentType === "mcp.discover" ||
 				frontendIntentType === "mcp.auth-complete"
 					? MCP_FRONTEND_OPERATION_TIMEOUT_MS
-					: method === "bash" || method === "compact"
-						? 130_000
-						: 30_000);
+					: method === "compact"
+						? CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS
+						: method === "bash"
+							? 130_000
+							: 30_000);
 			const timer = window.setTimeout(() => {
 				if (!this.pending.delete(id)) return;
 				reject(new Error(`Chatobby runtime request timed out after ${timeout}ms: ${method}`));
@@ -555,16 +688,25 @@ function isExtensionUIRequest(value: unknown): value is WsExtensionUIRequest {
 	);
 }
 
-function parseRuntimeServerHelloData(data: unknown): RuntimeServerHello | null {
+function parseRuntimeServerHandshakeData(data: unknown): RuntimeServerHello | RuntimeServerPending | null {
 	try {
-		return parseRuntimeServerHello(JSON.parse(String(data)));
+		const parsed: unknown = JSON.parse(String(data));
+		return parseRuntimeServerHello(parsed) ?? parseRuntimeServerPending(parsed);
 	} catch {
 		return null;
 	}
 }
 
-function matchesExpectedRuntimeHello(
-	acknowledgement: RuntimeServerHello,
+function parseRuntimeServerActivationData(data: unknown): RuntimeServerActivationRequired | null {
+	try {
+		return parseRuntimeServerActivationRequired(JSON.parse(String(data)));
+	} catch {
+		return null;
+	}
+}
+
+function matchesExpectedRuntimeHandshake(
+	acknowledgement: RuntimeServerHello | RuntimeServerPending | RuntimeServerActivationRequired,
 	expected: Omit<RuntimeClientHello, "type">,
 ): boolean {
 	return (

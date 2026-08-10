@@ -1,7 +1,8 @@
-import type { AutoNameStrategy, WsAutoCompactionSettings, WsBashResult, WsBridgeConfig, WsExtensionUIRequest, WsForkMessage, WsPromptAttachment, WsPromptContextPacket, WsProviderInfo, WsRuntimeInfo, WsSessionInfo, WsSessionStats } from "./connector-types.js";
-import { type RuntimeClientHello } from "./control/contracts.js";
+import type { AutoNameStrategy, WsAutoCompactionSettings, WsBashResult, WsBridgeConfig, WsExtensionUIRequest, WsForkMessage, WsLocalModelProvider, WsLocalModelProviderDocument, WsLocalModelProviderProbeResult, WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, WsPromptAttachment, WsPromptContextPacket, WsProviderInfo, WsRuntimeInfo, WsSessionInfo, WsSessionStats } from "./connector-types.js";
+export type { WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, } from "./connector-types.js";
+import { type RuntimeClientHello, type RuntimeServerActivationRequired } from "./control/contracts.js";
 import { type FrontendBootstrap, type FrontendBootstrapRequest, type FrontendIntent, type FrontendIntentResult, type FrontendPatch, type FrontendScreenRequest, type FrontendScreenViewModel, type FrontendSubscriptionAck, type FrontendSubscriptionRequest } from "./frontend-contracts.js";
-export type { RuntimeClientHello, RuntimeIdentity, RuntimeReadyDescriptor, RuntimeServerHello, RuntimeStatusResponse, } from "./control/contracts.js";
+export type { RuntimeClientHello, RuntimeIdentity, RuntimeReadyDescriptor, RuntimeServerActivationRequired, RuntimeServerHello, RuntimeServerPending, RuntimeStatusResponse, } from "./control/contracts.js";
 export { CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION, CHATOBBY_RUNTIME_PROTOCOL_VERSION, parseRuntimeReadyDescriptor, RUNTIME_CLOSE_CODES, } from "./control/contracts.js";
 export { CHATOBBY_FRONTEND_PROTOCOL_VERSION } from "./frontend-contracts.js";
 export type { FrontendChatobbyPluginBrandIcon, FrontendChatobbyPluginCapability, FrontendChatobbyPluginCapabilityCounts, FrontendChatobbyPluginCapabilityKind, FrontendChatobbyPluginDetail, FrontendChatobbyPluginMetric, FrontendChatobbyPluginSource, FrontendChatobbyPluginSummary, FrontendPluginMcpScreenViewModel, FrontendPublicSkillMetadata, } from "./frontend-plugin-contracts.js";
@@ -12,13 +13,17 @@ export interface WsClientOptions {
     onClose?: () => void;
     runtime?: Omit<RuntimeClientHello, "type">;
     helloTimeout?: number;
+    startupAdmissionTimeout?: number;
+    activateRuntime?: (request: RuntimeServerActivationRequired) => Promise<void>;
     connectTimeout?: number;
     requestTimeout?: number;
     disconnectTimeout?: number;
 }
 export declare class ChatobbyWsError extends Error {
     readonly code: string;
-    constructor(code: string, message: string);
+    readonly diagnosticId?: string;
+    readonly retryable: boolean;
+    constructor(code: string, message: string, diagnosticId?: string, retryable?: boolean);
 }
 type ExtensionUIHandler = (request: WsExtensionUIRequest) => Promise<unknown>;
 /**
@@ -40,11 +45,13 @@ export declare class ChatobbyWsClient {
     private extensionUIHandler?;
     constructor(options: WsClientOptions);
     connect(): Promise<void>;
+    private respondToRuntimeActivation;
     disconnect(): Promise<void>;
     getFrontendBootstrap(request: FrontendBootstrapRequest): Promise<FrontendBootstrap>;
     getFrontendScreen(request: FrontendScreenRequest): Promise<FrontendScreenViewModel>;
     subscribeFrontend(request: FrontendSubscriptionRequest): Promise<FrontendSubscriptionAck>;
     dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult>;
+    registerProjectDirectoryCandidate(request: WsProjectDirectoryCandidateRequest): Promise<WsProjectDirectoryCandidateResult>;
     getMcpCredentialReferences(): Promise<readonly string[]>;
     setMcpCredential(reference: string, secret?: string): Promise<void>;
     prompt(message: string, attachments?: WsPromptAttachment[], context?: WsPromptContextPacket, submissionId?: string): Promise<"started" | "retracted">;
@@ -74,6 +81,10 @@ export declare class ChatobbyWsClient {
     getLastAssistantText(): Promise<string | null>;
     setOperatorViewOpen(open: boolean): Promise<void>;
     getProviders(): Promise<WsProviderInfo[]>;
+    getLocalModelProviders(): Promise<WsLocalModelProviderDocument>;
+    saveLocalModelProvider(expectedRevision: number, provider: WsLocalModelProvider, apiKey?: string): Promise<WsLocalModelProviderDocument>;
+    deleteLocalModelProvider(expectedRevision: number, providerId: string, removeCredential?: boolean): Promise<WsLocalModelProviderDocument>;
+    testLocalModelProvider(provider: WsLocalModelProvider, apiKey?: string): Promise<WsLocalModelProviderProbeResult>;
     setAutoCompaction(settings: {
         enabled?: boolean;
         thresholdPercent?: number;

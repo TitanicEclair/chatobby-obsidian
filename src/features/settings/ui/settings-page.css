@@ -1,0 +1,18 @@
+.chatobby-settings-page__guide {
+	flex: 0 0 auto;
+	padding: 0 var(--chatobby-page-inline-padding) var(--size-4-2);
+	border-bottom: var(--border-width) solid var(--chatobby-border);
+}
+
+.chatobby-settings-page__guide .setting-item {
+	padding-top: 0;
+}
+
+.chatobby-settings-page__settings {
+	min-width: 0;
+}
+
+.chatobby-settings-page .chatobby-settings {
+	max-width: none;
+	padding-inline: var(--chatobby-page-inline-padding);
+}

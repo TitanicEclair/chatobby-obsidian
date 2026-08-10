@@ -447,6 +447,42 @@ describe("McpView", () => {
     expect(element.textContent).not.toContain("Registry");
   });
 
+  it("guides users from connection type to relevant details without exposing advanced fields first", () => {
+    const current = model({ selectedTab: "installed", servers: [], installedPlugins: [] });
+    const view = new McpView({
+      app,
+      getModel: () => current,
+      subscribe: () => () => {},
+      onBack: vi.fn(),
+      onRefresh: vi.fn(async () => {}),
+      onIntent: vi.fn(async (_intent: McpViewIntent) => {}),
+      onNavigatePlugin: vi.fn(),
+    });
+    const element = mount(view);
+    element.querySelector<HTMLButtonElement>("[aria-label='Add MCP connection']")?.click();
+
+    expect(element.textContent).toContain("What would you like to connect?");
+    expect(element.textContent).toContain("Connections give Chatobby new tools");
+    expect(element.textContent).toContain("Browse Verified");
+    const remote = [...element.querySelectorAll<HTMLButtonElement>(".chatobby-mcp__connection-choice")]
+      .find((button) => button.textContent?.includes("Online service"));
+    const local = [...element.querySelectorAll<HTMLButtonElement>(".chatobby-mcp__connection-choice")]
+      .find((button) => button.textContent?.includes("Program on this computer"));
+    expect(remote?.getAttribute("aria-pressed")).toBe("true");
+    expect(element.querySelector(".chatobby-mcp__remote-fields")?.classList.contains("is-hidden")).toBe(false);
+    expect(element.querySelector(".chatobby-mcp__local-fields")?.classList.contains("is-hidden")).toBe(true);
+    expect(element.querySelector(".chatobby-mcp__advanced")?.hasAttribute("open")).toBe(false);
+    expect(element.textContent).toContain("Save connection");
+    expect(element.textContent).toContain("Test connection");
+
+    local?.click();
+
+    expect(local?.getAttribute("aria-pressed")).toBe("true");
+    expect(remote?.getAttribute("aria-pressed")).toBe("false");
+    expect(element.querySelector(".chatobby-mcp__remote-fields")?.classList.contains("is-hidden")).toBe(true);
+    expect(element.querySelector(".chatobby-mcp__local-fields")?.classList.contains("is-hidden")).toBe(false);
+  });
+
   it("shows and invokes cancellation while an MCP connection is starting", async () => {
     const connectingServer = { ...server(), enabled: true, state: "connecting" as const };
     const selected = {

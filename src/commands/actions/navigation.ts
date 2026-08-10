@@ -32,7 +32,13 @@ export const navigationActions: ChatobbyAction[] = [
     id: "open-sessions",
     name: "Open sessions",
     group: "navigation",
-    run: (services) => services.withView((view) => view.commandOpenPage("session-picker")),
+    run: (services) => services.withView((view) => view.commandOpenPage("projects")),
+  },
+  {
+    id: "open-projects",
+    name: "Open Projects",
+    group: "navigation",
+    run: (services) => services.withView((view) => view.commandOpenPage("projects")),
   },
   {
     id: "open-subagents",
@@ -76,6 +82,12 @@ export const navigationActions: ChatobbyAction[] = [
     group: "navigation",
     run: (services) => services.withView((view) => view.commandOpenPage("mcp")),
   },
+	{
+		id: "open-settings",
+		name: "Open Settings",
+		group: "navigation",
+		run: (services) => services.withView((view) => view.commandOpenPage("settings")),
+	},
   {
     id: "focus-page-navigation",
     name: "Focus page sections",

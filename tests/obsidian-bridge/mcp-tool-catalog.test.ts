@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { OBSIDIAN_DEFAULT_DIRECT_TOOLS } from "../../src/vendor/@chatobby/obsidian-protocol/mcp-policy";
+import { OBSIDIAN_DEFAULT_DIRECT_TOOLS } from "../../src/vendor/@chatobby/obsidian-protocol/index.js";
 import {
   OBSIDIAN_ALL_TOOL_NAMES,
   OBSIDIAN_BROWSER_TOOL_NAMES,
@@ -17,7 +17,7 @@ import {
   OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
   OBSIDIAN_UI_TOOL_NAMES,
   OBSIDIAN_UI_TOOL_OPERATION_MAP,
-} from "../../src/vendor/@chatobby/obsidian-protocol/mcp-tool-catalog";
+} from "../../src/vendor/@chatobby/obsidian-protocol/index.js";
 import { listImplementedOperations } from "../../src/obsidian-bridge/operation-registry";
 
 const BACKEND_PLUGIN_NATIVE_TOOL_NAMES = [
@@ -69,6 +69,7 @@ const BACKEND_BROWSER_TOOL_NAMES = [
   "obsidian_browser_press",
   "obsidian_browser_wait",
   "obsidian_browser_screenshot",
+  "obsidian_browser_diagnostics",
   "obsidian_browser_close",
 ] as const;
 
@@ -126,8 +127,8 @@ describe("MCP tool catalog", () => {
         expect(implemented.has(operation)).toBe(true);
       }
     }
-    expect(Object.keys(OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP)).toHaveLength(75);
-    expect(OBSIDIAN_NON_DIRECT_TOOL_NAMES).toHaveLength(75);
+    expect(Object.keys(OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP)).toHaveLength(76);
+    expect(OBSIDIAN_NON_DIRECT_TOOL_NAMES).toHaveLength(76);
   });
 
   it("keeps CLI process operations runtime-owned", () => {
@@ -140,10 +141,10 @@ describe("MCP tool catalog", () => {
     }
   });
 
-  it("keeps six direct façades plus 75 deferred canonical obsidian_* names", () => {
+  it("keeps six direct façades plus 76 deferred canonical obsidian_* names", () => {
     expect(OBSIDIAN_DEFAULT_DIRECT_TOOLS).toHaveLength(6);
-    expect(OBSIDIAN_ALL_TOOL_NAMES).toHaveLength(81);
-    expect(new Set(OBSIDIAN_ALL_TOOL_NAMES).size).toBe(81);
+    expect(OBSIDIAN_ALL_TOOL_NAMES).toHaveLength(82);
+    expect(new Set(OBSIDIAN_ALL_TOOL_NAMES).size).toBe(82);
     for (const name of OBSIDIAN_ALL_TOOL_NAMES) {
       expect(name.startsWith("obsidian_")).toBe(true);
     }

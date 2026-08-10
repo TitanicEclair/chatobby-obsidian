@@ -5,6 +5,7 @@ import { normalizeVaultDirectoryInput } from "./session-directory";
 export interface FileExplorerSessionActions {
   startNewSession(vaultDirectoryPath: string): Promise<void>;
   resumeSession(vaultDirectoryPath: string): Promise<void>;
+  createProject(vaultDirectoryPath: string): Promise<void>;
 }
 
 /** Resolve a selected folder, or the parent folder of a selected file. */
@@ -30,11 +31,19 @@ export function addFileExplorerSessionMenuItems(
     )));
   menu.addItem((item) => item
     .setSection("chatobby")
-    .setTitle("Resume Chatobby session here")
+		.setTitle("View Chatobby sessions here")
     .setIcon("history")
     .onClick(() => runFileMenuAction(
-      "open sessions for this folder",
+			"open sessions for this folder",
       () => actions.resumeSession(directory),
+    )));
+  menu.addItem((item) => item
+    .setSection("chatobby")
+    .setTitle("Create Chatobby Project from folder")
+    .setIcon("folder-kanban")
+    .onClick(() => runFileMenuAction(
+      "create a Project from this folder",
+      () => actions.createProject(directory),
     )));
 }
 

@@ -762,71 +762,124 @@ export class McpView extends ChatobbyComponent {
 
   private renderEditor(parent: HTMLElement, model: FrontendPluginMcpScreenViewModel): void {
     const section = createPageSection(parent, {
-      title: "Add MCP connection",
-      description: "Connect a server you trust using a remote endpoint or local program. It is saved disabled until you review it.",
+      title: "Add a connection",
+      description: "Connections give Chatobby new tools from services or programs you choose. Nothing is enabled until you review it.",
       surface: "inset",
     });
     const form = section.content.createDiv({ cls: "chatobby-mcp__editor" });
-    const name = inputField(form, "Name", "mcp:new:name", "my-plugin");
-    const scope = selectField(form, "Available in", "mcp:new:scope", [
+    const introduction = form.createDiv({ cls: "chatobby-mcp__editor-intro" });
+    const introductionIcon = introduction.createSpan({ cls: "chatobby-mcp__editor-intro-icon", attr: { "aria-hidden": "true" } });
+    setIcon(introductionIcon, "plug-zap");
+    const introductionCopy = introduction.createDiv();
+    introductionCopy.createDiv({ cls: "chatobby-mcp__editor-intro-title", text: "What would you like to connect?" });
+    introductionCopy.createDiv({
+      cls: "chatobby-mcp__editor-intro-copy",
+      text: "Choose a connection type below. If a service is already in Verified, use that guided setup instead.",
+    });
+    const browse = introduction.createEl("button", { text: "Browse Verified", attr: { type: "button" } });
+    browse.addEventListener("click", () => void this.changeView("discover", ""));
+
+    const transport = selectField(form, "Connection type", "mcp:new:transport", [
+      ["remote", "Online service"],
+      ["local", "Program on this computer"],
+    ]);
+    transport.closest<HTMLElement>(".chatobby-mcp__field")?.addClass("chatobby-visually-hidden");
+    const choices = form.createDiv({
+      cls: "chatobby-mcp__connection-choices",
+      attr: { role: "group", "aria-label": "Connection type" },
+    });
+    const remoteChoice = connectionChoice(
+      choices,
+      "cloud",
+      "Online service",
+      "Use a server address supplied by an app or service.",
+      () => selectTransport("remote"),
+    );
+    const localChoice = connectionChoice(
+      choices,
+      "terminal-square",
+      "Program on this computer",
+      "Run a trusted command already installed on this device.",
+      () => selectTransport("local"),
+    );
+
+    const basics = form.createDiv({ cls: "chatobby-mcp__editor-section" });
+    basics.createDiv({ cls: "chatobby-mcp__editor-section-title", text: "Connection details" });
+    const name = inputField(basics, "Connection name", "mcp:new:name", "For example: GitHub or My calendar", "A short name you will recognize later.");
+    const scope = selectField(basics, "Where should it be available?", "mcp:new:scope", [
       ["project", "This project"],
       ["user", "All projects"],
-    ]);
-    const transport = selectField(form, "Connection", "mcp:new:transport", [
-      ["remote", "Remote URL"],
-      ["local", "Local program"],
-    ]);
-    const lifecycle = selectField(form, "Start plugin", "mcp:new:lifecycle", [
-      ["lazy", "When a tool is used"],
-      ["keep-alive", "Keep it running"],
-      ["eager", "When Chatobby starts"],
-    ]);
-    const url = inputField(form, "Server URL", "mcp:new:url", "https://example.com/mcp");
-    const authentication = selectField(form, "Sign-in method", "mcp:new:auth", [
+    ], "This controls where the connection is listed; permissions still decide what agents may use.");
+
+    const remoteFields = form.createDiv({ cls: "chatobby-mcp__editor-section chatobby-mcp__remote-fields" });
+    remoteFields.createDiv({ cls: "chatobby-mcp__editor-section-title", text: "Online service" });
+    const url = inputField(remoteFields, "Server address", "mcp:new:url", "https://example.com/mcp", "Paste the MCP address supplied by the service.");
+    const authentication = selectField(remoteFields, "How do you sign in?", "mcp:new:auth", [
       ["oauth", "Browser sign-in"],
       ["bearer", "Token stored by Obsidian"],
       ["none", "No sign-in"],
-    ]);
+    ], "Choose the method documented by the service. Chatobby never stores the token value in its settings.");
     const bearerField = secretReferenceField(
       this.props.app,
-      form,
+      remoteFields,
       "Saved access token",
       "mcp:new:credential",
       "",
     );
-    const command = inputField(form, "Program", "mcp:new:command", "npx");
-    const argumentsInput = textAreaField(form, "Arguments, one per line", "mcp:new:arguments");
-    const workingDirectory = inputField(form, "Working folder (optional)", "mcp:new:cwd", "");
-    const environment = textAreaField(form, "Environment mappings, NAME=ENV_VARIABLE", "mcp:new:environment");
-    const headers = textAreaField(form, "Header mappings, HEADER=ENV_VARIABLE", "mcp:new:headers");
+
+    const localFields = form.createDiv({ cls: "chatobby-mcp__editor-section chatobby-mcp__local-fields" });
+    localFields.createDiv({ cls: "chatobby-mcp__editor-section-title", text: "Program on this computer" });
+    const command = inputField(localFields, "Program or command", "mcp:new:command", "For example: npx", "Use the command from the server's installation instructions.");
+    const argumentsInput = textAreaField(localFields, "Arguments", "mcp:new:arguments", "Put each argument on its own line.");
+    const workingDirectory = inputField(localFields, "Working folder", "mcp:new:cwd", "Optional", "Leave blank unless the server requires a particular folder.");
+
+    const advanced = form.createEl("details", { cls: "chatobby-mcp__advanced" });
+    advanced.createEl("summary", { text: "Advanced options" });
+    const advancedBody = advanced.createDiv({ cls: "chatobby-mcp__advanced-body" });
+    const lifecycle = selectField(advancedBody, "When should Chatobby start it?", "mcp:new:lifecycle", [
+      ["lazy", "Only when one of its tools is used"],
+      ["keep-alive", "Keep it available after first use"],
+      ["eager", "When Chatobby starts"],
+    ]);
+    const environment = textAreaField(advancedBody, "Environment variables", "mcp:new:environment", "Use NAME=ENV_VARIABLE, one per line. Values come from the existing environment.");
+    const headers = textAreaField(advancedBody, "Request headers", "mcp:new:headers", "Use HEADER=ENV_VARIABLE, one per line. Values come from the existing environment.");
     const refreshTransport = (): void => {
       const remote = transport.value === "remote";
-      url.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", !remote);
-      authentication.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", !remote);
+      remoteFields.toggleClass("is-hidden", !remote);
+      localFields.toggleClass("is-hidden", remote);
       bearerField.wrapper.toggleClass(
         "is-hidden",
         !remote || authentication.value !== "bearer",
       );
       headers.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", !remote);
-      command.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", remote);
-      argumentsInput.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", remote);
-      workingDirectory.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", remote);
       environment.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", remote);
+      remoteChoice.setAttr("aria-pressed", String(remote));
+      localChoice.setAttr("aria-pressed", String(!remote));
+      remoteChoice.toggleClass("is-selected", remote);
+      localChoice.toggleClass("is-selected", !remote);
+    };
+    const selectTransport = (value: "remote" | "local"): void => {
+      transport.value = value;
+      refreshTransport();
     };
     transport.addEventListener("change", refreshTransport);
     authentication.addEventListener("change", refreshTransport);
     refreshTransport();
+    form.createDiv({
+      cls: "chatobby-mcp__save-note",
+      text: "Saving adds this connection turned off. Test it, review the tools it provides, then enable it when you are ready.",
+    });
     const actions = createPageActionRow(form);
     action(actions, "Cancel", () => {
       this.creating = false;
       this.renderState(this.props.getModel());
     });
-    const preview = actions.createEl("button", { text: "Check", attr: { type: "button" } });
+    const preview = actions.createEl("button", { text: "Test connection", attr: { type: "button" } });
     preview.addEventListener("click", () => void this.runIntent({
       type: "mcp.preview",
       payload: { draft: collectDraft() },
     }));
-    const save = actions.createEl("button", { cls: "mod-cta", text: "Add disabled", attr: { type: "button" } });
+    const save = actions.createEl("button", { cls: "mod-cta", text: "Save connection", attr: { type: "button" } });
     save.addEventListener("click", () => void this.runIntent({
       type: "mcp.save",
       payload: {
@@ -1050,16 +1103,21 @@ function inputField(
   label: string,
   key: string,
   placeholder: string,
+  help?: string,
 ): HTMLInputElement {
   const wrapper = parent.createEl("label", { cls: "chatobby-mcp__field" });
   wrapper.createSpan({ text: label });
-  return wrapper.createEl("input", { attr: { placeholder, "data-page-state-key": key } });
+  const input = wrapper.createEl("input", { attr: { placeholder, "data-page-state-key": key } });
+  if (help) wrapper.createSpan({ cls: "chatobby-mcp__field-help", text: help });
+  return input;
 }
 
-function textAreaField(parent: HTMLElement, label: string, key: string): HTMLTextAreaElement {
+function textAreaField(parent: HTMLElement, label: string, key: string, help?: string): HTMLTextAreaElement {
   const wrapper = parent.createEl("label", { cls: "chatobby-mcp__field" });
   wrapper.createSpan({ text: label });
-  return wrapper.createEl("textarea", { attr: { rows: "3", "data-page-state-key": key } });
+  const textarea = wrapper.createEl("textarea", { attr: { rows: "3", "data-page-state-key": key } });
+  if (help) wrapper.createSpan({ cls: "chatobby-mcp__field-help", text: help });
+  return textarea;
 }
 
 function selectField(
@@ -1067,12 +1125,34 @@ function selectField(
   label: string,
   key: string,
   options: readonly (readonly [string, string])[],
+  help?: string,
 ): HTMLSelectElement {
   const wrapper = parent.createEl("label", { cls: "chatobby-mcp__field" });
   wrapper.createSpan({ text: label });
   const select = wrapper.createEl("select", { attr: { "data-page-state-key": key } });
   selectOptions(select, options);
+  if (help) wrapper.createSpan({ cls: "chatobby-mcp__field-help", text: help });
   return select;
+}
+
+function connectionChoice(
+  parent: HTMLElement,
+  iconName: string,
+  title: string,
+  description: string,
+  onChoose: () => void,
+): HTMLButtonElement {
+  const button = parent.createEl("button", {
+    cls: "chatobby-mcp__connection-choice",
+    attr: { type: "button", "aria-pressed": "false" },
+  });
+  const icon = button.createSpan({ cls: "chatobby-mcp__connection-choice-icon", attr: { "aria-hidden": "true" } });
+  setIcon(icon, iconName);
+  const copy = button.createSpan({ cls: "chatobby-mcp__connection-choice-copy" });
+  copy.createSpan({ cls: "chatobby-mcp__connection-choice-title", text: title });
+  copy.createSpan({ cls: "chatobby-mcp__connection-choice-description", text: description });
+  button.addEventListener("click", onChoose);
+  return button;
 }
 
 function selectOptions(

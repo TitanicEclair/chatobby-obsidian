@@ -95,6 +95,16 @@ describe("runtime settings migration", () => {
     expect(settings.commandShell).toBe("auto");
   });
 
+	it("loads the per-vault Project folder choice and rejects stale values", async () => {
+		const remembered = defaults();
+		await new SettingsStore(fakePlugin({ directoryProjectLaunchBehavior: "reuse-canonical" }).value, remembered).load();
+		expect(remembered.directoryProjectLaunchBehavior).toBe("reuse-canonical");
+
+		const invalid = defaults();
+		await new SettingsStore(fakePlugin({ directoryProjectLaunchBehavior: "legacy-directory" }).value, invalid).load();
+		expect(invalid.directoryProjectLaunchBehavior).toBe("ask");
+	});
+
   it("fills missing composer shortcuts and preserves valid custom bindings", async () => {
     const plugin = fakePlugin({ composerKeybindings: { stashDraft: "Mod+K" } });
     const settings = defaults();

@@ -53,6 +53,19 @@ runtime from Chatobby's in-plugin action.
 
 ## Release requirements
 
+Development happens only in the private connector repository. Ordinary
+feature branches merge into its default `dev` branch. A temporary
+`release/<version>` branch is then cut from `dev`, paired with the matching
+private runtime release branch, and used for candidate testing. After manual
+acceptance, that exact connector commit promotes through a pull request into
+private `main`. Public connector `main` receives only the separately authorized
+projection of the approved private commit.
+
+The private release workflow is intentionally inert: the tag-triggered
+publisher runs only when `github.repository` is
+`TitanicEclair/chatobby-obsidian`. A private tag can therefore never create a
+connector release accidentally.
+
 Every public version must:
 
 1. use the same plugin and runtime version and tag;

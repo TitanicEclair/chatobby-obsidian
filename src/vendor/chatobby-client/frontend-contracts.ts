@@ -4,7 +4,15 @@ import type { ThinkingLevel } from "./wire-types.ts";
 /** Public, data-only protocol consumed by reviewable Chatobby frontends. */
 export const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 1;
 
-export type FrontendScreenId = "memory" | "permissions" | "events" | "queries" | "channels" | "subagents" | "mcp";
+export type FrontendScreenId =
+	| "projects"
+	| "memory"
+	| "permissions"
+	| "events"
+	| "queries"
+	| "channels"
+	| "subagents"
+	| "mcp";
 export type FrontendIconToken =
 	| "activity"
 	| "agent"
@@ -116,6 +124,9 @@ export interface FrontendSessionViewModel {
 	readonly name?: string;
 	readonly recoveryPath?: string;
 	readonly workingDirectory: string;
+	readonly workspace:
+		| { readonly kind: "vault"; readonly label: string }
+		| { readonly kind: "project"; readonly projectId: string; readonly label: string };
 	readonly model: string;
 	readonly thinkingLevel: ThinkingLevel;
 	readonly streaming: boolean;
@@ -340,6 +351,100 @@ export interface FrontendChannelGroupViewModel {
 	readonly items: readonly FrontendChannelDirectoryItem[];
 }
 
+export type FrontendProjectLifecycleFilter = "active" | "archived" | "all";
+export type FrontendProjectAvailabilityFilter =
+	| "all"
+	| "available"
+	| "attention"
+	| "missing"
+	| "conflict"
+	| "relink-required";
+export type FrontendProjectSort = "updated-desc" | "name-asc" | "created-desc";
+
+export interface FrontendProjectRootViewModel {
+	readonly rootId: string;
+	readonly directoryId: string;
+	readonly label: string;
+	readonly primary: boolean;
+	readonly locationKind: "vault-relative" | "external";
+	readonly vaultRelativePath?: string;
+	readonly directoryReuse: "canonical" | "none";
+	readonly markerPolicy: "required" | "optional" | "disabled";
+	readonly recoveryMode: "marker" | "device-binding-only";
+	readonly availability: "available" | "missing" | "conflict" | "relink-required" | "unregistered";
+	readonly availabilityLabel: string;
+	readonly recoveryAction?: "relink" | "resolve-conflict" | "repair-marker";
+}
+
+export interface FrontendProjectSessionViewModel {
+	readonly sessionId: string;
+	readonly name: string;
+	readonly createdAt: string;
+	readonly updatedAt: string;
+	readonly messageCount: number;
+	readonly running: boolean;
+	readonly activeRootId?: string;
+}
+
+export interface FrontendProjectSummaryViewModel {
+	readonly projectId: string;
+	readonly revision: number;
+	readonly name: string;
+	readonly description?: string;
+	readonly lifecycle: "active" | "archived";
+	readonly creationKind: "directory-session" | "manual" | "migration";
+	readonly primaryRootId?: string;
+	readonly primaryRootLabel?: string;
+	readonly canonicalVaultRelativePath?: string;
+	readonly rootCount: number;
+	readonly sessionCount: number;
+	readonly availability: "available" | "attention" | "missing" | "conflict" | "relink-required";
+	readonly availabilityLabel: string;
+	readonly createdAt: string;
+	readonly updatedAt: string;
+}
+
+export interface FrontendProjectDetailViewModel {
+	readonly projectId: string;
+	readonly revision: number;
+	readonly name: string;
+	readonly description?: string;
+	readonly lifecycle: "active" | "archived";
+	readonly creationKind: "directory-session" | "manual" | "migration";
+	readonly primaryRootId?: string;
+	readonly roots: readonly FrontendProjectRootViewModel[];
+	readonly sessions: readonly FrontendProjectSessionViewModel[];
+}
+
+export interface FrontendRunningWorkspaceViewModel {
+	readonly kind: "vault" | "project" | "unresolved";
+	readonly label: string;
+	readonly projectId?: string;
+	readonly activeRootId?: string;
+	readonly attachedRootIds: readonly string[];
+}
+
+export interface FrontendProjectScreenViewModel {
+	readonly screenId: "projects";
+	readonly revision: number;
+	readonly snapshotSequence: number;
+	readonly loading: boolean;
+	readonly error?: string;
+	readonly statusMessage?: string;
+	readonly query: string;
+	readonly lifecycleFilter: FrontendProjectLifecycleFilter;
+	readonly availabilityFilter: FrontendProjectAvailabilityFilter;
+	readonly sort: FrontendProjectSort;
+	readonly selectedProjectId?: string;
+	readonly runningIn: FrontendRunningWorkspaceViewModel;
+	readonly projects: readonly FrontendProjectSummaryViewModel[];
+	readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
+	readonly detail?: FrontendProjectDetailViewModel;
+	readonly lifecycleOptions: readonly FrontendChoiceOption[];
+	readonly availabilityOptions: readonly FrontendChoiceOption[];
+	readonly sortOptions: readonly FrontendChoiceOption[];
+}
+
 export interface FrontendChannelMessageViewModel {
 	readonly id: string;
 	readonly order: number;
@@ -366,7 +471,9 @@ export interface FrontendChannelScreenViewModel {
 	readonly nextCursor?: string;
 }
 
-export type FrontendMemoryFilter = "all" | "profile" | "vault" | "project" | "lessons" | "archived";
+export type FrontendMemoryCollectionFilter = "all" | "profile" | "vault" | "project" | "lessons";
+export type FrontendMemoryScopeFilter = "available" | "vault" | "current-project";
+export type FrontendMemoryStatusFilter = "active" | "archived" | "all";
 export type FrontendMemoryCategoryFilter =
 	| "all"
 	| "uncategorized"
@@ -384,6 +491,8 @@ export interface FrontendMemoryRecordViewModel {
 	readonly revision: number;
 	readonly iconToken: FrontendIconToken;
 	readonly label: string;
+	readonly locationLabel: string;
+	readonly scopeRelationLabel: string;
 	readonly stateLabel?: string;
 	readonly content: string;
 	readonly provenanceLabel: string;
@@ -417,16 +526,21 @@ export interface FrontendMemoryScreenViewModel {
 	readonly loading: boolean;
 	readonly error?: string;
 	readonly statusMessage?: string;
-	readonly filter: FrontendMemoryFilter;
-	readonly filters: readonly {
-		readonly id: FrontendMemoryFilter;
+	readonly scope: {
 		readonly label: string;
-		readonly selected: boolean;
-	}[];
+		readonly path?: string;
+		readonly description: string;
+	};
+	readonly scopeFilter: FrontendMemoryScopeFilter;
+	readonly scopeOptions: readonly FrontendChoiceOption[];
+	readonly collection: FrontendMemoryCollectionFilter;
+	readonly collectionOptions: readonly FrontendChoiceOption[];
+	readonly status: FrontendMemoryStatusFilter;
+	readonly statusOptions: readonly FrontendChoiceOption[];
 	readonly query: string;
 	readonly searchResultCount?: number;
-	readonly category: FrontendMemoryCategoryFilter;
-	readonly categoryOptions: readonly FrontendChoiceOption[];
+	readonly lessonCategory: FrontendMemoryCategoryFilter;
+	readonly lessonCategoryOptions: readonly FrontendChoiceOption[];
 	readonly sort: FrontendMemorySort;
 	readonly sortOptions: readonly FrontendChoiceOption[];
 	readonly records: readonly FrontendMemoryRecordViewModel[];
@@ -782,7 +896,10 @@ export interface FrontendEventScreenViewModel {
 export type FrontendSubagentExecutionMode = "auto" | "in-process" | "worker-process";
 export type FrontendSubagentResolvedExecutionMode = Exclude<FrontendSubagentExecutionMode, "auto">;
 export type FrontendSubagentContextMode = "fresh" | "fork";
-export type FrontendSubagentDefinitionScope = "global" | "vault" | "directory" | "session";
+/** Internal resolution layers reported to the frontend for provenance and effective settings. */
+export type FrontendSubagentResolutionLayer = "global" | "vault" | "directory" | "session";
+/** Availability choices accepted when a user creates or edits an agent role. */
+export type FrontendSubagentUserDefinitionScope = "vault" | "directory";
 export type FrontendSubagentRunStatus =
 	| "created"
 	| "queued"
@@ -850,7 +967,7 @@ export interface FrontendSubagentAgentDefinition {
 	id: string;
 	name: string;
 	description: string;
-	scope: FrontendSubagentDefinitionScope;
+	scope: FrontendSubagentResolutionLayer;
 	scopeId: string;
 	systemPrompt: string;
 	enabled: boolean;
@@ -859,6 +976,11 @@ export interface FrontendSubagentAgentDefinition {
 	revision: number;
 	updatedAt: number;
 }
+
+export type FrontendSubagentUserAgentDefinition = Omit<FrontendSubagentAgentDefinition, "scope" | "builtIn"> & {
+	scope: FrontendSubagentUserDefinitionScope;
+	builtIn?: never;
+};
 
 export interface FrontendSubagentAcceptancePolicy {
 	level: "none" | "attested" | "checked" | "verified" | "reviewed";
@@ -1253,9 +1375,9 @@ export interface FrontendSubagentSettingsViewModel {
 		retentionDays: number;
 		allowSiblingCommunication: boolean;
 	};
-	scope?: { kind: FrontendSubagentDefinitionScope; id: string };
+	scope?: { kind: FrontendSubagentResolutionLayer; id: string };
 	revision: number;
-	sources: Partial<Record<string, { kind: FrontendSubagentDefinitionScope; id: string }>>;
+	sources: Partial<Record<string, { kind: FrontendSubagentResolutionLayer; id: string }>>;
 }
 
 export interface FrontendSubagentPermissionSnapshotViewModel {
@@ -1314,6 +1436,7 @@ export interface FrontendSubagentScreenViewModel {
 }
 
 export type FrontendScreenViewModel =
+	| FrontendProjectScreenViewModel
 	| FrontendChannelScreenViewModel
 	| FrontendMemoryScreenViewModel
 	| FrontendContextQueryScreenViewModel
@@ -1442,6 +1565,7 @@ export type FrontendIntent =
 			readonly type: "session.create";
 			readonly payload: {
 				readonly cwdOverride?: string;
+				readonly workspace?: { readonly kind: "vault" } | { readonly kind: "project"; readonly projectId: string };
 				readonly model?: string;
 				readonly thinkingLevel?: ThinkingLevel;
 				readonly permissionProfileId?: string | null;
@@ -1455,6 +1579,23 @@ export type FrontendIntent =
 				readonly model?: string;
 				readonly thinkingLevel?: ThinkingLevel;
 				readonly permissionProfileId?: string | null;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "session.resume-by-id";
+			readonly payload: { readonly sessionId: string };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "session.change-workspace";
+			readonly payload: {
+				readonly target:
+					| { readonly kind: "vault" }
+					| {
+							readonly kind: "project";
+							readonly projectId: string;
+							readonly activeRootId?: string;
+							readonly sessionAttachedRootIds: readonly string[];
+					  };
 			};
 	  })
 	| (FrontendIntentBase & {
@@ -1484,6 +1625,85 @@ export type FrontendIntent =
 	| (FrontendIntentBase & {
 			readonly type: "operator.set-view-open";
 			readonly payload: { readonly open: boolean };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.set-view";
+			readonly payload: {
+				readonly query: string;
+				readonly lifecycleFilter: FrontendProjectLifecycleFilter;
+				readonly availabilityFilter: FrontendProjectAvailabilityFilter;
+				readonly sort: FrontendProjectSort;
+				readonly selectedProjectId?: string;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.create";
+			readonly payload: {
+				readonly name: string;
+				readonly description?: string;
+				readonly vaultRelativePath?: string;
+				readonly directoryCandidateRef?: string;
+				readonly directoryReuse: "canonical" | "none";
+				readonly markerPolicy: "required" | "optional" | "disabled";
+				readonly useForCurrentSession?: boolean;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.replace-details";
+			readonly payload: {
+				readonly projectId: string;
+				readonly expectedProjectRevision: number;
+				readonly name: string;
+				readonly description?: string;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.archive" | "projects.restore";
+			readonly payload: { readonly projectId: string; readonly expectedProjectRevision: number };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.root-add";
+			readonly payload: {
+				readonly projectId: string;
+				readonly expectedProjectRevision: number;
+				readonly label: string;
+				readonly vaultRelativePath?: string;
+				readonly directoryCandidateRef?: string;
+				readonly directoryReuse: "canonical" | "none";
+				readonly markerPolicy: "required" | "optional" | "disabled";
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.root-relabel";
+			readonly payload: {
+				readonly projectId: string;
+				readonly expectedProjectRevision: number;
+				readonly rootId: string;
+				readonly label: string;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.root-set-primary" | "projects.root-remove";
+			readonly payload: {
+				readonly projectId: string;
+				readonly expectedProjectRevision: number;
+				readonly rootId: string;
+				readonly replacementRootId?: string;
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.root-recover";
+			readonly payload: { readonly projectId: string; readonly rootId: string };
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.root-relink";
+			readonly payload: {
+				readonly projectId: string;
+				readonly expectedProjectRevision: number;
+				readonly rootId: string;
+				readonly vaultRelativePath?: string;
+				readonly directoryCandidateRef?: string;
+			};
 	  })
 	| (FrontendIntentBase & {
 			readonly type: "channel.select";
@@ -1526,9 +1746,11 @@ export type FrontendIntent =
 	| (FrontendIntentBase & {
 			readonly type: "memory.set-view";
 			readonly payload: {
-				readonly filter: FrontendMemoryFilter;
+				readonly scopeFilter: FrontendMemoryScopeFilter;
+				readonly collection: FrontendMemoryCollectionFilter;
+				readonly status: FrontendMemoryStatusFilter;
 				readonly query: string;
-				readonly category: FrontendMemoryCategoryFilter;
+				readonly lessonCategory: FrontendMemoryCategoryFilter;
 				readonly sort: FrontendMemorySort;
 			};
 	  })
@@ -1876,7 +2098,7 @@ export type FrontendIntent =
 	| (FrontendIntentBase & {
 			readonly type: "subagents.save-definition";
 			readonly payload: {
-				readonly definition: FrontendSubagentAgentDefinition;
+				readonly definition: FrontendSubagentUserAgentDefinition;
 				readonly permissionProfileId: string;
 			};
 	  })
@@ -1884,7 +2106,7 @@ export type FrontendIntent =
 			readonly type: "subagents.delete-definition";
 			readonly payload: {
 				readonly definitionId: string;
-				readonly scope: FrontendSubagentDefinitionScope;
+				readonly scope: FrontendSubagentUserDefinitionScope;
 				readonly scopeId: string;
 				readonly expectedDefinitionRevision: number;
 			};
@@ -2033,9 +2255,11 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			...base,
 			type: input.type,
 			payload: {
-				filter: requireMemoryFilter(payload.filter),
+				scopeFilter: requireMemoryScopeFilter(payload.scopeFilter),
+				collection: requireMemoryCollectionFilter(payload.collection),
+				status: requireMemoryStatusFilter(payload.status),
 				query: typeof payload.query === "string" ? payload.query : "",
-				category: requireMemoryCategoryFilter(payload.category),
+				lessonCategory: requireMemoryCategoryFilter(payload.lessonCategory),
 				sort: requireMemorySort(payload.sort),
 			},
 		};
@@ -2588,10 +2812,11 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 	}
 	if (input.type === "subagents.save-definition") {
 		const permissionProfileId = requireString(payload.permissionProfileId, "payload.permissionProfileId");
+		const definition = parseUserAgentDefinition(payload.definition);
 		return {
 			...base,
 			type: input.type,
-			payload: { definition: parseAgentDefinition(payload.definition), permissionProfileId },
+			payload: { definition, permissionProfileId },
 		};
 	}
 	if (input.type === "subagents.delete-definition") {
@@ -2600,7 +2825,7 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			type: input.type,
 			payload: {
 				definitionId: requireString(payload.definitionId, "payload.definitionId"),
-				scope: requireDefinitionScope(payload.scope),
+				scope: requireUserDefinitionScope(payload.scope),
 				scopeId: requireString(payload.scopeId, "payload.scopeId"),
 				expectedDefinitionRevision: requireSafeInteger(
 					payload.expectedDefinitionRevision,
@@ -2612,15 +2837,189 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 	if (input.type === "subagents.update-settings") {
 		return { ...base, type: input.type, payload: { settings: parseResolvedSubagentSettings(payload.settings) } };
 	}
+	if (input.type === "projects.set-view") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				query: typeof payload.query === "string" ? payload.query : "",
+				lifecycleFilter: requireProjectLifecycleFilter(payload.lifecycleFilter),
+				availabilityFilter: requireProjectAvailabilityFilter(payload.availabilityFilter),
+				sort: requireProjectSort(payload.sort),
+				selectedProjectId: optionalString(payload.selectedProjectId, "payload.selectedProjectId"),
+			},
+		};
+	}
+	if (input.type === "projects.create") {
+		const directoryReuse = requireString(payload.directoryReuse, "payload.directoryReuse");
+		if (directoryReuse !== "canonical" && directoryReuse !== "none") {
+			throw new Error("payload.directoryReuse is invalid");
+		}
+		const markerPolicy = requireString(payload.markerPolicy, "payload.markerPolicy");
+		if (markerPolicy !== "required" && markerPolicy !== "optional" && markerPolicy !== "disabled") {
+			throw new Error("payload.markerPolicy is invalid");
+		}
+		const vaultRelativePath = optionalString(payload.vaultRelativePath, "payload.vaultRelativePath");
+		const directoryCandidateRef = optionalString(payload.directoryCandidateRef, "payload.directoryCandidateRef");
+		if (vaultRelativePath !== undefined && directoryCandidateRef !== undefined) {
+			throw new Error("Choose either a vault folder or an operating-system directory candidate, not both.");
+		}
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				name: requireString(payload.name, "payload.name"),
+				description: optionalString(payload.description, "payload.description"),
+				vaultRelativePath,
+				directoryCandidateRef,
+				directoryReuse,
+				markerPolicy,
+				useForCurrentSession:
+					payload.useForCurrentSession === undefined
+						? undefined
+						: requireBoolean(payload.useForCurrentSession, "payload.useForCurrentSession"),
+			},
+		};
+	}
+	if (input.type === "projects.replace-details") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				expectedProjectRevision: requireSafeInteger(
+					payload.expectedProjectRevision,
+					"payload.expectedProjectRevision",
+				),
+				name: requireString(payload.name, "payload.name"),
+				description: optionalString(payload.description, "payload.description"),
+			},
+		};
+	}
+	if (input.type === "projects.archive" || input.type === "projects.restore") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				expectedProjectRevision: requireSafeInteger(
+					payload.expectedProjectRevision,
+					"payload.expectedProjectRevision",
+				),
+			},
+		};
+	}
+	if (input.type === "projects.root-add") {
+		const directoryReuse = requireProjectDirectoryReuse(payload.directoryReuse);
+		const markerPolicy = requireProjectMarkerPolicy(payload.markerPolicy);
+		const vaultRelativePath = optionalString(payload.vaultRelativePath, "payload.vaultRelativePath");
+		const directoryCandidateRef = optionalString(payload.directoryCandidateRef, "payload.directoryCandidateRef");
+		if ((vaultRelativePath === undefined) === (directoryCandidateRef === undefined)) {
+			throw new Error("Choose exactly one Project folder source.");
+		}
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				expectedProjectRevision: requireSafeInteger(
+					payload.expectedProjectRevision,
+					"payload.expectedProjectRevision",
+				),
+				label: requireString(payload.label, "payload.label"),
+				vaultRelativePath,
+				directoryCandidateRef,
+				directoryReuse,
+				markerPolicy,
+			},
+		};
+	}
+	if (input.type === "projects.root-relabel") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				expectedProjectRevision: requireSafeInteger(
+					payload.expectedProjectRevision,
+					"payload.expectedProjectRevision",
+				),
+				rootId: requireString(payload.rootId, "payload.rootId"),
+				label: requireString(payload.label, "payload.label"),
+			},
+		};
+	}
+	if (input.type === "projects.root-set-primary" || input.type === "projects.root-remove") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				expectedProjectRevision: requireSafeInteger(
+					payload.expectedProjectRevision,
+					"payload.expectedProjectRevision",
+				),
+				rootId: requireString(payload.rootId, "payload.rootId"),
+				replacementRootId: optionalString(payload.replacementRootId, "payload.replacementRootId"),
+			},
+		};
+	}
+	if (input.type === "projects.root-recover") {
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				rootId: requireString(payload.rootId, "payload.rootId"),
+			},
+		};
+	}
+	if (input.type === "projects.root-relink") {
+		const vaultRelativePath = optionalString(payload.vaultRelativePath, "payload.vaultRelativePath");
+		const directoryCandidateRef = optionalString(payload.directoryCandidateRef, "payload.directoryCandidateRef");
+		if ((vaultRelativePath === undefined) === (directoryCandidateRef === undefined)) {
+			throw new Error("Choose exactly one replacement folder source.");
+		}
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				expectedProjectRevision: requireSafeInteger(
+					payload.expectedProjectRevision,
+					"payload.expectedProjectRevision",
+				),
+				rootId: requireString(payload.rootId, "payload.rootId"),
+				vaultRelativePath,
+				directoryCandidateRef,
+			},
+		};
+	}
 	if (input.type === "operator.set-view-open") {
 		return { ...base, type: input.type, payload: { open: requireBoolean(payload.open, "payload.open") } };
 	}
 	if (input.type === "session.create") {
+		const workspaceRecord =
+			payload.workspace === undefined ? undefined : requireRecord(payload.workspace, "payload.workspace");
+		const workspace =
+			workspaceRecord === undefined
+				? undefined
+				: workspaceRecord.kind === "vault"
+					? ({ kind: "vault" } as const)
+					: workspaceRecord.kind === "project"
+						? {
+								kind: "project" as const,
+								projectId: requireString(workspaceRecord.projectId, "payload.workspace.projectId"),
+							}
+						: (() => {
+								throw new Error("payload.workspace.kind is invalid");
+							})();
 		return {
 			...base,
 			type: input.type,
 			payload: {
 				cwdOverride: optionalString(payload.cwdOverride, "payload.cwdOverride"),
+				workspace,
 				model: optionalString(payload.model, "payload.model"),
 				thinkingLevel: optionalThinkingLevel(payload.thinkingLevel),
 				permissionProfileId: optionalNullableString(payload.permissionProfileId, "payload.permissionProfileId"),
@@ -2637,6 +3036,36 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				model: optionalString(payload.model, "payload.model"),
 				thinkingLevel: optionalThinkingLevel(payload.thinkingLevel),
 				permissionProfileId: optionalNullableString(payload.permissionProfileId, "payload.permissionProfileId"),
+			},
+		};
+	}
+	if (input.type === "session.resume-by-id") {
+		return {
+			...base,
+			type: input.type,
+			payload: { sessionId: requireString(payload.sessionId, "payload.sessionId") },
+		};
+	}
+	if (input.type === "session.change-workspace") {
+		const target = requireRecord(payload.target, "payload.target");
+		if (target.kind === "vault") {
+			return { ...base, type: input.type, payload: { target: { kind: "vault" } } };
+		}
+		if (target.kind !== "project") throw new Error("payload.target.kind is invalid");
+		const attachedRootIds = requireStringArray(
+			target.sessionAttachedRootIds,
+			"payload.target.sessionAttachedRootIds",
+		);
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				target: {
+					kind: "project",
+					projectId: requireString(target.projectId, "payload.target.projectId"),
+					activeRootId: optionalString(target.activeRootId, "payload.target.activeRootId"),
+					sessionAttachedRootIds: Object.freeze([...attachedRootIds]),
+				},
 			},
 		};
 	}
@@ -2678,6 +3107,7 @@ export function parseFrontendScreenRequest(value: unknown): FrontendScreenReques
 	requireSchemaVersion(input);
 	const screenId = requireString(input.screenId, "screenId");
 	if (
+		screenId !== "projects" &&
 		screenId !== "memory" &&
 		screenId !== "permissions" &&
 		screenId !== "events" &&
@@ -2699,6 +3129,7 @@ export function parseFrontendScreenRequest(value: unknown): FrontendScreenReques
 export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 	const input = requireRecord(value, "frontend screen");
 	if (
+		input.screenId !== "projects" &&
 		input.screenId !== "channels" &&
 		input.screenId !== "memory" &&
 		input.screenId !== "permissions" &&
@@ -2711,6 +3142,22 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 	}
 	requireSafeInteger(input.revision, "revision");
 	requireBoolean(input.loading, "loading");
+	if (input.screenId === "projects") {
+		requireSafeInteger(input.snapshotSequence, "snapshotSequence");
+		if (typeof input.query !== "string") throw new Error("query must be a string");
+		requireProjectLifecycleFilter(input.lifecycleFilter);
+		requireProjectAvailabilityFilter(input.availabilityFilter);
+		requireProjectSort(input.sort);
+		optionalString(input.selectedProjectId, "selectedProjectId");
+		requireRecord(input.runningIn, "runningIn");
+		requireArray(input.projects, "projects");
+		requireArray(input.vaultSessions, "vaultSessions");
+		if (input.detail !== undefined) requireRecord(input.detail, "detail");
+		requireArray(input.lifecycleOptions, "lifecycleOptions");
+		requireArray(input.availabilityOptions, "availabilityOptions");
+		requireArray(input.sortOptions, "sortOptions");
+		return value as FrontendProjectScreenViewModel;
+	}
 	if (input.screenId === "channels") {
 		requireArray(input.groups, "groups");
 		requireString(input.heading, "heading");
@@ -2718,7 +3165,21 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 		return value as FrontendChannelScreenViewModel;
 	}
 	if (input.screenId === "memory") {
-		requireArray(input.filters, "filters");
+		const scope = requireRecord(input.scope, "scope");
+		requireString(scope.label, "scope.label");
+		requireString(scope.description, "scope.description");
+		optionalString(scope.path, "scope.path");
+		requireMemoryScopeFilter(input.scopeFilter);
+		requireArray(input.scopeOptions, "scopeOptions");
+		requireMemoryCollectionFilter(input.collection);
+		requireArray(input.collectionOptions, "collectionOptions");
+		requireMemoryStatusFilter(input.status);
+		requireArray(input.statusOptions, "statusOptions");
+		if (typeof input.query !== "string") throw new Error("query must be a string");
+		requireMemoryCategoryFilter(input.lessonCategory);
+		requireArray(input.lessonCategoryOptions, "lessonCategoryOptions");
+		requireMemorySort(input.sort);
+		requireArray(input.sortOptions, "sortOptions");
 		requireArray(input.records, "records");
 		requireArray(input.candidates, "candidates");
 		requireArray(input.learningSettings, "learningSettings");
@@ -2880,18 +3341,55 @@ function optionalAutoNameStrategy(value: unknown): "truncate" | "model" | undefi
 	return value;
 }
 
-function requireMemoryFilter(value: unknown): FrontendMemoryFilter {
+function requireMemoryCollectionFilter(value: unknown): FrontendMemoryCollectionFilter {
+	if (value === "all" || value === "profile" || value === "vault" || value === "project" || value === "lessons") {
+		return value;
+	}
+	throw new Error(`payload.collection is invalid: ${String(value)}`);
+}
+
+function requireMemoryScopeFilter(value: unknown): FrontendMemoryScopeFilter {
+	if (value === "available" || value === "vault" || value === "current-project") return value;
+	throw new Error(`payload.scopeFilter is invalid: ${String(value)}`);
+}
+
+function requireProjectLifecycleFilter(value: unknown): FrontendProjectLifecycleFilter {
+	if (value === "active" || value === "archived" || value === "all") return value;
+	throw new Error("payload.lifecycleFilter is invalid");
+}
+
+function requireProjectDirectoryReuse(value: unknown): "canonical" | "none" {
+	if (value === "canonical" || value === "none") return value;
+	throw new Error("payload.directoryReuse is invalid");
+}
+
+function requireProjectMarkerPolicy(value: unknown): "required" | "optional" | "disabled" {
+	if (value === "required" || value === "optional" || value === "disabled") return value;
+	throw new Error("payload.markerPolicy is invalid");
+}
+
+function requireProjectAvailabilityFilter(value: unknown): FrontendProjectAvailabilityFilter {
 	if (
 		value === "all" ||
-		value === "profile" ||
-		value === "vault" ||
-		value === "project" ||
-		value === "lessons" ||
-		value === "archived"
+		value === "available" ||
+		value === "attention" ||
+		value === "missing" ||
+		value === "conflict" ||
+		value === "relink-required"
 	) {
 		return value;
 	}
-	throw new Error(`payload.filter is invalid: ${String(value)}`);
+	throw new Error("payload.availabilityFilter is invalid");
+}
+
+function requireProjectSort(value: unknown): FrontendProjectSort {
+	if (value === "updated-desc" || value === "name-asc" || value === "created-desc") return value;
+	throw new Error("payload.sort is invalid");
+}
+
+function requireMemoryStatusFilter(value: unknown): FrontendMemoryStatusFilter {
+	if (value === "active" || value === "archived" || value === "all") return value;
+	throw new Error(`payload.status is invalid: ${String(value)}`);
 }
 
 function requireMemoryCategoryFilter(value: unknown): FrontendMemoryCategoryFilter {
@@ -3173,9 +3671,22 @@ function parseAgentDefinition(value: unknown): FrontendSubagentAgentDefinition {
 	return value as FrontendSubagentAgentDefinition;
 }
 
-function requireDefinitionScope(value: unknown): FrontendSubagentDefinitionScope {
+function requireDefinitionScope(value: unknown): FrontendSubagentResolutionLayer {
 	if (value === "global" || value === "vault" || value === "directory" || value === "session") return value;
 	throw new Error("payload.scope is invalid");
+}
+
+function requireUserDefinitionScope(value: unknown): FrontendSubagentUserDefinitionScope {
+	if (value === "vault" || value === "directory") return value;
+	throw new Error("payload.scope must be vault or directory");
+}
+
+function parseUserAgentDefinition(value: unknown): FrontendSubagentUserAgentDefinition {
+	const definition = parseAgentDefinition(value);
+	const scope = requireUserDefinitionScope(definition.scope);
+	if (definition.builtIn !== undefined) throw new Error("payload.definition.builtIn is not allowed");
+	const { builtIn: _builtIn, ...userDefinition } = definition;
+	return { ...userDefinition, scope };
 }
 
 function parseResolvedSubagentSettings(value: unknown): FrontendSubagentSettingsViewModel {

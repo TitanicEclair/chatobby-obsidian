@@ -19,7 +19,7 @@ function isBridgeCapability(value) {
 }
 
 // packages/chatobby-obsidian-protocol/src/bridge-errors.ts
-var OBSIDIAN_BRIDGE_PROTOCOL_VERSION = 1;
+var OBSIDIAN_BRIDGE_PROTOCOL_VERSION = 2;
 var OBSIDIAN_BRIDGE_ERROR_CODES = /* @__PURE__ */ new Set([
   "OBSIDIAN_UNAVAILABLE",
   "BRIDGE_PROTOCOL_MISMATCH",
@@ -31,6 +31,7 @@ var OBSIDIAN_BRIDGE_ERROR_CODES = /* @__PURE__ */ new Set([
   "PATH_AMBIGUOUS",
   "REVISION_CONFLICT",
   "RESULT_EXPIRED",
+  "WEB_VIEWER_NOT_FOUND",
   "PATH_EXISTS",
   "INVALID_INPUT",
   "UNSUPPORTED_OPERATION",
@@ -60,6 +61,63 @@ function parseBridgeErrorPayload(input) {
     retryable: obj.retryable,
     ...obj.details !== void 0 ? { details: obj.details } : {}
   };
+}
+
+// packages/chatobby-obsidian-protocol/src/bridge-config.ts
+function parseObsidianBridgeConnectionConfig(input) {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new TypeError("bridge_config must be an object");
+  }
+  const value = input;
+  const allowed = /* @__PURE__ */ new Set(["type", "schemaVersion", "url", "token", "protocolVersion", "vaultId", "vaultRoot"]);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) throw new TypeError(`bridge_config contains unknown field: ${key}`);
+  }
+  if (value.type !== "bridge_config") throw new TypeError("bridge_config.type must be bridge_config");
+  if (value.schemaVersion !== 1) throw new TypeError("bridge_config.schemaVersion must be 1");
+  if (value.protocolVersion !== OBSIDIAN_BRIDGE_PROTOCOL_VERSION) {
+    throw new TypeError(`bridge_config.protocolVersion must be ${OBSIDIAN_BRIDGE_PROTOCOL_VERSION}`);
+  }
+  const url = requireNonEmptyString(value.url, "bridge_config.url");
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new TypeError("bridge_config.url must be an absolute WebSocket URL");
+  }
+  if (parsedUrl.protocol !== "ws:" && parsedUrl.protocol !== "wss:") {
+    throw new TypeError("bridge_config.url must use ws or wss");
+  }
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(parsedUrl.hostname)) {
+    throw new TypeError("bridge_config.url must target loopback");
+  }
+  const vaultRoot = requireNonEmptyString(value.vaultRoot, "bridge_config.vaultRoot");
+  if (!isPortableAbsolutePath(vaultRoot)) {
+    throw new TypeError("bridge_config.vaultRoot must be an absolute canonical root");
+  }
+  return {
+    type: "bridge_config",
+    schemaVersion: 1,
+    url,
+    token: requireNonEmptyString(value.token, "bridge_config.token"),
+    protocolVersion: OBSIDIAN_BRIDGE_PROTOCOL_VERSION,
+    vaultId: requireBoundedIdentifier(value.vaultId, "bridge_config.vaultId"),
+    vaultRoot
+  };
+}
+function requireBoundedIdentifier(input, field) {
+  const value = requireNonEmptyString(input, field);
+  if (value.length > 256) throw new TypeError(`${field} must not exceed 256 characters`);
+  return value;
+}
+function isPortableAbsolutePath(value) {
+  return value.startsWith("/") || value.startsWith("\\\\") || /^[A-Za-z]:[\\/]/u.test(value);
+}
+function requireNonEmptyString(input, field) {
+  if (typeof input !== "string" || input.trim().length === 0 || input !== input.trim()) {
+    throw new TypeError(`${field} must be a non-empty string`);
+  }
+  return input;
 }
 
 // packages/chatobby-obsidian-protocol/src/bridge-operations.ts
@@ -115,6 +173,7 @@ var OBSIDIAN_BROWSER_OPERATIONS = [
   "browser.press",
   "browser.wait",
   "browser.screenshot",
+  "browser.diagnostics",
   "browser.close"
 ];
 var OBSIDIAN_RETRIEVAL_OPERATIONS = [
@@ -160,6 +219,206 @@ function isOperationName(value) {
     return true;
   }
   return value.startsWith("cli.native.") && value.length > "cli.native.".length;
+}
+
+// packages/chatobby-obsidian-protocol/src/vault-paths.ts
+function normalizeVaultFolderPath(input) {
+  if (input.includes("\0")) throw new TypeError("Vault folder paths cannot contain null bytes.");
+  const path = input.replace(/\\/gu, "/");
+  if (path === "" || path === "/" || path === "." || path === "./") return "";
+  const pathWithoutRootMarkers = path.replace(/^(?:\/+|\.\/)+/u, "");
+  if (/^[A-Za-z]:/u.test(pathWithoutRootMarkers) || path.startsWith("//")) {
+    throw new TypeError("Vault folder paths must be vault-relative, not operating-system absolute paths.");
+  }
+  const segments = [];
+  for (const segment of path.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") throw new TypeError("Vault folder paths cannot contain '..' traversal segments.");
+    segments.push(segment);
+  }
+  return segments.join("/");
+}
+
+// packages/chatobby-obsidian-protocol/src/project-directory-protocol.ts
+var PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION = 1;
+var OBSERVATION_STATUSES = /* @__PURE__ */ new Set([
+  "applied",
+  "no-op",
+  "recovery-required",
+  "conflict",
+  "rejected"
+]);
+var RESCAN_REASONS = /* @__PURE__ */ new Set([
+  "startup",
+  "queue-overflow",
+  "disconnect-timeout",
+  "retry-exhausted"
+]);
+function parseProjectDirectoryObserved(input) {
+  const value = requireExactObject(input, "project_directory_observed", [
+    "type",
+    "schemaVersion",
+    "requestId",
+    "observationId",
+    "observedAt",
+    "changeKind",
+    "entryKind",
+    "oldVaultRelativePath",
+    "newVaultRelativePath"
+  ]);
+  requireLiteral(value.type, "project_directory_observed", "type");
+  requireLiteral(value.schemaVersion, PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION, "schemaVersion");
+  const oldVaultRelativePath = requireCanonicalFolderPath(value.oldVaultRelativePath, "oldVaultRelativePath");
+  const newVaultRelativePath = requireCanonicalFolderPath(value.newVaultRelativePath, "newVaultRelativePath");
+  if (oldVaultRelativePath === newVaultRelativePath) {
+    throw new TypeError("Project directory observation paths must differ.");
+  }
+  return {
+    type: "project_directory_observed",
+    schemaVersion: PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION,
+    requestId: requireIdentifier(value.requestId, "requestId"),
+    observationId: requireIdentifier(value.observationId, "observationId"),
+    observedAt: requireCanonicalTimestamp(value.observedAt, "observedAt"),
+    changeKind: requireLiteral(value.changeKind, "rename-or-move", "changeKind"),
+    entryKind: requireLiteral(value.entryKind, "folder", "entryKind"),
+    oldVaultRelativePath,
+    newVaultRelativePath
+  };
+}
+function parseProjectDirectoryObservationResult(input) {
+  const value = requireExactObject(input, "project_directory_observation_result", [
+    "type",
+    "schemaVersion",
+    "requestId",
+    "observationId",
+    "status",
+    "resultingSequence",
+    "errorCode",
+    "retryable"
+  ]);
+  requireLiteral(value.type, "project_directory_observation_result", "type");
+  requireLiteral(value.schemaVersion, PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION, "schemaVersion");
+  return parseResultFields(value, {
+    type: "project_directory_observation_result",
+    requestId: requireIdentifier(value.requestId, "requestId"),
+    correlationKey: "observationId",
+    correlationValue: requireIdentifier(value.observationId, "observationId")
+  });
+}
+function parseProjectDirectoryRescanRequested(input) {
+  const value = requireExactObject(input, "project_directory_rescan_requested", [
+    "type",
+    "schemaVersion",
+    "requestId",
+    "rescanId",
+    "requestedAt",
+    "reason"
+  ]);
+  requireLiteral(value.type, "project_directory_rescan_requested", "type");
+  requireLiteral(value.schemaVersion, PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION, "schemaVersion");
+  if (typeof value.reason !== "string" || !RESCAN_REASONS.has(value.reason)) {
+    throw new TypeError(`Invalid project directory rescan reason: ${String(value.reason)}`);
+  }
+  return {
+    type: "project_directory_rescan_requested",
+    schemaVersion: PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION,
+    requestId: requireIdentifier(value.requestId, "requestId"),
+    rescanId: requireIdentifier(value.rescanId, "rescanId"),
+    requestedAt: requireCanonicalTimestamp(value.requestedAt, "requestedAt"),
+    reason: value.reason
+  };
+}
+function parseProjectDirectoryRescanResult(input) {
+  const value = requireExactObject(input, "project_directory_rescan_result", [
+    "type",
+    "schemaVersion",
+    "requestId",
+    "rescanId",
+    "status",
+    "resultingSequence",
+    "errorCode",
+    "retryable"
+  ]);
+  requireLiteral(value.type, "project_directory_rescan_result", "type");
+  requireLiteral(value.schemaVersion, PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION, "schemaVersion");
+  return parseResultFields(value, {
+    type: "project_directory_rescan_result",
+    requestId: requireIdentifier(value.requestId, "requestId"),
+    correlationKey: "rescanId",
+    correlationValue: requireIdentifier(value.rescanId, "rescanId")
+  });
+}
+function parseResultFields(value, identity) {
+  if (typeof value.status !== "string" || !OBSERVATION_STATUSES.has(value.status)) {
+    throw new TypeError(`Invalid project directory result status: ${String(value.status)}`);
+  }
+  if (typeof value.retryable !== "boolean") throw new TypeError("retryable must be a boolean");
+  const optionalFields = {};
+  if (value.resultingSequence !== void 0) {
+    if (typeof value.resultingSequence !== "number" || !Number.isSafeInteger(value.resultingSequence) || value.resultingSequence < 0) {
+      throw new TypeError("resultingSequence must be a non-negative integer");
+    }
+    optionalFields.resultingSequence = value.resultingSequence;
+  }
+  if (value.errorCode !== void 0) optionalFields.errorCode = requireIdentifier(value.errorCode, "errorCode");
+  if (identity.type === "project_directory_observation_result") {
+    return {
+      type: identity.type,
+      schemaVersion: PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION,
+      requestId: identity.requestId,
+      observationId: identity.correlationValue,
+      status: value.status,
+      retryable: value.retryable,
+      ...optionalFields
+    };
+  }
+  return {
+    type: identity.type,
+    schemaVersion: PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION,
+    requestId: identity.requestId,
+    rescanId: identity.correlationValue,
+    status: value.status,
+    retryable: value.retryable,
+    ...optionalFields
+  };
+}
+function requireCanonicalFolderPath(input, field) {
+  if (typeof input !== "string") throw new TypeError(`${field} must be a string`);
+  const normalized = normalizeVaultFolderPath(input);
+  if (normalized.length === 0) throw new TypeError(`${field} must identify a folder below the vault root`);
+  if (normalized !== input) throw new TypeError(`${field} must be a normalized vault-relative folder path`);
+  return normalized;
+}
+function requireCanonicalTimestamp(input, field) {
+  if (typeof input !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(input)) {
+    throw new TypeError(`${field} must be a canonical UTC ISO timestamp`);
+  }
+  const parsed = new Date(input);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== input) {
+    throw new TypeError(`${field} must be a valid canonical UTC ISO timestamp`);
+  }
+  return input;
+}
+function requireIdentifier(input, field) {
+  if (typeof input !== "string" || input.length === 0 || input !== input.trim() || input.length > 256) {
+    throw new TypeError(`${field} must be a non-empty bounded identifier`);
+  }
+  return input;
+}
+function requireLiteral(input, expected, field) {
+  if (input !== expected) throw new TypeError(`${field} must be ${String(expected)}`);
+  return expected;
+}
+function requireExactObject(input, label, allowedKeys) {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+  const value = input;
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) throw new TypeError(`${label} contains unknown field: ${key}`);
+  }
+  return value;
 }
 
 // packages/chatobby-obsidian-protocol/src/bridge-protocol.ts
@@ -243,7 +502,7 @@ function parseHello(input) {
   const result = {
     type: "hello",
     authToken: input.authToken,
-    protocolVersion: 1,
+    protocolVersion: OBSIDIAN_BRIDGE_PROTOCOL_VERSION,
     connectionId: input.connectionId,
     vault: parseVault(input.vault),
     appVersion: input.appVersion,
@@ -404,6 +663,10 @@ function parsePluginToServerMessage(input) {
       return parseCapabilitiesChanged(input);
     case "context_changed":
       return parseContextChanged(input);
+    case "project_directory_observed":
+      return parseProjectDirectoryObserved(input);
+    case "project_directory_rescan_requested":
+      return parseProjectDirectoryRescanRequested(input);
     case "result":
       return parseResult(input);
     case "error":
@@ -424,6 +687,10 @@ function parseServerToPluginMessage(input) {
       return parseInvoke(input);
     case "cancel":
       return parseCancel(input);
+    case "project_directory_observation_result":
+      return parseProjectDirectoryObservationResult(input);
+    case "project_directory_rescan_result":
+      return parseProjectDirectoryRescanResult(input);
     default:
       throw new TypeError(`Unknown server-to-plugin message type: ${String(type)}`);
   }
@@ -587,6 +854,7 @@ var OBSIDIAN_BROWSER_TOOL_OPERATION_MAP = {
   obsidian_browser_press: "browser.press",
   obsidian_browser_wait: "browser.wait",
   obsidian_browser_screenshot: "browser.screenshot",
+  obsidian_browser_diagnostics: "browser.diagnostics",
   obsidian_browser_close: "browser.close"
 };
 var OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP = {
@@ -649,6 +917,13 @@ var OBSIDIAN_ALL_TOOL_OPERATION_MAP = {
   ...OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP
 };
 var OBSIDIAN_ALL_TOOL_NAMES = Object.keys(OBSIDIAN_ALL_TOOL_OPERATION_MAP);
+function obsidianCliToolGroup(name) {
+  if (name === "obsidian_dev_diagnostics") return "obsidian.diagnostics";
+  if (name === "obsidian_plugin" || name === "obsidian_appearance" || name === "obsidian_sync") {
+    return "obsidian.cli.manage";
+  }
+  return "obsidian.cli.content";
+}
 var OBSIDIAN_EXCLUDED_COMPAT_TOOL_NAMES = [
   "vault_*",
   "open_note",
@@ -938,6 +1213,7 @@ var TOOL_PLUGIN_REQUIREMENTS = {
   obsidian_browser_press: ["webviewer"],
   obsidian_browser_wait: ["webviewer"],
   obsidian_browser_screenshot: ["webviewer"],
+  obsidian_browser_diagnostics: ["webviewer"],
   obsidian_browser_close: ["webviewer"],
   obsidian_daily_note: ["daily-notes"],
   obsidian_base: ["bases"],
@@ -978,6 +1254,7 @@ var OBSIDIAN_TOOL_CAPABILITY_CATALOG = Object.entries(
     toolName: name,
     operation,
     capability: capabilityForOperation(operation),
+    executionOwner: operation.startsWith("cli.") ? "runtime" : "connector",
     requiredPlugins: TOOL_PLUGIN_REQUIREMENTS[name] ?? [],
     requiredRuntimeDependencies: CLI_TOOLS.has(name) ? ["obsidian-cli"] : [],
     enhancedByPlugins: operation.startsWith("retrieval.") ? RETRIEVAL_ENHANCEMENTS : []
@@ -994,7 +1271,7 @@ function evaluateObsidianToolAvailability(descriptor, state) {
   const missingEnhancements = descriptor.enhancedByPlugins.filter((id) => plugins.get(id)?.enabled !== true);
   return {
     toolName: descriptor.toolName,
-    available: state.capabilities.includes(descriptor.capability) && missingPlugins.length === 0 && missingRuntimeDependencies.length === 0,
+    available: (descriptor.executionOwner === "runtime" || state.capabilities.includes(descriptor.capability)) && missingPlugins.length === 0 && missingRuntimeDependencies.length === 0,
     missingPlugins,
     missingRuntimeDependencies,
     availableEnhancements,
@@ -1017,24 +1294,6 @@ function capabilityForOperation(operation) {
   if (operation.startsWith("commands.")) return "commands";
   if (operation.startsWith("hotkeys.")) return "hotkeys";
   return "vault";
-}
-
-// packages/chatobby-obsidian-protocol/src/vault-paths.ts
-function normalizeVaultFolderPath(input) {
-  if (input.includes("\0")) throw new TypeError("Vault folder paths cannot contain null bytes.");
-  const path = input.replace(/\\/gu, "/");
-  if (path === "" || path === "/" || path === "." || path === "./") return "";
-  const pathWithoutRootMarkers = path.replace(/^(?:\/+|\.\/)+/u, "");
-  if (/^[A-Za-z]:/u.test(pathWithoutRootMarkers) || path.startsWith("//")) {
-    throw new TypeError("Vault folder paths must be vault-relative, not operating-system absolute paths.");
-  }
-  const segments = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") throw new TypeError("Vault folder paths cannot contain '..' traversal segments.");
-    segments.push(segment);
-  }
-  return segments.join("/");
 }
 export {
   OBSIDIAN_ALL_OPERATIONS,
@@ -1070,13 +1329,20 @@ export {
   OBSIDIAN_UI_OPERATIONS,
   OBSIDIAN_UI_TOOL_NAMES,
   OBSIDIAN_UI_TOOL_OPERATION_MAP,
+  PROJECT_DIRECTORY_PROTOCOL_SCHEMA_VERSION,
   createObsidianMcpServerPolicy,
   evaluateObsidianToolAvailability,
   isBridgeCapability,
   isOperationName,
   normalizeVaultFolderPath,
+  obsidianCliToolGroup,
   parseBridgeErrorPayload,
+  parseObsidianBridgeConnectionConfig,
   parsePluginToServerMessage,
+  parseProjectDirectoryObservationResult,
+  parseProjectDirectoryObserved,
+  parseProjectDirectoryRescanRequested,
+  parseProjectDirectoryRescanResult,
   parseRetrievalEnvelope,
   parseServerToPluginMessage,
   parseVaultSelector

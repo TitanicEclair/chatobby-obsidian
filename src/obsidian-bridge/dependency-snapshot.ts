@@ -4,7 +4,7 @@ import type { App } from "obsidian";
 import type {
   ObsidianCapabilityState,
   ObsidianPluginState,
-} from "../vendor/@chatobby/obsidian-protocol/tool-capabilities";
+} from "../vendor/@chatobby/obsidian-protocol/index.js";
 import { PLUGIN_CAPABILITIES } from "./capabilities";
 
 interface CommunityPluginRegistry {

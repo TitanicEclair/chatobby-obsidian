@@ -8,10 +8,15 @@ import type {
   ObsidianBridgeHello,
   ObsidianEnabledPlugin,
   ObsidianBridgePing,
-} from "../vendor/@chatobby/obsidian-protocol/bridge-protocol";
+  ObsidianBridgeConnectionConfig,
+  ProjectDirectoryObservationResult,
+  ProjectDirectoryObserved,
+  ProjectDirectoryRescanRequested,
+  ProjectDirectoryRescanResult,
+} from "../vendor/@chatobby/obsidian-protocol/index.js";
 import {
   OBSIDIAN_BRIDGE_PROTOCOL_VERSION,
-} from "../vendor/@chatobby/obsidian-protocol/bridge-errors";
+} from "../vendor/@chatobby/obsidian-protocol/index.js";
 import type { BridgeConnectionEvent, BridgeConnectionState, InFlightRequest } from "./types";
 import { INITIAL_BRIDGE_STATE } from "./types";
 import {
@@ -41,6 +46,8 @@ export class ObsidianBridgeClient {
   private contextUnsubscribe: (() => void) | null = null;
   private capabilityFingerprint = "";
   private connectionListeners: Set<(state: BridgeConnectionState) => void> = new Set();
+  private observationResultListeners = new Set<(result: ProjectDirectoryObservationResult) => void>();
+  private rescanResultListeners = new Set<(result: ProjectDirectoryRescanResult) => void>();
 
   constructor(
     private app: App,
@@ -49,6 +56,7 @@ export class ObsidianBridgeClient {
     private appVersion: string,
     private pluginVersion: string,
     private wsFactory?: { new(url: string, protocols?: string | string[]  ): WebSocket } | null,
+    private bridgeConfig?: ObsidianBridgeConnectionConfig,
   ) {}
 
   // ── Subscriptions ──────────────────────────────────────────────────
@@ -57,6 +65,20 @@ export class ObsidianBridgeClient {
   onConnectionChange(listener: (state: BridgeConnectionState) => void): () => void {
     this.connectionListeners.add(listener);
     return () => this.connectionListeners.delete(listener);
+  }
+
+  /** Subscribe to typed Project directory observation results. */
+  onProjectDirectoryObservationResult(
+    listener: (result: ProjectDirectoryObservationResult) => void,
+  ): () => void {
+    this.observationResultListeners.add(listener);
+    return () => this.observationResultListeners.delete(listener);
+  }
+
+  /** Subscribe to typed Project directory rescan results. */
+  onProjectDirectoryRescanResult(listener: (result: ProjectDirectoryRescanResult) => void): () => void {
+    this.rescanResultListeners.add(listener);
+    return () => this.rescanResultListeners.delete(listener);
   }
 
   // ── Connection lifecycle ───────────────────────────────────────────
@@ -134,12 +156,29 @@ export class ObsidianBridgeClient {
    * reconnects with the new url/token. The old token is discarded; the new
    * token is used only for the next hello.authToken.
    */
-  async reconfigure(url: string, token: string): Promise<void> {
+  async reconfigure(config: ObsidianBridgeConnectionConfig): Promise<void>;
+  async reconfigure(url: string, token: string): Promise<void>;
+  async reconfigure(configOrUrl: ObsidianBridgeConnectionConfig | string, token?: string): Promise<void> {
+    const config = typeof configOrUrl === "string" ? undefined : configOrUrl;
+    const url = config?.url ?? configOrUrl as string;
+    const nextToken = config?.token ?? token;
+    if (!nextToken) throw new TypeError("Bridge token is required");
     this.url = url;
-    this.token = token;
+    this.token = nextToken;
+    this.bridgeConfig = config;
     await this.disconnect();
-    this.dispatch({ type: "configure", url, token });
+    this.dispatch({ type: "configure", url, token: nextToken });
     await this.connect();
+  }
+
+  /** Send one typed Project directory observation over the ready bridge. */
+  sendProjectDirectoryObservation(message: ProjectDirectoryObserved): boolean {
+    return this.sendProjectDirectoryMessage(message);
+  }
+
+  /** Send one typed authoritative Project directory rescan request. */
+  sendProjectDirectoryRescan(message: ProjectDirectoryRescanRequested): boolean {
+    return this.sendProjectDirectoryMessage(message);
   }
 
   /** Disconnect from the bridge. */
@@ -178,7 +217,10 @@ export class ObsidianBridgeClient {
   private sendHello(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    const vault = getVaultIdentity(this.app);
+    const discoveredVault = getVaultIdentity(this.app);
+    const vault = this.bridgeConfig
+      ? { id: this.bridgeConfig.vaultId, name: discoveredVault.name, root: this.bridgeConfig.vaultRoot }
+      : discoveredVault;
     const capabilityState = collectObsidianCapabilityState(this.app);
     this.capabilityFingerprint = capabilityStateFingerprint(capabilityState);
     const hello: ObsidianBridgeHello = {
@@ -268,7 +310,14 @@ export class ObsidianBridgeClient {
     }
 
     // routeInboundFrame mutates this.inFlight directly for invoke/cancel
-    const result = await routeInboundFrame(raw, this.app, this.inFlight);
+    const result = await routeInboundFrame(raw, this.app, this.inFlight, {
+      onProjectDirectoryObservationResult: (message) => {
+        for (const listener of this.observationResultListeners) listener(message);
+      },
+      onProjectDirectoryRescanResult: (message) => {
+        for (const listener of this.rescanResultListeners) listener(message);
+      },
+    });
 
     // Send outbound messages
     for (const msg of result.outbound) {
@@ -276,6 +325,14 @@ export class ObsidianBridgeClient {
         this.ws.send(serializeOutbound(msg));
       }
     }
+  }
+
+  private sendProjectDirectoryMessage(
+    message: ProjectDirectoryObserved | ProjectDirectoryRescanRequested,
+  ): boolean {
+    if (!this.isReady || !this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify(message));
+    return true;
   }
 
   private dispatch(event: BridgeConnectionEvent): void {

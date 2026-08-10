@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from "./wire-types.js";
 /** Public, data-only protocol consumed by reviewable Chatobby frontends. */
 export declare const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 1;
-export type FrontendScreenId = "memory" | "permissions" | "events" | "queries" | "channels" | "subagents" | "mcp";
+export type FrontendScreenId = "projects" | "memory" | "permissions" | "events" | "queries" | "channels" | "subagents" | "mcp";
 export type FrontendIconToken = "activity" | "agent" | "alert" | "archive" | "arrow-left-right" | "audio-lines" | "badge-alert" | "blocks" | "book-open" | "book-plus" | "book-up" | "brain" | "bot" | "calendar" | "calendar-clock" | "calendar-plus" | "calendar-x" | "captions" | "channel" | "check" | "clock" | "command" | "external-link" | "file" | "file-plus" | "file-text" | "folder" | "folder-kanban" | "folder-sync" | "git-branch" | "git-graph" | "globe" | "history" | "image" | "info" | "layout-panel-top" | "link" | "list" | "list-checks" | "memory" | "messages-square" | "paperclip" | "pencil" | "play" | "plug" | "search" | "square-terminal" | "send" | "shield" | "shield-check" | "shield-x" | "terminal" | "terminal-square" | "toggle-right" | "tool" | "trash-2" | "triangle-alert" | "unplug" | "users" | "user-round" | "video" | "workflow" | "wrench" | "x";
 export interface FrontendCapabilityReport {
     readonly featureFamilies: readonly string[];
@@ -43,6 +43,14 @@ export interface FrontendSessionViewModel {
     readonly name?: string;
     readonly recoveryPath?: string;
     readonly workingDirectory: string;
+    readonly workspace: {
+        readonly kind: "vault";
+        readonly label: string;
+    } | {
+        readonly kind: "project";
+        readonly projectId: string;
+        readonly label: string;
+    };
     readonly model: string;
     readonly thinkingLevel: ThinkingLevel;
     readonly streaming: boolean;
@@ -221,6 +229,87 @@ export interface FrontendChannelGroupViewModel {
     readonly label: string;
     readonly items: readonly FrontendChannelDirectoryItem[];
 }
+export type FrontendProjectLifecycleFilter = "active" | "archived" | "all";
+export type FrontendProjectAvailabilityFilter = "all" | "available" | "attention" | "missing" | "conflict" | "relink-required";
+export type FrontendProjectSort = "updated-desc" | "name-asc" | "created-desc";
+export interface FrontendProjectRootViewModel {
+    readonly rootId: string;
+    readonly directoryId: string;
+    readonly label: string;
+    readonly primary: boolean;
+    readonly locationKind: "vault-relative" | "external";
+    readonly vaultRelativePath?: string;
+    readonly directoryReuse: "canonical" | "none";
+    readonly markerPolicy: "required" | "optional" | "disabled";
+    readonly recoveryMode: "marker" | "device-binding-only";
+    readonly availability: "available" | "missing" | "conflict" | "relink-required" | "unregistered";
+    readonly availabilityLabel: string;
+    readonly recoveryAction?: "relink" | "resolve-conflict" | "repair-marker";
+}
+export interface FrontendProjectSessionViewModel {
+    readonly sessionId: string;
+    readonly name: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+    readonly messageCount: number;
+    readonly running: boolean;
+    readonly activeRootId?: string;
+}
+export interface FrontendProjectSummaryViewModel {
+    readonly projectId: string;
+    readonly revision: number;
+    readonly name: string;
+    readonly description?: string;
+    readonly lifecycle: "active" | "archived";
+    readonly creationKind: "directory-session" | "manual" | "migration";
+    readonly primaryRootId?: string;
+    readonly primaryRootLabel?: string;
+    readonly canonicalVaultRelativePath?: string;
+    readonly rootCount: number;
+    readonly sessionCount: number;
+    readonly availability: "available" | "attention" | "missing" | "conflict" | "relink-required";
+    readonly availabilityLabel: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+}
+export interface FrontendProjectDetailViewModel {
+    readonly projectId: string;
+    readonly revision: number;
+    readonly name: string;
+    readonly description?: string;
+    readonly lifecycle: "active" | "archived";
+    readonly creationKind: "directory-session" | "manual" | "migration";
+    readonly primaryRootId?: string;
+    readonly roots: readonly FrontendProjectRootViewModel[];
+    readonly sessions: readonly FrontendProjectSessionViewModel[];
+}
+export interface FrontendRunningWorkspaceViewModel {
+    readonly kind: "vault" | "project" | "unresolved";
+    readonly label: string;
+    readonly projectId?: string;
+    readonly activeRootId?: string;
+    readonly attachedRootIds: readonly string[];
+}
+export interface FrontendProjectScreenViewModel {
+    readonly screenId: "projects";
+    readonly revision: number;
+    readonly snapshotSequence: number;
+    readonly loading: boolean;
+    readonly error?: string;
+    readonly statusMessage?: string;
+    readonly query: string;
+    readonly lifecycleFilter: FrontendProjectLifecycleFilter;
+    readonly availabilityFilter: FrontendProjectAvailabilityFilter;
+    readonly sort: FrontendProjectSort;
+    readonly selectedProjectId?: string;
+    readonly runningIn: FrontendRunningWorkspaceViewModel;
+    readonly projects: readonly FrontendProjectSummaryViewModel[];
+    readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
+    readonly detail?: FrontendProjectDetailViewModel;
+    readonly lifecycleOptions: readonly FrontendChoiceOption[];
+    readonly availabilityOptions: readonly FrontendChoiceOption[];
+    readonly sortOptions: readonly FrontendChoiceOption[];
+}
 export interface FrontendChannelMessageViewModel {
     readonly id: string;
     readonly order: number;
@@ -245,7 +334,9 @@ export interface FrontendChannelScreenViewModel {
     readonly messages: readonly FrontendChannelMessageViewModel[];
     readonly nextCursor?: string;
 }
-export type FrontendMemoryFilter = "all" | "profile" | "vault" | "project" | "lessons" | "archived";
+export type FrontendMemoryCollectionFilter = "all" | "profile" | "vault" | "project" | "lessons";
+export type FrontendMemoryScopeFilter = "available" | "vault" | "current-project";
+export type FrontendMemoryStatusFilter = "active" | "archived" | "all";
 export type FrontendMemoryCategoryFilter = "all" | "uncategorized" | "failure" | "correction" | "insight" | "preference" | "convention" | "tool-quirk";
 export type FrontendMemorySort = "updated-desc" | "last-used-desc" | "created-desc" | "created-asc";
 export type FrontendMemoryBoundaryMode = "inherit" | "separate" | "project-only";
@@ -254,6 +345,8 @@ export interface FrontendMemoryRecordViewModel {
     readonly revision: number;
     readonly iconToken: FrontendIconToken;
     readonly label: string;
+    readonly locationLabel: string;
+    readonly scopeRelationLabel: string;
     readonly stateLabel?: string;
     readonly content: string;
     readonly provenanceLabel: string;
@@ -284,16 +377,21 @@ export interface FrontendMemoryScreenViewModel {
     readonly loading: boolean;
     readonly error?: string;
     readonly statusMessage?: string;
-    readonly filter: FrontendMemoryFilter;
-    readonly filters: readonly {
-        readonly id: FrontendMemoryFilter;
+    readonly scope: {
         readonly label: string;
-        readonly selected: boolean;
-    }[];
+        readonly path?: string;
+        readonly description: string;
+    };
+    readonly scopeFilter: FrontendMemoryScopeFilter;
+    readonly scopeOptions: readonly FrontendChoiceOption[];
+    readonly collection: FrontendMemoryCollectionFilter;
+    readonly collectionOptions: readonly FrontendChoiceOption[];
+    readonly status: FrontendMemoryStatusFilter;
+    readonly statusOptions: readonly FrontendChoiceOption[];
     readonly query: string;
     readonly searchResultCount?: number;
-    readonly category: FrontendMemoryCategoryFilter;
-    readonly categoryOptions: readonly FrontendChoiceOption[];
+    readonly lessonCategory: FrontendMemoryCategoryFilter;
+    readonly lessonCategoryOptions: readonly FrontendChoiceOption[];
     readonly sort: FrontendMemorySort;
     readonly sortOptions: readonly FrontendChoiceOption[];
     readonly records: readonly FrontendMemoryRecordViewModel[];
@@ -619,7 +717,10 @@ export interface FrontendEventScreenViewModel {
 export type FrontendSubagentExecutionMode = "auto" | "in-process" | "worker-process";
 export type FrontendSubagentResolvedExecutionMode = Exclude<FrontendSubagentExecutionMode, "auto">;
 export type FrontendSubagentContextMode = "fresh" | "fork";
-export type FrontendSubagentDefinitionScope = "global" | "vault" | "directory" | "session";
+/** Internal resolution layers reported to the frontend for provenance and effective settings. */
+export type FrontendSubagentResolutionLayer = "global" | "vault" | "directory" | "session";
+/** Availability choices accepted when a user creates or edits an agent role. */
+export type FrontendSubagentUserDefinitionScope = "vault" | "directory";
 export type FrontendSubagentRunStatus = "created" | "queued" | "running" | "paused" | "waiting" | "completed" | "failed" | "cancelled" | "orphaned";
 export type FrontendSubagentNodeStatus = "blocked" | "queued" | "running" | "waiting" | "paused" | "completed" | "failed" | "cancelled" | "skipped" | "orphaned";
 export type FrontendSubagentControlAction = "cancel" | "pause" | "resume" | "interrupt" | "steer" | "complete" | "retry" | "reprioritize" | "append-step" | "fork" | "clone" | "decide-child-input" | "decide-tool-permission" | "adopt" | "reconcile-orphan" | "approve-permission" | "deny-permission" | "approve-acceptance" | "reject-acceptance" | "extend-budget";
@@ -646,7 +747,7 @@ export interface FrontendSubagentAgentDefinition {
     id: string;
     name: string;
     description: string;
-    scope: FrontendSubagentDefinitionScope;
+    scope: FrontendSubagentResolutionLayer;
     scopeId: string;
     systemPrompt: string;
     enabled: boolean;
@@ -655,6 +756,10 @@ export interface FrontendSubagentAgentDefinition {
     revision: number;
     updatedAt: number;
 }
+export type FrontendSubagentUserAgentDefinition = Omit<FrontendSubagentAgentDefinition, "scope" | "builtIn"> & {
+    scope: FrontendSubagentUserDefinitionScope;
+    builtIn?: never;
+};
 export interface FrontendSubagentAcceptancePolicy {
     level: "none" | "attested" | "checked" | "verified" | "reviewed";
     criteria?: string[];
@@ -1032,12 +1137,12 @@ export interface FrontendSubagentSettingsViewModel {
         allowSiblingCommunication: boolean;
     };
     scope?: {
-        kind: FrontendSubagentDefinitionScope;
+        kind: FrontendSubagentResolutionLayer;
         id: string;
     };
     revision: number;
     sources: Partial<Record<string, {
-        kind: FrontendSubagentDefinitionScope;
+        kind: FrontendSubagentResolutionLayer;
         id: string;
     }>>;
 }
@@ -1098,7 +1203,7 @@ export interface FrontendSubagentScreenViewModel {
     readonly controlReceipts: readonly FrontendSubagentControlReceiptViewModel[];
     readonly focusedFeed: FrontendFeedDocumentViewModel;
 }
-export type FrontendScreenViewModel = FrontendChannelScreenViewModel | FrontendMemoryScreenViewModel | FrontendContextQueryScreenViewModel | FrontendPermissionScreenViewModel | FrontendEventScreenViewModel | FrontendSubagentScreenViewModel | FrontendMcpScreenViewModel;
+export type FrontendScreenViewModel = FrontendProjectScreenViewModel | FrontendChannelScreenViewModel | FrontendMemoryScreenViewModel | FrontendContextQueryScreenViewModel | FrontendPermissionScreenViewModel | FrontendEventScreenViewModel | FrontendSubagentScreenViewModel | FrontendMcpScreenViewModel;
 export interface FrontendScreenRequest {
     readonly schemaVersion: 1;
     readonly viewId: string;
@@ -1221,6 +1326,12 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly type: "session.create";
     readonly payload: {
         readonly cwdOverride?: string;
+        readonly workspace?: {
+            readonly kind: "vault";
+        } | {
+            readonly kind: "project";
+            readonly projectId: string;
+        };
         readonly model?: string;
         readonly thinkingLevel?: ThinkingLevel;
         readonly permissionProfileId?: string | null;
@@ -1233,6 +1344,23 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly model?: string;
         readonly thinkingLevel?: ThinkingLevel;
         readonly permissionProfileId?: string | null;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "session.resume-by-id";
+    readonly payload: {
+        readonly sessionId: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "session.change-workspace";
+    readonly payload: {
+        readonly target: {
+            readonly kind: "vault";
+        } | {
+            readonly kind: "project";
+            readonly projectId: string;
+            readonly activeRootId?: string;
+            readonly sessionAttachedRootIds: readonly string[];
+        };
     };
 }) | (FrontendIntentBase & {
     readonly type: "session.clone";
@@ -1264,6 +1392,82 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly type: "operator.set-view-open";
     readonly payload: {
         readonly open: boolean;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.set-view";
+    readonly payload: {
+        readonly query: string;
+        readonly lifecycleFilter: FrontendProjectLifecycleFilter;
+        readonly availabilityFilter: FrontendProjectAvailabilityFilter;
+        readonly sort: FrontendProjectSort;
+        readonly selectedProjectId?: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.create";
+    readonly payload: {
+        readonly name: string;
+        readonly description?: string;
+        readonly vaultRelativePath?: string;
+        readonly directoryCandidateRef?: string;
+        readonly directoryReuse: "canonical" | "none";
+        readonly markerPolicy: "required" | "optional" | "disabled";
+        readonly useForCurrentSession?: boolean;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.replace-details";
+    readonly payload: {
+        readonly projectId: string;
+        readonly expectedProjectRevision: number;
+        readonly name: string;
+        readonly description?: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.archive" | "projects.restore";
+    readonly payload: {
+        readonly projectId: string;
+        readonly expectedProjectRevision: number;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.root-add";
+    readonly payload: {
+        readonly projectId: string;
+        readonly expectedProjectRevision: number;
+        readonly label: string;
+        readonly vaultRelativePath?: string;
+        readonly directoryCandidateRef?: string;
+        readonly directoryReuse: "canonical" | "none";
+        readonly markerPolicy: "required" | "optional" | "disabled";
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.root-relabel";
+    readonly payload: {
+        readonly projectId: string;
+        readonly expectedProjectRevision: number;
+        readonly rootId: string;
+        readonly label: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.root-set-primary" | "projects.root-remove";
+    readonly payload: {
+        readonly projectId: string;
+        readonly expectedProjectRevision: number;
+        readonly rootId: string;
+        readonly replacementRootId?: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.root-recover";
+    readonly payload: {
+        readonly projectId: string;
+        readonly rootId: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.root-relink";
+    readonly payload: {
+        readonly projectId: string;
+        readonly expectedProjectRevision: number;
+        readonly rootId: string;
+        readonly vaultRelativePath?: string;
+        readonly directoryCandidateRef?: string;
     };
 }) | (FrontendIntentBase & {
     readonly type: "channel.select";
@@ -1307,9 +1511,11 @@ export type FrontendIntent = (FrontendIntentBase & {
 }) | (FrontendIntentBase & {
     readonly type: "memory.set-view";
     readonly payload: {
-        readonly filter: FrontendMemoryFilter;
+        readonly scopeFilter: FrontendMemoryScopeFilter;
+        readonly collection: FrontendMemoryCollectionFilter;
+        readonly status: FrontendMemoryStatusFilter;
         readonly query: string;
-        readonly category: FrontendMemoryCategoryFilter;
+        readonly lessonCategory: FrontendMemoryCategoryFilter;
         readonly sort: FrontendMemorySort;
     };
 }) | (FrontendIntentBase & {
@@ -1651,14 +1857,14 @@ export type FrontendIntent = (FrontendIntentBase & {
 }) | (FrontendIntentBase & {
     readonly type: "subagents.save-definition";
     readonly payload: {
-        readonly definition: FrontendSubagentAgentDefinition;
+        readonly definition: FrontendSubagentUserAgentDefinition;
         readonly permissionProfileId: string;
     };
 }) | (FrontendIntentBase & {
     readonly type: "subagents.delete-definition";
     readonly payload: {
         readonly definitionId: string;
-        readonly scope: FrontendSubagentDefinitionScope;
+        readonly scope: FrontendSubagentUserDefinitionScope;
         readonly scopeId: string;
         readonly expectedDefinitionRevision: number;
     };

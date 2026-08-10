@@ -10,6 +10,7 @@ import { runtimeInstallRoot } from "./platform-paths";
 export { runtimeInstallRoot } from "./platform-paths";
 
 export const RUNTIME_PACKAGE_MANIFEST_FILE = "runtime.manifest.json";
+export const PENDING_RUNTIME_INSTALLATION_FILE = "pending-installation.json";
 
 export interface RuntimePackageFile {
   path: string;
@@ -34,7 +35,13 @@ export interface RuntimePackageManifest {
 
 export interface PendingRuntimePackageInstallation {
   executable: string;
-  commit(): Promise<void>;
+  runtimeVersion: string;
+  runtimePackageFingerprint: string;
+  activationState: "prepared" | "activated";
+  /** Atomically make the already-verified candidate the active package. */
+  activate(): Promise<void>;
+  /** Seal a successfully authenticated activation and remove rollback state. */
+  finalize(): Promise<void>;
   rollback(): Promise<void>;
 }
 
@@ -61,6 +68,18 @@ declare const __CHATOBBY_RUNTIME_PUBLIC_KEY__: string;
 interface RuntimeInstallPointer {
   version: string;
   previousVersion?: string;
+}
+
+interface RuntimeInstallJournal {
+  schemaVersion: 1;
+  operationId: string;
+  state: "prepared" | "activated";
+  runtimeVersion: string;
+  runtimePackageFingerprint: string;
+  executable: string;
+  previousPointer: RuntimeInstallPointer | null;
+  hadExistingVersion: boolean;
+  containsSecretValues: false;
 }
 
 /** Resolve a development runtime or a fully verified installer-owned release package. */
@@ -142,7 +161,8 @@ export class RuntimePackageInstaller {
 
   async install(sourceDirectory: string, manifest: RuntimePackageManifest, pluginVersion: string): Promise<string> {
     const installation = await this.prepareInstall(sourceDirectory, manifest, pluginVersion);
-    await installation.commit();
+    await installation.activate();
+    await installation.finalize();
     return installation.executable;
   }
 
@@ -151,6 +171,9 @@ export class RuntimePackageInstaller {
     manifest: RuntimePackageManifest,
     pluginVersion: string,
   ): Promise<PendingRuntimePackageInstallation> {
+    if (await this.readPendingJournal()) {
+      throw new Error("A previous Chatobby runtime installation requires recovery before another installation can begin");
+    }
     await verifyRuntimePackage(sourceDirectory, manifest, pluginVersion, this.trustedPublicKey, false);
     const versionsRoot = join(this.installRoot, "versions");
     const versionDirectory = join(versionsRoot, manifest.version);
@@ -190,49 +213,62 @@ export class RuntimePackageInstaller {
       }
       throw error;
     }
-
+    const journal: RuntimeInstallJournal = {
+      schemaVersion: 1,
+      operationId,
+      state: "prepared",
+      runtimeVersion: manifest.version,
+      runtimePackageFingerprint: runtimePackageFingerprint(manifest),
+      executable: manifest.executable,
+      previousPointer: current,
+      hadExistingVersion,
+      containsSecretValues: false,
+    };
     try {
-      await writePointer(this.installRoot, {
-        version: manifest.version,
-        ...(current && current.version !== manifest.version ? { previousVersion: current.version } : {}),
-        ...(current?.version === manifest.version && current.previousVersion
-          ? { previousVersion: current.previousVersion }
-          : {}),
-      });
+      await writePendingJournal(this.installRoot, journal);
     } catch (error) {
-      await this.removeDirectory(versionDirectory, { recursive: true, force: true }).catch(() => undefined);
-      if (hadExistingVersion && existsSync(backupDirectory)) await rename(backupDirectory, versionDirectory);
-      await restorePointer(this.installRoot, current).catch(() => undefined);
+      if (existsSync(versionDirectory)) await rename(versionDirectory, failedDirectory).catch(() => undefined);
+      if (hadExistingVersion && existsSync(backupDirectory) && !existsSync(versionDirectory)) {
+        await rename(backupDirectory, versionDirectory).catch(() => undefined);
+      }
+      await this.removeDirectory(failedDirectory, { recursive: true, force: true }).catch(() => undefined);
       throw error;
     }
-    let settled = false;
-    return {
-      executable: packagePath(versionDirectory, manifest.executable),
-      commit: async () => {
-        if (settled) return;
-        settled = true;
-        if (hadExistingVersion) {
-          // A successful reconnect proves the replacement can execute. Cleanup is
-          // best effort because antivirus scanners may briefly retain file handles.
-          await this.removeDirectory(backupDirectory, { recursive: true, force: true }).catch(() => undefined);
-        }
-      },
-      rollback: async () => {
-        if (settled) return;
-        if (existsSync(versionDirectory)) await rename(versionDirectory, failedDirectory);
-        try {
-          if (hadExistingVersion && existsSync(backupDirectory)) await rename(backupDirectory, versionDirectory);
-          await restorePointer(this.installRoot, current);
-          settled = true;
-        } catch (error) {
-          if (!existsSync(versionDirectory) && existsSync(failedDirectory)) {
-            await rename(failedDirectory, versionDirectory).catch(() => undefined);
-          }
-          throw error;
-        }
-        await this.removeDirectory(failedDirectory, { recursive: true, force: true }).catch(() => undefined);
-      },
-    };
+    return this.createPendingInstallation(journal);
+  }
+
+  /** Reconstruct a verified interrupted installation after an Obsidian/plugin restart. */
+  async resumePendingInstall(pluginVersion: string): Promise<PendingRuntimePackageInstallation | null> {
+    const journal = await this.readPendingJournal();
+    if (!journal) return null;
+    const versionDirectory = this.versionDirectory(journal.runtimeVersion);
+    const manifest = await readRuntimePackageManifest(versionDirectory);
+    await verifyRuntimePackage(versionDirectory, manifest, pluginVersion, this.trustedPublicKey, true);
+    if (
+      manifest.version !== journal.runtimeVersion
+      || manifest.executable !== journal.executable
+      || runtimePackageFingerprint(manifest) !== journal.runtimePackageFingerprint
+    ) {
+      throw new Error("The interrupted Chatobby runtime installation does not match its signed package");
+    }
+    if (journal.hadExistingVersion) {
+      const backupDirectory = this.operationDirectory(journal, "backup");
+      const backupManifest = await readRuntimePackageManifest(backupDirectory);
+      await verifyRuntimePackage(backupDirectory, backupManifest, pluginVersion, this.trustedPublicKey, true);
+      if (backupManifest.version !== journal.runtimeVersion) {
+        throw new Error("The interrupted Chatobby runtime backup does not match its recorded version");
+      }
+    }
+    const current = readPointer(this.installRoot);
+    const expectedActive = activationPointer(journal.runtimeVersion, journal.previousPointer);
+    if (
+      journal.state === "activated"
+        ? !samePointer(current, expectedActive)
+        : !samePointer(current, journal.previousPointer) && !samePointer(current, expectedActive)
+    ) {
+      throw new Error("The interrupted Chatobby runtime installation pointer has changed unexpectedly");
+    }
+    return this.createPendingInstallation(journal);
   }
 
   async rollback(pluginVersion: string): Promise<string> {
@@ -249,6 +285,96 @@ export class RuntimePackageInstaller {
     const current = readPointer(this.installRoot);
     if (current?.version === version) throw new Error("Cannot remove the active Chatobby runtime");
     await rm(join(this.installRoot, "versions", version), { recursive: true, force: true });
+  }
+
+  private createPendingInstallation(initialJournal: RuntimeInstallJournal): PendingRuntimePackageInstallation {
+    let journal = initialJournal;
+    let finalized = false;
+    const versionDirectory = this.versionDirectory(journal.runtimeVersion);
+    const backupDirectory = this.operationDirectory(journal, "backup");
+    const failedDirectory = this.operationDirectory(journal, "failed");
+    const installation: PendingRuntimePackageInstallation = {
+      executable: packagePath(versionDirectory, journal.executable),
+      runtimeVersion: journal.runtimeVersion,
+      runtimePackageFingerprint: journal.runtimePackageFingerprint,
+      activationState: journal.state,
+      activate: async () => {
+        if (finalized || journal.state === "activated") return;
+        try {
+          await writePointer(this.installRoot, activationPointer(journal.runtimeVersion, journal.previousPointer));
+          journal = { ...journal, state: "activated" };
+          await writePendingJournal(this.installRoot, journal);
+          installation.activationState = "activated";
+        } catch (error) {
+          await restorePointer(this.installRoot, journal.previousPointer).catch(() => undefined);
+          throw error;
+        }
+      },
+      finalize: async () => {
+        if (finalized) return;
+        if (journal.state !== "activated") throw new Error("Cannot finalize a runtime package before activation");
+        if (journal.hadExistingVersion) {
+          // Keep the journal when cleanup is temporarily blocked. A later plugin
+          // start can retry without losing the rollback identity.
+          try {
+            await this.removeDirectory(backupDirectory, { recursive: true, force: true });
+          } catch {
+            return;
+          }
+        }
+        try {
+          await rm(this.pendingJournalPath(), { force: true });
+          finalized = true;
+        } catch {
+          // The installed runtime is already authenticated and active. Retain the
+          // journal so cleanup can be retried instead of rolling back good state.
+        }
+      },
+      rollback: async () => {
+        if (finalized) return;
+        await this.removeDirectory(failedDirectory, { recursive: true, force: true });
+        if (existsSync(versionDirectory)) await rename(versionDirectory, failedDirectory);
+        try {
+          if (journal.hadExistingVersion && existsSync(backupDirectory)) await rename(backupDirectory, versionDirectory);
+          await restorePointer(this.installRoot, journal.previousPointer);
+        } catch (error) {
+          if (!existsSync(versionDirectory) && existsSync(failedDirectory)) {
+            await rename(failedDirectory, versionDirectory).catch(() => undefined);
+          }
+          throw error;
+        }
+        await this.removeDirectory(failedDirectory, { recursive: true, force: true }).catch(() => undefined);
+        await rm(this.pendingJournalPath(), { force: true });
+        finalized = true;
+      },
+    };
+    return installation;
+  }
+
+  private async readPendingJournal(): Promise<RuntimeInstallJournal | null> {
+    const path = this.pendingJournalPath();
+    try {
+      const info = await lstat(path);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error("journal is not a regular file");
+      const value: unknown = JSON.parse(await readFile(path, "utf8"));
+      if (!isRuntimeInstallJournal(value)) throw new Error("journal shape is invalid");
+      return value;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw new Error(`Interrupted Chatobby runtime installation journal is invalid: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private pendingJournalPath(): string {
+    return join(this.installRoot, PENDING_RUNTIME_INSTALLATION_FILE);
+  }
+
+  private versionDirectory(version: string): string {
+    return join(this.installRoot, "versions", version);
+  }
+
+  private operationDirectory(journal: RuntimeInstallJournal, kind: "backup" | "failed"): string {
+    return join(this.installRoot, "versions", `.${journal.runtimeVersion}.${journal.operationId}.${kind}`);
   }
 }
 
@@ -398,7 +524,6 @@ function runtimePackageFingerprint(manifest: RuntimePackageManifest): string {
 function requiredRuntimePackageFiles(): string[] {
   return [
     executableName(),
-    "assets/app-bridge.bundle.js",
     "assets/photon_rs_bg.wasm",
     "assets/tree-sitter-bash.wasm",
     "assets/web-tree-sitter.wasm",
@@ -484,6 +609,65 @@ function readPointer(root: string): RuntimeInstallPointer | null {
   } catch {
     return null;
   }
+}
+
+function activationPointer(version: string, previous: RuntimeInstallPointer | null): RuntimeInstallPointer {
+  return {
+    version,
+    ...(previous && previous.version !== version ? { previousVersion: previous.version } : {}),
+    ...(previous?.version === version && previous.previousVersion
+      ? { previousVersion: previous.previousVersion }
+      : {}),
+  };
+}
+
+function samePointer(left: RuntimeInstallPointer | null, right: RuntimeInstallPointer | null): boolean {
+  return left?.version === right?.version && left?.previousVersion === right?.previousVersion;
+}
+
+async function writePendingJournal(root: string, journal: RuntimeInstallJournal): Promise<void> {
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  await setPrivateDirectoryMode(root);
+  const path = join(root, PENDING_RUNTIME_INSTALLATION_FILE);
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(journal, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await setPrivateFileMode(temporary, 0o600);
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+function isRuntimeInstallJournal(value: unknown): value is RuntimeInstallJournal {
+  if (!isRecord(value)) return false;
+  if (
+    value.schemaVersion !== 1
+    || typeof value.operationId !== "string"
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.operationId)
+    || (value.state !== "prepared" && value.state !== "activated")
+    || typeof value.runtimeVersion !== "string"
+    || !/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(value.runtimeVersion)
+    || typeof value.runtimePackageFingerprint !== "string"
+    || !/^[a-f0-9]{64}$/.test(value.runtimePackageFingerprint)
+    || value.executable !== executableName()
+    || typeof value.hadExistingVersion !== "boolean"
+    || value.containsSecretValues !== false
+  ) {
+    return false;
+  }
+  if (value.previousPointer !== null) {
+    if (!isRecord(value.previousPointer) || typeof value.previousPointer.version !== "string") return false;
+    if (
+      "previousVersion" in value.previousPointer
+      && value.previousPointer.previousVersion !== undefined
+      && typeof value.previousPointer.previousVersion !== "string"
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function writePointer(root: string, pointer: RuntimeInstallPointer): Promise<void> {

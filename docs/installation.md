@@ -3,13 +3,15 @@
 Chatobby is a desktop-only Obsidian connector backed by an independently
 installed local runtime. The official Community plugin installs and updates
 the connector. The normal runtime setup path is the signed in-plugin
-installation guide, which downloads from GitHub Releases; a standalone Windows
-installer is also available for manual installation.
+installation guide, which downloads from GitHub Releases. Runtime assets are
+not standalone installers.
 
 ## Requirements
 
-- Windows 11 or a currently supported Windows 10 x64 installation;
-- Obsidian 1.8.0 or newer;
+- Windows 11 or a currently supported Windows 10 x64 installation, macOS 11 or
+  newer on Apple Silicon or Intel, or a glibc-based Linux desktop on x64 or
+  arm64;
+- Obsidian 1.11.4 or newer;
 - a current backup of the vault you plan to use; and
 - an account or API key for at least one supported model provider.
 
@@ -26,16 +28,27 @@ under their own terms.
    then select **Install**. Chatobby downloads the package from the official
    GitHub release, verifies its signed update descriptor, verifies the signed
    runtime manifest and every packaged file, installs it atomically for the
-   current Windows account, and reconnects the vault.
-5. Open **Settings → Chatobby**, connect a model provider, and begin with a
-   copied test note and a low-risk read-only request.
+   current operating-system account, and reconnects the vault.
+5. In the Chatobby view, select the **Settings** gear. Connect a model provider
+   or local model server, then begin with a copied test note and a low-risk
+   read-only request. API keys use the same protected runtime credential store;
+   moving the setup page does not copy them into plugin settings.
 
-The plugin installation path does not run a downloaded Windows installer and
-does not request administrator access. If you instead use the standalone
-installer, the initial public alpha may show a Windows unknown-publisher
-warning until an Authenticode certificate is available. Continue only when it
-came from the official GitHub release and its checksum matches. Do not disable
-SmartScreen or antivirus globally.
+Obsidian's **Settings → Chatobby** page remains available for runtime,
+document-processing, documentation, and support discovery. It links back to
+the everyday Settings page inside Chatobby.
+
+The plugin installation path does not run a downloaded installer and does not
+request administrator or root access. Windows may show an unknown-publisher
+warning because the alpha runtime is not Authenticode-signed. macOS uses an
+ad-hoc signature rather than Apple notarization and may require one explicit
+**Open Anyway** approval. Chatobby never changes SmartScreen, Gatekeeper,
+quarantine, Full Disk Access, firewall, shell profiles, or global PATH.
+
+Linux support is experimental and targets ordinary glibc desktop installs.
+Flatpak, Snap, musl, and other confinement environments remain unverified. A
+detected libc, architecture, permission, or confinement mismatch stops before
+execution and preserves the previous runtime.
 
 ## Update
 
@@ -52,7 +65,8 @@ version mismatch, update both components before retrying.
 ## Uninstall
 
 1. Remove or disable Chatobby from Obsidian Community plugin settings.
-2. Remove **Chatobby Runtime** from Windows Installed apps.
+2. Close Obsidian and remove Chatobby's machine-local runtime directory for
+   your operating system if you also want to remove the runtime.
 
 Uninstalling program files intentionally preserves vault content, sessions,
 memory, event definitions, provider credentials, and other user-owned data.

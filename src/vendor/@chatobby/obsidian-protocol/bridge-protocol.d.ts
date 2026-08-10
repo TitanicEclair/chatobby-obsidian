@@ -1,6 +1,8 @@
 import type { ObsidianBridgeCapability } from "./bridge-capabilities.js";
 import type { ObsidianBridgeErrorPayload } from "./bridge-errors.js";
+import { OBSIDIAN_BRIDGE_PROTOCOL_VERSION } from "./bridge-errors.js";
 import type { ObsidianOperationName } from "./bridge-operations.js";
+import type { ProjectDirectoryObservationResult, ProjectDirectoryObserved, ProjectDirectoryRescanRequested, ProjectDirectoryRescanResult } from "./project-directory-protocol.js";
 import type { ObsidianPluginState, ObsidianRuntimeDependencyState } from "./tool-capabilities.js";
 export interface ObsidianBridgeVault {
     id: string;
@@ -15,7 +17,7 @@ export interface ObsidianEnabledPlugin {
 export interface ObsidianBridgeHello {
     type: "hello";
     authToken: string;
-    protocolVersion: 1;
+    protocolVersion: typeof OBSIDIAN_BRIDGE_PROTOCOL_VERSION;
     connectionId: string;
     vault: ObsidianBridgeVault;
     appVersion: string;
@@ -70,7 +72,7 @@ export interface ObsidianBridgeError {
     requestId: string;
     error: ObsidianBridgeErrorPayload;
 }
-export type ObsidianPluginToServerMessage = ObsidianBridgeHello | ObsidianBridgePing | ObsidianBridgeCapabilitiesChanged | ObsidianBridgeContextChanged | ObsidianBridgeResult | ObsidianBridgeError;
+export type ObsidianPluginToServerMessage = ObsidianBridgeHello | ObsidianBridgePing | ObsidianBridgeCapabilitiesChanged | ObsidianBridgeContextChanged | ProjectDirectoryObserved | ProjectDirectoryRescanRequested | ObsidianBridgeResult | ObsidianBridgeError;
 export interface ObsidianBridgePong {
     type: "pong";
     requestId?: string;
@@ -88,7 +90,7 @@ export interface ObsidianBridgeCancel {
     requestId: string;
     reason: "timeout" | "client_abort" | "disconnect" | "shutdown";
 }
-export type ObsidianServerToPluginMessage = ObsidianBridgePong | ObsidianBridgeInvoke | ObsidianBridgeCancel;
+export type ObsidianServerToPluginMessage = ObsidianBridgePong | ObsidianBridgeInvoke | ObsidianBridgeCancel | ProjectDirectoryObservationResult | ProjectDirectoryRescanResult;
 /**
  * Parse an unknown value into a validated ObsidianPluginToServerMessage.
  *

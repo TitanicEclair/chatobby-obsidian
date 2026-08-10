@@ -6,7 +6,6 @@
 @import "./shared/tokens.css";
 @import "./shell/shell.css";
 @import "./session/session.css";
-@import "./session/session-picker.css";
 @import "./toolbar/toolbar.css";
 @import "./composer/composer.css";
 @import "./settings/settings.css";
@@ -24,6 +23,8 @@
 @import "../features/events/ui/events.css";
 @import "../features/queries/ui/queries.css";
 @import "../features/mcp/ui/mcp.css";
+@import "../features/projects/ui/projects.css";
+@import "../features/settings/ui/settings-page.css";
 @import "../features/channels/ui/channels.css";
 @import "./shared/page-shell.css";
 @import "./shared/motion.css";

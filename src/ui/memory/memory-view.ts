@@ -1,11 +1,8 @@
 import { setIcon } from "obsidian";
 import type {
   FrontendMemoryBoundaryMode,
-  FrontendMemoryCategoryFilter,
-  FrontendMemoryFilter,
   FrontendMemoryRecordViewModel,
   FrontendMemoryScreenViewModel,
-  FrontendMemorySort,
 } from "../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../shared/component";
 import {
@@ -17,18 +14,14 @@ import {
   createPageToolbar,
   PageShell,
 } from "../shared/page-shell";
+import { memoryViewPayload, renderMemoryFilterControls, type MemorySetViewPayload } from "./memory-filters";
 
 /** Compatibility action emitted by older extension panels. */
 export type MemoryActionId = "memory:insights";
 export type MemoryTab = "memories" | "suggestions" | "settings";
 
 export type MemoryViewIntent =
-  | { readonly type: "memory.set-view"; readonly payload: {
-      readonly filter: FrontendMemoryFilter;
-      readonly query: string;
-      readonly category: FrontendMemoryCategoryFilter;
-      readonly sort: FrontendMemorySort;
-    } }
+  | { readonly type: "memory.set-view"; readonly payload: MemorySetViewPayload }
   | { readonly type: "memory.create"; readonly payload: { readonly target: "user" | "memory" | "project" | "failure"; readonly content: string } }
   | { readonly type: "memory.update"; readonly payload: { readonly recordId: string; readonly expectedRecordRevision: number; readonly content: string } }
   | { readonly type: "memory.set-status"; readonly payload: { readonly recordId: string; readonly expectedRecordRevision: number; readonly status: "active" | "archived" } }
@@ -199,7 +192,7 @@ export class MemoryView extends ChatobbyComponent {
       if (event.key === "Enter") {
         void this.runIntent({
           type: "memory.set-view",
-          payload: { filter: model.filter, query: input.value, category: model.category, sort: model.sort },
+          payload: memoryViewPayload(model, { query: input.value }),
         });
       }
     });
@@ -207,40 +200,14 @@ export class MemoryView extends ChatobbyComponent {
       if (!input.value && model.query) {
         void this.runIntent({
           type: "memory.set-view",
-          payload: { filter: model.filter, query: "", category: model.category, sort: model.sort },
+          payload: memoryViewPayload(model, { query: "" }),
         });
       }
     });
-    const category = this.createViewSelect(
-      toolbar,
-      "Memory category",
-      model.category,
-      model.categoryOptions,
-      (value) => {
-        if (!isMemoryCategoryFilter(value)) return;
-        this.selectedRecordId = null;
-        void this.runIntent({
-          type: "memory.set-view",
-          payload: { filter: model.filter, query: model.query, category: value, sort: model.sort },
-        });
-      },
-    );
-    category.addClass("chatobby-memory__category-select");
-    const sort = this.createViewSelect(
-      toolbar,
-      "Sort memories",
-      model.sort,
-      model.sortOptions,
-      (value) => {
-        if (!isMemorySort(value)) return;
-        this.selectedRecordId = null;
-        void this.runIntent({
-          type: "memory.set-view",
-          payload: { filter: model.filter, query: model.query, category: model.category, sort: value },
-        });
-      },
-    );
-    sort.addClass("chatobby-memory__sort-select");
+    renderMemoryFilterControls(toolbar, model, this.busy, (overrides) => {
+      this.selectedRecordId = null;
+      void this.runIntent({ type: "memory.set-view", payload: memoryViewPayload(model, overrides) });
+    });
     const add = toolbar.createEl("button", { cls: "mod-cta", attr: { type: "button" } });
     setIcon(add.createSpan(), "plus");
     add.createSpan({ text: "Add" });
@@ -249,22 +216,10 @@ export class MemoryView extends ChatobbyComponent {
       this.renderState(this.props.getModel());
     });
     if (this.creating) this.renderCreate(parent, model);
-
-    const filters = parent.createDiv({ cls: "chatobby-memory__filters" });
-    for (const option of model.filters) {
-      const button = filters.createEl("button", {
-        cls: option.selected ? "is-active" : undefined,
-        text: option.label,
-        attr: { type: "button", "aria-pressed": String(option.selected) },
-      });
-      button.addEventListener("click", () => {
-        this.selectedRecordId = null;
-        void this.runIntent({
-          type: "memory.set-view",
-          payload: { filter: option.id, query: model.query, category: model.category, sort: model.sort },
-        });
-      });
-    }
+    const scopeContext = parent.createDiv({ cls: "chatobby-memory__scope-context" });
+    scopeContext.createDiv({ cls: "chatobby-memory__scope-label", text: model.scope.label });
+    scopeContext.createDiv({ cls: "chatobby-memory__scope-description", text: model.scope.description });
+    if (model.scope.path) scopeContext.createDiv({ cls: "chatobby-memory__scope-path", text: model.scope.path });
     if (model.searchResultCount !== undefined) {
       parent.createDiv({ cls: "chatobby-memory__result-summary", text: `Search results · ${model.searchResultCount}` });
     }
@@ -314,7 +269,7 @@ export class MemoryView extends ChatobbyComponent {
   private renderRecords(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
     const list = parent.createDiv({ cls: "chatobby-memory__records", attr: { role: "list" } });
     if (model.records.length === 0) {
-      list.createDiv({ cls: "chatobby-memory__empty", text: model.filter === "archived" ? "No archived memories in this area." : "No matching memories yet." });
+      list.createDiv({ cls: "chatobby-memory__empty", text: model.status === "archived" ? "No archived memories in this area." : "No matching memories yet." });
       return;
     }
     model.records.forEach((record, index) => {
@@ -328,6 +283,7 @@ export class MemoryView extends ChatobbyComponent {
       const category = button.createSpan({ cls: "chatobby-memory__record-category" });
       category.createSpan({ cls: "chatobby-memory__record-label", text: record.label });
       if (record.stateLabel) category.createSpan({ cls: "chatobby-memory__record-state", text: record.stateLabel });
+      category.createSpan({ cls: "chatobby-memory__record-location", text: `${record.locationLabel} · ${record.scopeRelationLabel}` });
       button.createSpan({ cls: "chatobby-memory__record-divider", attr: { "aria-hidden": "true" } });
       button.createSpan({ cls: "chatobby-memory__record-content", text: record.content });
       button.addEventListener("click", () => {
@@ -354,6 +310,7 @@ export class MemoryView extends ChatobbyComponent {
     if (this.editing) this.renderEditor(detail, record);
     else detail.createDiv({ cls: "chatobby-memory__detail-content", text: record.content });
     const facts = detail.createDiv({ cls: "chatobby-memory__detail-facts" });
+    facts.createSpan({ text: `${record.locationLabel} · ${record.scopeRelationLabel}` });
     facts.createSpan({ text: `Updated ${new Date(record.updatedAt).toLocaleDateString()}` });
     facts.createSpan({ text: record.sensitivityLabel });
 
@@ -552,27 +509,6 @@ export class MemoryView extends ChatobbyComponent {
     });
   }
 
-  private createViewSelect(
-    parent: HTMLElement,
-    label: string,
-    value: string,
-    options: FrontendMemoryScreenViewModel["categoryOptions"],
-    onChange: (value: string) => void,
-  ): HTMLSelectElement {
-    const select = parent.createEl("select", {
-      cls: "chatobby-memory__view-select",
-      attr: { "aria-label": label },
-    });
-    for (const option of options) {
-      const element = select.createEl("option", { value: option.value, text: option.label });
-      element.disabled = Boolean(option.disabledReason);
-    }
-    select.value = value;
-    select.disabled = this.busy;
-    select.addEventListener("change", () => onChange(select.value));
-    return select;
-  }
-
   private selectTab(tab: MemoryTab): void {
     if (this.tab === tab) return;
     this.tab = tab;
@@ -608,24 +544,6 @@ export class MemoryView extends ChatobbyComponent {
 
 function isMemoryTarget(value: string): value is "user" | "memory" | "project" | "failure" {
   return value === "user" || value === "memory" || value === "project" || value === "failure";
-}
-
-function isMemoryCategoryFilter(value: string): value is FrontendMemoryCategoryFilter {
-  return value === "all"
-    || value === "uncategorized"
-    || value === "failure"
-    || value === "correction"
-    || value === "insight"
-    || value === "preference"
-    || value === "convention"
-    || value === "tool-quirk";
-}
-
-function isMemorySort(value: string): value is FrontendMemorySort {
-  return value === "updated-desc"
-    || value === "last-used-desc"
-    || value === "created-desc"
-    || value === "created-asc";
 }
 
 function isMemoryBoundaryMode(value: string): value is FrontendMemoryBoundaryMode {

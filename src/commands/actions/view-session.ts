@@ -8,7 +8,7 @@ import type { ChatobbyAction } from "../registry";
 const sessionActions: ChatobbyAction[] = [
   { id: "new-session", name: "New session", group: "session", run: (s) => s.withView((v) => v.commandNewSession()) },
   { id: "resume-session", name: "Resume session", group: "session", run: (s) => s.withView((v) => v.commandResumeSession()) },
-  { id: "set-working-directory", name: "Choose project folder", group: "session", run: (s) => s.withView((v) => v.commandSetWorkingDirectory()) },
+	{ id: "set-working-directory", name: "Open Projects", group: "session", run: (s) => s.withView((v) => v.commandSetWorkingDirectory()) },
   { id: "send-prompt", name: "Send message", group: "session", run: (s) => s.withView((v) => v.commandSendPrompt()) },
   { id: "abort", name: "Stop current turn", group: "session", run: (s) => s.withView((v) => v.commandAbort()) },
   { id: "compact", name: "Compact context", group: "session", run: (s) => s.withView((v) => v.commandCompact()) },

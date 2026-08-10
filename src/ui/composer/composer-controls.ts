@@ -1,6 +1,6 @@
 // ComposerControls — compact, native rendering of the runtime-owned control model.
 
-import { setIcon } from "obsidian";
+import { Menu, setIcon } from "obsidian";
 import type {
   FrontendChoiceControl,
   FrontendComposerViewModel,
@@ -19,8 +19,10 @@ export interface ComposerControlsHost {
 /** Native buttons and searchable menus; all option semantics come from the runtime. */
 export class ComposerControls extends ChatobbyComponent {
   private readonly buttons = new Map<PickerKind, HTMLButtonElement>();
+  private overflowButton: HTMLButtonElement | null = null;
   private picker: SelectionMenu | null = null;
   private activePickerKind: PickerKind | null = null;
+  private activePickerAnchor: HTMLButtonElement | null = null;
   private providerFilter = "";
   private selectedModel = "";
 
@@ -47,6 +49,16 @@ export class ComposerControls extends ChatobbyComponent {
       button.addEventListener("click", () => this.togglePicker(id));
       this.buttons.set(id, button);
     }
+    this.overflowButton = container.createEl("button", {
+      cls: "chatobby-control-button chatobby-control-overflow",
+      attr: {
+        type: "button",
+        "aria-label": "More composer options",
+        title: "More composer options",
+      },
+    });
+    setIcon(this.overflowButton, "ellipsis");
+    this.overflowButton.addEventListener("click", (event) => this.openOverflow(event));
     this.refreshControlLabels();
   }
 
@@ -80,6 +92,7 @@ export class ComposerControls extends ChatobbyComponent {
   override destroy(): void {
     this.closePicker(false);
     this.buttons.clear();
+    this.overflowButton = null;
     super.destroy();
   }
 
@@ -92,8 +105,8 @@ export class ComposerControls extends ChatobbyComponent {
     this.openPicker(kind);
   }
 
-  private openPicker(kind: PickerKind): void {
-    const anchor = this.buttons.get(kind);
+  private openPicker(kind: PickerKind, anchorOverride?: HTMLButtonElement): void {
+    const anchor = anchorOverride ?? this.buttons.get(kind);
     const control = this.control(kind);
     if (!anchor || !control) return;
     let picker: SelectionMenu;
@@ -143,16 +156,18 @@ export class ComposerControls extends ChatobbyComponent {
     });
     this.picker = picker;
     this.activePickerKind = kind;
+    this.activePickerAnchor = anchor;
     anchor.setAttr("aria-expanded", "true");
     anchor.setAttr("aria-controls", picker.id);
     picker.render(this.container!);
   }
 
   private closePicker(restoreFocus: boolean): void {
-    const anchor = this.activePickerKind ? this.buttons.get(this.activePickerKind) : undefined;
+    const anchor = this.activePickerAnchor;
     this.picker?.destroy();
     this.picker = null;
     this.activePickerKind = null;
+    this.activePickerAnchor = null;
     anchor?.setAttr("aria-expanded", "false");
     anchor?.removeAttribute("aria-controls");
     if (restoreFocus) anchor?.focus();
@@ -235,9 +250,37 @@ export class ComposerControls extends ChatobbyComponent {
         title: control.label,
       },
     });
+    const icon = button.createSpan({ cls: "chatobby-control-button__icon", attr: { "aria-hidden": "true" } });
+    setIcon(icon, controlIcon(control.id));
     button.createSpan({ cls: "chatobby-control-button__label", text: control.label });
     setIcon(button.createSpan({ cls: "chatobby-control-button__chevron", attr: { "aria-hidden": "true" } }), "chevron-down");
     return button;
+  }
+
+  private openOverflow(event: MouseEvent): void {
+    const anchor = this.overflowButton;
+    if (!anchor) return;
+    const menu = new Menu();
+    for (const kind of ["provider", "effort"] as const) {
+      const control = this.control(kind);
+      if (!control) continue;
+      const value = kind === "provider" ? this.providerFilter : control.value;
+      const selected = control.options.find((option) => option.value === value)?.label ?? control.label;
+      menu.addItem((item) => item
+        .setTitle(`${control.label}: ${selected}`)
+        .setIcon(controlIcon(kind))
+        .onClick(() => this.openPicker(kind, anchor)));
+    }
+    menu.showAtMouseEvent(event);
+  }
+}
+
+function controlIcon(id: PickerKind): string {
+  switch (id) {
+    case "permission": return "shield-check";
+    case "provider": return "server";
+    case "model": return "bot";
+    case "effort": return "gauge";
   }
 }
 

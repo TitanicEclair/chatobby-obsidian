@@ -151,7 +151,7 @@ export class MockBridgeWs {
   }
 
   /** Send a frame to all connected clients (simulates server→plugin communication). */
-  sendToClients(frame: { type: string; requestId: string; operation?: string; arguments?: Record<string, unknown>; deadline?: string; reason?: string }): void {
+  sendToClients(frame: Record<string, unknown>): void {
     for (const client of this.connectedClients) {
       if (client.readyState === 1) { // OPEN
         client.send(JSON.stringify(frame));

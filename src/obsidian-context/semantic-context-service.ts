@@ -3,8 +3,8 @@ import type {
   ObsidianBridgeContextChanged,
   ObsidianContextChangedDomain,
   ObsidianContextRevisions,
-} from "../vendor/@chatobby/obsidian-protocol/bridge-protocol";
-import type { ObsidianCapabilityState } from "../vendor/@chatobby/obsidian-protocol/tool-capabilities";
+} from "../vendor/@chatobby/obsidian-protocol/index.js";
+import type { ObsidianCapabilityState } from "../vendor/@chatobby/obsidian-protocol/index.js";
 import { collectObsidianCapabilityState } from "../obsidian-bridge/dependency-snapshot";
 import { buildNoteContextExcerpt } from "../obsidian-bridge/operations/helpers/note-io";
 import { getVaultIdentity } from "../obsidian-bridge/operations/helpers/vault-identity";

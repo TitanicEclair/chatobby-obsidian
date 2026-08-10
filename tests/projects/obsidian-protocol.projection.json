@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "TitanicEclair/pi-mono",
+  "sourceCommit": "d0b20cdd7f61508bee5be76d68dc2b29763b8292",
+  "generator": "scripts/build-vendor-artifacts.mjs",
+  "sourceArtifact": "vendor/obsidian-protocol",
+  "connectorArtifact": "src/vendor/@chatobby/obsidian-protocol",
+  "projectionManifest": "projection.json",
+  "projectionManifestSha256": "b0591b868d682bbda3a6ef082aab40334f8117f3d4600a7959cc5ccb1d0924fe"
+}
