@@ -225,7 +225,7 @@ export interface WsLocalModelProviderProbeResult {
 export interface WsProjectDirectoryCandidateRequest {
 	readonly schemaVersion: 1;
 	readonly intentId: string;
-	readonly operation: "create" | "root-add" | "root-relink";
+	readonly operation: "create" | "root-add" | "roots-add-batch" | "root-relink";
 	readonly absolutePath: string;
 }
 

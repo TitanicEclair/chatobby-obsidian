@@ -674,35 +674,100 @@ describe("Composer", () => {
 
   it("fuzzily references Vault files from @ without granting access", () => {
     const searchVaultReferences = vi.fn(() => [{
+      id: "vault:Notes/Cerebrum.md",
       kind: "file" as const,
       label: "Cerebrum.md",
       path: "Notes/Cerebrum.md",
+      promptPath: "Notes/Cerebrum.md",
+      scope: "vault" as const,
+      vaultRelativePath: "Notes/Cerebrum.md",
     }]);
-    const { composer, input, card } = bindComposer(createHost({ searchVaultReferences }));
+    const openVaultReference = vi.fn();
+    const send = vi.fn();
+    const { composer, input, card, highlight } = bindComposer(createHost({
+      searchVaultReferences,
+      openVaultReference,
+      send,
+    }));
     input.value = "Please review @cer";
     input.setSelectionRange(input.value.length, input.value.length);
 
     composer.handleInput();
 
     expect(searchVaultReferences).toHaveBeenCalledWith("cer");
+    expect(highlight.textContent).toContain("Please review @cer");
     expect(card.querySelector(".chatobby-reference-menu__name")?.textContent).toBe("Cerebrum.md");
     expect(card.textContent).toContain("does not grant Chatobby permission");
 
     composer.handleKeydown(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
 
-    expect(input.value).toBe("Please review @[[Notes/Cerebrum.md]] ");
+    expect(input.value).toBe("Please review ");
+    const chip = card.querySelector<HTMLButtonElement>(".chatobby-reference-chip__open");
+    expect(chip?.textContent).toBe("@Cerebrum.md");
+    chip?.click();
+    expect(openVaultReference).toHaveBeenCalledWith(expect.objectContaining({ path: "Notes/Cerebrum.md" }));
     expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(true);
+
+    composer.send();
+    expect(send).toHaveBeenCalledWith(
+      "Please review @[[Notes/Cerebrum.md]]",
+      undefined,
+      expect.any(AbortSignal),
+      expect.any(String),
+    );
   });
 
   it("marks selected folders explicitly in an @ reference", () => {
-    const { composer, input } = bindComposer(createHost({
-      searchVaultReferences: () => [{ kind: "folder", label: "Plans", path: "Projects/Plans" }],
+    const send = vi.fn();
+    const { composer, input, card } = bindComposer(createHost({
+      send,
+      searchVaultReferences: () => [{
+        id: "vault:Projects/Plans",
+        kind: "folder",
+        label: "Plans",
+        path: "Projects/Plans",
+        promptPath: "Projects/Plans",
+        relativePath: "Plans",
+        scope: "vault",
+        vaultRelativePath: "Projects/Plans",
+      }],
     }));
     input.value = "Use @pla";
     input.setSelectionRange(input.value.length, input.value.length);
     composer.handleInput();
     composer.handleKeydown(new KeyboardEvent("keydown", { key: "Tab", cancelable: true }));
-    expect(input.value).toBe("Use @[[Projects/Plans/]] ");
+    expect(input.value).toBe("Use ");
+    expect(card.querySelector(".chatobby-reference-chip__open")?.textContent).toBe("@Plans/");
+    composer.send();
+    expect(send).toHaveBeenCalledWith(
+      "Use @[[Projects/Plans/]]",
+      undefined,
+      expect.any(AbortSignal),
+      expect.any(String),
+    );
+  });
+
+  it("scrolls keyboard reference selection into view", async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => undefined);
+    const references = Array.from({ length: 12 }, (_, index) => ({
+      id: `vault:Notes/${index}.md`,
+      kind: "file" as const,
+      label: `${index}.md`,
+      path: `Notes/${index}.md`,
+      promptPath: `Notes/${index}.md`,
+      scope: "vault" as const,
+      vaultRelativePath: `Notes/${index}.md`,
+    }));
+    const { composer, input, card } = bindComposer(createHost({ searchVaultReferences: () => references }));
+    input.value = "@";
+    input.setSelectionRange(1, 1);
+    composer.handleInput();
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true }));
+
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" }));
+    expect(card.querySelectorAll(".chatobby-reference-menu__option")[1]?.classList.contains("is-active")).toBe(true);
+    scrollIntoView.mockRestore();
   });
 
   it("does not treat an email address as a Vault reference", () => {

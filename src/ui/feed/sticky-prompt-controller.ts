@@ -4,6 +4,7 @@ interface StickyPromptControllerOptions {
 	readonly getScroll: () => HTMLElement | null;
 	readonly getOrderedBlocks: () => readonly FeedBlock[];
 	readonly getBlockElement: (blockId: string) => HTMLElement | null;
+	readonly beforeNavigate?: () => void;
 }
 
 /** Maintains one compact pointer to the prompt governing the visible response. */
@@ -55,6 +56,7 @@ export class StickyPromptController {
 		const id = this.button?.dataset.targetBlockId;
 		const element = id ? this.options.getBlockElement(id) : null;
 		if (!element) return;
+		this.options.beforeNavigate?.();
 		element.scrollIntoView({ behavior: "smooth", block: "center" });
 		this.highlighted?.removeClass("is-feed-target");
 		if (this.highlightTimer !== null) window.clearTimeout(this.highlightTimer);

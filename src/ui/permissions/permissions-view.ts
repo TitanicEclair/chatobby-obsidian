@@ -119,6 +119,7 @@ export class PermissionsView extends ChatobbyComponent {
         });
         return;
       }
+      this.renderPolicyContext(body, model);
       this.renderProfiles(body, model);
       this.renderTemporaryApprovals(body, model);
       this.renderCapabilities(body, model);
@@ -127,6 +128,36 @@ export class PermissionsView extends ChatobbyComponent {
       const storage = createPageDisclosure(body, "policy-storage", "Technical details");
       storage.addClass("chatobby-permissions__storage");
       for (const line of model.storageLines ?? []) storage.createDiv({ text: line });
+    });
+  }
+
+  private renderPolicyContext(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
+    const context = body.createDiv({ cls: "chatobby-permissions__policy-context" });
+    const current = context.createDiv({ cls: "chatobby-permissions__policy-context-row is-current" });
+    const currentCopy = current.createDiv({ cls: "chatobby-permissions__policy-context-copy" });
+    currentCopy.createDiv({ cls: "chatobby-permissions__policy-context-label", text: "Current chat" });
+    currentCopy.createDiv({
+      cls: "chatobby-permissions__policy-context-detail",
+      text: bindingSourceLabel(model.currentChatPolicy.bindingSource),
+    });
+    current.createDiv({
+      cls: "chatobby-permissions__policy-context-value",
+      text: model.currentChatPolicy.name,
+    });
+
+    const installation = context.createDiv({ cls: "chatobby-permissions__policy-context-row" });
+    const installationCopy = installation.createDiv({ cls: "chatobby-permissions__policy-context-copy" });
+    installationCopy.createDiv({
+      cls: "chatobby-permissions__policy-context-label",
+      text: "Default for new chats",
+    });
+    installationCopy.createDiv({
+      cls: "chatobby-permissions__policy-context-detail",
+      text: "Used only when a chat has no specific policy assignment.",
+    });
+    installation.createDiv({
+      cls: "chatobby-permissions__policy-context-value",
+      text: model.installationDefaultPolicy.name,
     });
   }
 
@@ -502,6 +533,17 @@ function iconButton(parent: HTMLElement, icon: string, label: string): HTMLButto
 
 function titleCase(value: string): string {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
+}
+
+function bindingSourceLabel(source: string): string {
+  switch (source) {
+    case "user-session": return "Assigned specifically to this chat.";
+    case "installation-default": return "Inherited from the installation default.";
+    case "role": return "Inherited from this agent's role.";
+    case "workflow-node": return "Assigned by the running workflow node.";
+    case "run": return "Assigned to this active run.";
+    default: return "Resolved by Chatobby's live permission binding.";
+  }
 }
 
 function isDecision(value: string): value is FrontendPermissionDecision {

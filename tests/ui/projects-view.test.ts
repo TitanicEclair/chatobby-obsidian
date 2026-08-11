@@ -4,6 +4,7 @@ import { Menu, type App } from "obsidian";
 import { describe, expect, it, vi } from "vitest";
 import type { FrontendProjectScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 import { ProjectsView, type ProjectsViewIntent } from "../../src/features/projects/ui/projects-view";
+import { ProjectCreationDraftStore } from "../../src/features/projects/application/project-creation-draft";
 import { mount } from "./helpers/mount";
 
 const chooseSystemDirectories = vi.hoisted(() => vi.fn<() => Promise<readonly string[]>>());
@@ -22,6 +23,7 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
     sessionQuery: "",
     sessionSearchMode: "titles",
     sessionSort: "updated-desc",
+    sessionSearchPage: 0,
     selectedProjectId: "project:alpha",
     runningIn: { kind: "vault", label: "Vault", attachedRootIds: [] },
     projects: [{
@@ -81,6 +83,7 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
       }],
     },
 	vaultSessionCount: 0,
+    runningRoots: [],
     lifecycleOptions: [
       { value: "active", label: "Active projects" },
       { value: "archived", label: "Archived projects" },
@@ -103,12 +106,15 @@ function projectModel(overrides: Partial<FrontendProjectScreenViewModel> = {}): 
 function harness(options: {
   model?: FrontendProjectScreenViewModel;
   onIntent?: (intent: ProjectsViewIntent) => Promise<void>;
+  onMessageHit?: (hit: NonNullable<FrontendProjectScreenViewModel["messageSearchPage"]>["items"][number]) => Promise<void>;
   app?: App;
 } = {}) {
   let model = options.model ?? projectModel();
   const listeners = new Set<(value: FrontendProjectScreenViewModel | null) => void>();
   const onIntent = vi.fn(options.onIntent ?? (async () => {}));
   const onRefresh = vi.fn(async () => {});
+  const onMessageHit = vi.fn(options.onMessageHit ?? (async () => {}));
+  const creationDraft = new ProjectCreationDraftStore();
   const view = new ProjectsView({
     app: options.app ?? ({} as App),
     getModel: () => model,
@@ -119,13 +125,57 @@ function harness(options: {
     onBack: vi.fn(),
     onRefresh,
     onIntent,
+    getCreationDraft: () => creationDraft.snapshot(),
+    resetCreationDraft: () => { creationDraft.reset(); },
+    updateCreationDraft: (patch) => { creationDraft.updateDetails(patch); },
+    setCreationMarkerPolicy: (markerPolicy) => { creationDraft.setMarkerPolicy(markerPolicy); },
+    addCreationFolders: async (paths) => {
+      creationDraft.addRegisteredRoots(paths.map((path, index) => ({
+        directoryCandidateRef: `candidate:${index}:${path}`,
+        label: path.replace(/[\\/]+$/u, "").split(/[\\/]/u).at(-1) ?? path,
+        localPath: path,
+      })));
+    },
+    removeCreationFolder: (directoryCandidateRef) => { creationDraft.removeRoot(directoryCandidateRef); },
+    makeCreationFolderPrimary: (directoryCandidateRef) => { creationDraft.makePrimary(directoryCandidateRef); },
+    submitCreationDraft: async () => {
+      const draft = creationDraft.snapshot();
+      await onIntent({
+        type: "projects.create",
+        payload: draft.roots.length === 0
+          ? {
+              name: draft.name,
+              description: draft.description || undefined,
+              rootMode: "create-vault-folder",
+              directoryReuse: "none",
+              markerPolicy: "required",
+            }
+          : {
+              name: draft.name,
+              description: draft.description || undefined,
+              rootMode: "use-existing-folders",
+              roots: draft.roots.map((root) => ({
+                directoryCandidateRef: root.directoryCandidateRef,
+                label: root.label,
+                markerPolicy: draft.markerPolicy,
+                directoryReuse: "none" as const,
+              })),
+              primaryDirectoryCandidateRef: draft.primaryDirectoryCandidateRef,
+              directoryReuse: "none",
+              markerPolicy: draft.markerPolicy,
+            },
+      });
+      return true;
+    },
     onDeleteSession: vi.fn(async () => {}),
     onSessionAction: vi.fn(async () => {}),
+    onMessageHit,
   });
   return {
     view,
     onIntent,
     onRefresh,
+    onMessageHit,
     setModel(value: FrontendProjectScreenViewModel): void {
       model = value;
       for (const listener of listeners) listener(value);
@@ -198,11 +248,104 @@ describe("ProjectsView", () => {
 		}));
 	});
 
+	it("renders bounded message matches and navigates to the exact result", async () => {
+		const instance = harness({
+			model: projectModel({
+				sessionQuery: "recovery journal",
+				sessionSearchMode: "messages",
+				messageSearchPage: {
+					page: 0,
+					pageSize: 20,
+					totalCount: 21,
+					hasPrevious: false,
+					hasNext: true,
+					items: [{
+						hitId: "entry-1:0",
+						sessionId: "session:one",
+						sessionName: "Plan Alpha",
+						messageId: "entry-1",
+						targetBlockId: "history:message:entry-1:user",
+						role: "user",
+						timestamp: "2026-08-02T00:00:00.000Z",
+						excerpt: "The recovery journal must remain atomic.",
+						matchRanges: [{ start: 4, end: 20 }],
+					}],
+				},
+			}),
+		});
+		const root = mount(instance.view);
+
+		expect(root.querySelector(".chatobby-projects__message-result mark")?.textContent).toBe("recovery journal");
+		button(root, "Open match in Plan Alpha").click();
+		await vi.waitFor(() => expect(instance.onMessageHit).toHaveBeenCalledWith(
+			expect.objectContaining({ targetBlockId: "history:message:entry-1:user" }),
+		));
+
+		button(root, "Next").click();
+		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
+			type: "projects.set-view",
+			payload: expect.objectContaining({ sessionSearchPage: 1 }),
+		}));
+	});
+
 	it("keeps Create Project available while viewing a Project and opens it immediately", () => {
 		const root = mount(harness().view);
 		button(root, "Create Project").click();
-		expect(root.textContent).toContain("Choose an existing folder, or leave it blank");
+		expect(root.textContent).toContain("No existing folder is selected. Chatobby will create a folder named after this Project in the vault root.");
 		expect(root.querySelector<HTMLInputElement>('input[aria-label="Project name"]')).not.toBeNull();
+	});
+
+	it("accumulates multiple existing folders across rerenders and submits the chosen primary root", async () => {
+		const instance = harness();
+		const root = mount(instance.view);
+		button(root, "Create Project").click();
+		const name = root.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
+		if (!name) throw new Error("Project name input is unavailable");
+		name.value = "External workspace";
+		name.dispatchEvent(new Event("input", { bubbles: true }));
+
+		chooseSystemDirectories.mockResolvedValueOnce(["C:\\Y1S2\\chatopet"]);
+		button(root, "Choose folders").click();
+		await vi.waitFor(() => expect(root.textContent).toContain("C:\\Y1S2\\chatopet"));
+		chooseSystemDirectories.mockResolvedValueOnce(["D:\\Chatobby\\plugin"]);
+		button(root, "Add more folders").click();
+		await vi.waitFor(() => expect(root.textContent).toContain("D:\\Chatobby\\plugin"));
+
+		button(root, "Make plugin primary").click();
+		await vi.waitFor(() => expect(root.textContent).toContain("pluginPrimary"));
+		root.querySelector<HTMLFormElement>(".chatobby-projects__form")?.dispatchEvent(new Event("submit"));
+
+		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
+			type: "projects.create",
+			payload: expect.objectContaining({
+				name: "External workspace",
+				rootMode: "use-existing-folders",
+				primaryDirectoryCandidateRef: "candidate:0:D:\\Chatobby\\plugin",
+				roots: [
+					expect.objectContaining({ label: "chatopet", markerPolicy: "required" }),
+					expect.objectContaining({ label: "plugin", markerPolicy: "required" }),
+				],
+			}),
+		}));
+	});
+
+	it("uses the explicit vault-folder creation mode only when no existing folder was selected", async () => {
+		const instance = harness();
+		const root = mount(instance.view);
+		button(root, "Create Project").click();
+		const name = root.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
+		if (!name) throw new Error("Project name input is unavailable");
+		name.value = "Created in vault";
+		name.dispatchEvent(new Event("input", { bubbles: true }));
+		root.querySelector<HTMLFormElement>(".chatobby-projects__form")?.dispatchEvent(new Event("submit"));
+
+		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
+			type: "projects.create",
+			payload: expect.objectContaining({
+				name: "Created in vault",
+				rootMode: "create-vault-folder",
+			}),
+		}));
 	});
 
 	it("opens a stored Project session through its stable session ID", async () => {
@@ -335,14 +478,15 @@ describe("ProjectsView", () => {
 		button(modal, "Add folder").click();
 
     await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
-      type: "projects.root-add",
+      type: "projects.roots-add-batch",
       payload: {
         projectId: "project:alpha",
         expectedProjectRevision: 2,
-				label: "Alpha docs",
+        roots: [{
 				systemAbsolutePath: "C:\\Projects\\Alpha docs",
-        directoryReuse: "none",
-        markerPolicy: "required",
+          directoryReuse: "none",
+          markerPolicy: "required",
+        }],
       },
     }));
   });

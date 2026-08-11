@@ -250,6 +250,8 @@ export interface FrontendProjectRootViewModel {
     readonly primary: boolean;
     readonly locationKind: "vault-relative" | "external";
     readonly vaultRelativePath?: string;
+    /** Device-local UI projection. Never persist, log, export, or place in portable Project records. */
+    readonly localPath?: string;
     readonly directoryReuse: "canonical" | "none";
     readonly markerPolicy: "required" | "optional" | "disabled";
     readonly recoveryMode: "marker" | "device-binding-only";
@@ -274,6 +276,28 @@ export interface FrontendProjectSessionViewModel {
     readonly activeRootId?: string;
     /** Bounded excerpt emitted only when message-content search matched this chat. */
     readonly matchSnippet?: string;
+}
+export interface FrontendProjectMessageSearchHitViewModel {
+    readonly hitId: string;
+    readonly sessionId: string;
+    readonly sessionName: string;
+    readonly messageId: string;
+    readonly targetBlockId: string;
+    readonly role: "user" | "assistant";
+    readonly timestamp: string;
+    readonly excerpt: string;
+    readonly matchRanges: readonly {
+        readonly start: number;
+        readonly end: number;
+    }[];
+}
+export interface FrontendProjectMessageSearchPageViewModel {
+    readonly items: readonly FrontendProjectMessageSearchHitViewModel[];
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalCount: number;
+    readonly hasPrevious: boolean;
+    readonly hasNext: boolean;
 }
 export interface FrontendProjectSessionDestinationViewModel {
     readonly projectId: string;
@@ -333,6 +357,7 @@ export interface FrontendProjectScreenViewModel {
     readonly sessionQuery: string;
     readonly sessionSearchMode: FrontendProjectSessionSearchMode;
     readonly sessionSort: FrontendProjectSessionSort;
+    readonly sessionSearchPage: number;
     readonly selectedProjectId?: string;
     readonly runningIn: FrontendRunningWorkspaceViewModel;
     readonly projects: readonly FrontendProjectSummaryViewModel[];
@@ -341,6 +366,10 @@ export interface FrontendProjectScreenViewModel {
     readonly vaultSessionCount: number;
     readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
     readonly detail?: FrontendProjectDetailViewModel;
+    /** Available roots for the chat that is actually running, independent of the Project being viewed. */
+    readonly runningRoots: readonly FrontendProjectRootViewModel[];
+    /** Bounded exact message matches for the selected Project or Vault scope. */
+    readonly messageSearchPage?: FrontendProjectMessageSearchPageViewModel;
     readonly lifecycleOptions: readonly FrontendChoiceOption[];
     readonly availabilityOptions: readonly FrontendChoiceOption[];
     readonly sortOptions: readonly FrontendChoiceOption[];
@@ -660,6 +689,16 @@ export interface FrontendPermissionScreenViewModel {
     readonly selectedProfileId: string;
     readonly profiles: readonly FrontendPermissionProfileViewModel[];
     readonly selectedProfile: FrontendPermissionProfileViewModel;
+    readonly currentChatPolicy: {
+        readonly profileId: string;
+        readonly name: string;
+        readonly bindingSource: string;
+        readonly bindingRevision: number;
+    };
+    readonly installationDefaultPolicy: {
+        readonly profileId: string;
+        readonly name: string;
+    };
     readonly liveAgents: readonly FrontendPermissionLiveAgentViewModel[];
     readonly temporaryApprovalDescription: string;
     readonly temporaryApprovals: readonly FrontendPermissionSessionApprovalViewModel[];
@@ -1440,6 +1479,7 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly sessionQuery: string;
         readonly sessionSearchMode: FrontendProjectSessionSearchMode;
         readonly sessionSort: FrontendProjectSessionSort;
+        readonly sessionSearchPage: number;
         readonly selectedProjectId?: string;
     };
 }) | (FrontendIntentBase & {
@@ -1447,6 +1487,15 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly payload: {
         readonly name: string;
         readonly description?: string;
+        readonly rootMode?: "create-vault-folder" | "use-existing-folders";
+        readonly roots?: readonly {
+            readonly directoryCandidateRef: string;
+            readonly label: string;
+            readonly markerPolicy: "required" | "optional" | "disabled";
+            readonly directoryReuse: "canonical" | "none";
+        }[];
+        readonly primaryDirectoryCandidateRef?: string;
+        /** Legacy one-root compatibility; new connectors use rootMode and roots. */
         readonly vaultRelativePath?: string;
         readonly directoryCandidateRef?: string;
         readonly directoryReuse: "canonical" | "none";
@@ -1477,6 +1526,18 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly directoryCandidateRef?: string;
         readonly directoryReuse: "canonical" | "none";
         readonly markerPolicy: "required" | "optional" | "disabled";
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "projects.roots-add-batch";
+    readonly payload: {
+        readonly projectId: string;
+        readonly expectedProjectRevision: number;
+        readonly roots: readonly {
+            readonly directoryCandidateRef: string;
+            readonly label: string;
+            readonly markerPolicy: "required" | "optional" | "disabled";
+            readonly directoryReuse: "canonical" | "none";
+        }[];
     };
 }) | (FrontendIntentBase & {
     readonly type: "projects.root-relabel";
@@ -1930,6 +1991,7 @@ export interface FrontendIntentResult {
     readonly intentId: string;
     readonly status: "accepted" | "completed" | "rejected" | "conflict";
     readonly revision?: number;
+    readonly errorCode?: string;
     readonly fieldErrors?: Readonly<Record<string, string>>;
     readonly notice?: {
         readonly level: "info" | "warning" | "error";

@@ -46,6 +46,57 @@
   padding: var(--size-4-2) var(--size-4-3) 0;
 }
 
+.chatobby-reference-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-2-1);
+  padding: var(--size-2-2) var(--size-4-3) 0;
+}
+
+.chatobby-reference-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(260px, 100%);
+  align-items: center;
+  overflow: hidden;
+  border: var(--border-width) solid color-mix(in srgb, var(--chatobby-accent) 30%, var(--chatobby-line));
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--chatobby-accent) 7%, var(--chatobby-surface-raised));
+}
+
+button.chatobby-reference-chip__open,
+button.chatobby-reference-chip__remove {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+button.chatobby-reference-chip__open {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--size-2-1);
+  padding: var(--size-2-1) var(--size-2-2);
+  color: var(--text-normal);
+}
+
+button.chatobby-reference-chip__open:hover { background: var(--chatobby-surface-hover); }
+.chatobby-reference-chip__icon { display: inline-flex; flex: 0 0 auto; color: var(--chatobby-accent); }
+.chatobby-reference-chip__icon svg { width: var(--size-4-3); height: var(--size-4-3); }
+.chatobby-reference-chip__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.chatobby-reference-chip__remove {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-4-6);
+  align-self: stretch;
+  padding: 0;
+  color: var(--text-muted);
+}
+button.chatobby-reference-chip__remove:hover { color: var(--chatobby-danger); background: var(--chatobby-surface-hover); }
+button.chatobby-reference-chip__remove svg { width: var(--size-4-3); height: var(--size-4-3); }
+
 .chatobby-activation-rail {
   display: flex;
   flex-wrap: wrap;
@@ -96,6 +147,7 @@
 }
 
 .chatobby-composer-card.has-interaction .chatobby-attachment-rail,
+.chatobby-composer-card.has-interaction .chatobby-reference-rail,
 .chatobby-composer-card.has-interaction .chatobby-activation-rail,
 .chatobby-composer-card.has-interaction .chatobby-composer-controls-host,
 .chatobby-composer-card.has-interaction .chatobby-attach-btn {
@@ -340,14 +392,15 @@ textarea.chatobby-input {
 }
 
 .chatobby-reference-menu {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	max-height: min(360px, 52vh);
+	overflow: hidden;
   position: absolute;
   z-index: var(--layer-popover, 30);
   right: 0;
   bottom: calc(100% + var(--size-2-2));
   left: 0;
-  display: grid;
-  max-height: min(360px, calc(100vh - 180px));
-  overflow: hidden;
   border: var(--border-width) solid var(--chatobby-line);
   border-radius: var(--radius-m);
   background: var(--chatobby-canvas);
@@ -363,7 +416,14 @@ textarea.chatobby-input {
 .chatobby-reference-menu__title { border-bottom: var(--border-width) solid var(--chatobby-border); color: var(--text-normal); font-weight: var(--font-semibold); }
 .chatobby-reference-menu__hint { border-top: var(--border-width) solid var(--chatobby-border); color: var(--text-faint); }
 .chatobby-reference-menu__empty { color: var(--text-muted); }
-.chatobby-reference-menu__list { min-height: 0; overflow-y: auto; padding: var(--size-2-1); }
+.chatobby-reference-menu__list {
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-gutter: stable;
+	padding: var(--size-2-1);
+}
 button.chatobby-reference-menu__option {
   display: grid;
   width: 100%;

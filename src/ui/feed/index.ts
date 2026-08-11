@@ -68,6 +68,7 @@ export class FeedRenderer extends ChatobbyComponent {
 		getScroll: () => this.scrollEl,
 		getOrderedBlocks: () => this.currentBlocks(),
 		getBlockElement: (id) => this.blockMounts.get(id)?.element ?? null,
+		beforeNavigate: () => this.releaseBottomPinForNavigation(),
 	});
   private readonly blockMounts = new Map<string, BlockMount>();
   private store: FeedStore;
@@ -194,6 +195,18 @@ export class FeedRenderer extends ChatobbyComponent {
 
   focusFeed(): void {
     this.scrollEl?.focus();
+  }
+
+  navigateToBlock(blockId: string): boolean {
+    const element = this.blockMounts.get(blockId)?.element;
+    if (!element) return false;
+    this.releaseBottomPinForNavigation();
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.removeClass("is-feed-target");
+    void element.offsetWidth;
+    element.addClass("is-feed-target");
+    window.setTimeout(() => element.removeClass("is-feed-target"), 1_000);
+    return true;
   }
 
   setCompacting(on: boolean, reason?: string): void {
@@ -562,6 +575,14 @@ export class FeedRenderer extends ChatobbyComponent {
 
   private markUserScrollIntent(): void {
     this.userScrollIntentUntil = Date.now() + 1_000;
+  }
+
+  private releaseBottomPinForNavigation(): void {
+    if (!this.scrollEl) return;
+    this.markUserScrollIntent();
+    this.bottomPinned = false;
+    this.commitScroll(false, this.scrollEl.scrollTop);
+    this.updateJumpPill(false);
   }
 
   private updateJumpPill(isAtBottom: boolean): void {

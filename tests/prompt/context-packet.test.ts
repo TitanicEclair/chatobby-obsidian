@@ -28,7 +28,6 @@ describe("toPromptContextPacket", () => {
       workingDirectory: "Projects",
       sessionMessageCount: 0,
       sessionName: "Plan review",
-      permissionMode: "default",
     });
 
     expect(packet).toMatchObject({
@@ -41,7 +40,6 @@ describe("toPromptContextPacket", () => {
         isNewSession: true,
         sessionMessageCount: 0,
         sessionName: "Plan review",
-        permissionMode: "default",
       },
       activeNote: { path: "Projects/Plan.md", selection: "Selected text" },
       capabilities: {
@@ -68,7 +66,6 @@ describe("toPromptContextPacket", () => {
       isNewSession: false,
       sessionMessageCount: 4,
       sessionName: undefined,
-      permissionMode: undefined,
     });
     expect(packet.activeNote).toBeUndefined();
   });

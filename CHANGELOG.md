@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-08-12
+
+- Make composer `@` references visible while typing, rank the active Project's
+  vault or external folders first, keep keyboard selection scrolled into view,
+  and turn chosen files and folders into compact, clickable chips without
+  granting additional permission.
+- Show paginated, exact message matches in Project chat search and navigate to
+  the highlighted durable feed block after resuming the selected chat.
+- Restyle the sticky previous-prompt control as a full-width left-aligned bar
+  and release bottom pinning before it navigates, so a click is no longer
+  overridden by automatic scrolling.
+- Create Projects from several vault or external folders in one all-or-nothing
+  operation, preserve folder selections across rerenders, and never silently
+  replace a selected external folder with a same-named vault folder.
+- Add explicit primary-folder selection, marker retry/device-only recovery,
+  batch folder addition, local-path actions, and truthful Project repair flows.
+- Show the effective current-chat permission policy separately from the
+  installation default and remove connector-authored permission authority from
+  model context.
+- Restore each leaf's exact durable Project session before accepting a prompt
+  after the runtime reconnects, instead of adopting the runtime's temporary
+  blank Vault session.
+
 ## [0.3.3] - 2026-08-11
 
 - Clarify the exact Vault, Project, active-root, attached-folder, and update

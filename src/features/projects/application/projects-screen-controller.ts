@@ -2,11 +2,18 @@ import type { FrontendProtocolController } from "../../../frontend/frontend-prot
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type {
   FrontendIntent,
+  FrontendProjectMessageSearchHitViewModel,
+  FrontendProjectRootViewModel,
   FrontendProjectScreenViewModel,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import type { App } from "obsidian";
 import type { SessionAdvancedAction } from "../../../ui/session/session-maintenance";
 import { ProjectsView, type ProjectsViewIntent } from "../ui/projects-view";
+import { requestProjectMarkerRecovery } from "../ui/project-marker-recovery-modal";
+import {
+	ProjectCreationDraftStore,
+	type ProjectDraftMarkerPolicy,
+} from "./project-creation-draft";
 
 export interface ProjectsScreenControllerOptions {
   app: App;
@@ -18,11 +25,13 @@ export interface ProjectsScreenControllerOptions {
   onClosed(renderChat: boolean): void;
   deleteSession(sessionId: string): Promise<void>;
   runSessionAction(sessionId: string, action: SessionAdvancedAction): Promise<void>;
+  navigateToMessageHit(hit: FrontendProjectMessageSearchHitViewModel): Promise<void>;
 }
 
 /** Binds the runtime-owned Projects projection to the native Obsidian page. */
 export class ProjectsScreenController {
   private view: ProjectsView | null = null;
+  private readonly creationDraft = new ProjectCreationDraftStore();
 
   constructor(private readonly options: ProjectsScreenControllerOptions) {}
 
@@ -49,8 +58,19 @@ export class ProjectsScreenController {
       onBack: () => this.close(),
       onRefresh: async () => { await this.refresh(); },
       onIntent: (intent) => this.dispatch(intent),
+      getCreationDraft: () => this.creationDraft.snapshot(),
+      resetCreationDraft: () => { this.creationDraft.reset(); },
+      updateCreationDraft: (patch) => { this.creationDraft.updateDetails(patch); },
+      setCreationMarkerPolicy: (markerPolicy) => { this.creationDraft.setMarkerPolicy(markerPolicy); },
+      addCreationFolders: (paths) => this.addCreationFolders(paths),
+      removeCreationFolder: (directoryCandidateRef) => { this.creationDraft.removeRoot(directoryCandidateRef); },
+      makeCreationFolderPrimary: (directoryCandidateRef) => {
+        this.creationDraft.makePrimary(directoryCandidateRef);
+      },
+      submitCreationDraft: () => this.submitCreationDraft(),
       onDeleteSession: (sessionId) => this.options.deleteSession(sessionId),
       onSessionAction: (sessionId, action) => this.options.runSessionAction(sessionId, action),
+      onMessageHit: (hit) => this.openMessageHit(hit),
     });
     this.options.onOpened();
     this.view.render(this.options.getHost());
@@ -97,6 +117,21 @@ export class ProjectsScreenController {
     if (this.view) void this.refresh();
   }
 
+  async getRunningReferenceWorkspace(): Promise<{
+    readonly roots: readonly FrontendProjectRootViewModel[];
+    readonly activeRootId?: string;
+  }> {
+    let model = this.currentModel();
+    if (!model) {
+      await this.refresh();
+      model = this.currentModel();
+    }
+    return {
+      roots: model?.runningRoots ?? [],
+      activeRootId: model?.runningIn.activeRootId,
+    };
+  }
+
   private async refresh(projectId = this.currentModel()?.selectedProjectId): Promise<boolean> {
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) return false;
@@ -127,8 +162,51 @@ export class ProjectsScreenController {
   private async dispatch(input: ProjectsViewIntent): Promise<void> {
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) throw new Error("Chatobby frontend is not initialized");
-		const intentId = crypto.randomUUID();
-		const prepared = await this.prepareDirectoryCandidate(input, intentId);
+		let intentId = crypto.randomUUID();
+		let prepared = await this.prepareDirectoryCandidate(input, intentId);
+		try {
+			await this.dispatchPrepared(prepared, intentId);
+		} catch (error) {
+			if (
+				input.type !== "projects.roots-add-batch" ||
+				!(error instanceof ProjectIntentError) ||
+				!isMarkerError(error.errorCode)
+			) throw error;
+			const choice = await requestProjectMarkerRecovery(this.options.app, {
+				canUseDeviceOnly: error.errorCode === "PROJECT_DIRECTORY_MARKER_INVALID",
+				detail: error.message,
+			});
+			if (choice === "cancel") return;
+			intentId = crypto.randomUUID();
+			const retryInput: ProjectsViewIntent = choice === "device-only"
+				? {
+					type: input.type,
+					payload: {
+						...input.payload,
+						roots: input.payload.roots.map((root) => ({ ...root, markerPolicy: "disabled" as const })),
+					},
+				}
+				: input;
+			prepared = await this.prepareDirectoryCandidate(retryInput, intentId);
+			await this.dispatchPrepared(prepared, intentId);
+		}
+    if (input.type === "session.create" || input.type === "session.resume-by-id") this.close();
+  }
+
+  private async openMessageHit(hit: FrontendProjectMessageSearchHitViewModel): Promise<void> {
+    await this.dispatch({
+      type: "session.resume-by-id",
+      payload: { sessionId: hit.sessionId },
+    });
+    await this.options.navigateToMessageHit(hit);
+  }
+
+  private async dispatchPrepared(
+    prepared: Pick<FrontendIntent, "type" | "payload">,
+    intentId: string,
+  ): Promise<void> {
+    const snapshot = this.options.getStore().snapshot;
+    if (!snapshot) throw new Error("Chatobby frontend is not initialized");
     const intent = {
       schemaVersion: 1 as const,
 			intentId,
@@ -138,11 +216,117 @@ export class ProjectsScreenController {
     } as FrontendIntent;
     const outcome = await this.options.getProtocol().dispatch(intent);
     if (outcome.status === "rejected" || outcome.status === "conflict") {
-      throw new Error(outcome.notice?.message ?? "The Project action could not be applied.");
+      throw new ProjectIntentError(
+        outcome.notice?.message ?? "The Project action could not be applied.",
+        outcome.errorCode,
+      );
     }
     this.view?.setLocalError(null);
-    if (input.type === "session.create" || input.type === "session.resume-by-id") this.close();
   }
+
+	private async addCreationFolders(paths: readonly string[]): Promise<void> {
+		const draft = this.creationDraft.snapshot();
+		const known = new Set(draft.roots.map((root) => normalizeLocalPath(root.localPath)));
+		const additions = [...new Set(paths.map((path) => path.trim()).filter(Boolean))]
+			.filter((path) => !known.has(normalizeLocalPath(path)));
+		const registered = await Promise.all(additions.map(async (absolutePath) => {
+			const candidate = await this.options.getProtocol().registerProjectDirectoryCandidate({
+				schemaVersion: 1,
+				intentId: draft.intentId,
+				operation: "create",
+				absolutePath,
+			});
+			return {
+				directoryCandidateRef: candidate.directoryCandidateRef,
+				label: candidate.label,
+				localPath: absolutePath,
+			};
+		}));
+		this.creationDraft.addRegisteredRoots(registered);
+	}
+
+	private async submitCreationDraft(): Promise<boolean> {
+		const draft = this.creationDraft.snapshot();
+		const name = draft.name.trim();
+		if (!name) throw new Error("Enter a Project name.");
+		if (draft.roots.length === 0) {
+			await this.dispatchPrepared({
+				type: "projects.create",
+				payload: {
+					name,
+					...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+					rootMode: "create-vault-folder",
+					directoryReuse: "none",
+					markerPolicy: "required",
+				},
+			}, draft.intentId);
+			return true;
+		}
+		const primaryDirectoryCandidateRef = draft.primaryDirectoryCandidateRef;
+		if (!primaryDirectoryCandidateRef) throw new Error("Choose a primary Project folder.");
+		try {
+			await this.dispatchCreationWithRoots(draft);
+			return true;
+		} catch (error) {
+			if (!(error instanceof ProjectIntentError) || !isMarkerError(error.errorCode)) throw error;
+			const choice = await requestProjectMarkerRecovery(this.options.app, {
+				canUseDeviceOnly: error.errorCode === "PROJECT_DIRECTORY_MARKER_INVALID",
+				detail: error.message,
+			});
+			if (choice === "cancel") return false;
+			const markerPolicy = choice === "device-only" ? "disabled" as const : draft.markerPolicy;
+			await this.refreshCreationCandidates(markerPolicy);
+			await this.dispatchCreationWithRoots(this.creationDraft.snapshot());
+			return true;
+		}
+	}
+
+	private async refreshCreationCandidates(markerPolicy: ProjectDraftMarkerPolicy): Promise<void> {
+		const draft = this.creationDraft.snapshot();
+		const primaryLocalPath = draft.roots.find(
+			(root) => root.directoryCandidateRef === draft.primaryDirectoryCandidateRef,
+		)?.localPath;
+		const intentId = crypto.randomUUID();
+		const roots = await Promise.all(draft.roots.map(async (root) => {
+			const candidate = await this.options.getProtocol().registerProjectDirectoryCandidate({
+				schemaVersion: 1,
+				intentId,
+				operation: "create",
+				absolutePath: root.localPath,
+			});
+			return {
+				directoryCandidateRef: candidate.directoryCandidateRef,
+				label: candidate.label,
+				localPath: root.localPath,
+			};
+		}));
+		this.creationDraft.setMarkerPolicy(markerPolicy);
+		this.creationDraft.replaceRegisteredRoots({ intentId, roots, primaryLocalPath });
+	}
+
+	private async dispatchCreationWithRoots(draft: ReturnType<ProjectCreationDraftStore["snapshot"]>): Promise<void> {
+		const name = draft.name.trim();
+		if (!name) throw new Error("Enter a Project name.");
+		const primaryDirectoryCandidateRef = draft.primaryDirectoryCandidateRef;
+		if (!primaryDirectoryCandidateRef) throw new Error("Choose a primary Project folder.");
+		await this.dispatchPrepared({
+			type: "projects.create",
+			payload: {
+				name,
+				...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+				rootMode: "use-existing-folders",
+				roots: draft.roots.map((root) => ({
+					directoryCandidateRef: root.directoryCandidateRef,
+					label: root.label,
+					markerPolicy: draft.markerPolicy,
+					directoryReuse: "none" as const,
+				})),
+				primaryDirectoryCandidateRef,
+				directoryReuse: "none",
+				markerPolicy: draft.markerPolicy,
+			},
+		}, draft.intentId);
+	}
 
 	private async prepareDirectoryCandidate(
 		input: ProjectsViewIntent,
@@ -151,8 +335,33 @@ export class ProjectsScreenController {
 		if (
 			input.type !== "projects.create" &&
 			input.type !== "projects.root-add" &&
+			input.type !== "projects.roots-add-batch" &&
 			input.type !== "projects.root-relink"
 		) return input;
+		if (input.type === "projects.roots-add-batch") {
+			const candidates = await Promise.all(input.payload.roots.map(async (root) => {
+				const candidate = await this.options.getProtocol().registerProjectDirectoryCandidate({
+					schemaVersion: 1,
+					intentId,
+					operation: "roots-add-batch",
+					absolutePath: root.systemAbsolutePath,
+				});
+				return {
+					directoryCandidateRef: candidate.directoryCandidateRef,
+					label: candidate.label,
+					markerPolicy: root.markerPolicy,
+					directoryReuse: root.directoryReuse,
+				};
+			}));
+			return {
+				type: input.type,
+				payload: {
+					projectId: input.payload.projectId,
+					expectedProjectRevision: input.payload.expectedProjectRevision,
+					roots: candidates,
+				},
+			};
+		}
 		const absolutePath = input.payload.systemAbsolutePath;
 		if (!absolutePath) return input;
 		const operation = input.type === "projects.create"
@@ -190,4 +399,19 @@ export class ProjectsScreenController {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeLocalPath(path: string): string {
+	return path.trim().replace(/[\\/]+$/u, "").toLocaleLowerCase();
+}
+
+class ProjectIntentError extends Error {
+	constructor(message: string, readonly errorCode?: string) {
+		super(message);
+		this.name = "ProjectIntentError";
+	}
+}
+
+function isMarkerError(errorCode: string | undefined): boolean {
+	return errorCode === "PROJECT_DIRECTORY_MARKER_INVALID" || errorCode === "PROJECT_DIRECTORY_MARKER_CONFLICT";
 }

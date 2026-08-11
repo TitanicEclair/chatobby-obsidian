@@ -100,5 +100,12 @@ jobs:
               -f sha="$GITHUB_SHA" \
               -F force=false >/dev/null
           fi
-          test "$(gh api \
-            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          promoted_main=""
+          for attempt in $(seq 1 20); do
+            promoted_main="$(git ls-remote origin refs/heads/main | cut -f1)"
+            if test "$promoted_main" = "$GITHUB_SHA"; then
+              break
+            fi
+            sleep 2
+          done
+          test "$promoted_main" = "$GITHUB_SHA"

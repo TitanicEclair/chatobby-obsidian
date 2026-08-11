@@ -181,7 +181,8 @@ describe("FeedRenderer", () => {
         },
       ],
     };
-    const renderer = new FeedRenderer(createMockFeedHost(state));
+    const host = createMockFeedHost(state);
+    const renderer = new FeedRenderer(host);
     const element = mount(renderer);
     const scroll = element.querySelector<HTMLElement>(".chatobby-feed__scroll");
     const first = element.querySelector<HTMLElement>("[data-block-id='prompt-one']");
@@ -198,9 +199,12 @@ describe("FeedRenderer", () => {
     const sticky = element.querySelector<HTMLButtonElement>(".chatobby-feed__sticky-prompt");
     expect(sticky?.classList.contains("is-hidden")).toBe(false);
     expect(sticky?.textContent).toBe("Review the architecture and list the important gaps.");
+    host.feedViewActions.setScroll(true, 0);
+    expect(host.getFeedStore().select(feedSelectors.scroll).isAtBottom).toBe(true);
     sticky?.click();
     expect(first.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
     expect(first.classList.contains("is-feed-target")).toBe(true);
+    expect(host.getFeedStore().select(feedSelectors.scroll).isAtBottom).toBe(false);
   });
 
   it("renders feed blocks through block components and markdown host", () => {

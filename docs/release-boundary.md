@@ -61,6 +61,13 @@ acceptance, that exact connector commit promotes through a pull request into
 private `main`. Public connector `main` receives only the separately authorized
 projection of the approved private commit.
 
+The public tag workflow publishes and verifies the exact three connector
+assets before it advances public `main`. Promotion remains fast-forward only.
+After the ref update, the workflow polls the remote ref for a bounded interval
+before asserting equality, because the branch read can briefly lag the
+successful update. A timeout fails the workflow; it does not force or repeat
+the promotion.
+
 The private release workflow is intentionally inert: the tag-triggered
 publisher runs only when `github.repository` is
 `TitanicEclair/chatobby-obsidian`. A private tag can therefore never create a

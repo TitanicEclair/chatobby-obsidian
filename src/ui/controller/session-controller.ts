@@ -59,6 +59,7 @@ export class SessionController {
   private runtimeMessageCount = 0;
   private runtimeWorkingDirectory: string | null = null;
 	private runtimeWorkspace: FrontendSessionViewModel["workspace"] = { kind: "vault", label: "Vault" };
+	private disconnectedSessionPath: string | null = null;
 
   constructor(private readonly options: SessionControllerOptions) {
     this.workingDirectory = new WorkingDirectoryController(options.app, options.plugin);
@@ -212,19 +213,7 @@ export class SessionController {
 
 	async handleStoredSessionSelect(sessionPath: string): Promise<void> {
     await this.runSessionTransition("Resuming session", async () => {
-      const preferences = this.options.plugin.getSessionPreferences();
-      const changed = await this.options.dispatchSessionIntent({
-        type: "session.resume",
-        payload: {
-          sessionPath,
-          model: preferences.model || undefined,
-          thinkingLevel: preferences.thinkingLevel,
-        },
-      });
-      if (!changed) return;
-      this.options.claimSessionOwnership();
-      this.options.renderActiveTab();
-			this.options.exitSessionBrowser();
+			await this.resumeStoredSession(sessionPath, true);
     }).catch((error) => {
       console.error("Chatobby: resume session failed", error);
       new Notice(`Could not resume session: ${error instanceof Error ? error.message : String(error)}`);
@@ -240,7 +229,7 @@ export class SessionController {
 
   reconcileActiveSession(): Promise<void> {
     if (this.reconnectPromise) return this.reconnectPromise;
-    this.reconnectPromise = this.options.synchronizeFrontend().finally(() => { this.reconnectPromise = null; });
+		this.reconnectPromise = this.restoreDisconnectedSession().finally(() => { this.reconnectPromise = null; });
     return this.reconnectPromise;
   }
 
@@ -271,12 +260,44 @@ export class SessionController {
   markTransportDisconnected(): TransportInterruption {
     const active = this.activeTab();
     if (!active) return { hadActiveWork: false, hadInteraction: false };
+		this.disconnectedSessionPath = active.sessionFile ?? null;
     this.runtimeWorkingDirectory = null;
     const disconnected = disconnectSession(active);
     this.tabs.set(disconnected.tab);
     this.options.renderActiveTab();
     return disconnected.interruption;
   }
+
+	private async restoreDisconnectedSession(): Promise<void> {
+		const sessionPath = this.disconnectedSessionPath;
+		if (!sessionPath) {
+			await this.options.synchronizeFrontend();
+			return;
+		}
+		try {
+			await this.resumeStoredSession(sessionPath, false);
+			this.disconnectedSessionPath = null;
+		} catch (error) {
+			this.disconnectedSessionPath = sessionPath;
+			throw error;
+		}
+	}
+
+	private async resumeStoredSession(sessionPath: string, exitSessionBrowser: boolean): Promise<void> {
+		const preferences = this.options.plugin.getSessionPreferences();
+		const changed = await this.options.dispatchSessionIntent({
+			type: "session.resume",
+			payload: {
+				sessionPath,
+				model: preferences.model || undefined,
+				thinkingLevel: preferences.thinkingLevel,
+			},
+		});
+		if (!changed) return;
+		this.options.claimSessionOwnership();
+		this.options.renderActiveTab();
+		if (exitSessionBrowser) this.options.exitSessionBrowser();
+	}
 
   async addCurrentBackendSessionTab(
     _previousTab?: SessionTab,

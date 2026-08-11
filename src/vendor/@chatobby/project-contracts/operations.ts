@@ -50,6 +50,17 @@ export type ProjectCreationRootIntentV1 =
 			readonly directoryReuse: "canonical" | "none";
 	  };
 
+export interface ProjectSelectedRootIntentV1 {
+	readonly directoryCandidateRef: DirectoryCandidateRef;
+	readonly label: string;
+	readonly markerPolicy: "required" | "optional" | "disabled";
+	readonly directoryReuse: "canonical" | "none";
+}
+
+export interface ProjectRootBatchAddIntentV1 extends ProjectSelectedRootIntentV1 {
+	readonly location: ProjectRootLocationV1;
+}
+
 export type ProjectCommandV1 =
 	| (ProjectCommandEnvelopeV1 & {
 			/** Product path for atomic Project + primary-root creation. */
@@ -59,6 +70,25 @@ export type ProjectCommandV1 =
 			readonly creationKind: "directory-session" | "manual" | "migration";
 			readonly defaults: ProjectDefaultsV1;
 			readonly root: ProjectCreationRootIntentV1;
+	  })
+	| (ProjectCommandEnvelopeV1 & {
+			readonly type: "project.create.with-roots";
+			readonly name: string;
+			readonly description?: string;
+			readonly creationKind: "directory-session" | "manual" | "migration";
+			readonly defaults: ProjectDefaultsV1;
+			readonly rootMode: "create-vault-folder";
+			readonly root: Extract<ProjectCreationRootIntentV1, { readonly kind: "vault-folder" }>;
+	  })
+	| (ProjectCommandEnvelopeV1 & {
+			readonly type: "project.create.with-roots";
+			readonly name: string;
+			readonly description?: string;
+			readonly creationKind: "directory-session" | "manual" | "migration";
+			readonly defaults: ProjectDefaultsV1;
+			readonly rootMode: "use-existing-folders";
+			readonly roots: readonly ProjectSelectedRootIntentV1[];
+			readonly primaryDirectoryCandidateRef: DirectoryCandidateRef;
 	  })
 	| (ProjectCommandEnvelopeV1 & {
 			readonly type: "project.replace";
@@ -96,6 +126,10 @@ export type ProjectCommandV1 =
 			readonly type: "project.root.register";
 			readonly rootId: RootId;
 			readonly directoryCandidateRef: DirectoryCandidateRef;
+	  })
+	| (ProjectRootCommandEnvelopeV1 & {
+			readonly type: "project.roots.add-batch";
+			readonly roots: readonly ProjectRootBatchAddIntentV1[];
 	  })
 	| (ProjectRootCommandEnvelopeV1 & {
 			readonly type: "project.root.add";

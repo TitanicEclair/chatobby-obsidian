@@ -139,6 +139,61 @@
 	color: var(--text-normal);
 }
 
+.chatobby-projects__message-results-summary {
+	margin: var(--size-2-2) 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.chatobby-projects__message-results {
+	display: flex;
+	flex-direction: column;
+	border-top: var(--border-width) solid var(--chatobby-border);
+}
+
+.chatobby-projects button.chatobby-projects__message-result {
+	display: grid;
+	gap: var(--size-2-1);
+	width: 100%;
+	height: auto;
+	min-width: 0;
+	padding: var(--size-4-3);
+	border: 0;
+	border-bottom: var(--border-width) solid var(--chatobby-border);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-normal);
+	text-align: left;
+}
+
+.chatobby-projects button.chatobby-projects__message-result:hover { background: var(--chatobby-surface-hover); }
+.chatobby-projects__message-result-header { display: flex; min-width: 0; justify-content: space-between; gap: var(--size-4-3); }
+.chatobby-projects__message-result-session { overflow: hidden; font-weight: var(--font-medium); text-overflow: ellipsis; white-space: nowrap; }
+.chatobby-projects__message-result-meta { flex: 0 0 auto; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.chatobby-projects__message-result-excerpt {
+	display: -webkit-box;
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+.chatobby-projects__message-result-excerpt mark {
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--chatobby-accent) 24%, transparent);
+	color: var(--text-normal);
+}
+.chatobby-projects__message-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: var(--size-4-3);
+	padding-top: var(--size-4-3);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
 .chatobby-projects__folder-list,
 .chatobby-projects__chat-list { display: flex; flex-direction: column; }
 
@@ -167,6 +222,11 @@
 .chatobby-projects__folder-path,
 .chatobby-projects__folder-warning,
 .chatobby-projects__chat-snippet { margin-top: 2px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.chatobby-projects__folder-path {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .chatobby-projects__chat-snippet {
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -234,6 +294,64 @@
 .chatobby-projects__field textarea { min-height: 5rem; resize: vertical; }
 .chatobby-projects__folder-choice { color: var(--text-muted); }
 .chatobby-projects__form-actions { justify-content: flex-end; }
+
+.chatobby-projects__draft-folders,
+.chatobby-projects__draft-summary {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: var(--size-2-2);
+	padding: var(--size-4-3);
+	border: var(--border-width) solid var(--chatobby-border);
+	border-radius: var(--radius-m);
+	background: var(--chatobby-surface-muted);
+}
+
+.chatobby-projects__draft-heading,
+.chatobby-projects__draft-root-title,
+.chatobby-projects__marker-choice {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: var(--size-2-2);
+}
+
+.chatobby-projects__draft-heading { justify-content: space-between; }
+.chatobby-projects__draft-heading > span,
+.chatobby-projects__draft-empty,
+.chatobby-projects__field-help,
+.chatobby-projects__draft-summary > div {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.chatobby-projects__draft-root-list { display: flex; min-width: 0; flex-direction: column; }
+.chatobby-projects__draft-root {
+	display: grid;
+	min-width: 0;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--size-4-3);
+	padding: var(--size-4-2) 0;
+	border-bottom: var(--border-width) solid var(--chatobby-border);
+}
+.chatobby-projects__draft-root-copy { min-width: 0; }
+.chatobby-projects__draft-root-title > :first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: var(--font-medium);
+}
+.chatobby-projects__marker-choice {
+	position: relative;
+	align-items: flex-start;
+	flex-wrap: wrap;
+}
+.chatobby-projects__marker-choice > input { margin-top: 0.15em; }
+.chatobby-projects__marker-choice > .chatobby-projects__field-help {
+	width: 100%;
+	padding-left: calc(var(--checkbox-size) + var(--size-2-2));
+}
 
 .chatobby-projects__folder-picker-list {
   display: flex;

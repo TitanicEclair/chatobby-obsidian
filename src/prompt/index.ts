@@ -31,7 +31,6 @@ export interface PromptWorkspaceContext {
   workingDirectory: string;
   sessionMessageCount: number;
   sessionName?: string;
-  permissionMode?: string;
 }
 
 export function gatherVaultContext(app: App, options: { chatobbyVersion?: string } = {}): VaultContext {
@@ -158,7 +157,6 @@ export function toPromptContextPacket(
       isNewSession: workspace.sessionMessageCount === NEW_SESSION_MESSAGE_COUNT,
       sessionMessageCount: workspace.sessionMessageCount,
       sessionName: workspace.sessionName,
-      permissionMode: workspace.permissionMode,
     } : undefined,
     appContext: context.appContext,
     environment: context.environment ? {

@@ -3,6 +3,7 @@ import type { FrontendStore } from "../../frontend/frontend-store";
 import type { App } from "obsidian";
 import type ChatobbyPlugin from "../../main";
 import type { SessionAdvancedAction } from "../session/session-maintenance";
+import type { FrontendProjectMessageSearchHitViewModel } from "../../vendor/chatobby-client/frontend-contracts.js";
 import { EventsScreenController } from "../../features/events/public";
 import { ContextQueryScreenController } from "../../features/queries/public";
 import { McpScreenController } from "../../features/mcp/public";
@@ -37,6 +38,7 @@ export interface ChatViewOverlayScreenOptions {
   openSession(projectPath: string, sessionPath: string): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
   runSessionAction(sessionId: string, action: SessionAdvancedAction): Promise<void>;
+  navigateToMessageHit(hit: FrontendProjectMessageSearchHitViewModel): Promise<void>;
   navigateMcpPlugin(pluginId?: string): void;
 	downloadGuide(): void;
 }
@@ -113,6 +115,7 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     onClosed: (renderChat) => options.onClosed("projects", renderChat),
     deleteSession: (sessionId) => options.deleteSession(sessionId),
     runSessionAction: (sessionId, action) => options.runSessionAction(sessionId, action),
+    navigateToMessageHit: (hit) => options.navigateToMessageHit(hit),
   });
 	settings = new SettingsScreenController({
 		app: options.app,

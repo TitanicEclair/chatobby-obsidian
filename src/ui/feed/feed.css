@@ -36,19 +36,19 @@
 
 .chatobby-feed__sticky-prompt {
 	position: absolute;
-	top: var(--size-2-2);
-	left: 50%;
+	top: 0;
+	left: 0;
 	z-index: 3;
-	width: min(calc(100% - 7rem), 720px);
+	width: 100%;
 	min-width: 0;
-	padding: var(--size-2-2) var(--size-4-3);
-	transform: translateX(-50%);
+	padding: var(--size-2-1) var(--chatobby-edge-padding);
 	overflow: hidden;
-	border: var(--border-width) solid var(--chatobby-border);
-	border-radius: 999px;
+	border: 0;
+	border-bottom: var(--border-width) solid var(--chatobby-border);
+	border-radius: 0;
 	color: var(--text-muted);
 	background: color-mix(in srgb, var(--chatobby-canvas) 94%, transparent);
-	box-shadow: 0 2px 8px color-mix(in srgb, var(--chatobby-shadow-color) 32%, transparent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--chatobby-shadow-color) 20%, transparent);
 	font-size: var(--font-ui-smaller);
 	text-align: left;
 	text-overflow: ellipsis;
@@ -59,7 +59,7 @@
 .chatobby-feed__sticky-prompt:hover,
 .chatobby-feed__sticky-prompt:focus-visible {
 	color: var(--text-normal);
-	border-color: color-mix(in srgb, var(--chatobby-accent) 45%, var(--chatobby-border));
+	background: color-mix(in srgb, var(--chatobby-accent) 6%, var(--chatobby-canvas));
 }
 
 .chatobby-feed__block.is-feed-target {

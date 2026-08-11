@@ -12,7 +12,7 @@ import { createChatViewFeedHost } from "./feed/chat-view-feed-host";
 import { Composer, type PromptSubmissionOutcome } from "./composer/composer";
 import { createComposerContextHost } from "./composer/composer-context-host";
 import { ComposerControls } from "./composer/composer-controls";
-import { searchVaultReferences } from "./composer/vault-reference-search";
+import { searchWorkspaceReferences, type ComposerVaultReference } from "./composer/vault-reference-search";
 import { promptText } from "./modals/modals";
 import { openAutoCompactionSettings, toggleAutoCompaction, type AutoCompactionActionOptions } from "./controller/auto-compaction-controller";
 import { SlashMenu } from "./composer/slash-menu";
@@ -288,6 +288,9 @@ export class ChatobbyView extends ItemView {
       },
       runSessionAction: async (sessionId, action) => {
         await this.storedSessionActions.run({ sessionId }, action);
+      },
+      navigateToMessageHit: async (hit) => {
+        await this.waitForFeedTarget(hit.targetBlockId);
       },
       navigateMcpPlugin: (pluginId) => this.navigateTo(pluginId ? { mode: "mcp", pluginId } : { mode: "mcp" }),
 		downloadGuide: () => this.onDownloadGuide(),
@@ -671,7 +674,11 @@ export class ChatobbyView extends ItemView {
       cancelInteraction: () => this.extensionUi.cancelActive(),
       focusFeed: () => this.feed?.focusFeed(),
       storeFiles: (files) => this.storeComposerFiles(files),
-      searchVaultReferences: (query) => searchVaultReferences(this.app, query),
+      searchVaultReferences: async (query) => {
+        const workspace = await this.overlayScreens.projects.getRunningReferenceWorkspace().catch(() => undefined);
+        return searchWorkspaceReferences(this.app, query, workspace);
+      },
+      openVaultReference: (reference) => { void this.openComposerReference(reference); },
     });
 
     this.composerControls = new ComposerControls({
@@ -847,7 +854,6 @@ export class ChatobbyView extends ItemView {
       workingDirectory: this.sessions.workingDirectoryPath() || ".",
       sessionMessageCount: this.sessionState.messages.length,
       sessionName: this.activeTab()?.name,
-      permissionMode: this.activeTab()?.permissionMode ?? this.plugin.getSessionPreferences().permissionMode,
     };
     try {
       const outcome = await submitPrompt({
@@ -1221,6 +1227,35 @@ export class ChatobbyView extends ItemView {
   openSystemPath(path: string): void { openSystemPathExternally(this.app, path); }
 
   revealSystemPath(path: string): void { revealSystemPathExternally(this.app, path); }
+
+  private openComposerReference(reference: ComposerVaultReference): void {
+    if (reference.vaultRelativePath) {
+      const entry = this.app.vault.getAbstractFileByPath(reference.vaultRelativePath);
+      if (reference.kind === "file") {
+        void this.app.workspace.openLinkText(reference.vaultRelativePath, "", "tab");
+        return;
+      }
+      if (entry) {
+        const explorer = this.app.workspace.getLeavesOfType("file-explorer")[0]?.view as {
+          revealInFolder?: (file: typeof entry) => void;
+        } | undefined;
+        if (explorer?.revealInFolder) {
+          explorer.revealInFolder(entry);
+          return;
+        }
+      }
+    }
+    if (reference.localPath) revealSystemPathExternally(this.app, reference.localPath);
+  }
+
+  private async waitForFeedTarget(blockId: string): Promise<void> {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      if (this.feed?.navigateToBlock(blockId)) return;
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+    }
+    new Notice("The chat opened, but Chatobby could not find that message in the active branch.");
+  }
 
   copyToClipboard(text: string): void {
     navigator.clipboard.writeText(text).catch((e) => {

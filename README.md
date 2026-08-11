@@ -138,6 +138,11 @@ collapses away instead of permanently occupying the interface.
 You can stop a turn, inspect what the agent used, copy a full Markdown response,
 or select only the portion you need.
 
+Type `@` in the composer to attach a file or folder reference. Chatobby suggests
+the running Project's working folders first, including registered folders outside
+the vault, and keeps each selection as an openable chip. A reference tells the
+agent which item you mean; it does not bypass the active permission policy.
+
 ### Work with images and documents
 
 Paste an image into the composer or attach a supported document. Chatobby keeps
@@ -154,8 +159,12 @@ still depends on a multimodal model or a configured advanced OCR engine.
 
 Every chat belongs either to the Vault or to a Project. A Project keeps related
 conversations together and can include one primary folder plus other working
-folders. Sessions retain their history, Project identity, and current working
-set so you can continue the real work later instead of starting from nothing.
+folders, including folders outside the vault. Project creation can accumulate
+several folder selections at once and lets you choose which one is primary.
+Selected external folders are used in place; Chatobby does not create a
+same-named vault copy for them. Sessions retain their history, Project identity,
+and current working set so you can continue the real work later instead of
+starting from nothing.
 
 Browsing the Projects page never silently changes the chat that is running.
 Open a stored chat to resume it, choose **New chat in Project** for a separate
@@ -164,9 +173,16 @@ context menu. Obsidian tabs remain the boundary between independent active
 conversations, while the agent rail switches between a main session and its
 subagents.
 
+Project chat search can search either conversation names or message contents.
+Content results show the matching excerpts in bounded pages; selecting one
+resumes that chat and moves the feed to the exact highlighted message.
+
 Right-click a folder, or a file inside it, to start Project work from that
-folder. Adding another folder to the Project makes it available to its chats
-without granting capabilities denied by the active permission policy.
+folder. The primary folder supplies the chat's working directory and relative
+path base; attached folders receive the same Project-root permission treatment.
+Adding either kind makes it available to the Project's chats without granting
+capabilities denied by the active permission policy. Paths outside the Project
+remain governed by the separate external-directory rule.
 
 ### Customize the system prompt for each workspace
 
@@ -707,6 +723,12 @@ checks that Approve safe would otherwise ask you to decide. Auto may add a
 small model request before a tool runs and fails closed if classification
 cannot complete. Create narrower custom policies for specialized roles,
 web-only research, automation, or sensitive projects.
+
+The Permissions page shows **Current chat** separately from **Default for new
+chats**. A chat explicitly bound to Full access continues to use Full access
+even when Obsidian is the installation default. The default is not evidence of
+the open chat's effective policy, and each tool operation is still checked
+against the effective binding when it runs.
 
 When customizing a policy:
 

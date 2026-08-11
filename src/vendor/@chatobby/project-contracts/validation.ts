@@ -49,6 +49,8 @@ import type {
 	ProjectMigrationReceiptV1,
 	ProjectMutationReceiptV1,
 	ProjectReceiptV1,
+	ProjectRootBatchAddIntentV1,
+	ProjectSelectedRootIntentV1,
 	ProjectSnapshotV1,
 	RootOperationReceiptV1,
 } from "./operations.ts";
@@ -891,6 +893,39 @@ export function parseProjectCreationRootIntentV1(value: unknown): ProjectCreatio
 	invalid("Project creation root intent kind must be selected-root or vault-folder.", "root.kind");
 }
 
+function parseProjectSelectedRootIntentV1(value: unknown): ProjectSelectedRootIntentV1 {
+	const record = expectRecord(value, "Selected Project root intent");
+	expectExactKeys(
+		record,
+		["directoryCandidateRef", "label", "markerPolicy", "directoryReuse"],
+		[],
+		"Selected Project root intent",
+	);
+	return Object.freeze({
+		directoryCandidateRef: parseDirectoryCandidateRef(record.directoryCandidateRef),
+		label: expectString(record.label, "label", { maximum: 200 }),
+		markerPolicy: expectLiteral(record.markerPolicy, ["required", "optional", "disabled"], "markerPolicy"),
+		directoryReuse: expectLiteral(record.directoryReuse, ["canonical", "none"], "directoryReuse"),
+	});
+}
+
+function parseProjectRootBatchAddIntentV1(value: unknown): ProjectRootBatchAddIntentV1 {
+	const record = expectRecord(value, "Project batch root intent");
+	expectExactKeys(
+		record,
+		["directoryCandidateRef", "label", "location", "markerPolicy", "directoryReuse"],
+		[],
+		"Project batch root intent",
+	);
+	return Object.freeze({
+		directoryCandidateRef: parseDirectoryCandidateRef(record.directoryCandidateRef),
+		label: expectString(record.label, "label", { maximum: 200 }),
+		location: parseProjectRootLocationV1(record.location),
+		markerPolicy: expectLiteral(record.markerPolicy, ["required", "optional", "disabled"], "markerPolicy"),
+		directoryReuse: expectLiteral(record.directoryReuse, ["canonical", "none"], "directoryReuse"),
+	});
+}
+
 export function parseProjectCommandV1(value: unknown): ProjectCommandV1 {
 	const record = expectRecord(value, "Project command");
 	expectSchemaVersion(record);
@@ -917,6 +952,71 @@ export function parseProjectCommandV1(value: unknown): ProjectCommandV1 {
 			defaults: parseProjectDefaultsV1(record.defaults),
 			root: parseProjectCreationRootIntentV1(record.root),
 		});
+	}
+	if (record.type === "project.create.with-roots") {
+		const commonRequired = [
+			"schemaVersion",
+			"commandId",
+			"issuedAt",
+			"type",
+			"name",
+			"creationKind",
+			"defaults",
+			"rootMode",
+		] as const;
+		if (record.rootMode === "create-vault-folder") {
+			expectExactKeys(record, [...commonRequired, "root"], ["description"], "Multi-root Project creation command");
+			const root = parseProjectCreationRootIntentV1(record.root);
+			if (root.kind !== "vault-folder") invalid("create-vault-folder requires a vault-folder root.", "root");
+			return Object.freeze({
+				...base,
+				type: "project.create.with-roots",
+				name: expectString(record.name, "name", { maximum: 200 }),
+				...(record.description === undefined
+					? {}
+					: { description: expectString(record.description, "description", { allowEmpty: true, maximum: 4000 }) }),
+				creationKind: expectLiteral(
+					record.creationKind,
+					["directory-session", "manual", "migration"],
+					"creationKind",
+				),
+				defaults: parseProjectDefaultsV1(record.defaults),
+				rootMode: "create-vault-folder",
+				root,
+			});
+		}
+		if (record.rootMode === "use-existing-folders") {
+			expectExactKeys(
+				record,
+				[...commonRequired, "roots", "primaryDirectoryCandidateRef"],
+				["description"],
+				"Multi-root Project creation command",
+			);
+			const roots = expectArray(record.roots, "roots").map(parseProjectSelectedRootIntentV1);
+			if (roots.length === 0 || roots.length > 64) invalid("use-existing-folders requires 1 to 64 roots.", "roots");
+			const primaryDirectoryCandidateRef = parseDirectoryCandidateRef(record.primaryDirectoryCandidateRef);
+			if (!roots.some((root) => root.directoryCandidateRef === primaryDirectoryCandidateRef)) {
+				invalid("The primary directory candidate must be present in roots.", "primaryDirectoryCandidateRef");
+			}
+			return Object.freeze({
+				...base,
+				type: "project.create.with-roots",
+				name: expectString(record.name, "name", { maximum: 200 }),
+				...(record.description === undefined
+					? {}
+					: { description: expectString(record.description, "description", { allowEmpty: true, maximum: 4000 }) }),
+				creationKind: expectLiteral(
+					record.creationKind,
+					["directory-session", "manual", "migration"],
+					"creationKind",
+				),
+				defaults: parseProjectDefaultsV1(record.defaults),
+				rootMode: "use-existing-folders",
+				roots: Object.freeze(roots),
+				primaryDirectoryCandidateRef,
+			});
+		}
+		invalid("Project creation rootMode must be create-vault-folder or use-existing-folders.", "rootMode");
 	}
 	if (record.type === "project.replace") {
 		expectExactKeys(
@@ -1055,6 +1155,23 @@ export function parseProjectCommandV1(value: unknown): ProjectCommandV1 {
 			markerPolicy: expectLiteral(record.markerPolicy, ["required", "optional", "disabled"], "markerPolicy"),
 			directoryReuse: expectLiteral(record.directoryReuse, ["canonical", "none"], "directoryReuse"),
 			directoryCandidateRef: parseDirectoryCandidateRef(record.directoryCandidateRef),
+		});
+	}
+	if (record.type === "project.roots.add-batch") {
+		expectExactKeys(
+			record,
+			["schemaVersion", "commandId", "issuedAt", "type", "projectId", "expectedRevision", "roots"],
+			[],
+			"Project roots batch-add command",
+		);
+		const roots = expectArray(record.roots, "roots").map(parseProjectRootBatchAddIntentV1);
+		if (roots.length === 0 || roots.length > 64) invalid("Batch root addition requires 1 to 64 roots.", "roots");
+		return Object.freeze({
+			...base,
+			type: "project.roots.add-batch",
+			projectId: parseProjectId(record.projectId),
+			expectedRevision: expectInteger(record.expectedRevision, "expectedRevision"),
+			roots: Object.freeze(roots),
 		});
 	}
 	if (record.type === "project.root.relabel") {

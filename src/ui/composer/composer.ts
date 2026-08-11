@@ -111,13 +111,16 @@ export interface ComposerHost {
   /** Persist pasted/dropped files and return prompt-safe attachment refs. */
   storeFiles?(files: readonly File[]): Promise<ComposerAttachment[]>;
   /** Search file and folder names for an inline @ reference. */
-  searchVaultReferences?(query: string): readonly ComposerVaultReference[];
+  searchVaultReferences?(query: string): readonly ComposerVaultReference[] | Promise<readonly ComposerVaultReference[]>;
+  /** Open or reveal a selected reference without granting agent access. */
+  openVaultReference?(reference: ComposerVaultReference): void;
 }
 
 export class Composer extends ChatobbyComponent {
   private inputEl: HTMLTextAreaElement | null = null;
   private highlightEl: HTMLElement | null = null;
   private attachmentRailEl: HTMLElement | null = null;
+  private referenceRailEl: HTMLElement | null = null;
   private activationRailEl: HTMLElement | null = null;
   private interactionRailEl: HTMLElement | null = null;
   private composerCardEl: HTMLElement | null = null;
@@ -155,6 +158,8 @@ export class Composer extends ChatobbyComponent {
   private referenceToken: ReferenceToken | null = null;
   private referenceMatches: readonly ComposerVaultReference[] = [];
   private referenceIndex = 0;
+  private referenceSearchSequence = 0;
+  private selectedReferences: ComposerVaultReference[] = [];
 
   constructor(private host: ComposerHost) {
     super();
@@ -188,12 +193,14 @@ export class Composer extends ChatobbyComponent {
     this.referenceMenuEl = card?.createDiv({ cls: "chatobby-reference-menu is-hidden" }) ?? null;
     this.interactionRailEl = card?.createDiv({ cls: "chatobby-interaction-rail is-hidden" }) ?? null;
     this.attachmentRailEl = card?.createDiv({ cls: "chatobby-attachment-rail is-hidden" }) ?? null;
+    this.referenceRailEl = card?.createDiv({ cls: "chatobby-reference-rail is-hidden" }) ?? null;
     this.activationRailEl = card?.createDiv({ cls: "chatobby-activation-rail is-hidden" }) ?? null;
     if (this.attachmentRailEl && card) {
       const inputWrap = card.querySelector(".chatobby-input-wrap");
       if (inputWrap && this.referenceMenuEl) card.insertBefore(this.referenceMenuEl, inputWrap);
       if (inputWrap && this.interactionRailEl) card.insertBefore(this.interactionRailEl, inputWrap);
       if (inputWrap) card.insertBefore(this.attachmentRailEl, inputWrap);
+      if (inputWrap && this.referenceRailEl) card.insertBefore(this.referenceRailEl, inputWrap);
       if (inputWrap && this.activationRailEl) card.insertBefore(this.activationRailEl, inputWrap);
       this.bindAttachmentEvents(card);
     }
@@ -252,6 +259,7 @@ export class Composer extends ChatobbyComponent {
     this.disarmAbortConfirm();
     this.resetHistoryNavigation();
     this.state.text = text;
+    this.selectedReferences = [];
     this.activations = [];
     this.cancelledToken = null;
     this.pendingArgumentCompletion = null;
@@ -261,6 +269,7 @@ export class Composer extends ChatobbyComponent {
     }
     this.resizeInput();
     this.refreshSlashState();
+    this.renderReferences();
     this.updateControls();
   }
 
@@ -274,6 +283,7 @@ export class Composer extends ChatobbyComponent {
     this.resetHistoryNavigation();
     if (revokeAttachments) this.releaseDraftAttachments(this.captureDraft());
     this.state = createInitialComposerState();
+    this.selectedReferences = [];
     this.activations = [];
     this.cancelledToken = null;
     this.pendingArgumentCompletion = null;
@@ -287,6 +297,7 @@ export class Composer extends ChatobbyComponent {
     this.renderHighlights([]);
     this.renderActivations([]);
     this.renderAttachments();
+    this.renderReferences();
   }
 
   /** Send the current input. */
@@ -301,7 +312,7 @@ export class Composer extends ChatobbyComponent {
     }
     if (this.promptInFlight) return;
     const rawText = this.state.text;
-    const text = rawText.trim();
+    const text = this.promptText(rawText);
     if (!text && this.state.attachments.length === 0) return;
     this.activateExactLeadingCommand();
     const commands = this.parseActivatedCommands();
@@ -340,7 +351,7 @@ export class Composer extends ChatobbyComponent {
         this.updateControls();
       };
       const result = isSlashSubmission
-        ? this.host.submitSlashPlan?.({ text: rawText, commands, attachments }, acceptSlashSubmission)
+        ? this.host.submitSlashPlan?.({ text, commands, attachments }, acceptSlashSubmission)
         : this.host.send(text, attachments, pendingAbort.signal, submissionId);
       if (isPromiseLike(result)) {
         void Promise.resolve(result).then(
@@ -396,7 +407,7 @@ export class Composer extends ChatobbyComponent {
    *  not a new prompt. Only meaningful while a turn is active. */
   steer(): void {
     this.disarmAbortConfirm();
-    const text = this.state.text.trim();
+    const text = this.promptText(this.state.text);
     if (!text && this.state.attachments.length === 0) return;
     const attachments = this.state.attachments.length > 0
       ? this.state.attachments.map((attachment) => attachment.prompt)
@@ -479,7 +490,7 @@ export class Composer extends ChatobbyComponent {
         return;
       } else if (this.isTurnActive()) {
         // Mid-turn Enter STEERS the running turn (a correction) — it does not start a new prompt.
-        if (this.state.text.trim() || this.state.attachments.length > 0) this.steer();
+        if (this.state.text.trim() || this.state.attachments.length > 0 || this.selectedReferences.length > 0) this.steer();
       } else {
         this.send();
       }
@@ -548,8 +559,10 @@ export class Composer extends ChatobbyComponent {
       this.state.text = this.inputEl.value;
     }
     this.updateControls();
+    // The textarea itself is transparent; the highlight mirror is the visible
+    // text. Keep it current even while @ suggestions own autocomplete.
+    this.refreshSlashState();
     if (this.refreshReferenceState()) this.host.closeSlash?.();
-    else this.refreshSlashState();
   }
 
   // ── Private helpers ────────────────────────────────────────────
@@ -579,21 +592,43 @@ export class Composer extends ChatobbyComponent {
       this.closeReferenceMenu();
       return false;
     }
+    const tokenChanged = this.referenceToken?.start !== token.start || this.referenceToken.query !== token.query;
     this.referenceToken = token;
-    this.referenceMatches = this.host.searchVaultReferences(token.query);
-    this.referenceIndex = Math.min(this.referenceIndex, Math.max(0, this.referenceMatches.length - 1));
+    if (tokenChanged) this.referenceIndex = 0;
+    const sequence = ++this.referenceSearchSequence;
+    const result = this.host.searchVaultReferences(token.query);
+    if (isPromiseLike(result)) {
+      this.referenceMatches = [];
+      this.renderReferenceMenu(true);
+      void Promise.resolve(result).then((matches) => {
+        if (sequence !== this.referenceSearchSequence || this.referenceToken?.query !== token.query) return;
+        this.referenceMatches = matches;
+        this.referenceIndex = Math.min(this.referenceIndex, Math.max(0, matches.length - 1));
+        this.renderReferenceMenu();
+      }, () => {
+        if (sequence !== this.referenceSearchSequence) return;
+        this.referenceMatches = [];
+        this.renderReferenceMenu();
+      });
+      return true;
+    }
+    this.referenceMatches = result;
+    this.referenceIndex = Math.min(this.referenceIndex, Math.max(0, result.length - 1));
     this.renderReferenceMenu();
     return true;
   }
 
-  private renderReferenceMenu(): void {
+  private renderReferenceMenu(loading = false): void {
     const menu = this.referenceMenuEl;
     if (!menu) return;
     menu.empty();
     menu.removeClass("is-hidden");
     menu.createDiv({ cls: "chatobby-reference-menu__title", text: "Reference a file or folder" });
-    if (this.referenceMatches.length === 0) {
-      menu.createDiv({ cls: "chatobby-reference-menu__empty", text: "No matching files or folders" });
+    if (loading || this.referenceMatches.length === 0) {
+      menu.createDiv({
+        cls: "chatobby-reference-menu__empty",
+        text: loading ? "Looking through this workspace…" : "No matching files or folders",
+      });
       return;
     }
     const list = menu.createDiv({ cls: "chatobby-reference-menu__list", attr: { role: "listbox" } });
@@ -604,6 +639,7 @@ export class Composer extends ChatobbyComponent {
           type: "button",
           role: "option",
           "aria-selected": String(index === this.referenceIndex),
+          "data-reference-index": String(index),
         },
       });
       const icon = option.createSpan({ cls: "chatobby-reference-menu__icon", attr: { "aria-hidden": "true" } });
@@ -627,6 +663,11 @@ export class Composer extends ChatobbyComponent {
     if (this.referenceMatches.length === 0) return;
     this.referenceIndex = (this.referenceIndex + delta + this.referenceMatches.length) % this.referenceMatches.length;
     this.renderReferenceMenu();
+    window.requestAnimationFrame(() => {
+      this.referenceMenuEl
+        ?.querySelector<HTMLElement>(`[data-reference-index="${this.referenceIndex}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
   }
 
   private commitReference(): void {
@@ -634,25 +675,70 @@ export class Composer extends ChatobbyComponent {
     const token = this.referenceToken;
     const reference = this.referenceMatches[this.referenceIndex];
     if (!input || !token || !reference) return;
-    const path = reference.kind === "folder" ? `${reference.path.replace(/\/$/u, "")}/` : reference.path;
-    const insertion = `@[[${path}]] `;
     const cursor = input.selectionStart ?? token.end;
-    input.value = `${input.value.slice(0, token.start)}${insertion}${input.value.slice(cursor)}`;
-    const nextCursor = token.start + insertion.length;
+    const before = input.value.slice(0, token.start);
+    const after = input.value.slice(cursor).replace(/^\s+/u, "");
+    input.value = `${before}${after}`;
+    const nextCursor = token.start;
     input.setSelectionRange(nextCursor, nextCursor);
     this.state.text = input.value;
+    if (!this.selectedReferences.some((candidate) => candidate.id === reference.id)) {
+      this.selectedReferences = [...this.selectedReferences, reference];
+    }
     this.closeReferenceMenu();
     this.resizeInput();
     this.refreshSlashState();
+    this.renderReferences();
     this.updateControls();
   }
 
   private closeReferenceMenu(): void {
+    this.referenceSearchSequence += 1;
     this.referenceToken = null;
     this.referenceMatches = [];
     this.referenceIndex = 0;
     this.referenceMenuEl?.empty();
     this.referenceMenuEl?.addClass("is-hidden");
+  }
+
+  private renderReferences(): void {
+    const rail = this.referenceRailEl;
+    if (!rail) return;
+    rail.empty();
+    rail.toggleClass("is-hidden", this.selectedReferences.length === 0);
+    for (const reference of this.selectedReferences) {
+      const chip = rail.createDiv({ cls: "chatobby-reference-chip" });
+      const open = chip.createEl("button", {
+        cls: "chatobby-reference-chip__open",
+        attr: { type: "button", title: reference.localPath ?? reference.vaultRelativePath ?? reference.path },
+      });
+      const icon = open.createSpan({ cls: "chatobby-reference-chip__icon", attr: { "aria-hidden": "true" } });
+      setIcon(icon, reference.kind === "folder" ? "folder" : "file-text");
+      open.createSpan({ cls: "chatobby-reference-chip__label", text: referenceChipLabel(reference) });
+      open.addEventListener("click", () => this.host.openVaultReference?.(reference));
+      const remove = chip.createEl("button", {
+        cls: "chatobby-reference-chip__remove",
+        attr: { type: "button", "aria-label": `Remove ${reference.label}` },
+      });
+      setIcon(remove, "x");
+      remove.addEventListener("click", () => {
+        this.selectedReferences = this.selectedReferences.filter((candidate) => candidate.id !== reference.id);
+        this.renderReferences();
+        this.updateControls();
+        this.inputEl?.focus();
+      });
+    }
+  }
+
+  private promptText(text: string): string {
+    const prompt = text.trim();
+    const references = this.selectedReferences.map((reference) => {
+      const path = reference.kind === "folder"
+        ? `${reference.promptPath.replace(/[\\/]$/u, "")}/`
+        : reference.promptPath;
+      return `@[[${path}]]`;
+    });
+    return [prompt, ...references].filter(Boolean).join(" ");
   }
 
   private setPromptInFlight(promptInFlight: boolean): void {
@@ -670,7 +756,7 @@ export class Composer extends ChatobbyComponent {
 
   private updateControls(): void {
     const turnActive = this.isTurnActive();
-    const empty = this.state.text.trim().length === 0 && this.state.attachments.length === 0;
+    const empty = this.state.text.trim().length === 0 && this.state.attachments.length === 0 && this.selectedReferences.length === 0;
     const submittingInteraction = this.activeInteraction?.method === "input";
 
     // One morphing slot: send while idle, stop while a turn runs. Same circle, same place.
@@ -806,7 +892,7 @@ export class Composer extends ChatobbyComponent {
   private restorePendingSubmissionDraft(): void {
     const draft = this.pendingSubmissionDraft;
     if (!draft || this.pendingSubmissionDraftRestored) return;
-    if (this.state.text.length > 0 || this.state.attachments.length > 0) return;
+    if (this.state.text.length > 0 || this.state.attachments.length > 0 || this.selectedReferences.length > 0) return;
     this.restoreDraft(draft);
     this.pendingSubmissionDraftRestored = true;
   }
@@ -818,7 +904,7 @@ export class Composer extends ChatobbyComponent {
   }
 
   private restoreStashedDraftIfComposerEmpty(): void {
-    if (this.state.text.length > 0 || this.state.attachments.length > 0) return;
+    if (this.state.text.length > 0 || this.state.attachments.length > 0 || this.selectedReferences.length > 0) return;
     this.restoreStashedDraft();
   }
 
@@ -839,7 +925,7 @@ export class Composer extends ChatobbyComponent {
         if (result.retracted) {
           this.recoverableSubmission = null;
           this.committedTurnPending = false;
-          if (this.state.text.trim() || this.state.attachments.length > 0) {
+          if (this.state.text.trim() || this.state.attachments.length > 0 || this.selectedReferences.length > 0) {
             this.replaceStashedDraft(this.captureDraft());
           }
           this.restoreDraft(recoverable.draft);
@@ -881,7 +967,7 @@ export class Composer extends ChatobbyComponent {
   }
 
   private stashCurrentDraft(): void {
-    if (!this.state.text.trim() && this.state.attachments.length === 0) {
+    if (!this.state.text.trim() && this.state.attachments.length === 0 && this.selectedReferences.length === 0) {
       return;
     }
     this.replaceStashedDraft(this.captureDraft());
@@ -891,7 +977,7 @@ export class Composer extends ChatobbyComponent {
 
   private restoreStashExplicitly(): void {
     if (!this.stashedDraft) return;
-    if (this.state.text.trim() || this.state.attachments.length > 0) {
+    if (this.state.text.trim() || this.state.attachments.length > 0 || this.selectedReferences.length > 0) {
       new Notice("Clear the composer before restoring the stashed draft.");
       return;
     }
@@ -945,6 +1031,7 @@ export class Composer extends ChatobbyComponent {
 
   private applyHistoryText(text: string, cursor: "start" | "end"): void {
     this.state.text = text;
+    this.selectedReferences = [];
     this.activations = [];
     this.cancelledToken = null;
     this.pendingArgumentCompletion = null;
@@ -956,6 +1043,7 @@ export class Composer extends ChatobbyComponent {
     this.resizeInput();
     this.updateControls();
     this.refreshSlashState();
+    this.renderReferences();
   }
 
   private resetHistoryNavigation(): void {
@@ -968,6 +1056,7 @@ export class Composer extends ChatobbyComponent {
       text: this.state.text,
       attachments: [...this.state.attachments],
       activations: this.activations.map((activation) => ({ ...activation })),
+      references: [...this.selectedReferences],
     };
   }
 
@@ -975,6 +1064,7 @@ export class Composer extends ChatobbyComponent {
     this.state.text = draft.text;
     this.state.attachments = [...draft.attachments];
     this.activations = draft.activations.map((activation) => ({ ...activation }));
+    this.selectedReferences = [...draft.references];
     this.cancelledToken = null;
     this.pendingArgumentCompletion = null;
     this.resetHistoryNavigation();
@@ -983,6 +1073,7 @@ export class Composer extends ChatobbyComponent {
     this.updateControls();
     this.refreshSlashState();
     this.renderAttachments();
+    this.renderReferences();
     this.inputEl?.focus();
   }
 
@@ -1329,8 +1420,8 @@ function isTextInput(e: KeyboardEvent): boolean {
   return e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
 }
 
-function isPromiseLike(value: unknown): value is PromiseLike<void | PromptSubmissionOutcome> {
-  return typeof value === "object" && value !== null && "then" in value;
+function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
+	return typeof value === "object" && value !== null && "then" in value;
 }
 
 interface ReferenceToken {
@@ -1374,6 +1465,7 @@ interface ComposerDraftSnapshot {
   text: string;
   attachments: ComposerAttachment[];
   activations: SlashActivation[];
+  references: ComposerVaultReference[];
 }
 
 interface RecoverableSubmission {
@@ -1398,6 +1490,12 @@ function activationIcon(command: SlashCommandSpec): string {
   if (command.source === "prompt") return "file-text";
   if (command.source === "extension") return "puzzle";
   return "terminal";
+}
+
+function referenceChipLabel(reference: ComposerVaultReference): string {
+  if (reference.kind === "file") return `@${reference.label}`;
+  const path = reference.relativePath || reference.label;
+  return `@${path.replace(/[\\/]$/u, "")}/`;
 }
 
 function activationKindLabel(command: SlashCommandSpec): string {

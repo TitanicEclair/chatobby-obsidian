@@ -253,6 +253,37 @@ describe("SessionController", () => {
     expect(renderActiveTab).toHaveBeenCalled();
   });
 
+	it("reattaches the leaf's durable Project session after the runtime reconnects", async () => {
+		const intents: SessionMutationRequest[] = [];
+		const projectSession = session("project-session", {
+			name: "External Roots Live Test",
+			recoveryPath: "C:/sessions/project-session.jsonl",
+			workingDirectory: "C:\\Vault\\.obsidian\\plugins\\chatobby",
+			workspace: { kind: "project", projectId: "project:external-roots", label: "External Roots Live Test" },
+		});
+		const { controller } = harness({
+			dispatch: async (request, target) => {
+				intents.push(request);
+				target.applyRuntimeSession(projectSession);
+				return true;
+			},
+		});
+		controller.applyRuntimeSession(projectSession);
+
+		controller.markTransportDisconnected();
+		await controller.reconcileActiveSession();
+
+		expect(intents).toEqual([{
+			type: "session.resume",
+			payload: {
+				sessionPath: "C:/sessions/project-session.jsonl",
+				thinkingLevel: "medium",
+			},
+		}]);
+		expect(controller.activeTabId()).toBe("project-session");
+		expect(controller.workspaceLabel()).toBe("External Roots Live Test");
+	});
+
   it("replaces the last closed session with a new runtime target", async () => {
     const intents: SessionMutationRequest[] = [];
     const { controller } = harness({

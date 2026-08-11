@@ -1,6 +1,7 @@
 import { Menu, Modal, setIcon, type App } from "obsidian";
 import type {
   FrontendProjectDetailViewModel,
+  FrontendProjectMessageSearchHitViewModel,
   FrontendProjectRootViewModel,
   FrontendProjectScreenViewModel,
   FrontendProjectSessionViewModel,
@@ -8,7 +9,15 @@ import type {
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../../../ui/shared/component";
 import { confirmAction, pickItem, promptText } from "../../../ui/modals/modals";
+import {
+  openSystemPathExternally,
+  revealSystemPathExternally,
+} from "../../../ui/controller/system-path-opener";
 import type { SessionAdvancedAction } from "../../../ui/session/session-maintenance";
+import type {
+  ProjectCreationDraftSnapshot,
+  ProjectDraftMarkerPolicy,
+} from "../application/project-creation-draft";
 import { chooseSystemDirectories } from "../infrastructure/system-directory-picker";
 import {
   createPageIconButton,
@@ -26,15 +35,24 @@ export type ProjectsViewIntent =
       readonly sessionQuery: string;
       readonly sessionSearchMode: FrontendProjectScreenViewModel["sessionSearchMode"];
       readonly sessionSort: FrontendProjectScreenViewModel["sessionSort"];
+      readonly sessionSearchPage: number;
       readonly selectedProjectId?: string;
     } }
   | { readonly type: "projects.create"; readonly payload: {
       readonly name: string;
       readonly description?: string;
+      readonly rootMode?: "create-vault-folder" | "use-existing-folders";
+      readonly roots?: readonly {
+        readonly directoryCandidateRef: string;
+        readonly label: string;
+        readonly markerPolicy: "required" | "optional" | "disabled";
+        readonly directoryReuse: "canonical" | "none";
+      }[];
+      readonly primaryDirectoryCandidateRef?: string;
       readonly vaultRelativePath?: string;
       readonly systemAbsolutePath?: string;
       readonly directoryReuse: "canonical" | "none";
-      readonly markerPolicy: "required";
+      readonly markerPolicy: "required" | "optional" | "disabled";
       readonly useForCurrentSession?: boolean;
     } }
   | { readonly type: "projects.replace-details"; readonly payload: {
@@ -54,7 +72,16 @@ export type ProjectsViewIntent =
       readonly vaultRelativePath?: string;
       readonly systemAbsolutePath?: string;
       readonly directoryReuse: "none";
-      readonly markerPolicy: "required";
+      readonly markerPolicy: "required" | "optional" | "disabled";
+    } }
+  | { readonly type: "projects.roots-add-batch"; readonly payload: {
+      readonly projectId: string;
+      readonly expectedProjectRevision: number;
+      readonly roots: readonly {
+        readonly systemAbsolutePath: string;
+        readonly markerPolicy: "required" | "optional" | "disabled";
+        readonly directoryReuse: "canonical" | "none";
+      }[];
     } }
   | { readonly type: "projects.root-relabel"; readonly payload: {
       readonly projectId: string;
@@ -89,6 +116,14 @@ export type ProjectsViewIntent =
         | { readonly kind: "vault" }
         | { readonly kind: "project"; readonly projectId: string };
     } }
+  | { readonly type: "session.change-workspace"; readonly payload: {
+      readonly target: {
+        readonly kind: "project";
+        readonly projectId: string;
+        readonly activeRootId: string;
+        readonly sessionAttachedRootIds: readonly string[];
+      };
+    } }
   | { readonly type: "session.resume-by-id"; readonly payload: { readonly sessionId: string } };
 
 interface ProjectsViewProps {
@@ -98,8 +133,17 @@ interface ProjectsViewProps {
   onBack(): void;
   onRefresh(): Promise<void>;
   onIntent(intent: ProjectsViewIntent): Promise<void>;
+  getCreationDraft(): ProjectCreationDraftSnapshot;
+  resetCreationDraft(): void;
+  updateCreationDraft(patch: { readonly name?: string; readonly description?: string }): void;
+  setCreationMarkerPolicy(markerPolicy: ProjectDraftMarkerPolicy): void;
+  addCreationFolders(paths: readonly string[]): Promise<void>;
+  removeCreationFolder(directoryCandidateRef: string): void;
+  makeCreationFolderPrimary(directoryCandidateRef: string): void;
+  submitCreationDraft(): Promise<boolean>;
   onDeleteSession(sessionId: string): Promise<void>;
   onSessionAction(sessionId: string, action: SessionAdvancedAction): Promise<void>;
+  onMessageHit(hit: FrontendProjectMessageSearchHitViewModel): Promise<void>;
 }
 
 type EditorMode = "create" | "details" | null;
@@ -272,12 +316,19 @@ export class ProjectsView extends ChatobbyComponent {
   handleKeydown(event: KeyboardEvent): boolean {
     if (event.key !== "Escape" && event.key !== "BrowserBack") return false;
     if (this.editor) {
+      if (this.editor === "create") this.props.resetCreationDraft();
       this.editor = null;
       this.renderState(this.props.getModel());
       event.preventDefault();
       return true;
     }
     return false;
+  }
+
+  private startCreating(model: FrontendProjectScreenViewModel): void {
+    this.props.resetCreationDraft();
+    this.editor = "create";
+    this.renderState(model);
   }
 
   private renderState(model: FrontendProjectScreenViewModel | null): void {
@@ -327,7 +378,7 @@ export class ProjectsView extends ChatobbyComponent {
         title: "Project unavailable",
         description: "This Project is no longer in the current view. Choose another Project or refresh.",
         actionLabel: "Create Project",
-        onAction: () => { this.editor = "create"; this.renderState(model); },
+        onAction: () => this.startCreating(model),
       });
       return;
     }
@@ -344,7 +395,7 @@ export class ProjectsView extends ChatobbyComponent {
     });
 		create.disabled = this.editor === "create";
     setIcon(create, "plus");
-    create.addEventListener("click", () => { this.editor = "create"; this.renderState(model); });
+    create.addEventListener("click", () => this.startCreating(model));
     const search = parent.createEl("input", {
       cls: "chatobby-projects__search",
       attr: { type: "search", placeholder: "Search Projects", "aria-label": "Search Projects", enterkeyhint: "search" },
@@ -519,6 +570,10 @@ export class ProjectsView extends ChatobbyComponent {
       className: "chatobby-projects__chats",
     });
 	this.renderChatControls(chats.content, empty.model);
+    if (empty.model.sessionSearchMode === "messages" && empty.model.sessionQuery.trim()) {
+      this.renderMessageSearchPage(chats.content, empty.model);
+      return;
+    }
     if (visibleSessions.length === 0) {
       createPageState(chats.content, {
         kind: "empty",
@@ -535,6 +590,49 @@ export class ProjectsView extends ChatobbyComponent {
     }
     const list = chats.content.createDiv({ cls: "chatobby-projects__chat-list" });
     for (const session of visibleSessions) this.renderSession(list, session);
+  }
+
+  private renderMessageSearchPage(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
+    const page = model.messageSearchPage;
+    if (!page || page.items.length === 0) {
+      createPageState(parent, {
+        kind: "empty",
+        title: "No matching messages",
+        description: "No indexed user or assistant message in this scope contains that text.",
+        actionLabel: "Clear search",
+        onAction: () => void this.changeView({ sessionQuery: "", sessionSearchPage: 0 }),
+      });
+      return;
+    }
+    const summary = parent.createDiv({
+      cls: "chatobby-projects__message-results-summary",
+      text: `${page.totalCount} ${plural(page.totalCount, "match")} · page ${page.page + 1}`,
+    });
+    summary.setAttr("aria-live", "polite");
+    const list = parent.createDiv({ cls: "chatobby-projects__message-results" });
+    for (const hit of page.items) this.renderMessageHit(list, hit);
+    if (!page.hasPrevious && !page.hasNext) return;
+    const pagination = parent.createDiv({ cls: "chatobby-projects__message-pagination" });
+    const previous = pagination.createEl("button", { text: "Previous", attr: { type: "button" } });
+    previous.disabled = !page.hasPrevious;
+    previous.addEventListener("click", () => void this.changeView({ sessionSearchPage: Math.max(0, page.page - 1) }));
+    pagination.createSpan({ text: `Page ${page.page + 1} of ${Math.max(1, Math.ceil(page.totalCount / page.pageSize))}` });
+    const next = pagination.createEl("button", { text: "Next", attr: { type: "button" } });
+    next.disabled = !page.hasNext;
+    next.addEventListener("click", () => void this.changeView({ sessionSearchPage: page.page + 1 }));
+  }
+
+  private renderMessageHit(parent: HTMLElement, hit: FrontendProjectMessageSearchHitViewModel): void {
+    const button = parent.createEl("button", {
+      cls: "chatobby-projects__message-result",
+      attr: { type: "button", "aria-label": `Open match in ${hit.sessionName}` },
+    });
+    const header = button.createDiv({ cls: "chatobby-projects__message-result-header" });
+    header.createSpan({ cls: "chatobby-projects__message-result-session", text: hit.sessionName });
+    header.createSpan({ cls: "chatobby-projects__message-result-meta", text: `${humanizeRole(hit.role)} · ${formatRelativeDate(hit.timestamp)}` });
+    const excerpt = button.createDiv({ cls: "chatobby-projects__message-result-excerpt" });
+    renderMatchRanges(excerpt, hit.excerpt, hit.matchRanges);
+    button.addEventListener("click", () => void this.props.onMessageHit(hit));
   }
 
   private renderChatControls(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
@@ -562,6 +660,7 @@ export class ProjectsView extends ChatobbyComponent {
 	});
 	messages.addEventListener("click", () => void this.changeView({
 		sessionSearchMode: model.sessionSearchMode === "messages" ? "titles" : "messages",
+		sessionSearchPage: 0,
 	}));
 	choiceSelect(controls, model.sessionSortOptions, model.sessionSort, "Chat sorting", (value) => {
 		void this.changeView({ sessionSort: value as FrontendProjectScreenViewModel["sessionSort"] });
@@ -576,7 +675,14 @@ export class ProjectsView extends ChatobbyComponent {
     const heading = copy.createDiv({ cls: "chatobby-projects__folder-heading" });
     heading.createSpan({ text: root.label });
     if (root.primary) heading.createSpan({ cls: "chatobby-projects__badge", text: "Primary" });
-    if (root.vaultRelativePath) copy.createDiv({ cls: "chatobby-projects__folder-path", text: root.vaultRelativePath });
+    const visiblePath = root.localPath ?? root.vaultRelativePath;
+    if (visiblePath) {
+      copy.createDiv({
+        cls: "chatobby-projects__folder-path",
+        text: visiblePath,
+        attr: { title: visiblePath },
+      });
+    }
     if (root.availability !== "available") {
       copy.createDiv({ cls: "chatobby-projects__folder-warning", text: root.availabilityLabel });
     }
@@ -653,6 +759,44 @@ export class ProjectsView extends ChatobbyComponent {
   private openRootMenu(event: MouseEvent, detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): void {
     event.preventDefault();
     const menu = new Menu();
+    const running = this.props.getModel()?.runningIn;
+    if (
+      root.availability === "available" &&
+      running?.kind === "project" &&
+      running.projectId === detail.projectId &&
+      running.activeRootId !== root.rootId
+    ) {
+      menu.addItem((item) => item.setTitle("Run current chat here").setIcon("play").onClick(() => void this.run(
+        `active-root:${root.rootId}`,
+        {
+          type: "session.change-workspace",
+          payload: {
+            target: {
+              kind: "project",
+              projectId: detail.projectId,
+              activeRootId: root.rootId,
+              sessionAttachedRootIds: detail.roots
+                .filter((candidate) => candidate.rootId !== root.rootId && candidate.availability === "available")
+                .map((candidate) => candidate.rootId),
+            },
+          },
+        },
+      )));
+      menu.addSeparator();
+    }
+    const localPath = root.localPath;
+    if (localPath) {
+      menu.addItem((item) => item.setTitle("Open folder").setIcon("folder-open").onClick(() => {
+        openSystemPathExternally(this.props.app, localPath);
+      }));
+      menu.addItem((item) => item.setTitle("Reveal in file explorer").setIcon("scan-search").onClick(() => {
+        revealSystemPathExternally(this.props.app, localPath);
+      }));
+      menu.addItem((item) => item.setTitle("Copy path").setIcon("copy").onClick(() => {
+        void navigator.clipboard.writeText(localPath);
+      }));
+      menu.addSeparator();
+    }
     menu.addItem((item) => item.setTitle("Rename folder label").setIcon("pencil").onClick(() => void this.renameRoot(detail, root)));
     if (!root.primary) {
       menu.addItem((item) => item.setTitle("Make primary").setIcon("star").onClick(() => void this.run(`primary:${root.rootId}`, {
@@ -769,22 +913,21 @@ export class ProjectsView extends ChatobbyComponent {
     const folders = await chooseSystemDirectories("Add folders to Project", true);
     if (folders.length === 0 || !await confirmDirectoryMarkers(this.props.app, folders.length)) return;
     await this.runAction("add-folders", async () => {
-      for (const folder of folders) {
-        const current = this.props.getModel()?.detail;
-        if (!current || current.projectId !== detail.projectId) throw new Error("The Project changed while adding folders.");
-        await this.props.onIntent({
-          type: "projects.root-add",
-          payload: {
-            projectId: current.projectId,
-            expectedProjectRevision: current.revision,
-            label: systemPathLabel(folder),
+      const current = this.props.getModel()?.detail;
+      if (!current || current.projectId !== detail.projectId) throw new Error("The Project changed while adding folders.");
+      await this.props.onIntent({
+        type: "projects.roots-add-batch",
+        payload: {
+          projectId: current.projectId,
+          expectedProjectRevision: current.revision,
+          roots: folders.map((folder) => ({
             systemAbsolutePath: folder,
-            directoryReuse: "none",
-            markerPolicy: "required",
-          },
-        });
-        await this.props.onRefresh();
-      }
+            directoryReuse: "none" as const,
+            markerPolicy: "required" as const,
+          })),
+        },
+      });
+      await this.props.onRefresh();
     });
   }
 
@@ -867,43 +1010,120 @@ export class ProjectsView extends ChatobbyComponent {
   }
 
   private renderCreateForm(parent: HTMLElement): void {
+    const draft = this.props.getCreationDraft();
     const section = createPageSection(parent, {
       title: "Create Project",
-      description: "Choose an existing folder, or leave it blank and Chatobby will create one in the vault root.",
+      description: "Keep one or more existing folders together, or let Chatobby create a new folder in this vault.",
     });
     const form = section.content.createEl("form", { cls: "chatobby-projects__form" });
-    const name = textField(form, "Project name", "Project name", true);
-    const description = textAreaField(form, "Description", "What are you working on?", "");
-    const selectedFolder = form.createDiv({ cls: "chatobby-projects__folder-choice" });
-    selectedFolder.createSpan({ text: "No folder selected" });
-    let folderPath: string | undefined;
-    const choose = form.createEl("button", { text: "Choose folder", attr: { type: "button" } });
-    choose.addEventListener("click", () => void chooseSystemDirectories("Choose Project folder", false).then(([folder]) => {
-      folderPath = folder;
-      selectedFolder.setText(folder ?? "No folder selected");
+    const name = textField(form, "Project name", "Project name", true, draft.name);
+    name.addEventListener("input", () => this.props.updateCreationDraft({ name: name.value }));
+    const description = textAreaField(form, "Description", "What are you working on?", draft.description);
+    description.addEventListener("input", () => this.props.updateCreationDraft({ description: description.value }));
+
+    const folders = form.createDiv({ cls: "chatobby-projects__draft-folders" });
+    const folderHeading = folders.createDiv({ cls: "chatobby-projects__draft-heading" });
+    folderHeading.createEl("strong", { text: "Project folders" });
+    folderHeading.createSpan({
+      text: draft.roots.length === 0
+        ? "None selected"
+        : `${draft.roots.length} ${plural(draft.roots.length, "folder")} selected`,
+    });
+    if (draft.roots.length === 0) {
+      folders.createDiv({
+        cls: "chatobby-projects__draft-empty",
+        text: "No existing folder is selected. Chatobby will create a folder named after this Project in the vault root.",
+      });
+    } else {
+      const rootList = folders.createDiv({ cls: "chatobby-projects__draft-root-list" });
+      for (const root of draft.roots) {
+        const row = rootList.createDiv({ cls: "chatobby-projects__draft-root" });
+        const copy = row.createDiv({ cls: "chatobby-projects__draft-root-copy" });
+        const title = copy.createDiv({ cls: "chatobby-projects__draft-root-title" });
+        title.createSpan({ text: root.label });
+        if (root.directoryCandidateRef === draft.primaryDirectoryCandidateRef) {
+          title.createSpan({ cls: "chatobby-projects__badge", text: "Primary" });
+        }
+        copy.createDiv({
+          cls: "chatobby-projects__folder-path",
+          text: root.localPath,
+          attr: { title: root.localPath },
+        });
+        const actions = row.createDiv({ cls: "chatobby-projects__row-actions" });
+        if (root.directoryCandidateRef !== draft.primaryDirectoryCandidateRef) {
+          const primary = actions.createEl("button", {
+            cls: "clickable-icon",
+            attr: { type: "button", "aria-label": `Make ${root.label} primary` },
+          });
+          setIcon(primary, "star");
+          primary.addEventListener("click", () => {
+            this.props.makeCreationFolderPrimary(root.directoryCandidateRef);
+            this.renderState(this.props.getModel());
+          });
+        }
+        const remove = actions.createEl("button", {
+          cls: "clickable-icon",
+          attr: { type: "button", "aria-label": `Remove ${root.label} from new Project` },
+        });
+        setIcon(remove, "x");
+        remove.addEventListener("click", () => {
+          this.props.removeCreationFolder(root.directoryCandidateRef);
+          this.renderState(this.props.getModel());
+        });
+      }
+    }
+    const choose = folders.createEl("button", {
+      text: draft.roots.length === 0 ? "Choose folders" : "Add more folders",
+      attr: { type: "button" },
+    });
+    choose.addEventListener("click", () => void this.runAction("choose-project-folders", async () => {
+      const paths = await chooseSystemDirectories("Choose Project folders", true);
+      if (paths.length === 0) return;
+      await this.props.addCreationFolders(paths);
     }));
+
+    if (draft.roots.length > 0) {
+      const marker = form.createEl("label", { cls: "chatobby-projects__marker-choice" });
+      const input = marker.createEl("input", { attr: { type: "checkbox" } });
+      input.checked = draft.markerPolicy === "required";
+      marker.createSpan({
+        text: "Place a Chatobby identity marker in these folders (recommended)",
+      });
+      marker.createDiv({
+        cls: "chatobby-projects__field-help",
+        text: "Markers help Chatobby recognize a folder after it is renamed or moved on this device. Turn this off to use device-only bindings.",
+      });
+      input.addEventListener("change", () => {
+        this.props.setCreationMarkerPolicy(input.checked ? "required" : "disabled");
+      });
+    }
+
+    const summary = form.createDiv({ cls: "chatobby-projects__draft-summary" });
+    summary.createEl("strong", { text: "Ready to create" });
+    summary.createDiv({
+      text: draft.roots.length === 0
+        ? "A new vault folder will become this Project’s primary folder."
+        : `${draft.roots.find((root) => root.directoryCandidateRef === draft.primaryDirectoryCandidateRef)?.label ?? "The first folder"} will be primary; ${Math.max(0, draft.roots.length - 1)} ${plural(Math.max(0, draft.roots.length - 1), "folder")} will be attached.`,
+    });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-			void (async () => {
-				if (folderPath !== undefined && !await confirmDirectoryMarkers(this.props.app, 1)) return;
-				const applied = await this.run("create-project", {
-					type: "projects.create",
-					payload: {
-						name: name.value,
-						description: description.value.trim() || undefined,
-						...(folderPath === undefined ? {} : { systemAbsolutePath: folderPath }),
-						directoryReuse: "none",
-						markerPolicy: "required",
-					},
-				});
-				if (!applied) return;
-				this.editor = null;
-				this.renderState(this.props.getModel());
-			})();
+      let created = false;
+      void this.runAction("create-project", async () => {
+        created = await this.props.submitCreationDraft();
+      }).then((applied) => {
+        if (!applied || !created) return;
+        this.props.resetCreationDraft();
+        this.editor = null;
+        this.renderState(this.props.getModel());
+      });
     });
     const actions = form.createDiv({ cls: "chatobby-projects__form-actions" });
     const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
-    cancel.addEventListener("click", () => { this.editor = null; this.renderState(this.props.getModel()); });
+    cancel.addEventListener("click", () => {
+      this.props.resetCreationDraft();
+      this.editor = null;
+      this.renderState(this.props.getModel());
+    });
     actions.createEl("button", { cls: "mod-cta", text: "Create Project", attr: { type: "submit" } });
     window.requestAnimationFrame(() => name.focus());
   }
@@ -945,7 +1165,7 @@ export class ProjectsView extends ChatobbyComponent {
 		}
 		if (this.sessionSearchTimer !== null) window.clearTimeout(this.sessionSearchTimer);
 		this.sessionSearchTimer = null;
-		void this.changeView({ sessionQuery: input.value });
+		void this.changeView({ sessionQuery: input.value, sessionSearchPage: 0 });
 	};
 	input.addEventListener("input", () => {
 		if (kind === "project") {
@@ -996,6 +1216,7 @@ export class ProjectsView extends ChatobbyComponent {
 	| "sessionQuery"
 	| "sessionSearchMode"
 	| "sessionSort"
+	| "sessionSearchPage"
 	| "selectedProjectId">>): Promise<void> {
     const model = this.props.getModel();
     if (!model) return;
@@ -1009,6 +1230,7 @@ export class ProjectsView extends ChatobbyComponent {
 		sessionQuery: patch.sessionQuery ?? model.sessionQuery,
 		sessionSearchMode: patch.sessionSearchMode ?? model.sessionSearchMode,
 		sessionSort: patch.sessionSort ?? model.sessionSort,
+		sessionSearchPage: patch.sessionSearchPage ?? model.sessionSearchPage,
         selectedProjectId: Object.hasOwn(patch, "selectedProjectId") ? patch.selectedProjectId : model.selectedProjectId,
       },
 	};
@@ -1025,10 +1247,6 @@ export class ProjectsView extends ChatobbyComponent {
 		});
 	await this.viewUpdateTail;
   }
-}
-
-function systemPathLabel(path: string): string {
-  return path.replace(/[\\/]+$/u, "").split(/[\\/]/u).at(-1) || path;
 }
 
 function sameSessionWorkspace(left: SessionWorkspace, right: SessionWorkspace): boolean {
@@ -1085,6 +1303,26 @@ function textAreaField(parent: HTMLElement, label: string, placeholder: string, 
 
 function plural(count: number, word: string): string {
   return count === 1 ? word : `${word}s`;
+}
+
+function humanizeRole(role: FrontendProjectMessageSearchHitViewModel["role"]): string {
+  return role === "user" ? "You" : "Chatobby";
+}
+
+function renderMatchRanges(
+  parent: HTMLElement,
+  text: string,
+  ranges: readonly { readonly start: number; readonly end: number }[],
+): void {
+  let cursor = 0;
+  for (const range of ranges) {
+    const start = Math.max(cursor, Math.min(text.length, range.start));
+    const end = Math.max(start, Math.min(text.length, range.end));
+    if (start > cursor) parent.append(document.createTextNode(text.slice(cursor, start)));
+    parent.createEl("mark", { text: text.slice(start, end) });
+    cursor = end;
+  }
+  if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
 }
 
 function formatRelativeDate(value: string): string {

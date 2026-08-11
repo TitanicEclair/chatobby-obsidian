@@ -28,6 +28,25 @@ describe("PermissionsView", () => {
     expect(root.textContent).toContain("This policy does not have access to any channels.");
   });
 
+  it("separates the current chat policy from the installation default", () => {
+    const model = permissionModel();
+    const view = new PermissionsView({
+      getModel: () => model,
+      subscribe: () => () => {},
+      onRefresh: vi.fn(async () => {}),
+      onIntent: vi.fn(async () => {}),
+      onBack: vi.fn(),
+    });
+
+    const root = mount(view);
+    const rows = [...root.querySelectorAll<HTMLElement>(".chatobby-permissions__policy-context-row")];
+    expect(rows[0]?.textContent).toContain("Current chat");
+    expect(rows[0]?.textContent).toContain("Full access");
+    expect(rows[0]?.textContent).toContain("Assigned specifically to this chat.");
+    expect(rows[1]?.textContent).toContain("Default for new chats");
+    expect(rows[1]?.textContent).toContain("Obsidian");
+  });
+
   it("keeps disclosures open while dispatching runtime-owned capability decisions", async () => {
     let model = permissionModel();
     const listeners = new Set<(value: FrontendPermissionScreenViewModel | null) => void>();
@@ -287,7 +306,19 @@ function permissionModel(): FrontendPermissionScreenViewModel {
     selectedProfileId: "custom",
     profiles: [profile, standard],
     selectedProfile: profile,
+    currentChatPolicy: {
+      profileId: "full-access",
+      name: "Full access",
+      bindingSource: "user-session",
+      bindingRevision: 4,
+    },
+    installationDefaultPolicy: {
+      profileId: "obsidian",
+      name: "Obsidian",
+    },
     liveAgents: [],
+    temporaryApprovalDescription: "Temporary access approved for this chat.",
+    temporaryApprovals: [],
     capabilityDescription: "Capability groups",
     capabilities: [{
       id: "read",

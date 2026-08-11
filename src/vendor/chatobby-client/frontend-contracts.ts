@@ -393,6 +393,8 @@ export interface FrontendProjectRootViewModel {
 	readonly primary: boolean;
 	readonly locationKind: "vault-relative" | "external";
 	readonly vaultRelativePath?: string;
+	/** Device-local UI projection. Never persist, log, export, or place in portable Project records. */
+	readonly localPath?: string;
 	readonly directoryReuse: "canonical" | "none";
 	readonly markerPolicy: "required" | "optional" | "disabled";
 	readonly recoveryMode: "marker" | "device-binding-only";
@@ -413,6 +415,27 @@ export interface FrontendProjectSessionViewModel {
 	readonly activeRootId?: string;
 	/** Bounded excerpt emitted only when message-content search matched this chat. */
 	readonly matchSnippet?: string;
+}
+
+export interface FrontendProjectMessageSearchHitViewModel {
+	readonly hitId: string;
+	readonly sessionId: string;
+	readonly sessionName: string;
+	readonly messageId: string;
+	readonly targetBlockId: string;
+	readonly role: "user" | "assistant";
+	readonly timestamp: string;
+	readonly excerpt: string;
+	readonly matchRanges: readonly { readonly start: number; readonly end: number }[];
+}
+
+export interface FrontendProjectMessageSearchPageViewModel {
+	readonly items: readonly FrontendProjectMessageSearchHitViewModel[];
+	readonly page: number;
+	readonly pageSize: number;
+	readonly totalCount: number;
+	readonly hasPrevious: boolean;
+	readonly hasNext: boolean;
 }
 
 export interface FrontendProjectSessionDestinationViewModel {
@@ -477,6 +500,7 @@ export interface FrontendProjectScreenViewModel {
 	readonly sessionQuery: string;
 	readonly sessionSearchMode: FrontendProjectSessionSearchMode;
 	readonly sessionSort: FrontendProjectSessionSort;
+	readonly sessionSearchPage: number;
 	readonly selectedProjectId?: string;
 	readonly runningIn: FrontendRunningWorkspaceViewModel;
 	readonly projects: readonly FrontendProjectSummaryViewModel[];
@@ -485,6 +509,10 @@ export interface FrontendProjectScreenViewModel {
 	readonly vaultSessionCount: number;
 	readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
 	readonly detail?: FrontendProjectDetailViewModel;
+	/** Available roots for the chat that is actually running, independent of the Project being viewed. */
+	readonly runningRoots: readonly FrontendProjectRootViewModel[];
+	/** Bounded exact message matches for the selected Project or Vault scope. */
+	readonly messageSearchPage?: FrontendProjectMessageSearchPageViewModel;
 	readonly lifecycleOptions: readonly FrontendChoiceOption[];
 	readonly availabilityOptions: readonly FrontendChoiceOption[];
 	readonly sortOptions: readonly FrontendChoiceOption[];
@@ -844,6 +872,16 @@ export interface FrontendPermissionScreenViewModel {
 	readonly selectedProfileId: string;
 	readonly profiles: readonly FrontendPermissionProfileViewModel[];
 	readonly selectedProfile: FrontendPermissionProfileViewModel;
+	readonly currentChatPolicy: {
+		readonly profileId: string;
+		readonly name: string;
+		readonly bindingSource: string;
+		readonly bindingRevision: number;
+	};
+	readonly installationDefaultPolicy: {
+		readonly profileId: string;
+		readonly name: string;
+	};
 	readonly liveAgents: readonly FrontendPermissionLiveAgentViewModel[];
 	readonly temporaryApprovalDescription: string;
 	readonly temporaryApprovals: readonly FrontendPermissionSessionApprovalViewModel[];
@@ -1683,6 +1721,7 @@ export type FrontendIntent =
 				readonly sessionQuery: string;
 				readonly sessionSearchMode: FrontendProjectSessionSearchMode;
 				readonly sessionSort: FrontendProjectSessionSort;
+				readonly sessionSearchPage: number;
 				readonly selectedProjectId?: string;
 			};
 	  })
@@ -1691,6 +1730,15 @@ export type FrontendIntent =
 			readonly payload: {
 				readonly name: string;
 				readonly description?: string;
+				readonly rootMode?: "create-vault-folder" | "use-existing-folders";
+				readonly roots?: readonly {
+					readonly directoryCandidateRef: string;
+					readonly label: string;
+					readonly markerPolicy: "required" | "optional" | "disabled";
+					readonly directoryReuse: "canonical" | "none";
+				}[];
+				readonly primaryDirectoryCandidateRef?: string;
+				/** Legacy one-root compatibility; new connectors use rootMode and roots. */
 				readonly vaultRelativePath?: string;
 				readonly directoryCandidateRef?: string;
 				readonly directoryReuse: "canonical" | "none";
@@ -1721,6 +1769,19 @@ export type FrontendIntent =
 				readonly directoryCandidateRef?: string;
 				readonly directoryReuse: "canonical" | "none";
 				readonly markerPolicy: "required" | "optional" | "disabled";
+			};
+	  })
+	| (FrontendIntentBase & {
+			readonly type: "projects.roots-add-batch";
+			readonly payload: {
+				readonly projectId: string;
+				readonly expectedProjectRevision: number;
+				readonly roots: readonly {
+					readonly directoryCandidateRef: string;
+					readonly label: string;
+					readonly markerPolicy: "required" | "optional" | "disabled";
+					readonly directoryReuse: "canonical" | "none";
+				}[];
 			};
 	  })
 	| (FrontendIntentBase & {
@@ -2178,6 +2239,7 @@ export interface FrontendIntentResult {
 	readonly intentId: string;
 	readonly status: "accepted" | "completed" | "rejected" | "conflict";
 	readonly revision?: number;
+	readonly errorCode?: string;
 	readonly fieldErrors?: Readonly<Record<string, string>>;
 	readonly notice?: {
 		readonly level: "info" | "warning" | "error";
@@ -2907,6 +2969,10 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				sessionQuery: typeof payload.sessionQuery === "string" ? payload.sessionQuery : "",
 				sessionSearchMode: requireProjectSessionSearchMode(payload.sessionSearchMode),
 				sessionSort: requireProjectSessionSort(payload.sessionSort),
+				sessionSearchPage: requireNonNegativeSafeInteger(
+					payload.sessionSearchPage ?? 0,
+					"payload.sessionSearchPage",
+				),
 				selectedProjectId: optionalString(payload.selectedProjectId, "payload.selectedProjectId"),
 			},
 		};
@@ -2922,6 +2988,27 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 		}
 		const vaultRelativePath = optionalString(payload.vaultRelativePath, "payload.vaultRelativePath");
 		const directoryCandidateRef = optionalString(payload.directoryCandidateRef, "payload.directoryCandidateRef");
+		const rootMode = optionalString(payload.rootMode, "payload.rootMode");
+		if (rootMode !== undefined && rootMode !== "create-vault-folder" && rootMode !== "use-existing-folders") {
+			throw new Error("payload.rootMode is invalid");
+		}
+		const roots =
+			payload.roots === undefined ? undefined : requireProjectFolderSelections(payload.roots, "payload.roots");
+		const primaryDirectoryCandidateRef = optionalString(
+			payload.primaryDirectoryCandidateRef,
+			"payload.primaryDirectoryCandidateRef",
+		);
+		if (rootMode === "use-existing-folders") {
+			if (roots === undefined || roots.length === 0 || primaryDirectoryCandidateRef === undefined) {
+				throw new Error("Existing-folder Project creation requires selected folders and one primary folder.");
+			}
+			if (!roots.some((root) => root.directoryCandidateRef === primaryDirectoryCandidateRef)) {
+				throw new Error("The primary Project folder must be one of the selected folders.");
+			}
+		}
+		if (rootMode === "create-vault-folder" && (roots !== undefined || primaryDirectoryCandidateRef !== undefined)) {
+			throw new Error("Vault-folder Project creation cannot carry existing-folder selections.");
+		}
 		if (vaultRelativePath !== undefined && directoryCandidateRef !== undefined) {
 			throw new Error("Choose either a vault folder or an operating-system directory candidate, not both.");
 		}
@@ -2933,6 +3020,9 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				description: optionalString(payload.description, "payload.description"),
 				vaultRelativePath,
 				directoryCandidateRef,
+				...(rootMode === undefined ? {} : { rootMode }),
+				...(roots === undefined ? {} : { roots }),
+				...(primaryDirectoryCandidateRef === undefined ? {} : { primaryDirectoryCandidateRef }),
 				directoryReuse,
 				markerPolicy,
 				useForCurrentSession:
@@ -2992,6 +3082,22 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				directoryCandidateRef,
 				directoryReuse,
 				markerPolicy,
+			},
+		};
+	}
+	if (input.type === "projects.roots-add-batch") {
+		const roots = requireProjectFolderSelections(payload.roots, "payload.roots");
+		if (roots.length === 0) throw new Error("Choose at least one Project folder.");
+		return {
+			...base,
+			type: input.type,
+			payload: {
+				projectId: requireString(payload.projectId, "payload.projectId"),
+				expectedProjectRevision: requireSafeInteger(
+					payload.expectedProjectRevision,
+					"payload.expectedProjectRevision",
+				),
+				roots,
 			},
 		};
 	}
@@ -3289,6 +3395,8 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 		requireString(input.selectedProfileId, "selectedProfileId");
 		requireArray(input.profiles, "profiles");
 		requireRecord(input.selectedProfile, "selectedProfile");
+		requireRecord(input.currentChatPolicy, "currentChatPolicy");
+		requireRecord(input.installationDefaultPolicy, "installationDefaultPolicy");
 		requireArray(input.capabilities, "capabilities");
 		requireArray(input.channels, "channels");
 		requireArray(input.advancedGroups, "advancedGroups");
@@ -3397,6 +3505,12 @@ function requireSafeInteger(value: unknown, label: string): number {
 	return value as number;
 }
 
+function requireNonNegativeSafeInteger(value: unknown, label: string): number {
+	const parsed = requireSafeInteger(value, label);
+	if (parsed < 0) throw new Error(`${label} must be non-negative`);
+	return parsed;
+}
+
 function permissionProfileRevision(payload: Record<string, unknown>): number {
 	return requireSafeInteger(payload.expectedProfileRevision, "payload.expectedProfileRevision");
 }
@@ -3459,6 +3573,36 @@ function requireProjectDirectoryReuse(value: unknown): "canonical" | "none" {
 function requireProjectMarkerPolicy(value: unknown): "required" | "optional" | "disabled" {
 	if (value === "required" || value === "optional" || value === "disabled") return value;
 	throw new Error("payload.markerPolicy is invalid");
+}
+
+function requireProjectFolderSelections(
+	value: unknown,
+	field: string,
+): readonly {
+	readonly directoryCandidateRef: string;
+	readonly label: string;
+	readonly markerPolicy: "required" | "optional" | "disabled";
+	readonly directoryReuse: "canonical" | "none";
+}[] {
+	if (!Array.isArray(value) || value.length > 64) throw new Error(`${field} must contain no more than 64 folders`);
+	const seen = new Set<string>();
+	return Object.freeze(
+		value.map((entry, index) => {
+			const record = requireRecord(entry, `${field}[${index}]`);
+			const directoryCandidateRef = requireString(
+				record.directoryCandidateRef,
+				`${field}[${index}].directoryCandidateRef`,
+			);
+			if (seen.has(directoryCandidateRef)) throw new Error(`${field} contains a duplicate folder selection`);
+			seen.add(directoryCandidateRef);
+			return Object.freeze({
+				directoryCandidateRef,
+				label: requireString(record.label, `${field}[${index}].label`),
+				markerPolicy: requireProjectMarkerPolicy(record.markerPolicy),
+				directoryReuse: requireProjectDirectoryReuse(record.directoryReuse),
+			});
+		}),
+	);
 }
 
 function requireProjectAvailabilityFilter(value: unknown): FrontendProjectAvailabilityFilter {
