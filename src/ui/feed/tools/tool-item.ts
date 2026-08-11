@@ -44,6 +44,11 @@ export class ToolItemView extends ChatobbyComponent {
   getResult(): unknown { return this.item.result; }
   get expanded(): boolean { return this.isExpanded; }
 
+  /** Update only the elapsed-time text; no feed state or DOM tree rebuild. */
+  tick(): void {
+    this.updateDuration();
+  }
+
   sync(item: ToolItem): void {
     this.item = item;
     if (this.iconEl) setIcon(this.iconEl, item.iconToken ?? "wrench");

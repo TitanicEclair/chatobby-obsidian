@@ -1,6 +1,13 @@
-# Workflows guide
+# Flows guide (legacy)
 
-Workflows connect several bounded agent roles into a reusable, finite execution
+> **Scheduled for deprecation in 0.4.0:** this page documents Chatobby's current
+> subagent-only **Flows** feature while it remains available in the 0.3.x
+> alpha. Prefer a direct subagent for new one-off delegation. A future
+> general-purpose workflow system is planned so workflow steps will not all
+> have to be subagents. Do not assume saved Flow definitions are the future
+> workflow format.
+
+Flows connect several bounded agent roles into a reusable, finite execution
 graph. Use one when the structure, dependencies, review gates, or fan-out are
 important enough to save. For a one-off piece of delegated work, start with a
 single [subagent](subagents.md) instead.

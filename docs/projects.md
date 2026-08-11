@@ -47,10 +47,40 @@ agent understand the workspace without copying folder paths into every prompt.
 
 ## Project guidance
 
-Place durable Chatobby-specific instructions in `chatobby.md` at the active
-Project root. Use it for stable naming, formatting, source, and verification
-rules. Use `AGENTS.md` for repository commands and code conventions. Neither
-file grants permission, and neither should contain credentials.
+Chatobby automatically creates `chatobby.md` in the exact root used by a new
+chat: the vault root for a Vault chat or the primary Project root for a Project
+chat. The generated file contains the current supported properties and an empty
+Markdown body. Put stable naming, formatting, source, and verification rules in
+that body. Use `AGENTS.md` for repository commands and code conventions.
+Neither file grants permission, and neither should contain credentials.
+
+The body is a lower-priority system-prompt section placed after Chatobby's
+protected built-in prompt. A body edit replaces the previous body on the next
+message you send; it does not change a turn already running. Frontmatter
+switches and workspace-directory properties are read when the agent runtime is
+prepared, so start a new chat or recreate/reconnect the session after changing
+them.
+
+| Chat situation | Body guidance | Frontmatter configuration |
+|---|---|---|
+| Vault chat | Vault-root `chatobby.md` | Compiled from that file when the runtime is prepared. |
+| Project chat | Vault-root body plus the body from the chat's active Project root | Compiled from the active root; Vault properties are not inherited as another configuration layer. |
+| Added Project folder | Its body can activate when work first targets that registered folder. | It does not replace the running chat's base configuration. |
+| Ordinary nested folder | Nested `chatobby.md` files are not discovered automatically. | Use path-scoped `AGENTS.md` or compatible `CLAUDE.md` for nested repository rules. |
+| Primary root changes | Existing chats retain their stored active root until moved or reopened; new chats default to the current primary root. | The selected active root is read when its runtime is prepared. |
+
+`AGENTS.md` is the preferred path-scoped repository instruction file.
+`CLAUDE.md` is supported for compatibility through the same mechanism. When
+both exist in the same directory, Chatobby uses `AGENTS.md` there. None of
+these files grants permission or should contain credentials.
+
+Most users should leave all prompt switches enabled. The current configurable
+sections are core behavior, task planning, tool routing, coding workflow,
+artifacts, memory, personal workflow, subagents, automation, and Obsidian
+Markdown output. The five directory properties choose vault-relative
+conventions for artifacts, sandbox files, task lists, reports, and inbox work;
+they do not create folders. The complete property table and example are in the
+[README project-guidance section](../README.md#project-guidance-chatobbymd-agentsmd-and-claudemd).
 
 For model setup, see [providers and models](providers-and-models.md). For
 authority boundaries, see [responsibility boundaries](responsibility-boundaries.md).

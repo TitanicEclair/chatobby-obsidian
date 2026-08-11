@@ -992,13 +992,6 @@ export class ChatobbyView extends ItemView {
 		this.turnAbort.setActivity(Boolean(session?.streaming || session?.compacting));
 	}
     if (session && sessionChanged) {
-      if (!previous.isStreaming && session.streaming) this.liveStats.start();
-      if (previous.isStreaming && !session.streaming) {
-        this.liveStats.stop();
-        void this.liveStats.refresh();
-      }
-      if (!previous.isCompacting && session.compacting) this.liveStats.start();
-      if (previous.isCompacting && !session.compacting) this.liveStats.sync();
       if (previous.thinkingLevel !== session.thinkingLevel) {
         void this.plugin.rememberSessionPreferences({ thinkingLevel: session.thinkingLevel });
       }

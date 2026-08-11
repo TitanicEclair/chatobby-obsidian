@@ -27,6 +27,33 @@ export function normalizeVaultDirectoryInput(input: string): string {
     .replace(/\/+$/, "");
 }
 
+/**
+ * Canonicalize persisted directory state against the current vault.
+ *
+ * Older connector builds could persist an absolute cwd in the leaf field that
+ * now stores a vault-relative directory. Translate only paths proven to be the
+ * current vault or one of its descendants; unrelated absolute paths remain
+ * invalid and fail the normal vault-directory check.
+ */
+export function normalizeVaultDirectoryForBase(vaultBasePath: string, input: string): string {
+  const candidate = normalizeHostPath(input);
+  if (!candidate || candidate === "." || candidate === "/") return "";
+
+  const vaultBase = normalizeHostPath(vaultBasePath);
+  if (vaultBase && isAbsoluteHostPath(candidate)) {
+    const caseInsensitive = isWindowsOrUncPath(vaultBase) || isWindowsOrUncPath(candidate);
+    const comparableBase = caseInsensitive ? vaultBase.toLocaleLowerCase() : vaultBase;
+    const comparableCandidate = caseInsensitive ? candidate.toLocaleLowerCase() : candidate;
+    if (comparableCandidate === comparableBase) return "";
+    if (comparableCandidate.startsWith(`${comparableBase}/`)) {
+      return normalizeVaultDirectoryInput(candidate.slice(vaultBase.length + 1));
+    }
+    return candidate;
+  }
+
+  return normalizeVaultDirectoryInput(input);
+}
+
 export function vaultDirectoryTabName(vaultDirectoryPath: string | undefined, vaultName: string): string {
   const normalized = vaultDirectoryPath === undefined ? "" : normalizeVaultDirectoryInput(vaultDirectoryPath);
   if (!normalized) return vaultName.trim() || "Vault";
@@ -63,4 +90,21 @@ function isVaultAdapterWithBasePath(adapter: unknown): adapter is VaultAdapterWi
   if (typeof adapter !== "object" || adapter === null) return false;
   const candidate = adapter as { getBasePath?: unknown };
   return typeof candidate.getBasePath === "function";
+}
+
+function normalizeHostPath(value: string): string {
+  const replaced = value.trim().replace(/\\/g, "/");
+  const prefix = replaced.startsWith("//") ? "//" : "";
+  const body = prefix ? replaced.slice(2) : replaced;
+  const normalized = `${prefix}${body.replace(/\/{2,}/g, "/")}`;
+  if (normalized === "/" || normalized === "//") return normalized;
+  return normalized.replace(/\/+$/g, "");
+}
+
+function isAbsoluteHostPath(value: string): boolean {
+  return value.startsWith("/") || /^[a-z]:\//iu.test(value);
+}
+
+function isWindowsOrUncPath(value: string): boolean {
+  return value.startsWith("//") || /^[a-z]:\//iu.test(value);
 }

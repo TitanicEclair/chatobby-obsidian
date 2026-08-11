@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +25,11 @@ export async function exportReviewableSource({ repositoryRoot, destination, draf
   await rm(outputRoot, { recursive: true, force: true });
   await mkdir(outputRoot, { recursive: true });
   for (const path of manifest.reviewableExportFiles ?? []) await copyAllowlisted(sourceRoot, outputRoot, path);
+  const releaseNotes = (await readdir(sourceRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && /^RELEASE_NOTES_\d+\.\d+\.\d+\.md$/u.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  for (const path of releaseNotes) await copyAllowlisted(sourceRoot, outputRoot, path);
   for (const path of manifest.reviewableExportRoots ?? []) await copyAllowlisted(sourceRoot, outputRoot, path);
   for (const path of manifest.requiredPublicationFiles ?? []) {
     if (await pathExists(join(sourceRoot, path))) await copyAllowlisted(sourceRoot, outputRoot, path);

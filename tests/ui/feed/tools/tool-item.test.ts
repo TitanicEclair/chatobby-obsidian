@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToolItemView } from "../../../../src/ui/feed/tools/tool-item";
 import type { ToolItem } from "../../../../src/types";
 import { createMockFeedHost } from "../../helpers/mock-host";
 import { mount } from "../../helpers/mount";
 
 describe("ToolItemView", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("renders a compact row with name, primary arg, status class, and a detail hook", () => {
     const item: ToolItem = {
       id: "tool_1",
@@ -93,5 +95,28 @@ describe("ToolItemView", () => {
     expect(el.querySelector(".chatobby-tool-item__name")?.textContent).toBe("inspecting agents");
     view.sync({ ...item, displayTitle: "inspected agents", status: "succeeded" });
     expect(el.querySelector(".chatobby-tool-item__name")?.textContent).toBe("inspected agents");
+  });
+
+  it("updates a running tool duration from the shared feed clock without another tool event", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const item: ToolItem = {
+      id: "tool_timer",
+      name: "web_read",
+      category: "web",
+      arguments: JSON.stringify({ url: "https://example.com" }),
+      semanticKind: "web.read",
+      displayTitle: "reading page",
+      status: "running",
+      startTime: 0,
+      isExpanded: false,
+    };
+    const view = new ToolItemView(createMockFeedHost(), item);
+    const el = mount(view);
+
+    expect(el.querySelector(".chatobby-tool-item__duration")?.textContent).toBe("1s");
+    vi.setSystemTime(4_000);
+    view.tick();
+    expect(el.querySelector(".chatobby-tool-item__duration")?.textContent).toBe("4s");
   });
 });

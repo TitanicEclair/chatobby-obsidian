@@ -9,10 +9,16 @@
 
 **Community:** [GitHub Discussions](https://github.com/TitanicEclair/chatobby-obsidian/discussions) · [Issue tracker](https://github.com/TitanicEclair/chatobby-obsidian/issues) · [Documentation](https://github.com/TitanicEclair/chatobby-obsidian/tree/main/docs)
 
-**Chatobby** gives you a completely **local** agent, built with full support for obsidian and coding.
+**Chatobby** gives you a **local-first agent workspace**, built with first-class
+support for Obsidian and coding.
 
 Chatobby can understand your notes, use tools, work across projects,
 recall memory and past sessions, and coordinate subagents when a task grows.
+
+You can use a hosted model or connect a model server already running on your
+own computer. Each Vault or Project chat can also have a visible,
+user-editable `chatobby.md` system-prompt layer, so the way Chatobby works can
+fit the project without modifying the plugin or exposing private internals.
 
 Your conversations, permissions, context, scheduled work, and delegated work all
 remain visible inside Obsidian.
@@ -66,14 +72,16 @@ alpha experience.
 - [Support Chatobby's development](#support-chatobbys-development)
 - [What makes Chatobby different](#what-makes-chatobby-different)
 - [The agentic experience](#the-agentic-experience)
+  - [Run local models on your own hardware](#run-local-models-on-your-own-hardware)
+  - [Customize the system prompt for each workspace](#customize-the-system-prompt-for-each-workspace)
 - [Install](#install)
 - [A guided first fifteen minutes](#a-guided-first-fifteen-minutes)
 - [User guides](#user-guides)
-- [Project guidance: `chatobby.md` and `AGENTS.md`](#project-guidance-chatobbymd-and-agentsmd)
+- [Project guidance: `chatobby.md`, `AGENTS.md`, and `CLAUDE.md`](#project-guidance-chatobbymd-agentsmd-and-claudemd)
 - [Memory](#memory)
 - [Context Queries](#context-queries)
 - [Skills](#skills)
-- [Tasks, roles, subagents, workflows, and channels](#tasks-roles-subagents-workflows-and-channels)
+- [Tasks, roles, subagents, Flows, and channels](#tasks-roles-subagents-flows-and-channels)
 - [Events](#events)
 - [Permission policies](#permission-policies)
 - [More things to ask Chatobby](#more-things-to-ask-chatobby)
@@ -92,11 +100,13 @@ an agent is allowed to do useful work, and track tasks for you.
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Tool-using agent        | Ask for an outcome instead of manually copying every note and instruction into a prompt.                                                                   |
 | Visible work            | Follow Chatobby's thoughts, reasoning summaries, tool activity, permission requests, tasks, errors, and results in one feed.                               |
-| Project sessions        | Keep each conversation tied to the directory and context it actually belongs to, with the default being your vault.                                        |
+| Projects                | Keep related chats and one or more working folders together while Vault chats remain available for general work.                                         |
 | Permission policies     | Decide which files, commands, tools, channels, and automated actions a session may use. Create fully customizable permission presets.                      |
 | Memory and context      | Retain approved knowledge and inject small pieces of live project data when needed.                                                                        |
-| Subagents and workflows | Delegate focused work without losing the main conversation or its supervision.                                                                             |
+| Subagents and legacy Flows | Delegate focused work without losing the main conversation. The current subagent-only Flows surface is being retired in 0.4.0.                          |
 | Events                  | Run bounded one-off or repeating work with an assigned project, agent, policy, and runtime limits.                                                         |
+| Local model servers     | Connect Ollama, LM Studio, vLLM, llama.cpp, or another compatible server through Chatobby settings.                                                        |
+| Custom project prompt   | Use the automatically prepared `chatobby.md` to add durable system guidance and choose optional prompt modules.                                           |
 | Extensible runtime      | Use providers, models, skills, MCP servers, project instructions, and context queries without turning the Obsidian plugin into an unmaintainable monolith. |
 | Custom themes           | Chatobby's theme follows your vault's, and fits in to your preferences                                                                                     |
 
@@ -142,17 +152,37 @@ still depends on a multimodal model or a configured advanced OCR engine.
 
 ### Continue real projects
 
-A Chatobby view is associated with a project directory. Sessions retain their
-conversation and operational history so you can continue the work later without
-pretending that every new chat begins from nothing.
+Every chat belongs either to the Vault or to a Project. A Project keeps related
+conversations together and can include one primary folder plus other working
+folders. Sessions retain their history, Project identity, and current working
+set so you can continue the real work later instead of starting from nothing.
 
-Changing to a different directory while a view already has an active session
-opens the work in a separate Chatobby view. Obsidian tabs remain the boundary
-between independent workspaces, while the agent rail switches between a main
-session and its subagents.
+Browsing the Projects page never silently changes the chat that is running.
+Open a stored chat to resume it, choose **New chat in Project** for a separate
+conversation, or move an existing chat between Vault and Projects from its
+context menu. Obsidian tabs remain the boundary between independent active
+conversations, while the agent rail switches between a main session and its
+subagents.
 
-Right-click a folder, or a file inside it, to start a Chatobby session in that
-folder or browse its stored sessions.
+Right-click a folder, or a file inside it, to start Project work from that
+folder. Adding another folder to the Project makes it available to its chats
+without granting capabilities denied by the active permission policy.
+
+### Customize the system prompt for each workspace
+
+Chatobby automatically prepares a visible `chatobby.md` in the vault root for
+a Vault chat or in the primary Project root for a Project chat. Leave the
+properties alone and write ordinary Markdown below them to add durable naming,
+formatting, source, verification, or workflow preferences.
+
+The body is a real lower-priority system-prompt section placed after Chatobby's
+protected built-in prompt—not a repeated user message. Body edits replace the
+old guidance on the next message you send. Advanced users can also switch
+optional built-in prompt modules on or off; those frontmatter changes take
+effect when a new chat or recreated/reconnected session runtime is prepared.
+
+See [Project guidance](#project-guidance-chatobbymd-agentsmd-and-claudemd) for the full
+property list and examples.
 
 ### Use Chatobby for coding as well as notes
 
@@ -180,9 +210,11 @@ each active subagent. Every subagent has its own feed instead of being rendered
 as an undifferentiated block in the main conversation.
 
 Reusable roles provide consistent instructions, model choices, limits, and
-permission policies. Reusable workflows connect multiple roles into a validated
-execution graph with dependencies, concurrency limits, structured outputs, and
-fan-out or fan-in when appropriate.
+permission policies. The existing subagent-only **Flows** feature can connect
+multiple roles into a validated execution graph, but it is scheduled for
+deprecation in 0.4.0. New work should normally use direct subagents while a
+future general-purpose workflow system is designed around more than subagent
+nodes.
 
 Channels provide a durable, inspectable place for agent-to-agent communication.
 They are separate from user-facing session messages, so operational
@@ -234,6 +266,24 @@ Provider, model, and reasoning effort are session controls. Chatobby can use
 supported built-in providers and custom model metadata. The provider account,
 subscription, API key, and usage charges remain between you and that provider;
 Chatobby does not resell model tokens during the free alpha.
+
+### Run local models on your own hardware
+
+Chatobby can connect to a server you already run through Ollama, LM Studio,
+vLLM, llama.cpp, or another OpenAI-compatible or Anthropic
+Messages-compatible endpoint. Open **Chatobby Settings -> Local model
+servers**, choose a preset or API format, enter the exact model ID, and run the
+real connection test before saving.
+
+You can also ask Chatobby to help choose a realistic local setup for your
+device. With permission, it can inspect relevant RAM, GPU, and VRAM facts,
+compare quantization and hybrid CPU/GPU offload, link current official setup
+guides, and explain what should be tested rather than treating hardware fit as
+certain. Chatobby connects to the server; it does not silently install, start,
+or expose one.
+
+See the [providers and models guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/providers-and-models.md)
+for presets, API modes, authentication choices, and a complete setup example.
 
 ### Research the current web
 
@@ -327,14 +377,14 @@ the agent to create or manage the feature for you:
 | [MCP connections](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/mcp-connections.md) | Add verified or custom online and local connections, test them, and permission their discovered tools deliberately. |
 | [Context Queries](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/context-queries.md) | Safely compute small typed project data at session start or before a turn, including the complete supported script and SDK contract. |
 | [Subagents](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md) | Launch bounded specialist workers with appropriate roles, policies, limits, communication, and lifecycle handling. |
-| [Workflows](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md) | Review the existing subagent-flow feature while it remains available. It is scheduled for deprecation in 0.4.0 in favor of general-purpose workflows. |
+| [Flows (legacy)](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md) | Review the existing subagent-only Flow feature while it remains available. It is scheduled for deprecation in 0.4.0 in favor of general-purpose workflows. |
 | [Events](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/events.md) | Create deliberate one-off or repeating automated work with schedules, policies, limits, and inspectable history. |
 
 You can build these features through their pages or describe the outcome to
 Chatobby and ask it to use the dedicated management tools. Chatobby never needs
 to inspect its own product source to use them.
 
-## Project guidance: `chatobby.md` and `AGENTS.md`
+## Project guidance: `chatobby.md`, `AGENTS.md`, and `CLAUDE.md`
 
 Chatobby supports both its own project-guidance file and the standard
 coding-agent instruction files. They overlap slightly, but they have different
@@ -342,17 +392,19 @@ discovery rules and are most useful for different kinds of projects.
 
 | File | Best use | Discovery |
 |---|---|---|
-| `chatobby.md` | Chatobby-specific project behavior, vault conventions, and optional prompt/workspace configuration | Loaded from the active Project root; a lone former `.chatobby.md` is migrated without overwriting a visible file |
-| `AGENTS.md` | Repository instructions, development commands, code conventions, verification requirements, and directory-scoped guidance | Discovered from the selected project directory and its ancestors by the agent runtime |
-| `CLAUDE.md` | Existing compatible project instructions when a repository already uses this convention | Discovered through the same context-file mechanism as `AGENTS.md` |
+| `chatobby.md` | Chatobby-specific system guidance plus optional prompt/workspace configuration | Automatically prepared at the vault root for a Vault chat or the active root for a Project chat; it does not search ordinary nested folders |
+| `AGENTS.md` | Repository instructions, development commands, code conventions, verification requirements, and directory-scoped guidance | Loaded from the registered root toward the file or folder Chatobby is about to use |
+| `CLAUDE.md` | Compatibility for repositories that already keep agent instructions under this filename | Loaded through the same path-scoped mechanism as `AGENTS.md`; when both exist in one directory, `AGENTS.md` is used there |
 
 Neither file grants permission, and neither should contain secrets. Built-in
 safety, evidence, and permission behavior remains authoritative.
 
 ### A simple `chatobby.md`
 
-Create `chatobby.md` directly inside the active Project root. Plain Markdown is
-enough:
+Start a new Vault or Project chat and Chatobby creates the file automatically.
+The generated file contains the current properties and an empty body. For the
+common case, leave the properties enabled and add plain Markdown below the
+closing `---` line:
 
 ```markdown
 # Project guidance
@@ -364,9 +416,28 @@ enough:
 - When writing a project report, distinguish confirmed facts from proposals.
 ```
 
-The body becomes lower-priority project guidance for sessions created in that
-project. Start a new session after changing the file if an existing session does
-not reflect the update.
+The body becomes lower-priority project guidance for every chat in that
+workspace. It is sent as a system-prompt section after Chatobby's protected
+built-in sections, not as an ordinary user message.
+
+| Chat situation | Body guidance | Frontmatter configuration |
+|---|---|---|
+| Vault chat | Vault-root `chatobby.md` | Vault-root properties are compiled when the runtime is prepared. |
+| Project chat | Vault-root body plus the body from the chat's active Project root | Active-root properties configure the session. Vault properties are not inherited as a second configuration layer. |
+| Added Project folder | Its body can activate when Chatobby first works inside that registered folder. | Its properties do not replace the current chat's base configuration. |
+| Ordinary nested folder | A nested `chatobby.md` is not discovered automatically. | Nested properties are not inherited; use `AGENTS.md` or `CLAUDE.md` for path-specific repository rules. |
+| Project primary root changes | Existing chats retain their stored active root until moved or reopened. New chats default to the current primary root. | A newly prepared runtime reads its selected active root. |
+
+| Change | When it is used |
+|---|---|
+| Edit only the Markdown body | On the next new message you send. The prior body is replaced; a turn already running is unchanged. |
+| Change a prompt-module switch | When a new chat or recreated/reconnected session runtime prepares its base prompt. |
+| Change a workspace-directory property | When a new chat or recreated/reconnected session runtime prepares its workspace conventions. |
+| Add a property introduced by a later Chatobby version | Normally automatic. Chatobby synchronizes missing supported properties while preserving your values, comments, unknown properties, and body. |
+
+Changing a Project's folder list does not silently change an existing chat's
+active root. If you need that chat to use another root's properties, move or
+reopen it against that root so its runtime is prepared with the correct cwd.
 
 Use `chatobby.md` for durable conventions. Do not use it for:
 
@@ -385,7 +456,9 @@ modules and workspace directories:
 
 ```markdown
 ---
+chatobby-prompt-schema: 1
 chatobby-system-prompt: true
+chatobby-task-guidance: true
 chatobby-tool-guidance: true
 chatobby-coding-workflow-guidance: true
 chatobby-artifact-guidance: true
@@ -406,8 +479,34 @@ chatobby-inbox-directory: .chatobby/workspace/inbox
 Keep generated reports concise and link every report to [[Project Index]].
 ```
 
-Disabling built-in sections can remove important behavioral guidance. It is an
-advanced option, not a recommended first customization.
+### Current properties
+
+| Property | Default | What it controls |
+|---|---:|---|
+| `chatobby-prompt-schema` | `1` | The file-format version. Chatobby owns and updates this exact value. |
+| `chatobby-system-prompt` | `true` | Chatobby's core working temperament, evidence discipline, conversational behavior, and outcome ownership. |
+| `chatobby-task-guidance` | `true` | First-class planning and progress tracking for substantive multi-step work. |
+| `chatobby-tool-guidance` | `true` | Capability discovery and correct routing among Obsidian, web, file, shell, and specialist tools. |
+| `chatobby-coding-workflow-guidance` | `true` | Repository understanding, implementation, testing, and live verification behavior. |
+| `chatobby-artifact-guidance` | `true` | Durable working files, reports, and artifact organization. |
+| `chatobby-memory-guidance` | `true` | Durable memory, correction, retrieval, and continuity behavior. |
+| `chatobby-personal-workflow-guidance` | `true` | Personal organization and lifestyle-work guidance with privacy and inference boundaries. |
+| `chatobby-subagent-guidance` | `true` | When and how bounded subagents should be delegated and supervised. |
+| `chatobby-automation-guidance` | `true` | Events, schedules, triggers, and deliberate recurring work. |
+| `chatobby-markdown-output-guidance` | `true` | Obsidian-ready Markdown, wikilinks, embeds, properties, callouts, tasks, and blocks. |
+| `chatobby-artifacts-directory` | `.chatobby/workspace/artifacts` | Preferred vault-relative location for durable generated artifacts. |
+| `chatobby-sandbox-directory` | `.chatobby/workspace/sandbox` | Preferred vault-relative location for temporary working files. |
+| `chatobby-tasklists-directory` | `.chatobby/workspace/tasklists` | Preferred vault-relative location for durable task-list artifacts. |
+| `chatobby-reports-directory` | `.chatobby/workspace/reports` | Preferred vault-relative location for generated reports. |
+| `chatobby-inbox-directory` | `.chatobby/workspace/inbox` | Preferred vault-relative location for items awaiting organization. |
+
+Directory properties are conventions; changing one does not create that folder
+or grant access to it. Values must remain within the Vault or Project boundary.
+Disabling built-in sections can remove important behavioral guidance, so it is
+an advanced option rather than a recommended first customization. Runtime-owned
+product boundaries, immutable safety and confidentiality guidance, current
+environment facts, and the native skill catalogue remain enabled regardless of
+these switches.
 
 ### A simple `AGENTS.md`
 
@@ -424,8 +523,11 @@ For a repository, put instructions such as these in `AGENTS.md`:
 ```
 
 Use additional `AGENTS.md` files in nested directories when a particular part
-of a repository needs more specific guidance. Avoid duplicating contradictory
-rules across `chatobby.md`, `AGENTS.md`, and `CLAUDE.md`.
+of a repository needs more specific guidance. Existing `CLAUDE.md` files are
+supported as a compatibility alternative and use the same path-scoped loading.
+If both names exist in one directory, Chatobby uses `AGENTS.md` for that
+directory. Avoid duplicating contradictory rules across `chatobby.md`,
+`AGENTS.md`, and `CLAUDE.md`.
 
 ## Memory
 
@@ -537,7 +639,7 @@ be selected or closed as an Obsidian pane, but reading, clicking, typing, and
 page diagnostics happen inside its webpage. Host-interface and webpage
 references are not interchangeable.
 
-## Tasks, roles, subagents, workflows, and channels
+## Tasks, roles, subagents, Flows, and channels
 
 Full instructions: [Subagents guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md) and
 [Workflows guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md).
@@ -549,19 +651,22 @@ These surfaces cover different levels of coordination:
 | Task | Tracks one session's current multi-step work |
 | Role | Defines a reusable kind of specialist agent |
 | Subagent run | Performs one bounded delegated assignment |
-| Workflow | Connects reusable roles into a validated execution graph |
+| Flow (legacy) | Connects reusable subagent roles into a validated execution graph during the 0.3.x alpha |
 | Channel | Carries durable agent-to-agent communication |
 
 Start with one subagent when a task has a clearly separable research or review
-component. Use a saved workflow only when the sequence is reusable or when
-multiple agents need explicit dependencies and acceptance gates.
+component. The current subagent-only Flows feature is scheduled for deprecation
+in 0.4.0, so avoid building new long-lived processes around it. Existing Flows
+remain documented so their behavior is understandable while Chatobby moves
+toward a general-purpose workflow design whose steps do not all have to be
+subagents.
 
 Example requests:
 
 - `Delegate a bounded review of these sources to one research subagent. Limit it to five sources and reconcile the findings here.`
 - `Create a reusable role for web-only fact checking with a focused permission policy.`
-- `Design a workflow where one agent researches, one checks the citations, and the main agent writes the final note.`
-- `Show me the active workflow, its blocked nodes, and any permission request that needs my decision.`
+- `Inspect this existing Flow, explain its dependencies, and tell me what should be preserved before Flows are retired.`
+- `Show me the active Flow, its blocked nodes, and any permission request that needs my decision.`
 
 The main agent remains the supervisor. Delegation must not be used to bypass
 permissions or conceal work from the user.

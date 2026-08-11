@@ -19,11 +19,17 @@ unlock features, raise limits, or change the data Chatobby can access.
 - Obsidian-aware reading, search, navigation, and allowlisted vault operations;
 - memory, tasks, context queries, events, permissions, and document/image
   attachments;
-- subagents, workflows, and vault-scoped communication channels; and
+- subagents, the legacy subagent-only Flows feature, and vault-scoped
+  communication channels; and
 - local session storage with no Chatobby account requirement.
 
 Features are experimental. Contracts, storage formats, and user interfaces may
 change before a stable release.
+
+The current Flows feature is scheduled for deprecation in 0.4.0 while Chatobby
+moves toward a general-purpose workflow design. Existing Flows remain usable
+and documented during 0.3.x, but new reusable automation should not depend on
+their storage format.
 
 ## Cost and data flow
 

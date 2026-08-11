@@ -87,6 +87,32 @@ describe("SessionController", () => {
 		expect(controller.workspaceLabel()).toBe("Vault");
 	});
 
+  it("uses runtime-authoritative auto-compaction settings when projected", () => {
+    const { controller } = harness();
+    controller.applyRuntimeSession(session("session-1", {
+      autoCompaction: {
+        enabled: true,
+        thresholdPercent: 25,
+        effectiveThresholdPercent: 25,
+        customInstructions: "Preserve active decisions.",
+      },
+    }));
+
+    expect(controller.sessionState.autoCompaction).toEqual({
+      enabled: true,
+      thresholdPercent: 25,
+      effectiveThresholdPercent: 25,
+      customInstructions: "Preserve active decisions.",
+    });
+  });
+
+  it("keeps the connector fallback when an older runtime omits auto-compaction settings", () => {
+    const { controller } = harness();
+    controller.applyRuntimeSession(session("legacy-session"));
+
+    expect(controller.sessionState.autoCompaction).toEqual(EMPTY_SESSION_STATE.autoCompaction);
+  });
+
   it("switches the visible feed when the first runtime session appears", () => {
     const renderActiveTab = vi.fn();
     const { controller } = harness({ renderActiveTab });

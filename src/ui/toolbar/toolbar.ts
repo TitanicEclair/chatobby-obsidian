@@ -160,9 +160,9 @@ export class Toolbar extends ChatobbyComponent {
       this.meterEl.toggleClass("is-unavailable", pct == null);
       this.meterEl.toggleClass("is-running", this.host.getSessionState()?.isCompacting === true);
       this.meterEl.toggleClass("is-complete", this.compactionCompleted);
-      const tokens = context?.tokens ?? stats?.tokens.total ?? null;
+      const tokens = context?.tokens ?? null;
       const ctxWindow = context?.contextWindow;
-      this.meterEl.setAttr("title", pct == null ? "Context usage is loading" : meterTooltip(tokens ?? 0, ctxWindow, pct));
+      this.meterEl.setAttr("title", pct == null ? "Context usage is loading" : meterTooltip(tokens, ctxWindow, pct));
       this.renderContextMenu(stats, pct);
     } else if (this.meterEl) {
       this.closeContextMenu();
@@ -243,10 +243,15 @@ export class Toolbar extends ChatobbyComponent {
       text: pct == null ? "Usage is loading" : `${Math.round(pct)}% used`,
     });
     const context = stats?.contextUsage;
-    if (context?.contextWindow) {
+    if (context?.contextWindow && context.tokens != null) {
       this.contextMenuEl.createDiv({
         cls: "chatobby-context-menu__tokens",
-        text: `${formatTokens(context.tokens ?? stats?.tokens.total ?? 0)} of ${formatTokens(context.contextWindow)} tokens`,
+        text: `${formatTokens(context.tokens)} of ${formatTokens(context.contextWindow)} tokens`,
+      });
+    } else if (context?.contextWindow) {
+      this.contextMenuEl.createDiv({
+        cls: "chatobby-context-menu__tokens",
+        text: `Calculating current usage for a ${formatTokens(context.contextWindow)} token window`,
       });
     }
 
@@ -334,8 +339,10 @@ function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
-function meterTooltip(tokens: number, contextWindow: number | undefined, pct: number): string {
-  const parts = [`${formatTokens(tokens)} / ${formatTokens(contextWindow ?? 0)} tokens`];
+function meterTooltip(tokens: number | null, contextWindow: number | undefined, pct: number): string {
+  const parts = tokens == null
+    ? ["Current context token count is loading"]
+    : [`${formatTokens(tokens)} / ${formatTokens(contextWindow ?? 0)} tokens`];
   parts.push(`Context window ${Math.round(pct)}% full`);
   return parts.join("\n");
 }

@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-11
+
+- Clarify the exact Vault, Project, active-root, attached-folder, and update
+  lifecycle for `chatobby.md`, including its distinction from path-scoped
+  `AGENTS.md` and compatible `CLAUDE.md` instruction files.
+
+- Document automatically generated `chatobby.md` prompt files, the exact
+  body-versus-frontmatter activation lifecycle, every supported property, and
+  the lower-priority system-prompt boundary; promote local model servers and
+  customizable Project guidance in the public README.
+- Mark the current subagent-only Flows surface consistently as scheduled for
+  deprecation in 0.4.0 ahead of a future general-purpose workflow design.
+- Canonicalize legacy absolute directory values restored from Obsidian leaf
+  state against the current vault, so the vault root and its child folders no
+  longer trigger a false directory warning before every prompt.
+- Render the runtime-authoritative automatic-compaction threshold from the
+  canonical session snapshot while retaining a safe fallback for older
+  runtimes during reconnect.
+- Refresh context usage authoritatively as soon as a turn or compaction ends,
+  ignore superseded in-flight measurements, and never display cumulative
+  lifetime tokens as current context while usage is loading.
+- Advance running tool durations from the feed's shared lightweight clock so
+  elapsed time updates independently of tool events or unrelated rerenders.
+- Include every strictly versioned `RELEASE_NOTES_x.y.z.md` file in the
+  reviewable public-source projection so the tag release workflow always has
+  its required notes without admitting arbitrary similarly named files.
+
 ## [0.3.2] - 2026-08-11
 
 - Make failed runtime updates self-cleaning. A failed package copy removes its

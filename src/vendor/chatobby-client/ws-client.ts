@@ -418,7 +418,10 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("get_stored_session_fork_messages", { ...selector, cwdRoot }), "messages");
 	}
 
-	async cloneStoredSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{ sessionId: string; sessionPath: string }> {
+	async cloneStoredSession(
+		selector: WsStoredSessionSelector,
+		cwdRoot: string,
+	): Promise<{ sessionId: string; sessionPath: string }> {
 		const result = await this.send("clone_stored_session", { ...selector, cwdRoot });
 		return { sessionId: resultField(result, "sessionId"), sessionPath: resultField(result, "sessionPath") };
 	}

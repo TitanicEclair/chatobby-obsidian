@@ -17,6 +17,8 @@ export class LiveStatsController {
   private queued = false;
   private disposed = false;
   private active = true;
+  private activityWasRunning = false;
+  private generation = 0;
 
   constructor(private readonly options: LiveStatsControllerOptions) {}
 
@@ -29,6 +31,7 @@ export class LiveStatsController {
    *  the stats endpoint always queries the transport's current session, so a
    *  refresh right after the switch repopulates it for the now-active session. */
   reset(): void {
+    this.generation += 1;
     this.stats = null;
   }
 
@@ -40,9 +43,13 @@ export class LiveStatsController {
       return;
     }
     this.inFlight = true;
+    const generation = this.generation;
     try {
-      this.stats = await transport.getSessionStats();
-      this.options.onChange(this.stats);
+      const stats = await transport.getSessionStats();
+      if (generation === this.generation && !this.disposed) {
+        this.stats = stats;
+        this.options.onChange(this.stats);
+      }
     } catch (error) {
       console.error("Chatobby: failed to load session stats", error);
     } finally {
@@ -68,8 +75,22 @@ export class LiveStatsController {
 
   sync(): void {
     const session = this.options.getSessionState();
-    if (this.options.getTransport()?.isConnected && (session.isStreaming || session.isCompacting)) this.start();
-    else this.stop();
+    const activityIsRunning = session.isStreaming || session.isCompacting;
+    const connected = this.options.getTransport()?.isConnected === true;
+    if (connected && activityIsRunning) {
+      this.start();
+    } else {
+      this.stop();
+      if (connected && this.activityWasRunning && !activityIsRunning) {
+        // A pre-compaction or pre-turn response may still be in flight. Retire
+        // that generation, clear the meter immediately, and fetch the first
+        // authoritative post-activity context measurement.
+        this.reset();
+        this.options.onChange(null);
+        void this.refresh();
+      }
+    }
+    this.activityWasRunning = activityIsRunning;
   }
 
   setActive(active: boolean): void {

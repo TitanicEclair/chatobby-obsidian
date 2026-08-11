@@ -99,6 +99,7 @@ export class SessionController {
         isStreaming: session.streaming,
         isCompacting: session.compacting,
         isRetrying: session.retrying,
+        autoCompaction: session.autoCompaction ?? tab.sessionState.autoCompaction,
       },
     });
     this.runtimeMessageCount = session.messageCount;

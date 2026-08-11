@@ -35,6 +35,11 @@ export class ToolBlockView extends ChatobbyComponent {
     if (patch.isExpanded !== undefined) view.setExpanded(patch.isExpanded);
   }
 
+  /** Propagate the feed's shared 250 ms clock to running tool rows. */
+  tick(): void {
+    for (const view of this.views.values()) view.tick();
+  }
+
   protected onRender(container: HTMLElement): void {
     this.itemsEl = container.createDiv({ cls: "chatobby-tool-block__items" });
     if (this.block) this.syncItems(this.block.items);

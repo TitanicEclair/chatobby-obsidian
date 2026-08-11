@@ -38,6 +38,13 @@ export interface FrontendComposerViewModel {
     readonly canSubmit: boolean;
     readonly disabledReason?: string;
 }
+/** Runtime-authoritative automatic-compaction settings for the selected model. */
+export interface FrontendAutoCompactionViewModel {
+    readonly enabled: boolean;
+    readonly thresholdPercent: number;
+    readonly effectiveThresholdPercent: number;
+    readonly customInstructions?: string;
+}
 export interface FrontendSessionViewModel {
     readonly id: string;
     readonly name?: string;
@@ -56,6 +63,8 @@ export interface FrontendSessionViewModel {
     readonly streaming: boolean;
     readonly compacting: boolean;
     readonly retrying: boolean;
+    /** Optional for additive compatibility with runtimes predating this projection. */
+    readonly autoCompaction?: FrontendAutoCompactionViewModel;
     readonly retryStatus?: {
         readonly attempt: number;
         readonly maxAttempts: number;

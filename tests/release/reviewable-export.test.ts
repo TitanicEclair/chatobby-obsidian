@@ -24,6 +24,8 @@ describe("reviewable connector export", () => {
       publicationGaps: ["LICENSE.md"],
     });
     await expect(readFile(join(destination, "src", "main.ts"), "utf8")).resolves.toBe("export const value = 1;\n");
+    await expect(readFile(join(destination, "RELEASE_NOTES_0.3.2.md"), "utf8")).resolves.toBe("# Release 0.3.2\n");
+    await expect(readFile(join(destination, "RELEASE_NOTES_latest.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(join(destination, "publication-gaps.json"), "utf8")).resolves.toContain("LICENSE.md");
   });
 });
@@ -37,6 +39,8 @@ async function temporaryDirectory(prefix: string): Promise<string> {
 async function writeFixture(root: string): Promise<void> {
   await mkdir(join(root, "src"), { recursive: true });
   await writeFile(join(root, "README.md"), "# Connector\n");
+  await writeFile(join(root, "RELEASE_NOTES_0.3.2.md"), "# Release 0.3.2\n");
+  await writeFile(join(root, "RELEASE_NOTES_latest.md"), "# Not a versioned release\n");
   await writeFile(join(root, "src", "main.ts"), "export const value = 1;\n");
   await writeFile(
     join(root, "boundary-manifest.json"),

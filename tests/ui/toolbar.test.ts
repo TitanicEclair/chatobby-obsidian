@@ -57,7 +57,7 @@ describe("Toolbar", () => {
     };
     const host: ToolbarHost = {
       getConnectionState: () => ({ ...INITIAL_CONNECTION_STATE, status: "connected" }),
-      getSessionState: () => EMPTY_SESSION_STATE,
+      getSessionState: () => ({ ...EMPTY_SESSION_STATE, sessionId: "s" }),
       getRuntimeState: readyRuntimeState,
       getStats: () => stats,
       getFeedStore: () => createFeedStore(),
@@ -80,6 +80,42 @@ describe("Toolbar", () => {
     expect(statsEl.querySelector(".chatobby-context-menu")?.textContent).toContain("3% used");
     expect(statsEl.querySelector(".chatobby-context-menu")?.textContent).toContain("Starts at 85%");
     expect(statsEl.querySelector(".chatobby-context-menu")?.textContent).toContain("safety-adjusted to 80%");
+  });
+
+  it("never substitutes cumulative lifetime tokens for unavailable current context usage", () => {
+    const stats: WsSessionStats = {
+      sessionFile: "s.jsonl",
+      sessionId: "s",
+      userMessages: 20,
+      assistantMessages: 20,
+      toolCalls: 10,
+      toolResults: 10,
+      totalMessages: 60,
+      tokens: { input: 2_100_000, output: 10, cacheRead: 0, cacheWrite: 0, total: 2_100_010 },
+      cost: 0,
+      contextUsage: { contextWindow: 1_000_000 },
+    };
+    const host: ToolbarHost = {
+      getConnectionState: () => ({ ...INITIAL_CONNECTION_STATE, status: "connected" }),
+      getSessionState: () => ({ ...EMPTY_SESSION_STATE, sessionId: "s" }),
+      getRuntimeState: readyRuntimeState,
+      getStats: () => stats,
+      getFeedStore: () => createFeedStore(),
+      getAutoCompactionSettings: () => ({ enabled: true, thresholdPercent: 27, effectiveThresholdPercent: 27 }),
+      toggleAutoCompaction: vi.fn(async () => {}),
+      openAutoCompaction: vi.fn(),
+    };
+    const toolbar = new Toolbar(host);
+    const connectionEl = document.body.createDiv();
+    const statsEl = document.body.createDiv();
+
+    toolbar.bind(connectionEl, statsEl);
+    (statsEl.querySelector(".chatobby-context-meter") as HTMLButtonElement | null)?.click();
+
+    const menuText = statsEl.querySelector(".chatobby-context-menu")?.textContent ?? "";
+    expect(menuText).toContain("Usage is loading");
+    expect(menuText).toContain("Calculating current usage for a 1.0M token window");
+    expect(menuText).not.toContain("2.1M");
   });
 });
 

@@ -2,6 +2,7 @@ import { Notice, TFolder, type App } from "obsidian";
 import type ChatobbyPlugin from "../../main";
 import {
   getVaultBasePath,
+  normalizeVaultDirectoryForBase,
   normalizeVaultDirectoryInput,
   resolveVaultDirectoryCwd,
 } from "./session-directory";
@@ -18,13 +19,13 @@ export class WorkingDirectoryController {
   private vaultDirectoryPath: string;
 
   constructor(private readonly app: App, private readonly plugin: ChatobbyPlugin) {
-    this.vaultDirectoryPath = normalizeVaultDirectoryInput(plugin.getActiveVaultDirectory());
+    this.vaultDirectoryPath = this.normalize(plugin.getActiveVaultDirectory());
   }
 
   current(): string { return this.vaultDirectoryPath; }
 
   restore(rawPath: string): void {
-    this.vaultDirectoryPath = normalizeVaultDirectoryInput(rawPath);
+    this.vaultDirectoryPath = this.normalize(rawPath);
   }
 
   isVaultDirectory(path: string): boolean {
@@ -32,7 +33,7 @@ export class WorkingDirectoryController {
   }
 
   async set(rawPath: string): Promise<void> {
-    const path = normalizeVaultDirectoryInput(rawPath);
+    const path = this.normalize(rawPath);
     if (!this.isVaultDirectory(path)) {
       new Notice(`"${rawPath}" is not a directory in this vault.`);
       return;
@@ -57,6 +58,13 @@ export class WorkingDirectoryController {
       label: workingDirectoryLabel(this.vaultDirectoryPath, this.app.vault.getName()),
       vaultDirectoryPath: this.vaultDirectoryPath,
     };
+  }
+
+  private normalize(rawPath: string): string {
+    const vaultBasePath = getVaultBasePath(this.app);
+    return vaultBasePath
+      ? normalizeVaultDirectoryForBase(vaultBasePath, rawPath)
+      : normalizeVaultDirectoryInput(rawPath);
   }
 }
 
