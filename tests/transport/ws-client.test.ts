@@ -67,7 +67,10 @@ async function waitForSocketCount(count: number): Promise<void> {
   throw new Error(`Timed out waiting for ${count} sockets`);
 }
 
-async function waitForSent(socket: FakeWebSocket, count: number): Promise<void> {
+async function waitForSent(
+  socket: FakeWebSocket,
+  count: number,
+): Promise<void> {
   const deadline = Date.now() + 1000;
   while (Date.now() < deadline) {
     if (socket.sent.length >= count) return;
@@ -106,14 +109,20 @@ describe("ChatobbyTransport", () => {
     const credentialSource = vi.fn((reference: string) =>
       reference === "github-token" ? "secret-value" : null,
     );
-    const transport = new ChatobbyTransport(externalRuntime(), credentialSource);
+    const transport = new ChatobbyTransport(
+      externalRuntime(),
+      credentialSource,
+    );
     const connect = transport.connect();
     const socket = FakeWebSocket.instances[0]!;
     socket.open();
 
     await waitForSent(socket, 1);
     const referencesFrame = JSON.parse(socket.sent[0]!);
-    expect(referencesFrame).toMatchObject({ method: "mcp_credential_references", params: {} });
+    expect(referencesFrame).toMatchObject({
+      method: "mcp_credential_references",
+      params: {},
+    });
     socket.serverMessage({
       id: referencesFrame.id,
       type: "response",
@@ -138,24 +147,57 @@ describe("ChatobbyTransport", () => {
     await transport.disconnect();
   });
 
-	it("rejects a backend request that never receives a response", async () => {
-		const transport = new ChatobbyTransport(externalRuntime());
-		const connect = transport.connect();
-		FakeWebSocket.instances[0]!.open();
-		await connect;
-		vi.useFakeTimers();
-		try {
-			const pending = transport.getProviders();
-			const rejection = expect(pending).rejects.toThrow(
-				"Chatobby runtime request timed out after 30000ms: get_providers",
-			);
-			await vi.advanceTimersByTimeAsync(30_000);
-			await rejection;
-		} finally {
-			vi.useRealTimers();
-			await transport.disconnect();
-		}
-	});
+  it("rejects a backend request that never receives a response", async () => {
+    const transport = new ChatobbyTransport(externalRuntime());
+    const connect = transport.connect();
+    FakeWebSocket.instances[0]!.open();
+    await connect;
+    vi.useFakeTimers();
+    try {
+      const pending = transport.getProviders();
+      const rejection = expect(pending).rejects.toThrow(
+        "Chatobby runtime request timed out after 30000ms: get_providers",
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+      await transport.disconnect();
+    }
+  });
+
+  it("keeps prompt requests alive beyond the generic thirty second deadline", async () => {
+    const transport = new ChatobbyTransport(externalRuntime());
+    const connect = transport.connect();
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    await connect;
+    vi.useFakeTimers();
+    try {
+      let settled = false;
+      const pending = transport
+        .prompt("continue after compaction")
+        .finally(() => {
+          settled = true;
+        });
+      const frame = JSON.parse(socket.sent.at(-1)!);
+      expect(frame).toMatchObject({
+        method: "prompt",
+        params: { message: "continue after compaction" },
+      });
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(settled).toBe(false);
+      socket.serverMessage({
+        id: frame.id,
+        type: "response",
+        result: { status: "started" },
+      });
+      await expect(pending).resolves.toBe("started");
+    } finally {
+      vi.useRealTimers();
+      await transport.disconnect();
+    }
+  });
 
   it("keeps independent transports connected to the same runtime URL", async () => {
     const first = new ChatobbyTransport(externalRuntime());
@@ -186,7 +228,11 @@ describe("ChatobbyTransport", () => {
     await connect;
     socket.serverMessage({
       type: "extension_ui_request",
-      request: { id: "ui-1", method: "confirm", params: { message: "Proceed?" } },
+      request: {
+        id: "ui-1",
+        method: "confirm",
+        params: { message: "Proceed?" },
+      },
     });
     await Promise.resolve();
     expect(handledIds).toEqual(["ui-1"]);
@@ -240,9 +286,15 @@ describe("ChatobbyTransport", () => {
     socket.serverMessage({
       id: frame.id,
       type: "response",
-      result: { outcome: { intentId: "intent-1", status: "completed", revision: 2 } },
+      result: {
+        outcome: { intentId: "intent-1", status: "completed", revision: 2 },
+      },
     });
-    await expect(pending).resolves.toEqual({ intentId: "intent-1", status: "completed", revision: 2 });
+    await expect(pending).resolves.toEqual({
+      intentId: "intent-1",
+      status: "completed",
+      revision: 2,
+    });
     await transport.disconnect();
   });
 
@@ -263,23 +315,27 @@ describe("ChatobbyTransport", () => {
       id: frame.id,
       type: "response",
       result: {
-        sessions: [{
-          path: "C:/sessions/s1.jsonl",
-          id: "s1",
-          cwd: "C:/vault/Projects",
-          created: "2026-07-01T00:00:00.000Z",
-          modified: "2026-07-02T00:00:00.000Z",
-          messageCount: 1,
-          firstMessage: "resume me",
-        }],
+        sessions: [
+          {
+            path: "C:/sessions/s1.jsonl",
+            id: "s1",
+            cwd: "C:/vault/Projects",
+            created: "2026-07-01T00:00:00.000Z",
+            modified: "2026-07-02T00:00:00.000Z",
+            messageCount: 1,
+            firstMessage: "resume me",
+          },
+        ],
       },
     });
-    await expect(pending).resolves.toMatchObject([{
-      id: "s1",
-      cwd: "C:/vault/Projects",
-      firstMessage: "resume me",
-      created: new Date("2026-07-01T00:00:00.000Z"),
-    }]);
+    await expect(pending).resolves.toMatchObject([
+      {
+        id: "s1",
+        cwd: "C:/vault/Projects",
+        firstMessage: "resume me",
+        created: new Date("2026-07-01T00:00:00.000Z"),
+      },
+    ]);
     await transport.disconnect();
   });
 
@@ -289,7 +345,10 @@ describe("ChatobbyTransport", () => {
     const socket = FakeWebSocket.instances[0]!;
     socket.open();
     await connect;
-    const pending = transport.getStoredSessionForkMessages({ sessionId: "s1" }, "C:/vault");
+    const pending = transport.getStoredSessionForkMessages(
+      { sessionId: "s1" },
+      "C:/vault",
+    );
     await waitForSent(socket, 1);
     const frame = JSON.parse(socket.sent[0]!);
     expect(frame).toMatchObject({
@@ -301,7 +360,9 @@ describe("ChatobbyTransport", () => {
       type: "response",
       result: { messages: [{ entryId: "entry-1", text: "fork me" }] },
     });
-    await expect(pending).resolves.toEqual([{ entryId: "entry-1", text: "fork me" }]);
+    await expect(pending).resolves.toEqual([
+      { entryId: "entry-1", text: "fork me" },
+    ]);
     await transport.disconnect();
   });
 });

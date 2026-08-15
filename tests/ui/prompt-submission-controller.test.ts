@@ -1,14 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FeedStore } from "../../src/features/feed/public";
 import type { ChatobbyTransport } from "../../src/transport/ws-client";
 import {
-  PROMPT_START_TIMEOUT_MS,
   retractAcceptedPrompt,
   submitPrompt,
 } from "../../src/ui/controller/prompt-submission-controller";
-import { CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS } from "../../src/vendor/chatobby-client/control/contracts";
 
-type PromptTransport = Pick<ChatobbyTransport, "isConnected" | "prompt" | "retractPrompt">;
+type PromptTransport = Pick<
+  ChatobbyTransport,
+  "isConnected" | "prompt" | "retractPrompt"
+>;
 type PromptFeedStore = Pick<FeedStore, "dispatch">;
 
 function feedStore(): PromptFeedStore {
@@ -25,23 +26,27 @@ function transport(overrides: Partial<PromptTransport> = {}): PromptTransport {
 }
 
 describe("prompt submission controller", () => {
-  it("uses the runtime prompt lifetime so automatic compaction cannot cause a false start timeout", () => {
-    expect(PROMPT_START_TIMEOUT_MS).toBe(CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS);
-    expect(PROMPT_START_TIMEOUT_MS).toBeGreaterThan(30_000);
-  });
+  afterEach(() => vi.useRealTimers());
 
   it("submits a correlated feed message and leaves an accepted prompt in place", async () => {
     const feed = feedStore();
     const client = transport();
 
-    await expect(submitPrompt({
-      transport: client,
-      feedStore: feed,
-      message: "hello",
-      submissionId: "submission-1",
-    })).resolves.toBeUndefined();
+    await expect(
+      submitPrompt({
+        transport: client,
+        feedStore: feed,
+        message: "hello",
+        submissionId: "submission-1",
+      }),
+    ).resolves.toBeUndefined();
 
-    expect(client.prompt).toHaveBeenCalledWith("hello", undefined, undefined, "submission-1");
+    expect(client.prompt).toHaveBeenCalledWith(
+      "hello",
+      undefined,
+      undefined,
+      "submission-1",
+    );
     expect(feed.dispatch).toHaveBeenCalledOnce();
     expect(feed.dispatch).toHaveBeenCalledWith({
       type: "feed.user-prompt-submitted",
@@ -53,14 +58,18 @@ describe("prompt submission controller", () => {
 
   it("removes the exact feed message when the backend retracts before starting", async () => {
     const feed = feedStore();
-    const client = transport({ prompt: vi.fn(async () => "retracted" as const) });
+    const client = transport({
+      prompt: vi.fn(async () => "retracted" as const),
+    });
 
-    await expect(submitPrompt({
-      transport: client,
-      feedStore: feed,
-      message: "pull this back",
-      submissionId: "submission-2",
-    })).resolves.toEqual({ retracted: true });
+    await expect(
+      submitPrompt({
+        transport: client,
+        feedStore: feed,
+        message: "pull this back",
+        submissionId: "submission-2",
+      }),
+    ).resolves.toEqual({ retracted: true });
 
     expect(client.retractPrompt).not.toHaveBeenCalled();
     expect(feed.dispatch).toHaveBeenLastCalledWith({
@@ -75,9 +84,12 @@ describe("prompt submission controller", () => {
     const controller = new AbortController();
     let acceptPrompt: ((status: "started") => void) | undefined;
     const client = transport({
-      prompt: vi.fn(() => new Promise<"started">((resolve) => {
-        acceptPrompt = resolve;
-      })),
+      prompt: vi.fn(
+        () =>
+          new Promise<"started">((resolve) => {
+            acceptPrompt = resolve;
+          }),
+      ),
     });
     const submission = submitPrompt({
       transport: client,
@@ -87,7 +99,12 @@ describe("prompt submission controller", () => {
       submissionId: "submission-3",
     });
 
-    expect(client.prompt).toHaveBeenCalledWith("race", undefined, undefined, "submission-3");
+    expect(client.prompt).toHaveBeenCalledWith(
+      "race",
+      undefined,
+      undefined,
+      "submission-3",
+    );
     controller.abort();
     acceptPrompt?.("started");
 
@@ -104,11 +121,43 @@ describe("prompt submission controller", () => {
   it("does not remove an accepted message after visible output has started", async () => {
     const feed = feedStore();
     const client = transport({
-      retractPrompt: vi.fn(async () => ({ retracted: false as const, reason: "output-started" as const })),
+      retractPrompt: vi.fn(async () => ({
+        retracted: false as const,
+        reason: "output-started" as const,
+      })),
     });
 
-    await expect(retractAcceptedPrompt(client, feed, "submission-4", "keep this"))
-      .resolves.toEqual({ retracted: false, reason: "output-started" });
+    await expect(
+      retractAcceptedPrompt(client, feed, "submission-4", "keep this"),
+    ).resolves.toEqual({ retracted: false, reason: "output-started" });
     expect(feed.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a prompt pending while runtime compaction is still preparing it", async () => {
+    vi.useFakeTimers();
+    const feed = feedStore();
+    let resolvePrompt: ((status: "started") => void) | undefined;
+    const client = transport({
+      prompt: vi.fn(
+        () =>
+          new Promise<"started">((resolve) => {
+            resolvePrompt = resolve;
+          }),
+      ),
+    });
+    let settled = false;
+    const submission = submitPrompt({
+      transport: client,
+      feedStore: feed,
+      message: "continue after compaction",
+      submissionId: "submission-compaction",
+    }).finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(settled).toBe(false);
+    resolvePrompt?.("started");
+    await expect(submission).resolves.toBeUndefined();
   });
 });

@@ -1,12 +1,16 @@
 import type { FeedStore } from "../../features/feed/public";
-import type { AttachmentContent, WsPromptAttachment, WsPromptContextPacket } from "../../types";
+import type {
+  AttachmentContent,
+  WsPromptAttachment,
+  WsPromptContextPacket,
+} from "../../types";
 import type { ChatobbyTransport } from "../../transport/ws-client";
 import type { PromptSubmissionOutcome } from "../composer/composer";
-import { CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS } from "../../vendor/chatobby-client/control/contracts";
-import { withTimeout } from "./view-utils";
 
-export const PROMPT_START_TIMEOUT_MS = CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS;
-type PromptTransport = Pick<ChatobbyTransport, "isConnected" | "prompt" | "retractPrompt">;
+type PromptTransport = Pick<
+  ChatobbyTransport,
+  "isConnected" | "prompt" | "retractPrompt"
+>;
 type PromptFeedStore = Pick<FeedStore, "dispatch">;
 
 interface SubmitPromptOptions {
@@ -19,8 +23,18 @@ interface SubmitPromptOptions {
   readonly submissionId?: string;
 }
 
-export async function submitPrompt(options: SubmitPromptOptions): Promise<PromptSubmissionOutcome | undefined> {
-  const { transport, feedStore, message, attachments, context, signal, submissionId } = options;
+export async function submitPrompt(
+  options: SubmitPromptOptions,
+): Promise<PromptSubmissionOutcome | undefined> {
+  const {
+    transport,
+    feedStore,
+    message,
+    attachments,
+    context,
+    signal,
+    submissionId,
+  } = options;
   feedStore.dispatch({
     type: "feed.user-prompt-submitted",
     text: message,
@@ -29,21 +43,37 @@ export async function submitPrompt(options: SubmitPromptOptions): Promise<Prompt
     submissionId,
   });
 
-  const status = await withTimeout(
-    transport.prompt(message, attachments, context, submissionId),
-    PROMPT_START_TIMEOUT_MS,
-    "Prompt did not start",
+  // The generated transport owns the canonical lifecycle deadline. A prompt
+  // can be accepted immediately before or during automatic compaction, so a
+  // second connector timer would report a false failure while the runtime is
+  // correctly preparing the queued turn.
+  const status = await transport.prompt(
+    message,
+    attachments,
+    context,
+    submissionId,
   );
-  if (!submissionId || (!signal?.aborted && status !== "retracted")) return undefined;
+  if (!submissionId || (!signal?.aborted && status !== "retracted"))
+    return undefined;
   if (status === "retracted") {
     removeLocalPromptSubmission(feedStore, submissionId, message);
     return { retracted: true };
   }
-  const retraction = await retractAcceptedPrompt(transport, feedStore, submissionId, message);
-  return { retracted: retraction.retracted, retractionReason: retraction.reason };
+  const retraction = await retractAcceptedPrompt(
+    transport,
+    feedStore,
+    submissionId,
+    message,
+  );
+  return {
+    retracted: retraction.retracted,
+    retractionReason: retraction.reason,
+  };
 }
 
-export function toFeedAttachment(attachment: WsPromptAttachment): AttachmentContent {
+export function toFeedAttachment(
+  attachment: WsPromptAttachment,
+): AttachmentContent {
   if (attachment.type === "image") {
     return {
       type: "attachment",
@@ -56,7 +86,10 @@ export function toFeedAttachment(attachment: WsPromptAttachment): AttachmentCont
   }
   return {
     type: "attachment",
-    name: attachment.name ?? attachment.path.split(/[\\/]/u).at(-1) ?? "Attached file",
+    name:
+      attachment.name ??
+      attachment.path.split(/[\\/]/u).at(-1) ??
+      "Attached file",
     kind: attachmentKind(attachment),
     mimeType: attachment.mimeType,
     path: attachment.path,
@@ -64,17 +97,59 @@ export function toFeedAttachment(attachment: WsPromptAttachment): AttachmentCont
   };
 }
 
-function attachmentKind(attachment: Extract<WsPromptAttachment, { type: "file_ref" }>): AttachmentContent["kind"] {
+function attachmentKind(
+  attachment: Extract<WsPromptAttachment, { type: "file_ref" }>,
+): AttachmentContent["kind"] {
   if (attachment.mimeType?.startsWith("image/")) return "image";
   if (attachment.mimeType?.startsWith("text/")) return "text";
-  const extension = /\.([^.]+)$/u.exec(attachment.name ?? attachment.path)?.[1]?.toLowerCase();
-  return extension && TEXT_ATTACHMENT_EXTENSIONS.has(extension) ? "text" : "binary";
+  const extension = /\.([^.]+)$/u
+    .exec(attachment.name ?? attachment.path)?.[1]
+    ?.toLowerCase();
+  return extension && TEXT_ATTACHMENT_EXTENSIONS.has(extension)
+    ? "text"
+    : "binary";
 }
 
 const TEXT_ATTACHMENT_EXTENSIONS = new Set([
-  "c", "cc", "cpp", "cs", "css", "csv", "dart", "go", "h", "hpp", "htm", "html", "java", "js", "json",
-  "jsonc", "jsx", "log", "lua", "md", "php", "ps1", "py", "rb", "rs", "scss", "sh", "sql", "svg", "toml",
-  "ts", "tsv", "tsx", "txt", "vue", "xml", "yaml", "yml", "zsh",
+  "c",
+  "cc",
+  "cpp",
+  "cs",
+  "css",
+  "csv",
+  "dart",
+  "go",
+  "h",
+  "hpp",
+  "htm",
+  "html",
+  "java",
+  "js",
+  "json",
+  "jsonc",
+  "jsx",
+  "log",
+  "lua",
+  "md",
+  "php",
+  "ps1",
+  "py",
+  "rb",
+  "rs",
+  "scss",
+  "sh",
+  "sql",
+  "svg",
+  "toml",
+  "ts",
+  "tsv",
+  "tsx",
+  "txt",
+  "vue",
+  "xml",
+  "yaml",
+  "yml",
+  "zsh",
 ]);
 
 export async function retractAcceptedPrompt(
@@ -82,14 +157,22 @@ export async function retractAcceptedPrompt(
   feedStore: PromptFeedStore,
   submissionId: string,
   message: string,
-): Promise<{ retracted: boolean; reason?: "not-found" | "output-started" | "drain-timeout" | "prompt-failed" }> {
+): Promise<{
+  retracted: boolean;
+  reason?: "not-found" | "output-started" | "drain-timeout" | "prompt-failed";
+}> {
   if (!transport?.isConnected) return { retracted: false, reason: "not-found" };
   const result = await transport.retractPrompt(submissionId);
-  if (result.retracted) removeLocalPromptSubmission(feedStore, submissionId, message);
+  if (result.retracted)
+    removeLocalPromptSubmission(feedStore, submissionId, message);
   return result;
 }
 
-function removeLocalPromptSubmission(feedStore: PromptFeedStore, submissionId: string, message: string): void {
+function removeLocalPromptSubmission(
+  feedStore: PromptFeedStore,
+  submissionId: string,
+  message: string,
+): void {
   feedStore.dispatch({
     type: "feed.user-prompt-retracted",
     submissionId,

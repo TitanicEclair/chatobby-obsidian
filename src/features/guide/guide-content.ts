@@ -27,6 +27,7 @@ You do not need to learn every feature before starting. Open a Vault chat or cho
 - [[07 - Models and providers|Choose an AI provider and model]]
 - [[08 - Examples and recipes|Copy useful example requests]]
 - [[09 - Troubleshooting and limits|Fix common problems and understand limits]]
+- [[10 - Native skills and checked workflows|Use Chatobby's maintained procedural guidance]]
 
 ## A useful first request
 
@@ -619,6 +620,12 @@ Confirm that you assigned the edited policy to **Main agent** rather than only s
 
 Use Stop once. The timer, composer button, and running state should all settle. If they do not, copy diagnostics and include which agent, tool, or compaction step was active.
 
+## A message arrives while context is compacting
+
+Compaction writes a smaller continuity checkpoint before work continues. A message sent during automatic compaction is accepted once and waits behind that checkpoint; it should not show a false 30-second prompt timeout or start a duplicate turn. When compaction finishes, the feed should show **Context compacted**, then the queued message and response in order.
+
+The context meter may briefly say that it is calculating while the checkpoint is installed, but it should refresh to the post-compaction usage without showing the old pre-compaction total. If the meter remains empty, the queued message appears twice, or the feed never records completion, stop once and copy diagnostics with the visible compaction stage.
+
 ## Obsidian becomes slow or reloads
 
 Stop active Chatobby work, close unnecessary views, and restart Obsidian once. Include the open Chatobby page, approximate response size, and last visible action in a report. Do not repeatedly restart a crashing runtime without collecting diagnostics.
@@ -629,7 +636,75 @@ Do not share API keys, access tokens, full private prompts, or unrelated vault c
 
 AI models, websites, and third-party tools can be wrong. Verify high-impact medical, legal, financial, security, and destructive actions independently.
 
-[[00 - Start Here|Guide index]] · [[02 - Permissions and safety|Review permissions]] · [[06 - Plugins and MCP services|Review plugin setup]]
+[[00 - Start Here|Guide index]] · [[02 - Permissions and safety|Review permissions]] · [[06 - Plugins and MCP services|Review plugin setup]] · [[10 - Native skills and checked workflows|Understand native guidance]]
+`,
+  },
+  {
+    path: `${CHATOBBY_GUIDE_DIRECTORY}/10 - Native skills and checked workflows.md`,
+    title: "Native skills and checked workflows",
+    content: `# Native skills and checked workflows
+
+Chatobby includes maintained native skills for work that benefits from more than a short prompt. These skills are procedural guides: they help the agent choose the right representation, use an installed capability correctly, recognize common failure modes, and verify the result.
+
+Native skills cover Chatobby product setup, coding and plugin development, subagent coordination, web and document acquisition, Markdown vault work, structured data, diagrams and visual communication, calendars and planning, automation, learning workflows, and Obsidian interface styling.
+
+## How loading works
+
+The session begins with a compact catalogue of skill names and purposes, not every manual in full. When one is relevant, Chatobby loads its entry instructions. It can then load only the supporting resource needed for the current step, such as an audit script, plugin-specific reference, failure checklist, or rendered-review procedure.
+
+This progressive loading matters: ordinary questions stay compact, while specialist work can still receive deep guidance. Loading a skill does not install a plugin, grant permissions, or prove that a capability exists in your vault. Chatobby still checks the installed environment and the active permission policy.
+
+You can ask Chatobby to name the guidance it used:
+
+> Before planning this large Canvas, load the relevant native guidance. Tell me which skill and audit resources you used, then separate structural checks from rendered checks.
+
+## Native, user, and Project skills
+
+| Kind | Use it for | Who maintains it |
+|---|---|---|
+| **Native skill** | Supported Chatobby and Obsidian workflows | Shipped read-only with Chatobby |
+| **User skill** | A reusable procedure that should follow you across Projects | You, through Chatobby's managed-skill workflow |
+| **Project skill** | A procedure that belongs to one Project | You or collaborators in that Project |
+
+Use \`chatobby.md\` for rules that should always guide the Project. Use memory for facts or preferences that should be retrieved when relevant. Use a skill for a multi-step procedure with references, fixtures, scripts, or a verification method.
+
+## What a useful skill contains
+
+A managed skill should have one clear entry page and load deeper material only when needed. It should identify:
+
+- the jobs it covers and the cases it does not;
+- required files, plugins, versions, or permissions;
+- a normal workflow and a recovery path;
+- references or examples that support the procedure;
+- a concrete way to verify the output.
+
+For a broad subject, prefer a small suite over one enormous instruction file. For example, a diagram suite can separate representation choice, scene structure, deterministic auditing, and rendered review. A plugin automation suite can separate choice design, exact API semantics, cancellation, reruns, and live verification.
+
+## Checked-work examples
+
+### Canvas or Excalidraw
+
+Ask for the visual thesis and semantic sections first. Structural scripts can prove IDs, references, containment, and possible collisions; they cannot prove visual balance or readability. A rendered review remains a separate acceptance step.
+
+### QuickAdd or Templater
+
+Ask Chatobby to confirm that the plugin is installed and to use the current documented API. Test cancellation, malformed input, a repeated run, partial failure, and the real command or hotkey. A template that rendered once is not yet a dependable automation.
+
+### Bases, Dataview, or charts
+
+Define the question, property types, missing-value meaning, sorting, and source records before writing a query. Verify a sample of results against source notes and inspect the rendered output or current errors.
+
+### Plugin or theme work
+
+Ask Chatobby to reproduce the exact UI state, inspect current Obsidian diagnostics, make the smallest source change, rebuild, reload, and verify the affected state. Obsidian host panes and Web Viewer pages are different surfaces and require different evidence.
+
+## Ask Chatobby to create or improve a skill
+
+> Turn this recurring project-note workflow into a managed Project skill. Use a concise entry page, put the edge cases and audit script in separate resources, link the primary references, and test discovery and loading before I rely on it.
+
+Chatobby should preserve the skill as a maintainable knowledge suite rather than copying a long chat into one file. Review scripts and external links as you would other project code.
+
+[[00 - Start Here|Guide index]] · [[01 - Sessions and vault work|Project instructions]] · [[03 - Memory and instructions|Memory choices]] · [[09 - Troubleshooting and limits|Troubleshoot failures]]
 `,
   },
 ];

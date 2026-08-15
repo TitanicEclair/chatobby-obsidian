@@ -28,7 +28,7 @@ import { gatherVaultContext, toPromptContextPacket } from "../prompt";
 import { errorMessage } from "../utils";
 import type { ChatobbyTransport } from "../transport/ws-client";
 import { LiveStatsController } from "./controller/live-stats-controller";
-import { isThinkingLevel, withTimeout } from "./controller/view-utils";
+import { isThinkingLevel } from "./controller/view-utils";
 import { SlashCommandController } from "../features/commands/public";
 import { createChatViewOverlayScreens, type ChatViewOverlayScreens, type OverlayViewMode } from "./screens/chat-view-overlay-screens";
 import { ExtensionUiController } from "./controller/extension-ui-controller";
@@ -62,7 +62,7 @@ import { synchronizeFrontendFeed as syncFrontendFeedProjection } from "./control
 import type { FrontendBootstrap, FrontendChoiceControl, FrontendIntent, FrontendNavigationReference } from "../vendor/chatobby-client/frontend-contracts.js";
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
-import { PROMPT_START_TIMEOUT_MS, retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
+import { retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
 import { deliverQueuedMessage, deliverSteer } from "./controller/queued-message-delivery";
 import { focusPageNavigation, movePageNavigation } from "./shared/page-shell";
 const VIEW_TYPE = "chatobby-view";
@@ -896,8 +896,7 @@ export class ChatobbyView extends ItemView {
       startRun: options.startRun !== false,
     });
 
-    await withTimeout(transport.prompt(message), PROMPT_START_TIMEOUT_MS, "Slash prompt did not start")
-      .catch((e) => this.renderPromptFailure(message, e));
+    await transport.prompt(message).catch((e) => this.renderPromptFailure(message, e));
   }
 
   private async ensureConnectedTransport(

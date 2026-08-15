@@ -39,16 +39,86 @@
   background: var(--chatobby-surface-muted);
 }
 
-/* Live readout of the chosen threshold; the slider's value bubble only shows
-   while dragging, so this keeps the exact percentage visible at rest. */
+.chatobby-auto-compaction-modal__threshold {
+  margin-top: var(--size-4-3);
+  padding: var(--size-4-3);
+  border: var(--border-width) solid var(--chatobby-border);
+  border-radius: var(--radius-m);
+  background: var(--chatobby-surface-muted);
+}
+
+.chatobby-auto-compaction-modal__threshold-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--size-4-3);
+}
+
 .chatobby-auto-compaction-modal__threshold-value {
   flex: 0 0 auto;
-  min-width: 3em;
-  margin-left: var(--size-4-2);
+  min-width: 3.25em;
+  padding: var(--size-2-1) var(--size-4-2);
+  border-radius: var(--radius-s);
+  background: var(--chatobby-surface-hover);
   color: var(--chatobby-accent);
   font-family: var(--font-monospace-theme);
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.chatobby-auto-compaction-modal__threshold-track {
+  display: flex;
+  align-items: center;
+  margin-top: var(--size-4-3);
+}
+
+.chatobby-auto-compaction-modal__threshold-slider {
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--chatobby-accent) 0,
+    var(--chatobby-accent) var(--chatobby-compaction-threshold-progress),
+    var(--chatobby-border-strong) var(--chatobby-compaction-threshold-progress),
+    var(--chatobby-border-strong) 100%
+  );
+  cursor: pointer;
+}
+
+.chatobby-auto-compaction-modal__threshold-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  appearance: none;
+  border: 2px solid var(--chatobby-canvas);
+  border-radius: 50%;
+  background: var(--chatobby-accent);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+}
+
+.chatobby-auto-compaction-modal__threshold-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--chatobby-canvas);
+  border-radius: 50%;
+  background: var(--chatobby-accent);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+}
+
+.chatobby-auto-compaction-modal__threshold-slider:focus-visible {
+  outline: 2px solid var(--chatobby-accent);
+  outline-offset: 5px;
+}
+
+.chatobby-auto-compaction-modal__threshold-bounds {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--size-4-2);
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
 }

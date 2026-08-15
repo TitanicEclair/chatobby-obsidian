@@ -18,6 +18,7 @@ export class LiveStatsController {
   private disposed = false;
   private active = true;
   private activityWasRunning = false;
+  private compactionWasRunning = false;
   private generation = 0;
 
   constructor(private readonly options: LiveStatsControllerOptions) {}
@@ -64,7 +65,10 @@ export class LiveStatsController {
   start(): void {
     if (this.disposed || !this.active || this.timer !== null) return;
     void this.refresh();
-    this.timer = window.setInterval(() => void this.refresh(), LIVE_STATS_POLL_MS);
+    this.timer = window.setInterval(
+      () => void this.refresh(),
+      LIVE_STATS_POLL_MS,
+    );
   }
 
   stop(): void {
@@ -77,20 +81,26 @@ export class LiveStatsController {
     const session = this.options.getSessionState();
     const activityIsRunning = session.isStreaming || session.isCompacting;
     const connected = this.options.getTransport()?.isConnected === true;
+    const compactionEnded = this.compactionWasRunning && !session.isCompacting;
+    const activityEnded = this.activityWasRunning && !activityIsRunning;
+    const refreshAfterBoundary =
+      connected && (compactionEnded || activityEnded);
+
+    if (refreshAfterBoundary) {
+      // Compaction can flow directly into a queued inference without an idle
+      // frame. Retire pre-checkpoint stats on the compaction falling edge, not
+      // only when every kind of work becomes idle.
+      this.reset();
+      this.options.onChange(null);
+    }
     if (connected && activityIsRunning) {
       this.start();
     } else {
       this.stop();
-      if (connected && this.activityWasRunning && !activityIsRunning) {
-        // A pre-compaction or pre-turn response may still be in flight. Retire
-        // that generation, clear the meter immediately, and fetch the first
-        // authoritative post-activity context measurement.
-        this.reset();
-        this.options.onChange(null);
-        void this.refresh();
-      }
     }
+    if (refreshAfterBoundary) void this.refresh();
     this.activityWasRunning = activityIsRunning;
+    this.compactionWasRunning = session.isCompacting;
   }
 
   setActive(active: boolean): void {

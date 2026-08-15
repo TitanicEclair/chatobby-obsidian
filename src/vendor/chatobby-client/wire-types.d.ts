@@ -34,6 +34,8 @@ export interface WireAssistantMessage {
     content: WireContentBlock[];
     model: string;
     timestamp: number;
+    stopReason?: string;
+    errorMessage?: string;
 }
 export interface WireToolResultMessage {
     role: "toolResult";

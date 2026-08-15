@@ -9,9 +9,11 @@ import {
 
 describe("Chatobby guide", () => {
   it("ships a linked folder whose index targets all exist", () => {
-    expect(CHATOBBY_GUIDE_FILES).toHaveLength(10);
+    expect(CHATOBBY_GUIDE_FILES).toHaveLength(11);
     const paths = new Set(CHATOBBY_GUIDE_FILES.map((file) => file.path));
-    const links = [...CHATOBBY_GUIDE_MARKDOWN.matchAll(/\[\[([^|\]]+)/gu)].map((match) => match[1]!);
+    const links = [...CHATOBBY_GUIDE_MARKDOWN.matchAll(/\[\[([^|\]]+)/gu)].map(
+      (match) => match[1]!,
+    );
     expect(links.length).toBeGreaterThan(5);
     for (const link of links) {
       expect(paths.has(`${CHATOBBY_GUIDE_DIRECTORY}/${link}.md`)).toBe(true);
@@ -19,16 +21,31 @@ describe("Chatobby guide", () => {
   });
 
   it("provides beginner-facing explanations, workflows, and connected navigation", () => {
-    const completeGuide = CHATOBBY_GUIDE_FILES.map((file) => file.content).join("\n");
+    const completeGuide = CHATOBBY_GUIDE_FILES.map((file) => file.content).join(
+      "\n",
+    );
     expect(completeGuide.length).toBeGreaterThan(20_000);
     expect(completeGuide).toContain("much like a group chat");
     expect(completeGuide).toContain("Give an agent channel access");
     expect(completeGuide).toContain("secret name versus secret value");
-    expect(completeGuide).toContain("Creating a secret does not automatically link it");
+    expect(completeGuide).toContain(
+      "Creating a secret does not automatically link it",
+    );
     expect(completeGuide).toContain("Which account sign-ins work?");
-    expect(completeGuide).toContain("Connection and managed process are different");
-    expect(completeGuide).toContain("chats cannot use it until you restore a connection");
-    expect(completeGuide).toContain("[[02 - Permissions and safety|Permissions]]");
+    expect(completeGuide).toContain(
+      "Connection and managed process are different",
+    );
+    expect(completeGuide).toContain(
+      "chats cannot use it until you restore a connection",
+    );
+    expect(completeGuide).toContain(
+      "A message sent during automatic compaction is accepted once",
+    );
+    expect(completeGuide).toContain("Native, user, and Project skills");
+    expect(completeGuide).toContain("progressive loading");
+    expect(completeGuide).toContain(
+      "[[02 - Permissions and safety|Permissions]]",
+    );
   });
 
   it("copies every guide page after one confirmation", async () => {
@@ -59,7 +76,9 @@ describe("Chatobby guide", () => {
 
     expect(createFolder).toHaveBeenCalledWith(CHATOBBY_GUIDE_DIRECTORY);
     expect(create).toHaveBeenCalledTimes(CHATOBBY_GUIDE_FILES.length);
-    expect(entries.has(`${CHATOBBY_GUIDE_DIRECTORY}/00 - Start Here.md`)).toBe(true);
+    expect(entries.has(`${CHATOBBY_GUIDE_DIRECTORY}/00 - Start Here.md`)).toBe(
+      true,
+    );
   });
 
   it("rejects a runtime guide file outside the guide folder", async () => {
@@ -91,7 +110,9 @@ describe("Chatobby guide", () => {
           version: "test",
           earlyAccess: true,
           confirmationNotice: "Confirm",
-          files: [{ path: "../Outside.md", title: "Unsafe", content: "unsafe" }],
+          files: [
+            { path: "../Outside.md", title: "Unsafe", content: "unsafe" },
+          ],
         }),
       }),
     });

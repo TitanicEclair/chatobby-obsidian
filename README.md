@@ -317,10 +317,10 @@ Managed profiles use validated settings, stay bound to
 
 The two sections represent different records and should normally remain paired:
 
-| Settings section | What it controls | Required for chats? |
-| --- | --- | --- |
-| **Local model connections** | API format, server URL, authentication, model IDs, names, context/output limits, and advertised capabilities | Yes. This is what makes the provider and its models appear in the composer. |
-| **Managed llama.cpp** | How Chatobby launches, health-checks, restarts, and stops one existing `llama-server` executable and GGUF file | Optional. Use it only when Chatobby should own the llama.cpp process lifecycle. |
+| Settings section            | What it controls                                                                                               | Required for chats?                                                             |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Local model connections** | API format, server URL, authentication, model IDs, names, context/output limits, and advertised capabilities   | Yes. This is what makes the provider and its models appear in the composer.     |
+| **Managed llama.cpp**       | How Chatobby launches, health-checks, restarts, and stops one existing `llama-server` executable and GGUF file | Optional. Use it only when Chatobby should own the llama.cpp process lifecycle. |
 
 For an existing Ollama, LM Studio, vLLM, llama.cpp, or compatible server, add
 only a connection. To let Chatobby launch llama.cpp, first save and test a
@@ -680,18 +680,39 @@ trigger, and successful test state. Do not show raw script code.
 
 Skills provide reusable procedures for recurring work. User and project skills
 can be selected when appropriate, while Chatobby also ships runtime-owned
-operating skills for supported capabilities such as coding work, Web Viewer
-operation, MCP setup, model-provider configuration, Context Queries,
-permissions, subagents, command shells, and runtime diagnosis.
+operating skills across Chatobby setup, coding and plugin development, agent
+coordination, source acquisition, Markdown vault work, structured data, visual
+communication, planning, automation, learning workflows, and Obsidian styling.
 
 Runtime-owned skills are immutable and are not exposed as editable files or
-ordinary slash-command entries. The agent selects them semantically when the
-task requires them; selection is not based on a hardcoded list of trigger
-phrases.
+ordinary slash-command entries. A compact catalogue makes their names and
+purposes available at session start. The agent selects an entry semantically,
+then loads only the supporting references, scripts, fixtures, or verification
+checklists needed for the current step. This progressive disclosure avoids
+putting every specialist manual into every prompt.
+
+Loading a native skill does not install an Obsidian plugin, grant a permission,
+or prove that a capability is available in the current vault. Chatobby still
+checks the installed environment and the active policy. For visual work, it
+also distinguishes structural evidence from rendered evidence: an audit can
+prove IDs, references, containment, and collision candidates without claiming
+that a diagram looks correct.
 
 Use a project skill when the procedure belongs only to one project. Use a user
 skill when the procedure is genuinely reusable across projects. Do not put
 personal assumptions into a skill intended for other users.
+
+Ask Chatobby to create managed skills as small documentation suites rather than
+one oversized prompt. A useful suite has one discoverable entry page, focused
+resources for deeper cases, primary references, failure and recovery guidance,
+and an executable or observable verification method. For example:
+
+- `Load the relevant native guidance, then plan a large Canvas with a deterministic structural audit and a separate rendered review.`
+- `Turn this QuickAdd workflow into a Project skill with exact API references, cancellation and rerun tests, and a live verification checklist.`
+- `Create a user skill for this study-note method. Keep the entry concise and move notation rules and examples into focused resources.`
+
+The downloadable **Chatobby Guide** includes a complete beginner-facing page
+on native, user, and Project skills.
 
 ## Obsidian views and Web Viewer pages
 

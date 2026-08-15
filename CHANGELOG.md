@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+- Ignore replayed compaction-completion events that no longer have an active
+  checkpoint, show provider failures that contain no assistant text, and keep
+  the next submitted prompt in its correct chronological position.
+- Replace the duplicated threshold controls with one accessible, responsive
+  slider and persistent percentage readout. The configurable range now starts
+  at 10 percent while model defaults remain unchanged.
+
+- Keep prompt submissions pending through runtime-managed compaction instead
+  of applying a second connector-local deadline, and refresh post-compaction
+  context usage immediately even when the queued prompt has already begun
+  streaming.
+- Expand the public README and downloadable Chatobby Guide with progressive
+  native-skill loading, managed-skill stewardship, checked workflow examples,
+  compaction recovery, and the exact structured Obsidian CLI request and
+  result semantics.
+
 ## [0.4.0] - 2026-08-15
 
 - Keep prompt submission pending through runtime-managed compaction instead of

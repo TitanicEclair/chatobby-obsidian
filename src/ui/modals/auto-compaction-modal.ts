@@ -44,33 +44,51 @@ export class AutoCompactionModal extends Modal {
         .setValue(this.enabled)
         .onChange((enabled) => { this.enabled = enabled; }));
 
-    // Persistent readout of the chosen threshold. The slider's displayFormat only
-    // surfaces a value while dragging; this keeps the exact percentage visible at
-    // rest so the user isn't guessing between the 25–95% endpoints.
-    const thresholdValueEl = this.contentEl.createSpan({
+    const threshold = this.contentEl.createDiv({ cls: "chatobby-auto-compaction-modal__threshold" });
+    const thresholdHeading = threshold.createDiv({ cls: "chatobby-auto-compaction-modal__threshold-heading" });
+    const thresholdCopy = thresholdHeading.createDiv();
+    thresholdCopy.createDiv({ cls: "setting-item-name", text: "Context threshold" });
+    const thresholdDescription = thresholdCopy.createDiv({
+      cls: "setting-item-description",
+      text: "Start compaction when estimated context reaches this percentage.",
+    });
+    const thresholdValueEl = thresholdHeading.createEl("output", {
       cls: "chatobby-auto-compaction-modal__threshold-value",
       text: `${this.thresholdPercent}%`,
     });
+    const sliderId = "chatobby-auto-compaction-threshold";
+    const descriptionId = `${sliderId}-description`;
+    thresholdDescription.id = descriptionId;
+    thresholdValueEl.htmlFor = sliderId;
 
-    const thresholdSetting = new Setting(this.contentEl)
-      .setName("Context threshold")
-      .setDesc("Start compaction when estimated context reaches this percentage.")
-      .addSlider((slider) => {
-        slider
-          .setLimits(
-          AUTO_COMPACTION_MIN_THRESHOLD_PERCENT,
-          AUTO_COMPACTION_MAX_THRESHOLD_PERCENT,
-          AUTO_COMPACTION_THRESHOLD_STEP_PERCENT,
-          )
-          .setValue(this.thresholdPercent)
-          .onChange((thresholdPercent) => {
-            this.thresholdPercent = thresholdPercent;
-            thresholdValueEl.textContent = `${thresholdPercent}%`;
-          });
-        slider.sliderEl.setAttribute("aria-label", "Automatic compaction threshold percentage");
-      });
+    const thresholdTrack = threshold.createDiv({ cls: "chatobby-auto-compaction-modal__threshold-track" });
+    const slider = thresholdTrack.createEl("input", {
+      cls: "chatobby-auto-compaction-modal__threshold-slider",
+      attr: {
+        id: sliderId,
+        type: "range",
+        min: String(AUTO_COMPACTION_MIN_THRESHOLD_PERCENT),
+        max: String(AUTO_COMPACTION_MAX_THRESHOLD_PERCENT),
+        step: String(AUTO_COMPACTION_THRESHOLD_STEP_PERCENT),
+        value: String(this.thresholdPercent),
+        "aria-label": "Automatic compaction threshold percentage",
+        "aria-describedby": descriptionId,
+      },
+    });
+    const updateThreshold = (): void => {
+      this.thresholdPercent = Number(slider.value);
+      thresholdValueEl.value = `${this.thresholdPercent}%`;
+      const progress = (this.thresholdPercent - AUTO_COMPACTION_MIN_THRESHOLD_PERCENT)
+        / (AUTO_COMPACTION_MAX_THRESHOLD_PERCENT - AUTO_COMPACTION_MIN_THRESHOLD_PERCENT);
+      slider.style.setProperty("--chatobby-compaction-threshold-progress", `${progress * 100}%`);
+    };
+    slider.addEventListener("input", updateThreshold);
+    slider.addEventListener("change", updateThreshold);
+    updateThreshold();
 
-    thresholdSetting.controlEl.appendChild(thresholdValueEl);
+    const bounds = threshold.createDiv({ cls: "chatobby-auto-compaction-modal__threshold-bounds" });
+    bounds.createSpan({ text: `${AUTO_COMPACTION_MIN_THRESHOLD_PERCENT}% · earlier` });
+    bounds.createSpan({ text: `later · ${AUTO_COMPACTION_MAX_THRESHOLD_PERCENT}%` });
 
     const safety = this.contentEl.createDiv({ cls: "chatobby-auto-compaction-modal__safety" });
     safety.createSpan({
