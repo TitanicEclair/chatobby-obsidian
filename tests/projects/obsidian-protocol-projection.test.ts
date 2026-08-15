@@ -45,7 +45,7 @@ describe("generated Obsidian protocol boundary", () => {
 
     const manifest = JSON.parse(manifestBytes.toString("utf8")) as ProjectionManifest;
     expect(manifest).toMatchObject({ schemaVersion: 1, artifact: "obsidian-protocol", protocolVersion: 2 });
-    expect(manifest.files).toHaveLength(26);
+    expect(manifest.files).toHaveLength(24);
     expect(readdirSync(vendorRoot).sort()).toEqual(
       [...manifest.files.map((file) => file.path), evidence.projectionManifest].sort(),
     );

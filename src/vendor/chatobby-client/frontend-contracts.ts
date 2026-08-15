@@ -287,6 +287,11 @@ export type FrontendFeedBlock =
 			readonly activityEndedAt?: number;
 			readonly activityLabel?: string;
 			readonly detail?: string;
+			readonly activitySteps?: readonly {
+				readonly id: string;
+				readonly label: string;
+				readonly state: "pending" | "active" | "complete";
+			}[];
 	  }
 	| {
 			readonly type: "agent-activity";

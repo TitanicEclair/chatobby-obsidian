@@ -10,6 +10,9 @@ import type {
 	WsLocalModelProvider,
 	WsLocalModelProviderDocument,
 	WsLocalModelProviderProbeResult,
+	WsManagedLocalModelServerProfile,
+	WsManagedLocalModelServerSnapshot,
+	WsManagedLocalModelServerStatus,
 	WsProjectDirectoryCandidateRequest,
 	WsProjectDirectoryCandidateResult,
 	WsPromptAttachment,
@@ -22,12 +25,16 @@ import type {
 } from "./connector-types.ts";
 
 export type {
+	WsManagedLocalModelServerProfile,
+	WsManagedLocalModelServerSnapshot,
+	WsManagedLocalModelServerStatus,
 	WsProjectDirectoryCandidateRequest,
 	WsProjectDirectoryCandidateResult,
 } from "./connector-types.ts";
 
 import {
 	CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS,
+	CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS,
 	CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS,
 	CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS,
 	parseRuntimeServerActivationRequired,
@@ -496,6 +503,34 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("test_local_model_provider", { provider, apiKey }), "result");
 	}
 
+	async getManagedLocalModelServers(): Promise<WsManagedLocalModelServerSnapshot> {
+		return resultField(await this.send("get_managed_local_model_servers", {}), "snapshot");
+	}
+
+	async saveManagedLocalModelServer(
+		expectedRevision: number,
+		profile: WsManagedLocalModelServerProfile,
+	): Promise<WsManagedLocalModelServerSnapshot> {
+		return resultField(await this.send("save_managed_local_model_server", { expectedRevision, profile }), "snapshot");
+	}
+
+	async deleteManagedLocalModelServer(
+		expectedRevision: number,
+		profileId: string,
+	): Promise<WsManagedLocalModelServerSnapshot> {
+		return resultField(
+			await this.send("delete_managed_local_model_server", { expectedRevision, profileId }),
+			"snapshot",
+		);
+	}
+
+	async controlManagedLocalModelServer(
+		profileId: string,
+		action: "start" | "stop" | "restart",
+	): Promise<WsManagedLocalModelServerStatus> {
+		return resultField(await this.send(`${action}_managed_local_model_server`, { profileId }), "status");
+	}
+
 	async setAutoCompaction(settings: {
 		enabled?: boolean;
 		thresholdPercent?: number;
@@ -656,9 +691,11 @@ export class ChatobbyWsClient {
 					? MCP_FRONTEND_OPERATION_TIMEOUT_MS
 					: method === "compact"
 						? CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS
-						: method === "bash"
-							? 130_000
-							: 30_000);
+						: method === "prompt"
+							? CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS
+							: method === "bash"
+								? 130_000
+								: 30_000);
 			const timer = window.setTimeout(() => {
 				if (!this.pending.delete(id)) return;
 				reject(new Error(`Chatobby runtime request timed out after ${timeout}ms: ${method}`));

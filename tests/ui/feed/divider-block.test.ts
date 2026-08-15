@@ -31,7 +31,7 @@ describe("DividerBlockView", () => {
     expect(element.querySelector(".chatobby-divider-block__dots")?.classList.contains("is-animated")).toBe(false);
   });
 
-  it("shows a live elapsed compaction row and preserves the custom focus faintly below it", () => {
+  it("shows live elapsed time, truthful lifecycle steps, and bounded progress detail", () => {
     vi.useFakeTimers();
     vi.setSystemTime(10_000);
     const view = new DividerBlockView({
@@ -42,12 +42,22 @@ describe("DividerBlockView", () => {
       animated: true,
       activityStartedAt: 10_000,
       activityLabel: "Compacting",
-      detail: "Preserve the migration decision",
+      detail: "Working set 268k tokens → target at most 224k tokens",
+      activitySteps: [
+        { id: "preparing", label: "Preparing", state: "complete" },
+        { id: "writing-checkpoint", label: "Writing handoff", state: "active" },
+        { id: "validating-coverage", label: "Checking coverage", state: "pending" },
+      ],
     });
     const element = mount(view);
 
     expect(element.querySelector(".chatobby-divider-block__activity-label")?.textContent).toBe("Compacting for 1s");
-    expect(element.querySelector(".chatobby-divider-block__activity-detail")?.textContent).toBe("Preserve the migration decision");
+    expect(element.querySelector(".chatobby-divider-block__activity-detail")?.textContent).toBe(
+      "Working set 268k tokens → target at most 224k tokens",
+    );
+    expect(element.querySelectorAll(".chatobby-divider-block__step")).toHaveLength(3);
+    expect(element.querySelector('[data-step-id="preparing"]')?.classList.contains("is-complete")).toBe(true);
+    expect(element.querySelector('[data-step-id="writing-checkpoint"]')?.classList.contains("is-active")).toBe(true);
 
     vi.advanceTimersByTime(2_000);
     expect(element.querySelector(".chatobby-divider-block__activity-label")?.textContent).toBe("Compacting for 2s");
@@ -66,7 +76,7 @@ describe("DividerBlockView", () => {
       activityStartedAt: 10_000,
       activityEndedAt: 12_500,
       activityLabel: "Compacting",
-      detail: "Preserve the migration decision",
+      detail: "Working set 268k tokens → target at most 224k tokens",
     });
     expect(element.querySelector(".chatobby-divider-block__activity-label")?.textContent).toBe("Compacted in 3s");
     view.destroy();

@@ -18,21 +18,81 @@ shown in the active chat header.
    consequential instructions.
 
 You can create a Project from the Projects page or from a folder in Obsidian.
-A Project has one primary folder and may include other working folders. Adding
-a folder makes it part of every chat in the Project immediately. You do not
-need to add the same folder to an external-directory allowlist. This does not
-enable a denied capability: the active permission policy still decides whether
-the agent may read, edit, use a shell, or perform another operation.
+During creation, **Add folders** can select several vault or external folders.
+Selections accumulate instead of replacing one another; choose **Make primary**
+when a folder other than the first should be the working directory. If you
+intentionally select no existing folder, Chatobby creates a new folder named
+after the Project in the vault. A selected external folder is used in place and
+is never replaced by a same-named vault copy.
+
+A Project has one primary folder and may include other working folders. The
+primary folder determines the initial working directory and how relative paths
+resolve. Primary and attached folders otherwise receive the same Project-root
+permission treatment, and adding one makes it available to every chat in the
+Project immediately. You do not need to add the same folder to a separate
+external-directory allowlist. This does not enable a denied capability: the
+active permission policy still decides whether the agent may read, edit, use a
+shell, or perform another operation.
+
+## Folder identity and external access
+
+Chatobby normally offers to place a small identity marker in each selected
+folder. The marker contains no conversation or credential data; it lets
+Chatobby recognize that physical folder after a rename or move. If a marker
+cannot be written, you can retry, cancel the entire operation, or explicitly
+continue with a device-only binding. Creation and batch folder addition are
+all-or-nothing, so an inaccessible or expired selection never leaves a partial
+Project.
+
+Project membership identifies the workspace; it does not grant a capability.
+Paths inside any available Project folder are evaluated as Project-root paths.
+A safely resolved path outside the Project is evaluated under the policy's
+separate external-directory rule. A linked path that escapes a Project folder
+is external as well. **Full access** allows safely resolved external paths,
+while more restrictive policies may ask or deny.
 
 To reorganize an existing chat, right-click it and choose **Move chat…**. Vault
 is always the first destination, followed by searchable active Projects. Moving
 a chat changes its workspace and future Project context; it does not rewrite or
 remove any messages.
 
+Use the chat search above a Project's conversation list to search titles. Turn
+on **Search messages** to search inside conversations instead. Message results
+are shown as bounded pages of matching excerpts. Selecting a result resumes its
+conversation and moves the feed to that exact message, where Chatobby briefly
+highlights the match.
+
+Inside a chat, type `@` to reference a file or folder. With an empty query,
+Chatobby starts with useful items from the running Project's primary and attached
+folders, including external folders. Continue typing to narrow the results, use
+the arrow keys or pointer to move through the scrollable list, and select an item
+to keep it as a compact chip. Selecting that chip opens a vault file in Obsidian,
+reveals a vault folder in Obsidian's file explorer, or reveals an external item
+in the system file explorer. References communicate intent; permissions still
+decide what the agent may do with the item.
+
 At Project session start, Chatobby provides the agent with the current Project
-name and a compact list of its working folders. When the Project's folder set
-changes, Chatobby refreshes those facts for the next model call. This helps the
-agent understand the workspace without copying folder paths into every prompt.
+name, exact working directory, and verified primary and attached folders. When
+the Project's folder set changes, Chatobby replaces those facts for the next
+model call. Missing or conflicting folders remain identified by state without
+a guessed local path.
+
+The Permissions page distinguishes **Current chat** from **Default for new
+chats**. The current binding is authoritative for the open conversation; the
+installation default applies only when a chat has no explicit binding. Every
+operation is still admitted independently against that effective policy.
+
+## Repair a Project that points at the wrong folder
+
+Chatobby never deletes a mistakenly created folder automatically. To repair a
+Project non-destructively:
+
+1. Add the intended folder.
+2. Make it primary.
+3. Move or rebind the relevant chats if prompted.
+4. Remove the false folder from the Project.
+5. Reveal the old folder and inspect or remove it manually only when you are
+   certain it contains nothing you need.
 
 ## Useful requests
 

@@ -1,21 +1,12 @@
-import { resolve } from "node:path";
 import type { App } from "obsidian";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   capabilityStateFingerprint,
   collectObsidianCapabilityState,
 } from "../../src/obsidian-bridge/dependency-snapshot";
 
-const originalCli = process.env.CHATOBBY_OBSIDIAN_CLI_BIN;
-
-afterEach(() => {
-  if (originalCli === undefined) delete process.env.CHATOBBY_OBSIDIAN_CLI_BIN;
-  else process.env.CHATOBBY_OBSIDIAN_CLI_BIN = originalCli;
-});
-
 describe("Obsidian dependency snapshot", () => {
   it("distinguishes installed, enabled, and core plugin states", () => {
-    process.env.CHATOBBY_OBSIDIAN_CLI_BIN = resolve("package.json");
     const app = {
       plugins: {
         enabledPlugins: new Set(["smart-connections"]),
@@ -40,9 +31,7 @@ describe("Obsidian dependency snapshot", () => {
       expect.objectContaining({ id: "webviewer", kind: "core", installed: true, enabled: true }),
       expect.objectContaining({ id: "sync", kind: "core", installed: true, enabled: false }),
     ]));
-    expect(state.runtimeDependencies).toEqual([
-      expect.objectContaining({ id: "obsidian-cli", available: true }),
-    ]);
+    expect(state.runtimeDependencies).toEqual([]);
   });
 
   it("changes its fingerprint when an integration is enabled", () => {
@@ -65,18 +54,8 @@ describe("Obsidian dependency snapshot", () => {
     expect(capabilityStateFingerprint(enabled)).not.toBe(capabilityStateFingerprint(disabled));
   });
 
-  it("does not advertise CLI-backed tools on pre-1.12 Obsidian even when a binary path exists", () => {
-    process.env.CHATOBBY_OBSIDIAN_CLI_BIN = resolve("package.json");
-    const state = collectObsidianCapabilityState({
-      version: "1.8.0",
-    } as unknown as App);
-
-    expect(state.runtimeDependencies).toEqual([
-      expect.objectContaining({
-        id: "obsidian-cli",
-        available: false,
-        detail: expect.stringContaining("requires Obsidian 1.12"),
-      }),
-    ]);
+  it("does not probe runtime-owned executables from the connector", () => {
+    const state = collectObsidianCapabilityState({ version: "1.8.0" } as unknown as App);
+    expect(state.runtimeDependencies).toEqual([]);
   });
 });

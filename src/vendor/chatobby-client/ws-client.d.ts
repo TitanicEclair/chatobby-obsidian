@@ -1,5 +1,5 @@
-import type { AutoNameStrategy, WsAutoCompactionSettings, WsBashResult, WsBridgeConfig, WsExtensionUIRequest, WsForkMessage, WsLocalModelProvider, WsLocalModelProviderDocument, WsLocalModelProviderProbeResult, WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, WsPromptAttachment, WsPromptContextPacket, WsProviderInfo, WsRuntimeInfo, WsSessionInfo, WsSessionStats, WsStoredSessionSelector } from "./connector-types.js";
-export type { WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, } from "./connector-types.js";
+import type { AutoNameStrategy, WsAutoCompactionSettings, WsBashResult, WsBridgeConfig, WsExtensionUIRequest, WsForkMessage, WsLocalModelProvider, WsLocalModelProviderDocument, WsLocalModelProviderProbeResult, WsManagedLocalModelServerProfile, WsManagedLocalModelServerSnapshot, WsManagedLocalModelServerStatus, WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, WsPromptAttachment, WsPromptContextPacket, WsProviderInfo, WsRuntimeInfo, WsSessionInfo, WsSessionStats, WsStoredSessionSelector } from "./connector-types.js";
+export type { WsManagedLocalModelServerProfile, WsManagedLocalModelServerSnapshot, WsManagedLocalModelServerStatus, WsProjectDirectoryCandidateRequest, WsProjectDirectoryCandidateResult, } from "./connector-types.js";
 import { type RuntimeClientHello, type RuntimeServerActivationRequired } from "./control/contracts.js";
 import { type FrontendBootstrap, type FrontendBootstrapRequest, type FrontendIntent, type FrontendIntentResult, type FrontendPatch, type FrontendScreenRequest, type FrontendScreenViewModel, type FrontendSubscriptionAck, type FrontendSubscriptionRequest } from "./frontend-contracts.js";
 export type { RuntimeClientHello, RuntimeIdentity, RuntimeReadyDescriptor, RuntimeServerActivationRequired, RuntimeServerHello, RuntimeServerPending, RuntimeStatusResponse, } from "./control/contracts.js";
@@ -85,6 +85,10 @@ export declare class ChatobbyWsClient {
     saveLocalModelProvider(expectedRevision: number, provider: WsLocalModelProvider, apiKey?: string): Promise<WsLocalModelProviderDocument>;
     deleteLocalModelProvider(expectedRevision: number, providerId: string, removeCredential?: boolean): Promise<WsLocalModelProviderDocument>;
     testLocalModelProvider(provider: WsLocalModelProvider, apiKey?: string): Promise<WsLocalModelProviderProbeResult>;
+    getManagedLocalModelServers(): Promise<WsManagedLocalModelServerSnapshot>;
+    saveManagedLocalModelServer(expectedRevision: number, profile: WsManagedLocalModelServerProfile): Promise<WsManagedLocalModelServerSnapshot>;
+    deleteManagedLocalModelServer(expectedRevision: number, profileId: string): Promise<WsManagedLocalModelServerSnapshot>;
+    controlManagedLocalModelServer(profileId: string, action: "start" | "stop" | "restart"): Promise<WsManagedLocalModelServerStatus>;
     setAutoCompaction(settings: {
         enabled?: boolean;
         thresholdPercent?: number;

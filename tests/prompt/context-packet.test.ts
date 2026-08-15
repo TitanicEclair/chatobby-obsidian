@@ -14,11 +14,19 @@ describe("toPromptContextPacket", () => {
           utcOffsetMinutes: 480,
         },
         device: { platform: "Win32", userAgent: "fingerprint", hardwareConcurrency: 20 },
+		fileConventions: {
+			schemaVersion: 1,
+			revision: "file-conventions-v1-test",
+			observedAt: "2026-07-11T10:00:00Z",
+			observationStatus: "exact",
+			generatedLinks: { syntax: "wikilink", pathStyle: "relative" },
+			newAttachments: { mode: "subfolder-under-source", subfolderName: "assets" },
+		},
       },
       capabilities: {
-        featureFamilies: ["vault", "cli"],
-        integrations: [{ id: "daily-notes", name: "Daily notes", installed: true, enabled: false }],
-        runtimeDependencies: [{ id: "obsidian-cli", name: "Obsidian CLI", available: false }],
+        featureFamilies: ["vault"],
+		integrations: [{ id: "webviewer", name: "Web Viewer", installed: true, enabled: false }],
+        runtimeDependencies: [],
       },
       notePath: "Projects/Plan.md",
       selection: "Selected text",
@@ -43,13 +51,17 @@ describe("toPromptContextPacket", () => {
       },
       activeNote: { path: "Projects/Plan.md", selection: "Selected text" },
       capabilities: {
-        featureFamilies: ["vault", "cli"],
-        integrations: [{ id: "daily-notes", installed: true, enabled: false }],
-        runtimeDependencies: [{ id: "obsidian-cli", available: false }],
+        featureFamilies: ["vault"],
+		integrations: [{ id: "webviewer", installed: true, enabled: false }],
+        runtimeDependencies: [],
       },
       privacy: { included: ["workspace", "environment", "capabilities", "active-note", "selection", "excerpt", "open-notes"] },
     });
     expect(packet.environment?.device).toEqual({ platform: "Win32" });
+	expect(packet.environment?.fileConventions).toMatchObject({
+		generatedLinks: { syntax: "wikilink", pathStyle: "relative" },
+		newAttachments: { mode: "subfolder-under-source", subfolderName: "assets" },
+	});
     expect(packet.privacy.omitted).toContain("device fingerprint");
     expect(packet.privacy.omitted).toContain("unrelated plugin inventory");
   });

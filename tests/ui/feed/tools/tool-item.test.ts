@@ -11,7 +11,7 @@ describe("ToolItemView", () => {
     const item: ToolItem = {
       id: "tool_1",
       name: "bash",
-      category: "bash",
+		category: "shell",
       arguments: JSON.stringify({ command: "echo test" }),
       semanticKind: "shell.command.run",
       displayTitle: "preparing to run command",

@@ -13,6 +13,9 @@ import type {
   WsLocalModelProvider,
   WsLocalModelProviderDocument,
   WsLocalModelProviderProbeResult,
+  WsManagedLocalModelServerProfile,
+  WsManagedLocalModelServerSnapshot,
+  WsManagedLocalModelServerStatus,
   WsForkMessage,
   WsBashResult,
   WsPromptAttachment,
@@ -24,9 +27,15 @@ import type {
 import type { ConnectionState, ConnectionEvent } from "../types";
 import { INITIAL_CONNECTION_STATE } from "../types";
 import { transitionConnection, canRetry } from "../transitions";
-import { RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS } from "../ui/shared/constants";
+import {
+  RECONNECT_BASE_DELAY_MS,
+  RECONNECT_MAX_DELAY_MS,
+} from "../ui/shared/constants";
 import { errorMessage } from "../utils";
-import type { ReadyRuntime, RuntimeSessionCredentials } from "../runtime/contracts";
+import type {
+  ReadyRuntime,
+  RuntimeSessionCredentials,
+} from "../runtime/contracts";
 import type {
   FrontendBootstrap,
   FrontendBootstrapRequest,
@@ -52,10 +61,14 @@ export class ChatobbyTransport {
   private connectPromise: Promise<void> | null = null;
   private connectionState: ConnectionState = INITIAL_CONNECTION_STATE;
   private reconnectTimer: number | null = null;
-  private connectionListeners: Set<(state: ConnectionState) => void> = new Set();
-  private frontendPatchListeners: Set<(patch: FrontendPatch) => void> = new Set();
-  private bridgeConfigListeners: Set<(config: WsBridgeConfig) => void> = new Set();
-  private extensionUIHandler: ((request: WsExtensionUIRequest) => Promise<unknown>) | null = null;
+  private connectionListeners: Set<(state: ConnectionState) => void> =
+    new Set();
+  private frontendPatchListeners: Set<(patch: FrontendPatch) => void> =
+    new Set();
+  private bridgeConfigListeners: Set<(config: WsBridgeConfig) => void> =
+    new Set();
+  private extensionUIHandler:
+    ((request: WsExtensionUIRequest) => Promise<unknown>) | null = null;
 
   private serverUrl: string;
   private runtimeSession: RuntimeSessionCredentials | undefined;
@@ -64,7 +77,9 @@ export class ChatobbyTransport {
   constructor(
     runtime: ReadyRuntime,
     mcpCredentialSource?: McpCredentialSource,
-    private readonly activateRuntime?: (request: RuntimeServerActivationRequired) => Promise<void>,
+    private readonly activateRuntime?: (
+      request: RuntimeServerActivationRequired,
+    ) => Promise<void>,
   ) {
     this.serverUrl = runtime.endpoint;
     this.runtimeSession = runtime.session;
@@ -86,7 +101,9 @@ export class ChatobbyTransport {
   }
 
   /** Register a handler for extension UI requests. */
-  onExtensionUI(handler: (request: WsExtensionUIRequest) => Promise<unknown>): void {
+  onExtensionUI(
+    handler: (request: WsExtensionUIRequest) => Promise<unknown>,
+  ): void {
     this.extensionUIHandler = handler;
     this.client?.onExtensionUI(handler);
   }
@@ -151,7 +168,9 @@ export class ChatobbyTransport {
 
   /** Replace the runtime endpoint and scoped session identity. */
   async setRuntime(runtime: ReadyRuntime): Promise<void> {
-    const reconnect = this.connectionState.status === "connected" || this.connectionState.status === "connecting";
+    const reconnect =
+      this.connectionState.status === "connected" ||
+      this.connectionState.status === "connecting";
     if (reconnect) await this.disconnect();
     this.serverUrl = runtime.endpoint;
     this.runtimeSession = runtime.session;
@@ -168,19 +187,27 @@ export class ChatobbyTransport {
 
   // ── Runtime-owned frontend protocol ──────────────────────────────
 
-  async getFrontendBootstrap(request: FrontendBootstrapRequest): Promise<FrontendBootstrap> {
+  async getFrontendBootstrap(
+    request: FrontendBootstrapRequest,
+  ): Promise<FrontendBootstrap> {
     return this.requireClient().getFrontendBootstrap(request);
   }
 
-  async getFrontendScreen(request: FrontendScreenRequest): Promise<FrontendScreenViewModel> {
+  async getFrontendScreen(
+    request: FrontendScreenRequest,
+  ): Promise<FrontendScreenViewModel> {
     return this.requireClient().getFrontendScreen(request);
   }
 
-  async subscribeFrontend(request: FrontendSubscriptionRequest): Promise<FrontendSubscriptionAck> {
+  async subscribeFrontend(
+    request: FrontendSubscriptionRequest,
+  ): Promise<FrontendSubscriptionAck> {
     return this.requireClient().subscribeFrontend(request);
   }
 
-  async dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult> {
+  async dispatchFrontendIntent(
+    intent: FrontendIntent,
+  ): Promise<FrontendIntentResult> {
     return this.requireClient().dispatchFrontendIntent(intent);
   }
 
@@ -190,7 +217,10 @@ export class ChatobbyTransport {
     return this.requireClient().registerProjectDirectoryCandidate(request);
   }
 
-  async synchronizeMcpCredential(reference: string, secret: string | null): Promise<void> {
+  async synchronizeMcpCredential(
+    reference: string,
+    secret: string | null,
+  ): Promise<void> {
     await this.requireClient().setMcpCredential(reference, secret ?? undefined);
   }
 
@@ -206,12 +236,18 @@ export class ChatobbyTransport {
     return client.prompt(message, attachments, context, submissionId);
   }
 
-  async steer(message: string, attachments?: WsPromptAttachment[]): Promise<"accepted" | "promoted-to-prompt"> {
+  async steer(
+    message: string,
+    attachments?: WsPromptAttachment[],
+  ): Promise<"accepted" | "promoted-to-prompt"> {
     const client = this.requireClient();
     return client.steer(message, attachments);
   }
 
-  async followUp(message: string, attachments?: WsPromptAttachment[]): Promise<"started" | "promoted-to-prompt"> {
+  async followUp(
+    message: string,
+    attachments?: WsPromptAttachment[],
+  ): Promise<"started" | "promoted-to-prompt"> {
     const client = this.requireClient();
     return client.followUp(message, attachments);
   }
@@ -223,35 +259,57 @@ export class ChatobbyTransport {
 
   async retractPrompt(
     submissionId: string,
-  ): Promise<{ retracted: boolean; reason?: "not-found" | "output-started" | "drain-timeout" | "prompt-failed" }> {
+  ): Promise<{
+    retracted: boolean;
+    reason?: "not-found" | "output-started" | "drain-timeout" | "prompt-failed";
+  }> {
     return this.requireClient().retractPrompt(submissionId);
   }
 
   // ── Session lifecycle ──────────────────────────────────────────────
 
-  async listSessions(cwdOverride?: string, includeDescendants = false): Promise<SessionListItem[]> {
+  async listSessions(
+    cwdOverride?: string,
+    includeDescendants = false,
+  ): Promise<SessionListItem[]> {
     const client = this.requireClient();
     const sessions = await client.listSessions(cwdOverride, includeDescendants);
     return sessions.map(sessionListItemFromWire);
   }
 
-  async deleteSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{ sessionId: string }> {
+  async deleteSession(
+    selector: WsStoredSessionSelector,
+    cwdRoot: string,
+  ): Promise<{ sessionId: string }> {
     return this.requireClient().deleteSession(selector, cwdRoot);
   }
 
   /** Rename a persisted session without replacing the backend's active session. */
-  async renameStoredSession(selector: WsStoredSessionSelector, cwdRoot: string, name: string): Promise<void> {
+  async renameStoredSession(
+    selector: WsStoredSessionSelector,
+    cwdRoot: string,
+    name: string,
+  ): Promise<void> {
     await this.requireClient().renameStoredSession(selector, cwdRoot, name);
   }
 
   /** Read stable-ID-first fork points without replacing the backend's active session. */
-  async getStoredSessionForkMessages(selector: WsStoredSessionSelector, cwdRoot: string): Promise<WsForkMessage[]> {
-    const messages = await this.requireClient().getStoredSessionForkMessages(selector, cwdRoot);
+  async getStoredSessionForkMessages(
+    selector: WsStoredSessionSelector,
+    cwdRoot: string,
+  ): Promise<WsForkMessage[]> {
+    const messages = await this.requireClient().getStoredSessionForkMessages(
+      selector,
+      cwdRoot,
+    );
     return messages;
   }
 
   /** Clone a persisted session without replacing the backend's active session. */
-  async cloneStoredSession(selector: WsStoredSessionSelector, cwdRoot: string): Promise<{ sessionId: string; sessionPath: string }> {
+  async cloneStoredSession(
+    selector: WsStoredSessionSelector,
+    cwdRoot: string,
+  ): Promise<{ sessionId: string; sessionPath: string }> {
     return this.requireClient().cloneStoredSession(selector, cwdRoot);
   }
 
@@ -271,7 +329,12 @@ export class ChatobbyTransport {
     format: "html" | "jsonl",
     outputPath?: string,
   ): Promise<string> {
-    return this.requireClient().exportStoredSession(selector, cwdRoot, format, outputPath);
+    return this.requireClient().exportStoredSession(
+      selector,
+      cwdRoot,
+      format,
+      outputPath,
+    );
   }
 
   // ── State & messages ───────────────────────────────────────────────
@@ -312,7 +375,11 @@ export class ChatobbyTransport {
     provider: WsLocalModelProvider,
     apiKey?: string,
   ): Promise<WsLocalModelProviderDocument> {
-    return this.requireClient().saveLocalModelProvider(expectedRevision, provider, apiKey);
+    return this.requireClient().saveLocalModelProvider(
+      expectedRevision,
+      provider,
+      apiKey,
+    );
   }
 
   async deleteLocalModelProvider(
@@ -320,7 +387,11 @@ export class ChatobbyTransport {
     providerId: string,
     removeCredential = true,
   ): Promise<WsLocalModelProviderDocument> {
-    return this.requireClient().deleteLocalModelProvider(expectedRevision, providerId, removeCredential);
+    return this.requireClient().deleteLocalModelProvider(
+      expectedRevision,
+      providerId,
+      removeCredential,
+    );
   }
 
   async testLocalModelProvider(
@@ -330,9 +401,46 @@ export class ChatobbyTransport {
     return this.requireClient().testLocalModelProvider(provider, apiKey);
   }
 
+  async getManagedLocalModelServers(): Promise<WsManagedLocalModelServerSnapshot> {
+    return this.requireClient().getManagedLocalModelServers();
+  }
+
+  async saveManagedLocalModelServer(
+    expectedRevision: number,
+    profile: WsManagedLocalModelServerProfile,
+  ): Promise<WsManagedLocalModelServerSnapshot> {
+    return this.requireClient().saveManagedLocalModelServer(
+      expectedRevision,
+      profile,
+    );
+  }
+
+  async deleteManagedLocalModelServer(
+    expectedRevision: number,
+    profileId: string,
+  ): Promise<WsManagedLocalModelServerSnapshot> {
+    return this.requireClient().deleteManagedLocalModelServer(
+      expectedRevision,
+      profileId,
+    );
+  }
+
+  async controlManagedLocalModelServer(
+    action: "start" | "stop" | "restart",
+    profileId: string,
+  ): Promise<WsManagedLocalModelServerStatus> {
+    return this.requireClient().controlManagedLocalModelServer(
+      profileId,
+      action,
+    );
+  }
+
   // ── Session settings ───────────────────────────────────────────────
 
-  async setAutoCompaction(settings: { enabled?: boolean; thresholdPercent?: number }): Promise<WsAutoCompactionSettings> {
+  async setAutoCompaction(settings: {
+    enabled?: boolean;
+    thresholdPercent?: number;
+  }): Promise<WsAutoCompactionSettings> {
     const client = this.requireClient();
     return client.setAutoCompaction(settings);
   }
@@ -352,7 +460,10 @@ export class ChatobbyTransport {
 
   // ── Bash ────────────────────────────────────────────────────────────
 
-  async bash(command: string, excludeFromContext?: boolean): Promise<WsBashResult> {
+  async bash(
+    command: string,
+    excludeFromContext?: boolean,
+  ): Promise<WsBashResult> {
     const client = this.requireClient();
     return client.bash(command, excludeFromContext);
   }
@@ -433,11 +544,16 @@ export class ChatobbyTransport {
     }
   }
 
-  private async synchronizeMcpCredentials(client: ChatobbyWsClient): Promise<void> {
+  private async synchronizeMcpCredentials(
+    client: ChatobbyWsClient,
+  ): Promise<void> {
     if (!this.mcpCredentialSource) return;
     const references = await client.getMcpCredentialReferences();
     for (const reference of references) {
-      await client.setMcpCredential(reference, this.mcpCredentialSource(reference) ?? undefined);
+      await client.setMcpCredential(
+        reference,
+        this.mcpCredentialSource(reference) ?? undefined,
+      );
     }
   }
 
@@ -453,7 +569,8 @@ export class ChatobbyTransport {
     if (!canRetry(this.connectionState)) return;
 
     const delay = Math.min(
-      RECONNECT_BASE_DELAY_MS * Math.pow(2, this.connectionState.reconnectAttempt),
+      RECONNECT_BASE_DELAY_MS *
+        Math.pow(2, this.connectionState.reconnectAttempt),
       RECONNECT_MAX_DELAY_MS,
     );
 

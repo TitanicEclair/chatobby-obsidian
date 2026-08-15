@@ -1,6 +1,6 @@
 {
   "name": "chatobby-obsidian",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "build": "npm run check:community-review && tsc --noEmit && node esbuild.config.mjs",

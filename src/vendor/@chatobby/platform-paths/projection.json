@@ -7,7 +7,7 @@
   "sourceFiles": [
     {
       "path": "catalogue.ts",
-      "sha256": "bc811e7ffb8b7f5d4cb6e9e73677b328a649552fe2b12bf572579bdd15439ad6"
+      "sha256": "fbf9224ab2e1da3307b1e033839cea9caa8cd04bc6919fcdf6010b40755363e3"
     },
     {
       "path": "index.ts",
@@ -15,14 +15,14 @@
     },
     {
       "path": "resolver.ts",
-      "sha256": "3dcb2ba11f92ab3635e993b6e5e3a91eda84b028f73ed7737b74285b60da2416"
+      "sha256": "a61ebadc590af5e1efefe1e690cd8a2ae8ca5865737180ed0f4c0ccbdb26470c"
     }
   ],
   "files": [
     {
       "path": "catalogue.ts",
-      "size": 10844,
-      "sha256": "bc811e7ffb8b7f5d4cb6e9e73677b328a649552fe2b12bf572579bdd15439ad6"
+      "size": 11632,
+      "sha256": "fbf9224ab2e1da3307b1e033839cea9caa8cd04bc6919fcdf6010b40755363e3"
     },
     {
       "path": "index.ts",
@@ -31,8 +31,8 @@
     },
     {
       "path": "resolver.ts",
-      "size": 17323,
-      "sha256": "3dcb2ba11f92ab3635e993b6e5e3a91eda84b028f73ed7737b74285b60da2416"
+      "size": 17904,
+      "sha256": "a61ebadc590af5e1efefe1e690cd8a2ae8ca5865737180ed0f4c0ccbdb26470c"
     }
   ]
 }

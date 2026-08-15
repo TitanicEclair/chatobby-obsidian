@@ -108,6 +108,11 @@ export class Toolbar extends ChatobbyComponent {
     }
     this.syncCompactionStatus(session?.isCompacting === true);
     this.syncElapsedTimer();
+    // Session projections can replace model-specific compaction settings while
+    // this popover is already open (for example, immediately after reconnect).
+    // Keep that visible read model authoritative instead of leaving the empty
+    // state's placeholder threshold on screen until the user closes it.
+    if (this.contextMenuEl?.hasClass("is-open")) this.renderStats();
   }
 
   /** In-place stats update. Builds the elapsed span / context meter once, then mutates their

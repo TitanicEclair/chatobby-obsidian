@@ -12,6 +12,8 @@ export const CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS = 10 * 60 * 1000;
 export const CHATOBBY_RUNTIME_REATTACH_GRACE_MS = 15_000;
 /** Allows the five-minute engine deadline to settle and report before the transport gives up. */
 export const CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS = 5 * 60 * 1000 + 30_000;
+/** A prompt may wait behind a bounded manual checkpoint before it is accepted. */
+export const CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS = CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS;
 
 export const RUNTIME_CLOSE_CODES = {
 	authenticationFailed: 4401,

@@ -16,6 +16,16 @@ import { disconnectSession } from "../session/session-disconnection";
 
 export type { WorkingDirectoryScope } from "../session/working-directory-controller";
 
+export class SessionIntentRejectedError extends Error {
+	readonly code: string | undefined;
+
+	constructor(code: string | undefined, message: string) {
+		super(message);
+		this.name = "SessionIntentRejectedError";
+		this.code = code;
+	}
+}
+
 type SessionMutationIntent = Extract<FrontendIntent, {
   type: "session.create" | "session.resume" | "session.clone" | "session.fork" | "session.rename" | "session.import-jsonl";
 }>;
@@ -208,7 +218,15 @@ export class SessionController {
   }
 
   async restoreSession(sessionPath: string): Promise<void> {
-		await this.handleStoredSessionSelect(sessionPath);
+		try {
+			await this.runSessionTransition("Resuming session", async () => {
+				await this.resumeStoredSession(sessionPath, true);
+			});
+		} catch (error) {
+			if (!(error instanceof SessionIntentRejectedError) || error.code !== "SESSION_NOT_FOUND") throw error;
+			await this.options.synchronizeFrontend();
+			new Notice("The previous chat no longer exists. Chatobby restored the current available chat instead.");
+		}
   }
 
 	async handleStoredSessionSelect(sessionPath: string): Promise<void> {

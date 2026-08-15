@@ -13,50 +13,24 @@ import { isOperationName } from "../vendor/@chatobby/obsidian-protocol/index.js"
 import type { OperationHandler } from "./types";
 import { BridgeError } from "./types";
 
-// Core 10 handlers (Phase B).
 import {
   handleContextGet,
-  handleNoteRead,
-  handleVaultSearch,
   handleNoteResolve,
-  handleAttachmentRead,
-  handleVaultList,
-  handleNoteWrite,
-  handleNoteEdit,
-  handleNoteOpen,
-  handleAppOpen,
 } from "./operations/core-operations";
 
-// Plugin-native "data" handlers (Phase C): vault/metadata/links/tasks.
 import {
-  handleRegistryStatus,
-  handleMetadataGet,
-  handlePropertiesList,
-  handleFrontmatterUpdate,
-  handleTagsList,
-  handleLinksGenerate,
-  handleLinksGet,
   handleLinksAudit,
-  handleGraphTraverse,
-  handleTasksList,
-  handleTasksUpdate,
-  handleFolderCreate,
-  handleEntryCopy,
-  handleEntryMove,
-  handleEntryTrash,
   handleAttachmentImport,
 } from "./operations/plugin-native-operations";
 
-// Plugin-native "runtime" handlers (Phase C): editor/workspace/commands/hotkeys.
+// Plugin-native live-process handlers: editor and workspace.
 import {
   handleEditorGet,
   handleEditorEdit,
   handleEditorFocus,
+  handleEditorHistory,
   handleWorkspaceGet,
   handleWorkspaceManage,
-  handleCommandsList,
-  handleCommandsExecute,
-  handleHotkeysList,
 } from "./operations/workspace-operations";
 
 // Visible Obsidian ItemView semantic inspection and guarded interaction.
@@ -83,59 +57,23 @@ import {
   handleBrowserClose,
 } from "./operations/browser-operations";
 
-// Retrieval handlers (Phase D).
-import {
-  handleRetrievalExplore,
-  handleRetrievalTrace,
-  handleRetrievalRelated,
-  handleRetrievalHubs,
-  handleRetrievalCommunities,
-  handleRetrievalExplain,
-} from "./operations/retrieval-operations";
-
 /**
  * The complete operation → handler map. Adding an operation is one line here.
  */
 const HANDLERS: Record<string, OperationHandler> = {
-  // ── Core (Phase B) ──
   "context.get": handleContextGet,
-  "note.read": handleNoteRead,
-  "vault.search": handleVaultSearch,
   "note.resolve": handleNoteResolve,
-  "attachment.read": handleAttachmentRead,
-  "vault.list": handleVaultList,
-  "note.write": handleNoteWrite,
-  "note.edit": handleNoteEdit,
-  "note.open": handleNoteOpen,
-  "app.open": handleAppOpen,
 
-  // ── Plugin-native data (Phase C) ──
-  "registry.status": handleRegistryStatus,
-  "metadata.get": handleMetadataGet,
-  "properties.list": handlePropertiesList,
-  "frontmatter.update": handleFrontmatterUpdate,
-  "tags.list": handleTagsList,
-  "links.generate": handleLinksGenerate,
-  "links.get": handleLinksGet,
   "links.audit": handleLinksAudit,
-  "graph.traverse": handleGraphTraverse,
-  "tasks.list": handleTasksList,
-  "tasks.update": handleTasksUpdate,
-  "folder.create": handleFolderCreate,
-  "entry.copy": handleEntryCopy,
-  "entry.move": handleEntryMove,
-  "entry.trash": handleEntryTrash,
   "attachment.import": handleAttachmentImport,
 
-  // ── Plugin-native runtime (Phase C) ──
+  // ── Plugin-native live process ──
   "editor.get": handleEditorGet,
   "editor.edit": handleEditorEdit,
   "editor.focus": handleEditorFocus,
+  "editor.history": handleEditorHistory,
   "workspace.get": handleWorkspaceGet,
   "workspace.manage": handleWorkspaceManage,
-  "commands.list": handleCommandsList,
-  "commands.execute": handleCommandsExecute,
-  "hotkeys.list": handleHotkeysList,
 
   // ── Visible Obsidian UI ──
   "ui.snapshot": handleUiSnapshot,
@@ -156,14 +94,6 @@ const HANDLERS: Record<string, OperationHandler> = {
   "browser.screenshot": handleBrowserScreenshot,
   "browser.diagnostics": handleBrowserDiagnostics,
   "browser.close": handleBrowserClose,
-
-  // ── Retrieval (Phase D) ──
-  "retrieval.explore": handleRetrievalExplore,
-  "retrieval.trace": handleRetrievalTrace,
-  "retrieval.related": handleRetrievalRelated,
-  "retrieval.hubs": handleRetrievalHubs,
-  "retrieval.communities": handleRetrievalCommunities,
-  "retrieval.explain": handleRetrievalExplain,
 
 };
 

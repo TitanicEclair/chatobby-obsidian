@@ -3,6 +3,11 @@ import { ChatobbyComponent } from "../shared/component";
 import { decorateAfterMarkdown } from "./decorations";
 import type { FeedHost } from "./index";
 import { renderMessageAttachments } from "./message-attachments";
+import {
+  parsePromptReferences,
+  promptReferenceLabel,
+  type PromptReferencePresentation,
+} from "../shared/prompt-references";
 
 export class UserBlockView extends ChatobbyComponent {
   private contentEl: HTMLElement | null = null;
@@ -30,19 +35,25 @@ export class UserBlockView extends ChatobbyComponent {
     if (!this.contentEl) return;
     const content = message.content;
     if (typeof content === "string") {
-      this.renderMarkdown(content, this.contentEl);
+      const parsed = parsePromptReferences(content);
+      if (parsed.text) this.renderMarkdown(parsed.text, this.contentEl);
+      renderReferenceSummary(this.contentEl, parsed.references);
       return;
     }
     const attachments: AttachmentContent[] = [];
+    const references: PromptReferencePresentation[] = [];
     for (const item of content) {
       if (item.type === "text") {
-        this.renderMarkdown(item.text, this.contentEl.createDiv({ cls: "chatobby-user-block__text" }));
+        const parsed = parsePromptReferences(item.text);
+        if (parsed.text) this.renderMarkdown(parsed.text, this.contentEl.createDiv({ cls: "chatobby-user-block__text" }));
+        references.push(...parsed.references);
       } else if (item.type === "image") {
         renderImageCard(this.contentEl, item, this.host);
       } else if (item.type === "attachment") {
         attachments.push(item);
       }
     }
+    renderReferenceSummary(this.contentEl, references);
     renderMessageAttachments(this.contentEl, attachments, this.host);
   }
 
@@ -53,6 +64,29 @@ export class UserBlockView extends ChatobbyComponent {
       openSystemPath: (path) => this.host.openSystemPath(path),
     });
   }
+}
+
+function renderReferenceSummary(
+  container: HTMLElement,
+  references: readonly PromptReferencePresentation[],
+): void {
+  if (references.length === 0) return;
+  const unique = references.filter((reference, index) =>
+    references.findIndex((candidate) => candidate.kind === reference.kind && candidate.path === reference.path) === index);
+  const chip = container.createDiv({
+    cls: "chatobby-message-reference-summary",
+    attr: {
+      title: unique.map((reference) => reference.path).join("\n"),
+      "aria-label": unique.length === 1
+        ? `Referenced ${promptReferenceLabel(unique[0]!)}`
+        : `${unique.length} referenced items`,
+    },
+  });
+  chip.createSpan({ cls: "chatobby-message-reference-summary__at", text: "@", attr: { "aria-hidden": "true" } });
+  chip.createSpan({
+    cls: "chatobby-message-reference-summary__label",
+    text: unique.length === 1 ? promptReferenceLabel(unique[0]!) : `${unique.length} references`,
+  });
 }
 
 function renderImageCard(container: HTMLElement, image: ImageContent, host: FeedHost): void {

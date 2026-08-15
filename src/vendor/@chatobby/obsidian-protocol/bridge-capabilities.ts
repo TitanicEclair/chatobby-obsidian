@@ -6,17 +6,11 @@
 
 export const OBSIDIAN_BRIDGE_CAPABILITIES = [
 	"vault",
-	"metadata",
 	"links",
-	"tasks",
 	"attachments",
 	"editor",
 	"workspace",
-	"commands",
-	"hotkeys",
 	"browser",
-	"retrieval",
-	"cli",
 ] as const;
 
 export type ObsidianBridgeCapability = (typeof OBSIDIAN_BRIDGE_CAPABILITIES)[number];

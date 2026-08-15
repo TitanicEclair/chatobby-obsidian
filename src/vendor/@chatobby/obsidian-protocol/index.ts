@@ -20,12 +20,9 @@ export {
 } from "./bridge-errors.ts";
 export type {
 	ObsidianBrowserOperationName,
-	ObsidianCliOperationName,
-	ObsidianCliStaticOperationName,
 	ObsidianCoreOperationName,
 	ObsidianOperationName,
 	ObsidianPluginNativeOperationName,
-	ObsidianRetrievalOperationName,
 	ObsidianUiOperationName,
 } from "./bridge-operations.ts";
 // --- Bridge operations ---
@@ -33,10 +30,8 @@ export {
 	isOperationName,
 	OBSIDIAN_ALL_OPERATIONS,
 	OBSIDIAN_BROWSER_OPERATIONS,
-	OBSIDIAN_CLI_OPERATIONS,
 	OBSIDIAN_CORE_OPERATIONS,
 	OBSIDIAN_PLUGIN_NATIVE_OPERATIONS,
-	OBSIDIAN_RETRIEVAL_OPERATIONS,
 	OBSIDIAN_UI_OPERATIONS,
 } from "./bridge-operations.ts";
 export type {
@@ -66,7 +61,6 @@ export type { ObsidianVaultSelector } from "./bridge-selectors.ts";
 export { parseVaultSelector } from "./bridge-selectors.ts";
 export type {
 	ObsidianDirectToolName,
-	ObsidianLegacyDirectToolName,
 	ObsidianMcpPolicyOptions,
 	ObsidianMcpServerPolicy,
 } from "./mcp-policy.ts";
@@ -77,13 +71,8 @@ export {
 } from "./mcp-policy.ts";
 export type {
 	ObsidianBrowserToolName,
-	ObsidianCliFamilyToolName,
-	ObsidianCliSubstrateToolName,
-	ObsidianCliToolGroup,
-	ObsidianCoreSpecialistToolName,
 	ObsidianNonDirectToolName,
 	ObsidianPluginNativeToolName,
-	ObsidianRetrievalToolName,
 	ObsidianToolName,
 	ObsidianUiToolName,
 } from "./mcp-tool-catalog.ts";
@@ -92,23 +81,14 @@ export {
 	OBSIDIAN_ALL_TOOL_OPERATION_MAP,
 	OBSIDIAN_BROWSER_TOOL_NAMES,
 	OBSIDIAN_BROWSER_TOOL_OPERATION_MAP,
-	OBSIDIAN_CLI_FAMILY_TOOL_NAMES,
-	OBSIDIAN_CLI_FAMILY_TOOL_OPERATION_MAP,
-	OBSIDIAN_CLI_SUBSTRATE_TOOL_NAMES,
-	OBSIDIAN_CLI_SUBSTRATE_TOOL_OPERATION_MAP,
-	OBSIDIAN_CORE_SPECIALIST_TOOL_NAMES,
-	OBSIDIAN_CORE_SPECIALIST_TOOL_OPERATION_MAP,
 	OBSIDIAN_DIRECT_TOOL_OPERATION_MAP,
 	OBSIDIAN_EXCLUDED_COMPAT_TOOL_NAMES,
 	OBSIDIAN_NON_DIRECT_TOOL_NAMES,
 	OBSIDIAN_NON_DIRECT_TOOL_OPERATION_MAP,
 	OBSIDIAN_PLUGIN_NATIVE_TOOL_NAMES,
 	OBSIDIAN_PLUGIN_NATIVE_TOOL_OPERATION_MAP,
-	OBSIDIAN_RETRIEVAL_TOOL_NAMES,
-	OBSIDIAN_RETRIEVAL_TOOL_OPERATION_MAP,
 	OBSIDIAN_UI_TOOL_NAMES,
 	OBSIDIAN_UI_TOOL_OPERATION_MAP,
-	obsidianCliToolGroup,
 } from "./mcp-tool-catalog.ts";
 export type {
 	ProjectDirectoryObservationResult,
@@ -125,20 +105,6 @@ export {
 	parseProjectDirectoryRescanRequested,
 	parseProjectDirectoryRescanResult,
 } from "./project-directory-protocol.ts";
-export type {
-	ObsidianGraphComponent,
-	ObsidianRetrievalBackendStatus,
-	ObsidianRetrievalCandidate,
-	ObsidianRetrievalDiagnostics,
-	ObsidianRetrievalEnvelope,
-	ObsidianRetrievalEvidence,
-	ObsidianRetrievalEvidenceKind,
-	ObsidianRetrievalEvidenceProvider,
-	ObsidianRetrievalWarning,
-	ObsidianSemanticHit,
-} from "./retrieval-protocol.ts";
-// --- Retrieval protocol ---
-export { parseRetrievalEnvelope } from "./retrieval-protocol.ts";
 export type {
 	ObsidianCapabilityState,
 	ObsidianPluginKind,

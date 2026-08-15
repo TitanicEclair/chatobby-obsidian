@@ -401,6 +401,36 @@
   margin-top: var(--size-2-2);
 }
 
+.chatobby-message-reference-summary {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--size-2-1);
+  margin-top: var(--size-2-2);
+  padding: 2px var(--size-2-2);
+  border: var(--border-width) solid color-mix(in srgb, var(--text-muted) 24%, transparent);
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--chatobby-surface-muted) 68%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: var(--line-height-tight);
+}
+
+.chatobby-message-reference-summary__at {
+  flex: 0 0 auto;
+  color: var(--chatobby-accent);
+  font-weight: var(--font-semibold);
+}
+
+.chatobby-message-reference-summary__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chatobby-message-attachment {
   position: relative;
   display: grid;

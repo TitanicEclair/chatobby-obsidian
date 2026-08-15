@@ -256,7 +256,7 @@ describe("ObsidianBridgeClient integration", () => {
       const invokeFrame = {
         type: "invoke",
         requestId: "req-cancel-test",
-        operation: "note.read",
+		operation: "context.get",
         arguments: { path: "test.md" },
         deadline: new Date(Date.now() + 10000).toISOString(),
       };
@@ -322,7 +322,7 @@ describe("ObsidianBridgeClient integration", () => {
       const invokeFrame = {
         type: "invoke",
         requestId: "req-deadline-expired",
-        operation: "note.read",
+		operation: "context.get",
         arguments: { path: "existing.md" },
         deadline: new Date(Date.now() - 1000).toISOString(), // Already expired
       };

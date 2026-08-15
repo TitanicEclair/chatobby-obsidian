@@ -15,7 +15,6 @@ import { MarkdownView, Plugin } from "obsidian";
 import { join } from "node:path";
 import { BridgeConnectionCoordinator, ObsidianBridgeClient } from "./obsidian-bridge";
 import { parseObsidianBridgeConnectionConfig } from "./vendor/@chatobby/obsidian-protocol/index.js";
-import { disposeVaultRetrievalService } from "./obsidian-bridge/retrieval/service";
 import { ChatobbyView } from "./ui/view";
 import { CommandRegistry, type ChatobbyServices } from "./commands/registry";
 import { buildAllActions } from "./commands/actions";
@@ -254,8 +253,6 @@ export default class ChatobbyPlugin extends Plugin {
     this.projectDirectoryObservations.dispose();
     await this.frontendSessions.dispose();
     await this.bridgeCoordinator.dispose();
-    // Detach retrieval-service vault listeners so hot-reload doesn't leak them.
-    disposeVaultRetrievalService(this.app);
     disposeObsidianUiSnapshotService(this.app);
     disposeObsidianSemanticContextService(this.app);
   }

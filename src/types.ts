@@ -13,6 +13,9 @@ import type {
   WsLocalModelProvider,
   WsLocalModelProviderDocument,
   WsLocalModelProviderProbeResult,
+  WsManagedLocalModelServerProfile,
+  WsManagedLocalModelServerSnapshot,
+  WsManagedLocalModelServerStatus,
   WsBashResult,
   WsAttachmentCapabilities,
   WsPromptAttachment,
@@ -36,6 +39,9 @@ export type {
   WsLocalModelProvider,
   WsLocalModelProviderDocument,
   WsLocalModelProviderProbeResult,
+  WsManagedLocalModelServerProfile,
+  WsManagedLocalModelServerSnapshot,
+  WsManagedLocalModelServerStatus,
   WsBashResult,
   WsAttachmentCapabilities,
   WsPromptAttachment,
@@ -126,8 +132,8 @@ export const DEFAULT_COMPOSER_KEYBINDINGS: ComposerKeybindings = {
 
 /** Settings owned by the Obsidian SettingTab. Persisted to data.json. */
 export interface PluginSettings {
-	/** Completed first-run experience version. Zero means the setup guide is still active. */
-	onboardingVersion: number;
+  /** Completed first-run experience version. Zero means the setup guide is still active. */
+  onboardingVersion: number;
   /** Product runtime ownership mode. */
   runtimeMode: "managed" | "external" | "developer";
   /** Automatically acquire the managed runtime when a visible Chatobby view opens. */
@@ -141,7 +147,16 @@ export interface PluginSettings {
   /** Raw arguments used only in developer mode; lifecycle arguments remain manager-owned. */
   developerArgs: string[];
   /** Command shell used by agent shell tools. */
-  commandShell: "auto" | "pwsh" | "powershell" | "cmd" | "bash" | "zsh" | "fish" | "sh" | "custom";
+  commandShell:
+    | "auto"
+    | "pwsh"
+    | "powershell"
+    | "cmd"
+    | "bash"
+    | "zsh"
+    | "fish"
+    | "sh"
+    | "custom";
   /** Executable name or absolute path used when commandShell is custom. */
   customShellPath: string;
   /** Document OCR path used by read_document. */
@@ -160,14 +175,14 @@ export interface PluginSettings {
   composerKeybindings: ComposerKeybindings;
   /** Vault-relative directory used for new sessions and resume listing. Empty string = vault root. */
   activeVaultDirectory: string;
-	/** Per-vault behavior when a folder already has a canonical directory-session Project. */
-	directoryProjectLaunchBehavior: "ask" | "reuse-canonical" | "create-new";
+  /** Per-vault behavior when a folder already has a canonical directory-session Project. */
+  directoryProjectLaunchBehavior: "ask" | "reuse-canonical" | "create-new";
   /** How new sessions are auto-named: "truncate" (first 5 words) or "model" (LLM call). */
   autoNameStrategy: AutoNameStrategy;
 }
 
 export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
-	onboardingVersion: 0,
+  onboardingVersion: 0,
   runtimeMode: "managed",
   runtimeAutoStart: true,
   runtimeLifetime: "obsidian-session",
@@ -184,7 +199,7 @@ export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   autoScroll: true,
   composerKeybindings: { ...DEFAULT_COMPOSER_KEYBINDINGS },
   activeVaultDirectory: "",
-	directoryProjectLaunchBehavior: "ask",
+  directoryProjectLaunchBehavior: "ask",
   autoNameStrategy: "truncate",
 };
 
@@ -317,12 +332,12 @@ export interface ComposerAttachment {
 
 /** Permission mode for tool execution. Server-authoritative, persisted per session. */
 export type PermissionMode =
-  | "default"           // ask before each tool use
-  | "acceptEdits"       // auto-allow file edits, ask for commands
+  | "default" // ask before each tool use
+  | "acceptEdits" // auto-allow file edits, ask for commands
   | "bypassPermissions" // allow everything
-  | "plan"              // read-only planning mode
-  | "dontAsk"           // allow without asking (with reason)
-  | "auto";             // server decides
+  | "plan" // read-only planning mode
+  | "dontAsk" // allow without asking (with reason)
+  | "auto"; // server decides
 
 // ── Feed Blocks (rendering abstraction over raw messages) ────────────
 //
@@ -351,33 +366,33 @@ export type ToolItemStatus =
 
 /** Tool category — determines which UI component renders the tool. */
 export type ToolCategory =
-  | "read"       // read note / get context / get metadata / read image
-  | "edit"       // edit note / edit editor / update frontmatter
-  | "write"      // create note / create folder
-  | "list"       // list entries / tasks / tags / properties / commands / hotkeys
-  | "search"     // full-text search / vault explore
-  | "link"       // resolve note / get links / audit links / generate link
-  | "move"       // move entry / copy entry
-  | "trash"      // trash entry
-  | "open"       // open note / open app / focus location
-  | "graph"      // traverse graph / vault trace / vault related / vault hubs / vault communities / vault explain
-  | "task"       // update task
-  | "workspace"  // get workspace / manage leaf / get editor state / get capabilities
-  | "command"    // execute command
-  | "import"     // import attachment
-  | "bash"       // terminal command / run cli / read cli result
-  | "cli"        // daily note / base / file history / sync / bookmarks / template / plugin / appearance / quickadd / dev diagnostics
-  | "subagent"   // subagent lifecycle/control tools
-  | "metadata"   // metadata query (non-obsidian tools, or legacy)
-  | "git"        // git operation
+  | "read" // read note / get context / get metadata / read image
+  | "edit" // edit note / edit editor / update frontmatter
+  | "write" // create note / create folder
+  | "list" // list entries / tasks / tags / properties / commands / hotkeys
+  | "search" // full-text search / vault explore
+  | "link" // resolve note / get links / audit links / generate link
+  | "move" // move entry / copy entry
+  | "trash" // trash entry
+  | "open" // open note / open app / focus location
+  | "graph" // traverse graph / vault trace / vault related / vault hubs / vault communities / vault explain
+  | "task" // update task
+  | "workspace" // get workspace / manage leaf / get editor state / get capabilities
+  | "command" // execute command
+  | "import" // import attachment
+  | "shell" // terminal command / Obsidian CLI
+  | "cli" // daily note / base / file history / sync / bookmarks / template / plugin / appearance / quickadd / dev diagnostics
+  | "subagent" // subagent lifecycle/control tools
+  | "metadata" // metadata query (non-obsidian tools, or legacy)
+  | "git" // git operation
   | "capability" // MCP/tool capability discovery and connection
-  | "memory"     // durable memory search and mutation
-  | "skill"      // reusable skill inspection and mutation
-  | "event"      // durable Event inspection and mutation
+  | "memory" // durable memory search and mutation
+  | "skill" // reusable skill inspection and mutation
+  | "event" // durable Event inspection and mutation
   | "permission" // permission policy inspection and mutation
-  | "channel"    // agent communication channels
-  | "media"      // deterministic media download or transformation
-  | "other"      // fallback — generic tool card
+  | "channel" // agent communication channels
+  | "media" // deterministic media download or transformation
+  | "other"; // fallback — generic tool card
 
 /** An individual tool call within a ToolBlock. */
 export interface ToolItem {
@@ -566,6 +581,12 @@ export interface DividerBlock {
   activityLabel?: string;
   /** Optional user-supplied focus shown faintly below the operation label. */
   detail?: string;
+  /** Real lifecycle steps for long operations. No synthetic percentage is implied. */
+  activitySteps?: readonly {
+    id: string;
+    label: string;
+    state: "pending" | "active" | "complete";
+  }[];
 }
 
 export type SubagentEventChannel =
@@ -577,12 +598,7 @@ export type SubagentEventChannel =
   | "subagents:compacted";
 
 export type SubagentActivityStatus =
-  | "created"
-  | "running"
-  | "waiting"
-  | "completed"
-  | "failed"
-  | "steered";
+  "created" | "running" | "waiting" | "completed" | "failed" | "steered";
 
 export interface SubagentTokenUsage {
   input: number;
@@ -684,8 +700,18 @@ export interface VaultContext {
     contextId: string;
     sequence: number;
     capturedAt: string;
-    revisions: { workspace: number; editor: number; page: number; capabilities: number };
-    focus?: { activeLeafId?: string; viewType: string; title?: string; path?: string };
+    revisions: {
+      workspace: number;
+      editor: number;
+      page: number;
+      capabilities: number;
+    };
+    focus?: {
+      activeLeafId?: string;
+      viewType: string;
+      title?: string;
+      path?: string;
+    };
     workspace: { leafCount: number; openNoteCount: number };
     landmarks?: Array<{
       ref: string;
@@ -721,8 +747,18 @@ export interface VaultContext {
 
 export interface VaultCapabilityContext {
   featureFamilies: string[];
-  integrations: Array<{ id: string; name: string; installed: boolean; enabled: boolean }>;
-  runtimeDependencies: Array<{ id: string; name: string; available: boolean; detail?: string }>;
+  integrations: Array<{
+    id: string;
+    name: string;
+    installed: boolean;
+    enabled: boolean;
+  }>;
+  runtimeDependencies: Array<{
+    id: string;
+    name: string;
+    available: boolean;
+    detail?: string;
+  }>;
 }
 
 export interface VaultEnvironment {
@@ -755,6 +791,23 @@ export interface VaultEnvironment {
     obsidianVersion?: string;
     chatobbyVersion?: string;
   };
+  fileConventions?: ObsidianFileConventionFactsV1;
+}
+
+export interface ObsidianFileConventionFactsV1 {
+  schemaVersion: 1;
+  revision: string;
+  observedAt: string;
+  observationStatus: "exact" | "unavailable";
+  generatedLinks?: {
+    syntax: "wikilink" | "markdown";
+    pathStyle: "shortest" | "relative" | "vault-absolute";
+  };
+  newAttachments?:
+    | { mode: "vault-root" }
+    | { mode: "same-folder-as-source" }
+    | { mode: "subfolder-under-source"; subfolderName: string }
+    | { mode: "vault-folder"; vaultRelativePath: string };
 }
 
 export interface OpenNoteInfo {
@@ -825,7 +878,11 @@ export type SessionEvent =
   | { type: "stream_end" }
   | { type: "compact_start" }
   | { type: "compact_end" }
-  | { type: "queue_update"; steering: readonly string[]; followUp: readonly string[] }
+  | {
+      type: "queue_update";
+      steering: readonly string[];
+      followUp: readonly string[];
+    }
   | { type: "thinking_changed"; level: ThinkingLevel }
   | { type: "retry_start" }
   | { type: "retry_end" }

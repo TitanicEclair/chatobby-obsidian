@@ -30,7 +30,7 @@ describe("generated platform-path contract boundary", () => {
     expect(evidence).toMatchObject({
       schemaVersion: 1,
       sourceRepository: "TitanicEclair/pi-mono",
-      sourceCommit: "fa3d765ca39f777184cf243366c49d707e5e8b6f",
+      sourceCommit: "7e31722a59f554bcca3fac49fb13c620c8638328",
       generator: "scripts/build-vendor-artifacts.mjs",
       sourceArtifact: "vendor/platform-paths",
       connectorArtifact: "src/vendor/@chatobby/platform-paths",

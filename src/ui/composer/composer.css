@@ -48,8 +48,10 @@
 
 .chatobby-reference-rail {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--size-2-1);
+  min-width: 0;
+  overflow: hidden;
   padding: var(--size-2-2) var(--size-4-3) 0;
 }
 
@@ -77,12 +79,12 @@ button.chatobby-reference-chip__open {
   align-items: center;
   gap: var(--size-2-1);
   padding: var(--size-2-1) var(--size-2-2);
-  color: var(--text-normal);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
 button.chatobby-reference-chip__open:hover { background: var(--chatobby-surface-hover); }
-.chatobby-reference-chip__icon { display: inline-flex; flex: 0 0 auto; color: var(--chatobby-accent); }
-.chatobby-reference-chip__icon svg { width: var(--size-4-3); height: var(--size-4-3); }
+.chatobby-reference-chip__icon { display: inline-flex; flex: 0 0 auto; color: var(--chatobby-accent); font-weight: var(--font-semibold); }
 .chatobby-reference-chip__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.chatobby-reference-chip__remove {
   display: inline-flex;
@@ -93,9 +95,153 @@ button.chatobby-reference-chip__remove {
   align-self: stretch;
   padding: 0;
   color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 100ms ease, color 100ms ease, background-color 100ms ease;
 }
+.chatobby-reference-chip:hover button.chatobby-reference-chip__remove,
+.chatobby-reference-chip:focus-within button.chatobby-reference-chip__remove { opacity: 1; }
 button.chatobby-reference-chip__remove:hover { color: var(--chatobby-danger); background: var(--chatobby-surface-hover); }
 button.chatobby-reference-chip__remove svg { width: var(--size-4-3); height: var(--size-4-3); }
+
+button.chatobby-reference-summary {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--size-2-1);
+  padding: 2px var(--size-2-2);
+  overflow: hidden;
+  border: var(--border-width) solid color-mix(in srgb, var(--text-muted) 24%, transparent);
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--chatobby-surface-muted) 68%, transparent);
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: var(--line-height-tight);
+}
+
+button.chatobby-reference-summary:hover,
+button.chatobby-reference-summary[aria-expanded="true"] {
+  background: var(--chatobby-surface-hover);
+  color: var(--text-normal);
+}
+
+.chatobby-reference-summary__at,
+.chatobby-reference-panel__at {
+  flex: 0 0 auto;
+  color: var(--chatobby-accent);
+  font-weight: var(--font-semibold);
+}
+
+.chatobby-reference-summary__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-reference-panel {
+  position: absolute;
+  z-index: var(--layer-popover, 30);
+  right: 0;
+  bottom: calc(100% + var(--size-2-2));
+  left: 0;
+  max-height: min(220px, 34vh);
+  overflow: hidden;
+  border: var(--border-width) solid var(--chatobby-line);
+  border-radius: var(--radius-m);
+  background: var(--chatobby-canvas);
+  box-shadow: var(--shadow-s);
+  transform-origin: bottom center;
+}
+
+.chatobby-reference-panel.is-open {
+  animation: chatobby-reference-panel-in 120ms ease-out;
+}
+
+@keyframes chatobby-reference-panel-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.chatobby-reference-panel__list {
+  max-height: min(220px, 34vh);
+  padding: var(--size-2-1);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.chatobby-reference-panel__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--size-4-7);
+  align-items: center;
+  min-width: 0;
+  border-radius: var(--radius-s);
+}
+
+.chatobby-reference-panel__row:hover,
+.chatobby-reference-panel__row.is-active,
+.chatobby-reference-panel__row:focus-within {
+  background: var(--chatobby-surface-hover);
+}
+
+button.chatobby-reference-panel__open,
+button.chatobby-reference-panel__remove {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+button.chatobby-reference-panel__open {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--size-2-2);
+  padding: var(--size-2-2) var(--size-4-2);
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.chatobby-reference-panel__copy {
+  display: grid;
+  min-width: 0;
+}
+
+.chatobby-reference-panel__name,
+.chatobby-reference-panel__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-reference-panel__name { color: var(--text-muted); font-size: var(--font-ui-small); }
+.chatobby-reference-panel__path { color: var(--text-faint); font-size: var(--font-ui-smaller); }
+
+button.chatobby-reference-panel__remove {
+  display: inline-flex;
+  width: var(--size-4-7);
+  height: var(--size-4-7);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 100ms ease, color 100ms ease;
+}
+
+.chatobby-reference-panel__row:hover button.chatobby-reference-panel__remove,
+.chatobby-reference-panel__row:focus-within button.chatobby-reference-panel__remove { opacity: 1; }
+button.chatobby-reference-panel__remove:hover { color: var(--chatobby-danger); }
+button.chatobby-reference-panel__remove svg { width: var(--size-4-3); height: var(--size-4-3); }
+
+@media (hover: none) {
+  button.chatobby-reference-chip__remove,
+  button.chatobby-reference-panel__remove { opacity: 1; }
+}
 
 .chatobby-activation-rail {
   display: flex;
@@ -148,6 +294,7 @@ button.chatobby-reference-chip__remove svg { width: var(--size-4-3); height: var
 
 .chatobby-composer-card.has-interaction .chatobby-attachment-rail,
 .chatobby-composer-card.has-interaction .chatobby-reference-rail,
+.chatobby-composer-card.has-interaction .chatobby-reference-panel,
 .chatobby-composer-card.has-interaction .chatobby-activation-rail,
 .chatobby-composer-card.has-interaction .chatobby-composer-controls-host,
 .chatobby-composer-card.has-interaction .chatobby-attach-btn {

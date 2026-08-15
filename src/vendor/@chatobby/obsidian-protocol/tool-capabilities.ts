@@ -62,39 +62,7 @@ const TOOL_PLUGIN_REQUIREMENTS: Readonly<Partial<Record<ObsidianToolName, readon
 	obsidian_browser_screenshot: ["webviewer"],
 	obsidian_browser_diagnostics: ["webviewer"],
 	obsidian_browser_close: ["webviewer"],
-	obsidian_daily_note: ["daily-notes"],
-	obsidian_base: ["bases"],
-	obsidian_file_history: ["file-recovery"],
-	obsidian_sync: ["sync"],
-	obsidian_bookmarks: ["bookmarks"],
-	obsidian_template: ["templates"],
-	obsidian_quickadd: ["quickadd"],
 };
-
-const CLI_TOOLS = new Set<ObsidianToolName>([
-	"obsidian_daily_note",
-	"obsidian_base",
-	"obsidian_file_history",
-	"obsidian_sync",
-	"obsidian_bookmarks",
-	"obsidian_template",
-	"obsidian_plugin",
-	"obsidian_appearance",
-	"obsidian_quickadd",
-	"obsidian_dev_diagnostics",
-	"obsidian_outline",
-	"obsidian_backlinks",
-	"obsidian_orphans",
-	"obsidian_unresolved",
-	"obsidian_wordcount",
-	"obsidian_deadends",
-	"obsidian_recents",
-	"obsidian_random",
-	"obsidian_run_cli",
-	"obsidian_read_cli_result",
-]);
-
-const RETRIEVAL_ENHANCEMENTS: readonly string[] = ["graphify", "smart-connections"];
 
 /** Commercially extensible source of truth for current and future plugin-backed tool surfaces. */
 export const OBSIDIAN_TOOL_CAPABILITY_CATALOG: readonly ObsidianToolCapabilityDescriptor[] = Object.entries(
@@ -105,10 +73,10 @@ export const OBSIDIAN_TOOL_CAPABILITY_CATALOG: readonly ObsidianToolCapabilityDe
 		toolName: name,
 		operation,
 		capability: capabilityForOperation(operation),
-		executionOwner: operation.startsWith("cli.") ? "runtime" : "connector",
+		executionOwner: "connector",
 		requiredPlugins: TOOL_PLUGIN_REQUIREMENTS[name] ?? [],
-		requiredRuntimeDependencies: CLI_TOOLS.has(name) ? ["obsidian-cli"] : [],
-		enhancedByPlugins: operation.startsWith("retrieval.") ? RETRIEVAL_ENHANCEMENTS : [],
+		requiredRuntimeDependencies: [],
+		enhancedByPlugins: [],
 	};
 });
 
@@ -140,22 +108,9 @@ export function evaluateObsidianToolAvailability(
 function capabilityForOperation(operation: ObsidianOperationName): ObsidianBridgeCapability {
 	if (operation.startsWith("ui.")) return "workspace";
 	if (operation.startsWith("browser.")) return "browser";
-	if (operation.startsWith("retrieval.")) return "retrieval";
-	if (operation.startsWith("cli.")) return "cli";
-	if (
-		operation.startsWith("metadata.") ||
-		operation.startsWith("properties.") ||
-		operation.startsWith("frontmatter.") ||
-		operation.startsWith("tags.")
-	)
-		return "metadata";
-	if (operation.startsWith("links.") || operation.startsWith("graph.")) return "links";
-	if (operation.startsWith("tasks.")) return "tasks";
+	if (operation.startsWith("links.")) return "links";
 	if (operation.startsWith("attachment.")) return "attachments";
 	if (operation.startsWith("editor.")) return "editor";
-	if (operation.startsWith("workspace.") || operation.startsWith("app.") || operation === "registry.status")
-		return "workspace";
-	if (operation.startsWith("commands.")) return "commands";
-	if (operation.startsWith("hotkeys.")) return "hotkeys";
+	if (operation.startsWith("workspace.")) return "workspace";
 	return "vault";
 }

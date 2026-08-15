@@ -3,9 +3,8 @@
 //
 // Backward compatible: createMockApp(files) / createMockVault(files) /
 // createMockMetadataCache() / createMockWorkspace() keep working. The optional
-// second argument to createMockApp wires the richer surfaces the Phase C–E
-// operations need (metadata cache, resolvedLinks, active editor view, commands,
-// hotkeys, enabled plugins).
+// second argument to createMockApp wires richer metadata, editor, workspace,
+// and plugin-registry surfaces used by retained operations.
 
 import type { App, Vault, Workspace, MetadataCache, TFile, TFolder, TAbstractFile, EventRef } from "obsidian";
 
@@ -29,10 +28,6 @@ export interface MockAppOptions {
   vaultBasePath?: string;
   /** Optional plugin instances returned by app.plugins.getPlugin(). */
   pluginInstances?: Record<string, unknown>;
-  /** Command registry contents (commands.list / commands.execute). */
-  commands?: Array<{ id: string; name?: string }>;
-  /** Hotkey bindings keyed by command id (hotkeys.list). */
-  hotkeys?: Record<string, Array<{ modifiers: string; key: string }>>;
   /** Active markdown view for editor.* and workspace.* ops. */
   activeView?: { path: string; content?: string; cursor?: { line: number; ch: number }; selection?: string };
   /** Additional open note paths (workspace.get). */
@@ -269,10 +264,30 @@ interface MockEditor {
   setValue(value: string): void;
   lineCount(): number;
   setCursor(pos: { line: number; ch: number }): void;
+  listSelections(): Array<{ anchor: { line: number; ch: number }; head: { line: number; ch: number } }>;
+  hasFocus(): boolean;
+  focus(): void;
+  getScrollInfo(): { top: number; left: number };
+  offsetToPos(offset: number): { line: number; ch: number };
+  posToOffset(position: { line: number; ch: number }): number;
+  transaction(transaction: { changes?: Array<{ from: { line: number; ch: number }; to?: { line: number; ch: number }; text: string }> }): void;
+  scrollIntoView(): void;
+  undo(): void;
+  redo(): void;
 }
 
 function createMockEditor(getContent: () => string, setContent: (s: string) => void, cursor = { line: 0, ch: 0 }, selection = ""): MockEditor {
-  const state = { cursor: { ...cursor }, selection };
+  const state = { cursor: { ...cursor }, selection, focused: true, undo: [] as string[], redo: [] as string[] };
+  const offsetToPos = (offset: number): { line: number; ch: number } => {
+    const bounded = Math.max(0, Math.min(offset, getContent().length));
+    const before = getContent().slice(0, bounded).split(/\r?\n/);
+    return { line: before.length - 1, ch: before.at(-1)?.length ?? 0 };
+  };
+  const posToOffset = (position: { line: number; ch: number }): number => {
+    const lines = getContent().split(/\r?\n/);
+    const line = Math.max(0, Math.min(position.line, lines.length - 1));
+    return lines.slice(0, line).reduce((total, value) => total + value.length + 1, 0) + Math.max(0, Math.min(position.ch, lines[line]?.length ?? 0));
+  };
   return {
     getCursor: () => state.cursor,
     getSelection: () => state.selection,
@@ -280,6 +295,38 @@ function createMockEditor(getContent: () => string, setContent: (s: string) => v
     setValue: (v: string) => setContent(v),
     lineCount: () => getContent().split(/\r?\n/).length,
     setCursor: (pos: { line: number; ch: number }) => { state.cursor = { ...pos }; },
+    listSelections: () => [{ anchor: state.cursor, head: state.cursor }],
+    hasFocus: () => state.focused,
+    focus: () => { state.focused = true; },
+    getScrollInfo: () => ({ top: 0, left: 0 }),
+    offsetToPos,
+    posToOffset,
+    transaction: (transaction) => {
+      const before = getContent();
+      state.undo.push(before);
+      state.redo.length = 0;
+      let next = before;
+      const changes = (transaction.changes ?? []).map((change) => ({
+        ...change,
+        fromOffset: posToOffset(change.from),
+        toOffset: posToOffset(change.to ?? change.from),
+      })).sort((left, right) => right.fromOffset - left.fromOffset);
+      for (const change of changes) next = next.slice(0, change.fromOffset) + change.text + next.slice(change.toOffset);
+      setContent(next);
+    },
+    scrollIntoView: () => undefined,
+    undo: () => {
+      const previous = state.undo.pop();
+      if (previous === undefined) return;
+      state.redo.push(getContent());
+      setContent(previous);
+    },
+    redo: () => {
+      const next = state.redo.pop();
+      if (next === undefined) return;
+      state.undo.push(getContent());
+      setContent(next);
+    },
   };
 }
 
@@ -440,17 +487,5 @@ export function createMockApp(files: Map<string, string>, opts?: MockAppOptions)
       getPlugin: (id: string) => opts?.pluginInstances?.[id] ?? null,
     };
   }
-  if (opts?.commands) {
-    const executed: string[] = [];
-    app.commands = {
-      listCommands: () => opts.commands!,
-      executeCommandById: (id: string) => { executed.push(id); },
-      __executed: executed,
-    };
-  }
-  if (opts?.hotkeys) {
-    app.hotkeys = { getHotkeys: (id: string) => opts.hotkeys![id] };
-  }
-
   return app;
 }

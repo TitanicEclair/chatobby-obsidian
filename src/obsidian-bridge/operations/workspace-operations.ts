@@ -1,27 +1,15 @@
-// Plugin-native "runtime" operations (Phase C) — editor / workspace / commands /
-// hotkeys. These touch live Obsidian runtime surfaces that have no useful behavior
+// Plugin-native runtime operations for live editors and workspace layout. These
+// touch live Obsidian surfaces that have no useful behavior
 // in a headless test, so each handler degrades gracefully (returns an "unavailable"
 // result) when the surface is absent, and is otherwise correct in production.
 
+import { createHash } from "node:crypto";
 import type { TFile, App } from "obsidian";
 import type { OperationHandler } from "../types";
 import { BridgeError } from "../types";
-import { editNote } from "./helpers/note-io";
 import { isTFile } from "./helpers/file-types";
 import { getObsidianSemanticContextService } from "../../obsidian-context";
 
-// ── Command execution allowlist (defense-in-depth; mirrors the MCP server's
-// command-allowlist.ts so a stale/modified MCP server cannot bypass the gate).
-// Re-validate here per the api-surface contract.
-const COMMAND_ALLOWLIST = new Set([
-  "editor:save-file", "editor:toggle-pin", "editor:focus",
-  "workspace:new-tab", "workspace:next-tab", "workspace:previous-tab", "workspace:close",
-  "app:go-back", "app:go-forward",
-  "graph:open",
-  "file-explorer:new-file", "file-explorer:new-folder",
-  "editor:insert-embed", "editor:insert-link",
-  "editor:toggle-bold", "editor:toggle-italics", "editor:toggle-highlight", "editor:toggle-code",
-]);
 
 // ── Local surface types (kept minimal; cast via unknown to avoid `any`) ──
 
@@ -30,9 +18,21 @@ interface EditorLike {
   getCursor(side: "from" | "to"): { line: number; ch: number };
   getSelection(): string;
   getValue(): string;
-  setValue(value: string): void;
   lineCount(): number;
   setCursor(pos: { line: number; ch: number }): void;
+  listSelections(): Array<{ anchor: { line: number; ch: number }; head: { line: number; ch: number } }>;
+  hasFocus(): boolean;
+  focus(): void;
+  getScrollInfo(): { top: number; left: number };
+  offsetToPos(offset: number): { line: number; ch: number };
+  posToOffset(position: { line: number; ch: number }): number;
+  transaction(transaction: {
+    changes?: Array<{ from: { line: number; ch: number }; to?: { line: number; ch: number }; text: string }>;
+    selections?: Array<{ from: { line: number; ch: number }; to?: { line: number; ch: number } }>;
+  }, origin?: string): void;
+  scrollIntoView(range: { from: { line: number; ch: number }; to: { line: number; ch: number } }, center?: boolean): void;
+  undo(): void;
+  redo(): void;
 }
 
 interface MarkdownViewLike {
@@ -90,111 +90,122 @@ function findLeafById(workspace: WorkspaceLike, id: string | undefined): LeafLik
 }
 
 /** Find an active markdown view, preferring the workspace's active leaf. */
-function getActiveMarkdownView(app: App, path?: string): MarkdownViewLike | null {
+interface EditorTarget {
+  leaf: LeafLike;
+  view: MarkdownViewLike;
+}
+
+function getActiveMarkdownView(app: App, target?: { path?: string; leafId?: string }): EditorTarget | null {
   const ws = getWorkspace(app);
   const leaves = ws.getLeavesOfType("markdown") ?? [];
-  const activeView = ws.activeLeaf?.view;
-  const views: MarkdownViewLike[] = [];
-  for (const leaf of leaves) {
-    if (isMarkdownView(leaf.view)) views.push(leaf.view);
+  const candidates = leaves.filter((leaf): leaf is LeafLike & { view: MarkdownViewLike } => isMarkdownView(leaf.view));
+  if (target?.leafId) {
+    const leaf = findLeafById(ws, target.leafId);
+    if (!leaf || !isMarkdownView(leaf.view) || (target.path && leaf.view.file.path !== target.path)) return null;
+    return { leaf, view: leaf.view };
   }
-  if (path) {
-    return views.find((v) => v.file?.path === path) ?? null;
+  if (target?.path) {
+    const matches = candidates.filter((leaf) => leaf.view.file.path === target.path);
+    const active = matches.find((leaf) => leaf === ws.activeLeaf);
+    if (active) return { leaf: active, view: active.view };
+    if (matches.length > 1) throw new BridgeError("PATH_AMBIGUOUS", `More than one live editor is open for ${target.path}; provide leafId.`);
+    const leaf = matches[0];
+    return leaf ? { leaf, view: leaf.view } : null;
   }
-  if (activeView && isMarkdownView(activeView)) return activeView;
-  return views[0] ?? null;
+  const active = ws.activeLeaf;
+  if (active && isMarkdownView(active.view)) return { leaf: active, view: active.view };
+  const first = candidates[0];
+  return first ? { leaf: first, view: first.view } : null;
 }
 
 // ── editor.get ────────────────────────────────────────────────────────
 
 export const handleEditorGet: OperationHandler = async (args, _signal, app) => {
-  const path = typeof args.path === "string" ? args.path : undefined;
-  return getObsidianSemanticContextService(app).editorProjection(path);
+  const target = editorTarget(args.target);
+  const selected = getActiveMarkdownView(app, target);
+  if (!selected) throw new BridgeError("EDITOR_NOT_OPEN", "No matching live markdown editor is open.");
+  const { leaf, view } = selected;
+  const editor = view.editor;
+  const content = editor.getValue();
+  const contentHash = hashText(content);
+  const result: Record<string, unknown> = {
+    schemaVersion: 1,
+    path: view.file.path,
+    leafId: leafId(leaf),
+    contentHash,
+    editorRevision: contentHash,
+    focused: editor.hasFocus(),
+    cursor: editor.getCursor(),
+    selections: editor.listSelections().map((selection) => ({ from: selection.anchor, to: selection.head })),
+    scroll: editor.getScrollInfo(),
+    lineCount: editor.lineCount(),
+    coordinateSystem: "zero-based-line-and-column",
+  };
+  if (args.includeContent === true) {
+    const fromLine = numberArgument(args.fromLine, 0);
+    const requestedTo = numberArgument(args.toLine, Math.max(0, editor.lineCount() - 1));
+    const maxChars = Math.min(48_000, Math.max(1, numberArgument(args.maxChars, 24_000)));
+    const lines = content.split(/\r?\n/u);
+    const toLine = Math.min(requestedTo, Math.max(0, lines.length - 1));
+    const returned: string[] = [];
+    let returnedChars = 0;
+    let nextFromLine: number | undefined;
+    for (let line = Math.max(0, fromLine); line <= toLine; line += 1) {
+      const value = lines[line] ?? "";
+      const added = value.length + (returned.length > 0 ? 1 : 0);
+      if (returned.length > 0 && returnedChars + added > maxChars) {
+        nextFromLine = line;
+        break;
+      }
+      returned.push(value);
+      returnedChars += added;
+    }
+    result.content = returned.join("\n");
+    result.fromLine = Math.max(0, fromLine);
+    result.toLine = Math.max(0, fromLine) + Math.max(0, returned.length - 1);
+    result.coverage = {
+      kind: nextFromLine === undefined ? "exact" : "partial",
+      returned: returned.length,
+      total: Math.max(0, toLine - Math.max(0, fromLine) + 1),
+      hasMore: nextFromLine !== undefined,
+      ...(nextFromLine !== undefined ? { nextFromLine } : {}),
+    };
+  }
+  return result;
 };
 
 // ── editor.edit ───────────────────────────────────────────────────────
 
 export const handleEditorEdit: OperationHandler = async (args, _signal, app) => {
-  const path = typeof args.path === "string" ? args.path : undefined;
-  const edit = args.edit as Record<string, unknown> | undefined;
-  if (!edit || typeof edit !== "object") {
-    throw new BridgeError("INVALID_INPUT", "editor.edit requires an 'edit' argument");
-  }
-
-  const view = getActiveMarkdownView(app, path);
-  if (!view) {
-    // No live editor — apply the edit to the underlying file instead.
-    if (!path) throw new BridgeError("INVALID_INPUT", "editor.edit requires 'path' when no active editor");
-    const result = await editNote(app, path, edit);
-    return { appliedTo: "file" as const, ...result };
-  }
-
+  const target = editorTarget(args.target);
+  const selected = getActiveMarkdownView(app, target);
+  if (!selected) throw new BridgeError("EDITOR_NOT_OPEN", "No matching live markdown editor is open; no durable file was changed.");
+  const { leaf, view } = selected;
   const editor = view.editor;
   const current = editor.getValue();
-  const transformed = applyEditTransform(current, edit);
-  if (transformed !== current) {
-    editor.setValue(transformed);
+  const expectedContentHash = typeof args.expectedContentHash === "string" ? args.expectedContentHash : undefined;
+  if (!expectedContentHash || expectedContentHash !== hashText(current)) {
+    throw new BridgeError("EDITOR_TRANSFORM_STALE", "The live editor changed after it was inspected; no mutation was applied.");
   }
-  return { appliedTo: "editor" as const, path: view.file.path, changed: transformed !== current };
+  const changes = editorChanges(args.changes, editor, current.length);
+  const selections = editorSelections(args.selections);
+  editor.transaction({ changes, ...(selections ? { selections } : {}) }, "chatobby");
+  const reveal = asRecord(args.reveal);
+  const revealFrom = asEditorPosition(reveal.from);
+  if (revealFrom) editor.scrollIntoView({ from: revealFrom, to: asEditorPosition(reveal.to) ?? revealFrom }, reveal.center === true);
+  const updated = editor.getValue();
+  return {
+    schemaVersion: 1,
+    appliedTo: "live-editor",
+    path: view.file.path,
+    leafId: leafId(leaf),
+    changed: updated !== current,
+    changeCount: changes.length,
+    beforeContentHash: expectedContentHash,
+    contentHash: hashText(updated),
+    coordinateSystem: "zero-based-line-and-column",
+  };
 };
-
-/** Mirror of note.edit's transform modes, applied to an in-memory string. */
-function applyEditTransform(current: string, edit: Record<string, unknown>): string {
-  const mode = edit.mode as string;
-  const content = edit.content as string | undefined;
-  switch (mode) {
-    case "insert": {
-      const at = asEditorPosition(edit.at) ?? { line: 0, ch: 0 };
-      return replaceRange(current, content ?? "", at, at);
-    }
-    case "replace": {
-      const from = asEditorPosition(edit.from);
-      const to = asEditorPosition(edit.to);
-      if (!from || !to) throw new BridgeError("INVALID_INPUT", "replace requires 'from' and 'to'");
-      return replaceRange(current, content ?? "", from, to);
-    }
-    case "append": return current + (content ?? "");
-    case "prepend": return (content ?? "") + current;
-    case "replace_all": return content ?? "";
-    case "replace_exact": {
-      const find = edit.find as string | undefined;
-      if (find === undefined) throw new BridgeError("INVALID_INPUT", "replace_exact requires 'find'");
-      if (!current.includes(find)) throw new BridgeError("INVALID_INPUT", `Find string not found: ${find}`);
-      return current.replace(find, (edit.replace as string | undefined) ?? "");
-    }
-    default: throw new BridgeError("INVALID_INPUT", `Unknown edit mode: ${mode}`);
-  }
-}
-
-function asEditorPosition(value: unknown): { line: number; ch: number } | null {
-  if (!value || typeof value !== "object") return null;
-  const pos = value as Record<string, unknown>;
-  return typeof pos.line === "number" && typeof pos.ch === "number"
-    ? { line: pos.line, ch: pos.ch }
-    : null;
-}
-
-function replaceRange(
-  current: string,
-  replacement: string,
-  from: { line: number; ch: number },
-  to: { line: number; ch: number },
-): string {
-  const lines = current.split(/\r?\n/);
-  const start = offsetFromPosition(lines, from);
-  const end = offsetFromPosition(lines, to);
-  return current.slice(0, start) + replacement + current.slice(end);
-}
-
-function offsetFromPosition(lines: string[], pos: { line: number; ch: number }): number {
-  const line = Math.max(0, Math.min(pos.line, lines.length - 1));
-  const ch = Math.max(0, Math.min(pos.ch, lines[line]?.length ?? 0));
-  let offset = 0;
-  for (let i = 0; i < line; i++) {
-    offset += (lines[i]?.length ?? 0) + 1;
-  }
-  return offset + ch;
-}
 
 // ── editor.focus ──────────────────────────────────────────────────────
 
@@ -205,7 +216,9 @@ export const handleEditorFocus: OperationHandler = async (args, _signal, app) =>
   if (!isTFile(file)) throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
 
   const ws = getWorkspace(app);
-  const leaf = ws.getLeaf ? ws.getLeaf(false) : ws.getLeavesOfType("markdown")[0];
+  const requestedLeafId = typeof args.leafId === "string" ? args.leafId : undefined;
+  const leaf = findLeafById(ws, requestedLeafId) ?? (ws.getLeaf ? ws.getLeaf(false) : ws.getLeavesOfType("markdown")[0]);
+  if (requestedLeafId && !findLeafById(ws, requestedLeafId)) throw new BridgeError("EDITOR_NOT_OPEN", `Workspace leaf not found: ${requestedLeafId}`);
   if (!leaf) throw new BridgeError("OBSIDIAN_OPERATION_FAILED", "No workspace leaf available");
   if (leaf.openFile) await leaf.openFile(file);
   if (ws.setActiveLeaf) ws.setActiveLeaf(leaf, { focus: true });
@@ -214,11 +227,82 @@ export const handleEditorFocus: OperationHandler = async (args, _signal, app) =>
   const ch = typeof args.ch === "number" ? args.ch : 0;
   if (line !== undefined) {
     const view = isMarkdownView((leaf as { view?: unknown }).view) ? (leaf.view as MarkdownViewLike) : null;
-    if (view) view.editor.setCursor({ line, ch });
+    if (view) {
+      view.editor.setCursor({ line, ch });
+      view.editor.focus();
+      view.editor.scrollIntoView({ from: { line, ch }, to: { line, ch } }, true);
+    }
   }
 
-  return { focused: true, path, ...(line !== undefined ? { line, ch } : {}) };
+  return { focused: true, path, leafId: leafId(leaf), ...(line !== undefined ? { line, ch } : {}) };
 };
+
+export const handleEditorHistory: OperationHandler = async (args, _signal, app) => {
+  const action = args.action === "undo" || args.action === "redo" ? args.action : undefined;
+  if (!action) throw new BridgeError("INVALID_INPUT", "editor.history requires action=undo or action=redo.");
+  const selected = getActiveMarkdownView(app, editorTarget(args.target));
+  if (!selected) throw new BridgeError("EDITOR_NOT_OPEN", "No matching live markdown editor is open.");
+  selected.view.editor[action]();
+  const contentHash = hashText(selected.view.editor.getValue());
+  return { schemaVersion: 1, action, acknowledged: true, path: selected.view.file.path, leafId: leafId(selected.leaf), contentHash };
+};
+
+function editorTarget(value: unknown): { path?: string; leafId?: string } | undefined {
+  const record = asRecord(value);
+  const path = typeof record.path === "string" ? record.path : undefined;
+  const requestedLeafId = typeof record.leafId === "string" ? record.leafId : undefined;
+  return path || requestedLeafId ? { ...(path ? { path } : {}), ...(requestedLeafId ? { leafId: requestedLeafId } : {}) } : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asEditorPosition(value: unknown): { line: number; ch: number } | null {
+  const record = asRecord(value);
+  return Number.isInteger(record.line) && Number.isInteger(record.ch) && Number(record.line) >= 0 && Number(record.ch) >= 0
+    ? { line: Number(record.line), ch: Number(record.ch) }
+    : null;
+}
+
+function numberArgument(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) ? value : fallback;
+}
+
+function hashText(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function editorChanges(value: unknown, editor: EditorLike, contentLength: number): Array<{ from: { line: number; ch: number }; to?: { line: number; ch: number }; text: string }> {
+  if (!Array.isArray(value) || value.length === 0) throw new BridgeError("INVALID_INPUT", "editor.edit requires one or more changes.");
+  const normalized = value.map((item) => {
+    const record = asRecord(item);
+    if (typeof record.text !== "string") throw new BridgeError("INVALID_INPUT", "Every editor change requires text.");
+    const from = typeof record.from === "number" ? editor.offsetToPos(record.from) : asEditorPosition(record.from);
+    const to = record.to === undefined ? from : typeof record.to === "number" ? editor.offsetToPos(record.to) : asEditorPosition(record.to);
+    if (!from || !to) throw new BridgeError("INVALID_INPUT", "Editor change positions must be non-negative offsets or zero-based line/ch positions.");
+    const fromOffset = editor.posToOffset(from);
+    const toOffset = editor.posToOffset(to);
+    if (fromOffset < 0 || toOffset < fromOffset || toOffset > contentLength) throw new BridgeError("INVALID_INPUT", "Editor change range is outside the live buffer.");
+    return { from, to, text: record.text, fromOffset, toOffset };
+  }).sort((left, right) => left.fromOffset - right.fromOffset);
+  for (let index = 1; index < normalized.length; index += 1) {
+    if (normalized[index]!.fromOffset < normalized[index - 1]!.toOffset) throw new BridgeError("INVALID_INPUT", "Editor changes must not overlap.");
+  }
+  return normalized.map(({ from, to, text }) => ({ from, to, text }));
+}
+
+function editorSelections(value: unknown): Array<{ from: { line: number; ch: number }; to?: { line: number; ch: number } }> | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new BridgeError("INVALID_INPUT", "selections must be an array.");
+  return value.map((item) => {
+    const record = asRecord(item);
+    const from = asEditorPosition(record.from);
+    const to = record.to === undefined ? undefined : asEditorPosition(record.to);
+    if (!from || (record.to !== undefined && !to)) throw new BridgeError("INVALID_INPUT", "Selection positions must use zero-based line/ch.");
+    return { from, ...(to ? { to } : {}) };
+  });
+}
 
 // ── workspace.get ─────────────────────────────────────────────────────
 
@@ -304,85 +388,4 @@ export const handleWorkspaceManage: OperationHandler = async (args, _signal, app
     default:
       throw new BridgeError("INVALID_INPUT", `Unknown workspace action: ${action}`);
   }
-};
-
-// ── commands.list ─────────────────────────────────────────────────────
-
-interface CommandRegistryLike {
-  listCommands?(): Array<{ id: string; name?: string }>;
-  executeCommandById?(id: string): unknown;
-}
-
-function getCommands(app: App): CommandRegistryLike | null {
-  const commands = (app as unknown as { commands?: CommandRegistryLike }).commands;
-  return commands ?? null;
-}
-
-export const handleCommandsList: OperationHandler = async (args, _signal, app) => {
-  const commands = getCommands(app);
-  if (!commands?.listCommands) {
-    return { available: false, commands: [], reason: "Command registry unavailable" };
-  }
-  const limit = typeof args.limit === "number" ? args.limit : 500;
-  const query = typeof args.query === "string" ? args.query.toLowerCase() : "";
-  const all = (commands.listCommands() ?? []).filter((command) => {
-    if (!query) return true;
-    return command.id.toLowerCase().includes(query) || (command.name?.toLowerCase().includes(query) ?? false);
-  });
-  return {
-    available: true,
-    commands: all.slice(0, limit).map((c) => ({ id: c.id, ...(c.name ? { name: c.name } : {}) })),
-  };
-};
-
-// ── commands.execute ──────────────────────────────────────────────────
-
-export const handleCommandsExecute: OperationHandler = async (args, _signal, app) => {
-  const id = typeof args.commandId === "string" ? args.commandId : typeof args.id === "string" ? args.id : undefined;
-  if (!id) throw new BridgeError("INVALID_INPUT", "commands.execute requires 'id'");
-  // Defense-in-depth: re-validate the allowlist plugin-side.
-  if (!COMMAND_ALLOWLIST.has(id)) {
-    throw new BridgeError("COMMAND_NOT_ALLOWED", `Command '${id}' is not on the execution allowlist`, false, { commandId: id });
-  }
-  const commands = getCommands(app);
-  if (!commands?.executeCommandById) {
-    return { executed: false, id, reason: "Command registry unavailable" };
-  }
-  commands.executeCommandById(id);
-  return { executed: true, id, commandId: id };
-};
-
-// ── hotkeys.list ──────────────────────────────────────────────────────
-
-interface HotkeyBinding { modifiers: string; key: string }
-interface HotkeyRegistryLike {
-  getHotkeys?(commandId: string): HotkeyBinding[] | undefined;
-}
-
-function getHotkeys(app: App): HotkeyRegistryLike | null {
-  const hotkeys = (app as unknown as { hotkeys?: HotkeyRegistryLike }).hotkeys;
-  return hotkeys ?? null;
-}
-
-function formatBinding(b: HotkeyBinding): string {
-  return b.modifiers ? `${b.modifiers}-${b.key}` : b.key;
-}
-
-export const handleHotkeysList: OperationHandler = async (args, _signal, app) => {
-  const requestedCommandId = typeof args.commandId === "string" ? args.commandId : undefined;
-  const hotkeys = getHotkeys(app);
-  const commands = getCommands(app);
-  if (!hotkeys?.getHotkeys) {
-    return { available: false, hotkeys: [], reason: "Hotkey registry unavailable" };
-  }
-  const commandIds = requestedCommandId
-    ? [requestedCommandId]
-    : commands?.listCommands?.().map((c) => c.id) ?? [];
-  const out: Array<{ command: string; keys: string[] }> = [];
-  for (const id of commandIds) {
-    const bindings = hotkeys.getHotkeys(id) ?? [];
-    if (bindings.length === 0) continue;
-    out.push({ command: id, keys: bindings.map(formatBinding) });
-  }
-  return { available: true, hotkeys: out, source: "obsidian" };
 };

@@ -117,6 +117,48 @@ describe("Toolbar", () => {
     expect(menuText).toContain("Calculating current usage for a 1.0M token window");
     expect(menuText).not.toContain("2.1M");
   });
+
+  it("refreshes an open compaction popover when the active model settings arrive", () => {
+    let thresholdPercent = 85;
+    const host: ToolbarHost = {
+      getConnectionState: () => ({ ...INITIAL_CONNECTION_STATE, status: "connected" }),
+      getSessionState: () => ({ ...EMPTY_SESSION_STATE, sessionId: "s" }),
+      getRuntimeState: readyRuntimeState,
+      getStats: () => ({
+        sessionFile: "s.jsonl",
+        sessionId: "s",
+        userMessages: 0,
+        assistantMessages: 0,
+        toolCalls: 0,
+        toolResults: 0,
+        totalMessages: 0,
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        cost: 0,
+        contextUsage: { tokens: 0, contextWindow: 1_000_000, percent: 0 },
+      }),
+      getFeedStore: () => createFeedStore(),
+      getAutoCompactionSettings: () => ({
+        enabled: true,
+        thresholdPercent,
+        effectiveThresholdPercent: thresholdPercent,
+      }),
+      toggleAutoCompaction: vi.fn(async () => {}),
+      openAutoCompaction: vi.fn(),
+    };
+    const toolbar = new Toolbar(host);
+    const connectionEl = document.body.createDiv();
+    const statsEl = document.body.createDiv();
+
+    toolbar.bind(connectionEl, statsEl);
+    (statsEl.querySelector(".chatobby-context-meter") as HTMLButtonElement | null)?.click();
+    expect(statsEl.querySelector(".chatobby-context-menu")?.textContent).toContain("Starts at 85%");
+
+    thresholdPercent = 25;
+    toolbar.renderFlags();
+
+    expect(statsEl.querySelector(".chatobby-context-menu")?.textContent).toContain("Starts at 25%");
+    expect(statsEl.querySelector(".chatobby-context-menu")?.textContent).not.toContain("Starts at 85%");
+  });
 });
 
 function readyRuntimeState() {

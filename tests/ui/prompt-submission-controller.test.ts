@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { FeedStore } from "../../src/features/feed/public";
 import type { ChatobbyTransport } from "../../src/transport/ws-client";
 import {
+  PROMPT_START_TIMEOUT_MS,
   retractAcceptedPrompt,
   submitPrompt,
 } from "../../src/ui/controller/prompt-submission-controller";
+import { CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS } from "../../src/vendor/chatobby-client/control/contracts";
 
 type PromptTransport = Pick<ChatobbyTransport, "isConnected" | "prompt" | "retractPrompt">;
 type PromptFeedStore = Pick<FeedStore, "dispatch">;
@@ -23,6 +25,11 @@ function transport(overrides: Partial<PromptTransport> = {}): PromptTransport {
 }
 
 describe("prompt submission controller", () => {
+  it("uses the runtime prompt lifetime so automatic compaction cannot cause a false start timeout", () => {
+    expect(PROMPT_START_TIMEOUT_MS).toBe(CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS);
+    expect(PROMPT_START_TIMEOUT_MS).toBeGreaterThan(30_000);
+  });
+
   it("submits a correlated feed message and leaves an accepted prompt in place", async () => {
     const feed = feedStore();
     const client = transport();

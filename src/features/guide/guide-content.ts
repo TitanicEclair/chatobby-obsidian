@@ -52,7 +52,11 @@ AI models and connected services can be wrong, unavailable, or incomplete. Chato
 `;
 
 export const CHATOBBY_GUIDE_FILES: readonly GuideFile[] = [
-  { path: CHATOBBY_GUIDE_FILENAME, title: "Chatobby Guide", content: CHATOBBY_GUIDE_MARKDOWN },
+  {
+    path: CHATOBBY_GUIDE_FILENAME,
+    title: "Chatobby Guide",
+    content: CHATOBBY_GUIDE_MARKDOWN,
+  },
   {
     path: `${CHATOBBY_GUIDE_DIRECTORY}/01 - Sessions and vault work.md`,
     title: "Sessions and vault work",
@@ -462,11 +466,48 @@ Example for a stronger model:
 
 ## Use a model running on your computer
 
-Chatobby can connect to a local model server without sending the model request to a hosted provider. The server must already be running; Chatobby does not download models or keep the server alive.
+Chatobby can connect to a local model server without sending the model request to a hosted provider. Existing Ollama, LM Studio, vLLM, llama.cpp, OpenAI-compatible, and Anthropic-compatible servers can remain externally managed. For llama.cpp on this computer, Chatobby can instead start, health-check, and stop the process with validated launch settings. It does not download or delete executables or model files.
 
-Open Chatobby's **Settings** page, find **Local model servers**, select the matching preset, and enter the exact model ID shown by your server. The built-in presets cover Ollama, LM Studio, vLLM, and llama.cpp. You can also configure an OpenAI-compatible Chat Completions or Responses endpoint, or an Anthropic Messages-compatible endpoint.
+Open Chatobby's **Settings** page, find **Local model connections**, select the matching preset, and enter the exact model ID shown by your server. The built-in presets cover Ollama, LM Studio, vLLM, and llama.cpp. You can also configure an OpenAI-compatible Chat Completions or Responses endpoint, or an Anthropic Messages-compatible endpoint.
+
+### Connection and managed process are different
+
+| Settings section | Purpose |
+|---|---|
+| **Local model connections** | Defines how Chatobby sends requests: provider ID, URL, API format, authentication, model IDs, context/output limits, and capabilities. This record makes the provider and models appear below the composer. |
+| **Managed llama.cpp** | Optionally tells Chatobby how to launch and supervise an existing llama.cpp executable and GGUF file. It does not add a model to the composer by itself. |
+
+An externally managed server needs only the first record. A Chatobby-managed llama.cpp setup needs both. Create and test the connection first, then link the managed profile to the same provider ID and loopback port.
+
+### Fill in a connection
+
+1. Choose the closest server type. A preset supplies common defaults; you can still edit the URL and API format.
+2. Give the server a clear name and stable lowercase provider ID.
+3. Confirm the API base URL. Common defaults are \`http://127.0.0.1:11434/v1\` for Ollama, \`http://127.0.0.1:1234/v1\` for LM Studio, and a server-configured \`/v1\` URL for vLLM or llama.cpp.
+4. Choose OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages according to what the server implements.
+5. Choose no authentication for a trusted loopback server, or the exact API-key/bearer mode required by the endpoint.
+6. Enter one exact server model ID per line. Use \`model-id\` or \`model-id | Friendly name\`.
+7. Set the context window and output limit no higher than the running server supports. Enable reasoning or image input only when that exact model and endpoint support it.
+8. Select **Test connection**, save, then choose the provider and model below the composer.
 
 Select **Test connection** before saving. The test sends one very small request using the selected model and API format. If it succeeds, save the server and choose its model from the composer. A successful connection does not guarantee that a small local model can follow complex instructions or use every tool reliably.
+
+For managed llama.cpp, first save a loopback llama.cpp connection. Then configure **Managed llama.cpp** with the absolute llama-server and GGUF paths, launch behavior, context, GPU layers, cache types, and other bounded settings. **On demand** prepares it before inference, **When Chatobby starts** prepares it with the runtime, and **Manual** uses the Settings controls only.
+
+- Larger context windows use more memory, especially for the K/V cache.
+- GPU layers control model offload; start conservatively and confirm actual memory use.
+- Quantized V cache requires flash attention. Chatobby prevents that invalid combination.
+- Optional thread and batch controls are for measured tuning, not required setup.
+- Startup timeout controls readiness waiting, not later response duration.
+
+### Stop or remove a local setup
+
+- Select **Stop** to release RAM and VRAM while retaining both records.
+- Removing the **local model connection** removes its models from the composer and removes its stored credential. It does not stop the process or delete the managed profile. The remaining managed server may still run, but chats cannot use it until you restore a connection with the same provider ID and matching port.
+- Removing the **managed llama.cpp profile** stops a process owned by the current runtime and forgets its launch settings. It keeps the connection, executable, and GGUF file. The connection works again whenever a compatible server is running at that URL.
+- To remove everything, stop the process, remove the managed profile, then remove the connection. Chatobby never deletes the executable or model file.
+
+If a server starts but its connection test fails, compare the provider ID, port, API format, and model ID. If startup fails, check file paths, available memory, cache/flash compatibility, and the displayed diagnostics before repeating the same attempt.
 
 Most servers running only on this computer need no credential. If your server requires one, choose the matching **Provider API key** or **Bearer token** option. Do not expose an unauthenticated model server to the internet.
 

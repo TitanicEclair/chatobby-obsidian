@@ -164,6 +164,7 @@ export function toPromptContextPacket(
       locale: context.environment.locale,
       device: context.environment.device ? { platform: context.environment.device.platform } : undefined,
       app: context.environment.app,
+		fileConventions: context.environment.fileConventions,
     } : undefined,
     capabilities: context.capabilities ? {
       featureFamilies: context.capabilities.featureFamilies,

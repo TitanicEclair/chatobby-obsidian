@@ -20,8 +20,13 @@
     "lib": ["DOM", "ES2022"],
     "types": ["node"],
     "paths": {
-      "@chatobby/obsidian-protocol": ["src/vendor/@chatobby/obsidian-protocol/index.ts"],
-      "@chatobby/project-contracts": ["src/vendor/@chatobby/project-contracts/index.ts"]
+      "@chatobby/local-models": ["src/vendor/@chatobby/local-models/index.ts"],
+      "@chatobby/obsidian-protocol": [
+        "src/vendor/@chatobby/obsidian-protocol/index.ts"
+      ],
+      "@chatobby/project-contracts": [
+        "src/vendor/@chatobby/project-contracts/index.ts"
+      ]
     }
   },
   "include": ["src/**/*"]

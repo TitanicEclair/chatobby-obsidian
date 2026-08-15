@@ -4,11 +4,18 @@ import { isAbsolute, relative, resolve } from "node:path";
 
 const backendRoot = process.env.CHATOBBY_BACKEND_ROOT;
 if (!backendRoot) {
-  throw new Error("Set CHATOBBY_BACKEND_ROOT to the pi-mono checkout before running this check");
+  throw new Error(
+    "Set CHATOBBY_BACKEND_ROOT to the pi-mono checkout before running this check",
+  );
 }
 
 const backendCli = resolve(backendRoot, "packages/chatobby/dist/cli.js");
 const vendorPairs = [
+  {
+    name: "managed local model contracts",
+    backend: resolve(backendRoot, "vendor/local-models"),
+    connector: resolve("src/vendor/@chatobby/local-models"),
+  },
   {
     name: "browser client",
     backend: resolve(backendRoot, "vendor/chatobby-client"),
@@ -48,10 +55,14 @@ for (const pair of vendorPairs) {
     const backendHash = hashFile(resolve(pair.backend, relativePath));
     const connectorHash = hashFile(resolve(pair.connector, relativePath));
     if (backendHash !== connectorHash) {
-      throw new Error(`${pair.name} differs from the current backend: ${relativePath}`);
+      throw new Error(
+        `${pair.name} differs from the current backend: ${relativePath}`,
+      );
     }
   }
-  console.log(`Verified ${backendFiles.length} ${pair.name} files against ${pair.backend}`);
+  console.log(
+    `Verified ${backendFiles.length} ${pair.name} files against ${pair.backend}`,
+  );
 }
 
 verifyDeclaredProjection(obsidianProtocolProjection);
@@ -60,7 +71,10 @@ console.log(`Backend CLI: ${backendCli}`);
 
 function verifyDeclaredProjection(projection) {
   const backendManifestPath = resolve(projection.backend, "projection.json");
-  const connectorManifestPath = resolve(projection.connector, "projection.json");
+  const connectorManifestPath = resolve(
+    projection.connector,
+    "projection.json",
+  );
   const backendManifestBytes = readFileRequired(backendManifestPath);
   const connectorManifestBytes = readFileRequired(connectorManifestPath);
 
@@ -70,16 +84,30 @@ function verifyDeclaredProjection(projection) {
     );
   }
 
-  const manifest = parseProjectionManifest(backendManifestBytes, backendManifestPath, projection.artifact);
+  const manifest = parseProjectionManifest(
+    backendManifestBytes,
+    backendManifestPath,
+    projection.artifact,
+  );
   const seenPaths = new Set();
   for (const entry of manifest.files) {
     if (seenPaths.has(entry.path)) {
-      throw new Error(`${projection.name} projection declares duplicate file: ${entry.path}`);
+      throw new Error(
+        `${projection.name} projection declares duplicate file: ${entry.path}`,
+      );
     }
     seenPaths.add(entry.path);
 
-    const backendPath = resolveDeclaredFile(projection.backend, entry.path, projection.name);
-    const connectorPath = resolveDeclaredFile(projection.connector, entry.path, projection.name);
+    const backendPath = resolveDeclaredFile(
+      projection.backend,
+      entry.path,
+      projection.name,
+    );
+    const connectorPath = resolveDeclaredFile(
+      projection.connector,
+      entry.path,
+      projection.name,
+    );
     verifyDeclaredFile(backendPath, entry, `${projection.name} backend`);
     verifyDeclaredFile(connectorPath, entry, `${projection.name} connector`);
   }
@@ -94,7 +122,9 @@ function parseProjectionManifest(bytes, path, expectedArtifact) {
   try {
     manifest = JSON.parse(bytes.toString("utf8"));
   } catch (error) {
-    throw new Error(`Invalid projection manifest JSON: ${path}`, { cause: error });
+    throw new Error(`Invalid projection manifest JSON: ${path}`, {
+      cause: error,
+    });
   }
   if (
     manifest === null ||
@@ -103,7 +133,9 @@ function parseProjectionManifest(bytes, path, expectedArtifact) {
     manifest.artifact !== expectedArtifact ||
     !Array.isArray(manifest.files)
   ) {
-    throw new Error(`Unsupported ${expectedArtifact} projection manifest: ${path}`);
+    throw new Error(
+      `Unsupported ${expectedArtifact} projection manifest: ${path}`,
+    );
   }
   for (const entry of manifest.files) {
     if (
@@ -115,20 +147,34 @@ function parseProjectionManifest(bytes, path, expectedArtifact) {
       typeof entry.sha256 !== "string" ||
       !/^[a-f0-9]{64}$/u.test(entry.sha256)
     ) {
-      throw new Error(`Invalid file declaration in ${expectedArtifact} projection manifest: ${path}`);
+      throw new Error(
+        `Invalid file declaration in ${expectedArtifact} projection manifest: ${path}`,
+      );
     }
   }
   return manifest;
 }
 
 function resolveDeclaredFile(root, declaredPath, projectionName) {
-  if (!declaredPath || isAbsolute(declaredPath) || declaredPath.includes("\\")) {
-    throw new Error(`${projectionName} projection contains an unsafe path: ${declaredPath}`);
+  if (
+    !declaredPath ||
+    isAbsolute(declaredPath) ||
+    declaredPath.includes("\\")
+  ) {
+    throw new Error(
+      `${projectionName} projection contains an unsafe path: ${declaredPath}`,
+    );
   }
   const resolvedPath = resolve(root, declaredPath);
   const relativePath = relative(root, resolvedPath);
-  if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error(`${projectionName} projection contains an unsafe path: ${declaredPath}`);
+  if (
+    !relativePath ||
+    relativePath.startsWith("..") ||
+    isAbsolute(relativePath)
+  ) {
+    throw new Error(
+      `${projectionName} projection contains an unsafe path: ${declaredPath}`,
+    );
   }
   return resolvedPath;
 }
@@ -161,7 +207,9 @@ function listFiles(root) {
 function walk(root, relativeDirectory) {
   const directory = resolve(root, relativeDirectory);
   return readdirSync(directory).flatMap((name) => {
-    const relativePath = relativeDirectory ? `${relativeDirectory}/${name}` : name;
+    const relativePath = relativeDirectory
+      ? `${relativeDirectory}/${name}`
+      : name;
     return statSync(resolve(root, relativePath)).isDirectory()
       ? walk(root, relativePath)
       : [relativePath];

@@ -747,6 +747,66 @@ describe("Composer", () => {
     );
   });
 
+  it("collapses overflowing references into an expandable keyboard-scrollable removal panel", async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => undefined);
+    const references = [
+      {
+        id: "vault:Notes/Cerebrum.md",
+        kind: "file" as const,
+        label: "Cerebrum.md",
+        path: "Notes/Cerebrum.md",
+        promptPath: "Notes/Cerebrum.md",
+        scope: "vault" as const,
+        vaultRelativePath: "Notes/Cerebrum.md",
+      },
+      {
+        id: "vault:Projects/Plans",
+        kind: "folder" as const,
+        label: "Plans",
+        path: "Projects/Plans",
+        promptPath: "Projects/Plans",
+        relativePath: "Plans",
+        scope: "vault" as const,
+        vaultRelativePath: "Projects/Plans",
+      },
+    ];
+    const { composer, input, card } = bindComposer(createHost({
+      searchVaultReferences: (query) => query.includes("plan") ? [references[1]!] : [references[0]!],
+    }));
+
+    input.value = "@cer";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+    input.value = "@plan";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+
+    const rail = card.querySelector<HTMLElement>(".chatobby-reference-rail");
+    expect(rail).not.toBeNull();
+    if (!rail) return;
+    Object.defineProperties(rail, {
+      clientWidth: { value: 90, configurable: true },
+      scrollWidth: { value: 320, configurable: true },
+    });
+
+    await vi.waitFor(() => expect(card.querySelector(".chatobby-reference-summary")?.textContent).toBe("@2 references"));
+    card.querySelector<HTMLButtonElement>(".chatobby-reference-summary")?.click();
+    const panel = card.querySelector<HTMLElement>(".chatobby-reference-panel");
+    expect(panel?.classList.contains("is-hidden")).toBe(false);
+    expect(panel?.querySelectorAll(".chatobby-reference-panel__row")).toHaveLength(2);
+
+    panel?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" }));
+    expect(panel?.querySelectorAll(".chatobby-reference-panel__row")[1]?.classList.contains("is-active")).toBe(true);
+
+    panel?.querySelectorAll<HTMLButtonElement>(".chatobby-reference-panel__remove")[1]?.click();
+    expect(card.querySelector(".chatobby-reference-panel")?.classList.contains("is-hidden")).toBe(true);
+    expect(card.querySelector(".chatobby-reference-chip__open")?.textContent).toBe("@Cerebrum.md");
+    scrollIntoView.mockRestore();
+  });
+
   it("scrolls keyboard reference selection into view", async () => {
     const scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => undefined);
     const references = Array.from({ length: 12 }, (_, index) => ({

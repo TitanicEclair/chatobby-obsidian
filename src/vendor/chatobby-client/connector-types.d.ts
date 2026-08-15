@@ -6,6 +6,7 @@
  * prompting context, session-library metadata, and operator utilities that
  * cannot be represented as a frontend intent.
  */
+import type { ManagedLocalModelServerProfileV1, ManagedLocalModelServerSnapshotV1, ManagedLocalModelServerStatusV1 } from "@chatobby/local-models";
 import type { ObsidianBridgeConnectionConfig } from "@chatobby/obsidian-protocol";
 export type AutoNameStrategy = "truncate" | "model";
 /** Stable ID is preferred; path selection remains for active-session compatibility. */
@@ -65,6 +66,7 @@ export interface WsPromptContextPacket {
             obsidianVersion?: string;
             chatobbyVersion?: string;
         };
+        fileConventions?: ObsidianFileConventionFactsV1;
     };
     appContext?: {
         contextId: string;
@@ -143,6 +145,28 @@ export interface WsPromptContextPacket {
     privacy: {
         included: Array<"workspace" | "app-state" | "environment" | "capabilities" | "active-note" | "selection" | "excerpt" | "headings" | "open-notes" | "visible-landmarks">;
         omitted: string[];
+    };
+}
+/** Host-observed Files and Links conventions. These describe generated links and new attachments; they grant no access. */
+export interface ObsidianFileConventionFactsV1 {
+    schemaVersion: 1;
+    revision: string;
+    observedAt: string;
+    observationStatus: "exact" | "unavailable";
+    generatedLinks?: {
+        syntax: "wikilink" | "markdown";
+        pathStyle: "shortest" | "relative" | "vault-absolute";
+    };
+    newAttachments?: {
+        mode: "vault-root";
+    } | {
+        mode: "same-folder-as-source";
+    } | {
+        mode: "subfolder-under-source";
+        subfolderName: string;
+    } | {
+        mode: "vault-folder";
+        vaultRelativePath: string;
     };
 }
 export interface WsSessionInfo {
@@ -237,6 +261,9 @@ export interface WsLocalModelProviderProbeResult {
     advertisedModelIds: string[];
     message: string;
 }
+export type WsManagedLocalModelServerProfile = ManagedLocalModelServerProfileV1;
+export type WsManagedLocalModelServerStatus = ManagedLocalModelServerStatusV1;
+export type WsManagedLocalModelServerSnapshot = ManagedLocalModelServerSnapshotV1;
 /**
  * Privileged connector-to-runtime handoff for a directory selected through the
  * host operating system. The absolute path is transient transport input; the

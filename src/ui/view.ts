@@ -32,7 +32,11 @@ import { isThinkingLevel, withTimeout } from "./controller/view-utils";
 import { SlashCommandController } from "../features/commands/public";
 import { createChatViewOverlayScreens, type ChatViewOverlayScreens, type OverlayViewMode } from "./screens/chat-view-overlay-screens";
 import { ExtensionUiController } from "./controller/extension-ui-controller";
-import { SessionController, type SessionMutationRequest } from "./controller/session-controller";
+import {
+  SessionController,
+  SessionIntentRejectedError,
+  type SessionMutationRequest,
+} from "./controller/session-controller";
 import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRailController, type SubagentScreenController, type SubagentScreenTab } from "../features/subagents/public";
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
 import { downloadChatobbyGuide } from "../features/guide/public";
@@ -972,7 +976,10 @@ export class ChatobbyView extends ItemView {
     });
     if (result.status === "completed" || result.status === "accepted") return true;
     if (result.status === "rejected" && result.notice?.level === "info") return false;
-    throw new Error(result.notice?.message ?? "Chatobby rejected the session change");
+    throw new SessionIntentRejectedError(
+      result.errorCode,
+      result.notice?.message ?? "Chatobby rejected the session change",
+    );
   }
 
   private applyFrontendSnapshot(snapshot: FrontendBootstrap, applied: FrontendBootstrap | null): void {

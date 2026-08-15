@@ -1,5 +1,5 @@
 import type { App } from "obsidian";
-import type { VaultEnvironment } from "../types";
+import type { ObsidianFileConventionFactsV1, VaultEnvironment } from "../types";
 
 interface EnvironmentOptions {
   chatobbyVersion?: string;
@@ -61,7 +61,77 @@ export function gatherEnvironmentContext(app: App, options: EnvironmentOptions =
     chatobbyVersion: options.chatobbyVersion,
   });
 
+  environment.fileConventions = gatherFileConventionFacts(app, now);
+
   return environment;
+}
+
+type ConfigurableVault = { getConfig?: (key: string) => unknown };
+
+export function gatherFileConventionFacts(app: App, now = new Date()): ObsidianFileConventionFactsV1 {
+  const configurableVault = app.vault as unknown as ConfigurableVault;
+  const getConfig = configurableVault.getConfig;
+  const unavailable = (): ObsidianFileConventionFactsV1 => ({
+    schemaVersion: 1,
+    revision: "unavailable",
+    observedAt: now.toISOString(),
+    observationStatus: "unavailable",
+  });
+  if (typeof getConfig !== "function") return unavailable();
+  try {
+    const useMarkdownLinks: unknown = getConfig.call(configurableVault, "useMarkdownLinks");
+    const linkFormat: unknown = getConfig.call(configurableVault, "newLinkFormat");
+    const attachmentFolderPath: unknown = getConfig.call(configurableVault, "attachmentFolderPath");
+    if (
+      typeof useMarkdownLinks !== "boolean" ||
+      typeof linkFormat !== "string" ||
+      typeof attachmentFolderPath !== "string"
+    ) {
+      return unavailable();
+    }
+    const pathStyle: NonNullable<ObsidianFileConventionFactsV1["generatedLinks"]>["pathStyle"] | undefined =
+      linkFormat === "shortest"
+        ? "shortest"
+        : linkFormat === "relative"
+          ? "relative"
+          : linkFormat === "absolute"
+            ? "vault-absolute"
+            : undefined;
+    const newAttachments = normalizeAttachmentLocation(attachmentFolderPath);
+    if (!pathStyle || !newAttachments) return unavailable();
+    const normalized = {
+      generatedLinks: { syntax: useMarkdownLinks ? ("markdown" as const) : ("wikilink" as const), pathStyle },
+      newAttachments,
+    };
+    return {
+      schemaVersion: 1,
+      revision: stableFactRevision(JSON.stringify(normalized)),
+      observedAt: now.toISOString(),
+      observationStatus: "exact",
+      ...normalized,
+    };
+  } catch {
+    return unavailable();
+  }
+}
+
+function normalizeAttachmentLocation(value: string): ObsidianFileConventionFactsV1["newAttachments"] | undefined {
+  if (value === "/") return { mode: "vault-root" };
+  if (value === "./") return { mode: "same-folder-as-source" };
+  if (value.startsWith("./") && value.length > 2) {
+    return { mode: "subfolder-under-source", subfolderName: value.slice(2) };
+  }
+  const normalized = value.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
+  return normalized ? { mode: "vault-folder", vaultRelativePath: normalized } : undefined;
+}
+
+function stableFactRevision(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `file-conventions-v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 function formatLocalDate(date: Date): string {

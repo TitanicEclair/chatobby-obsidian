@@ -4,7 +4,11 @@ import type ChatobbyPlugin from "../../../src/main";
 import { feedSelectors } from "../../../src/features/feed/public";
 import { EMPTY_SESSION_STATE } from "../../../src/types";
 import type { ChatobbyTransport } from "../../../src/transport/ws-client";
-import { SessionController, type SessionMutationRequest } from "../../../src/ui/controller/session-controller";
+import {
+  SessionController,
+  SessionIntentRejectedError,
+  type SessionMutationRequest,
+} from "../../../src/ui/controller/session-controller";
 import type { FrontendSessionViewModel } from "../../../src/vendor/chatobby-client/frontend-contracts.js";
 
 describe("SessionController", () => {
@@ -282,6 +286,36 @@ describe("SessionController", () => {
 		}]);
 		expect(controller.activeTabId()).toBe("project-session");
 		expect(controller.workspaceLabel()).toBe("External Roots Live Test");
+	});
+
+	it("falls back to the runtime's current session when a leaf references a deleted session file", async () => {
+		const synchronize = vi.fn(async (target: SessionController) => {
+			target.applyRuntimeSession(session("available", { recoveryPath: "C:/sessions/available.jsonl" }));
+		});
+		const { controller, persistLeafState } = harness({
+			dispatch: async () => {
+				throw new SessionIntentRejectedError("SESSION_NOT_FOUND", "The selected session no longer exists.");
+			},
+			synchronize,
+		});
+
+		await expect(controller.restoreSession("C:/sessions/deleted.jsonl")).resolves.toBeUndefined();
+
+		expect(synchronize).toHaveBeenCalledOnce();
+		expect(controller.activeTabId()).toBe("available");
+		expect(persistLeafState).toHaveBeenCalled();
+	});
+
+	it("does not hide non-recoverable stored-session failures", async () => {
+		const { controller } = harness({
+			dispatch: async () => {
+				throw new SessionIntentRejectedError("SESSION_CONFLICT", "The selected session changed.");
+			},
+		});
+
+		await expect(controller.restoreSession("C:/sessions/conflict.jsonl")).rejects.toMatchObject({
+			code: "SESSION_CONFLICT",
+		});
 	});
 
   it("replaces the last closed session with a new runtime target", async () => {

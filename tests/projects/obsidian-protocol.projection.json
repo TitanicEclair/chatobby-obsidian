@@ -6,5 +6,5 @@
   "sourceArtifact": "vendor/obsidian-protocol",
   "connectorArtifact": "src/vendor/@chatobby/obsidian-protocol",
   "projectionManifest": "projection.json",
-  "projectionManifestSha256": "c81234152499804ae6c8da17a0a8a7bc1cb689261e96688787c7e282cc618917"
+  "projectionManifestSha256": "93d23c344a2c07541b253cb86ea702f182dac40842c2e576eb2ba533ba792e12"
 }

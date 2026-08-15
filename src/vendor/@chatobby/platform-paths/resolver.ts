@@ -26,7 +26,15 @@ export type SourcePlatformPathRequest =
 	| {
 			readonly role: "agent-data-root" | "permission-profiles" | "permission-config" | "permission-logs-root";
 	  }
-	| { readonly role: "device-data-root" | "device-bindings-root" | "projects-device-identity" }
+	| {
+			readonly role:
+				| "device-data-root"
+				| "device-bindings-root"
+				| "projects-device-identity"
+				| "local-models-root"
+				| "local-model-server-profiles";
+	  }
+	| { readonly role: "local-model-server-state-root"; readonly profileId: string }
 	| { readonly role: "projects-device-bindings-root"; readonly vaultId: VaultId; readonly deviceId: DeviceId }
 	| { readonly role: "projects-marker-index"; readonly vaultId: VaultId; readonly deviceId: DeviceId }
 	| {
@@ -99,6 +107,17 @@ export function resolveSourcePlatformPath(
 			return path.join(resolveDeviceDataRoot(environment), "projects", "device-bindings");
 		case "projects-device-identity":
 			return path.join(resolveDeviceDataRoot(environment), "projects", "device.json");
+		case "local-models-root":
+			return path.join(resolveDeviceDataRoot(environment), "local-models");
+		case "local-model-server-profiles":
+			return path.join(resolveDeviceDataRoot(environment), "local-models", "servers.json");
+		case "local-model-server-state-root":
+			return path.join(
+				resolveDeviceDataRoot(environment),
+				"local-models",
+				"servers",
+				encodePlatformPathKey(request.profileId),
+			);
 		case "projects-device-bindings-root":
 			return path.join(
 				resolveDeviceDataRoot(environment),

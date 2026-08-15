@@ -1,4 +1,14 @@
-import { Modal, Notice, PluginSettingTab, Setting, type App, type SettingDefinitionItem } from "obsidian";
+import {
+  type App,
+  type DropdownComponent,
+  Modal,
+  Notice,
+  Platform,
+  PluginSettingTab,
+  Setting,
+  type SettingDefinitionItem,
+  type TextComponent,
+} from "obsidian";
 import type ChatobbyPlugin from "./main";
 import {
   DEFAULT_COMPOSER_KEYBINDINGS,
@@ -8,6 +18,9 @@ import {
   type WsLocalModelProvider,
   type WsLocalModelProviderDocument,
   type WsLocalModelProviderProbeResult,
+  type WsManagedLocalModelServerProfile,
+  type WsManagedLocalModelServerSnapshot,
+  type WsManagedLocalModelServerStatus,
   type WsProviderInfo,
 } from "./types";
 import { formatCommandArgs, splitCommandArgs } from "./backend/command-line";
@@ -26,7 +39,11 @@ import {
   type ComposerKeybindingAction,
 } from "./ui/composer/keybindings";
 
-const THINKING_DISPLAY_OPTIONS: ThinkingDisplay[] = ["hidden", "collapsed", "expanded"];
+const THINKING_DISPLAY_OPTIONS: ThinkingDisplay[] = [
+  "hidden",
+  "collapsed",
+  "expanded",
+];
 const SETTINGS_SEARCH_ALIASES = [
   "runtime",
   "install runtime",
@@ -52,54 +69,67 @@ const SETTINGS_SEARCH_ALIASES = [
 export class ChatobbySettingTab extends PluginSettingTab {
   private providerCatalog: WsProviderInfo[] | null = null;
   private localProviderDocument: WsLocalModelProviderDocument | null = null;
+  private managedLocalModelSnapshot: WsManagedLocalModelServerSnapshot | null =
+    null;
   private providerCatalogLoading = false;
   private providerCatalogError: string | null = null;
   private providerCatalogAttempted = false;
   private settingsHost: HTMLElement | null = null;
-	private settingsSurface: "plugin" | "chatobby" = "plugin";
+  private settingsSurface: "plugin" | "chatobby" = "plugin";
 
-  constructor(app: App, private readonly plugin: ChatobbyPlugin) {
+  constructor(
+    app: App,
+    private readonly plugin: ChatobbyPlugin,
+  ) {
     super(app, plugin);
   }
 
   getSettingDefinitions(): SettingDefinitionItem[] {
-    return [{
-      type: "group",
-      cls: "chatobby-settings",
-      items: [{
-        name: "Chatobby settings",
-        desc: "Runtime, document handling, and support, with everyday settings available inside Chatobby.",
-        aliases: SETTINGS_SEARCH_ALIASES,
-        render: (setting) => {
-          setting.settingEl.empty();
-          setting.settingEl.addClass("chatobby-settings__definition-host");
-          this.settingsHost = setting.settingEl;
-					this.settingsSurface = "plugin";
-          this.renderSettings(setting.settingEl, "plugin");
-        },
-      }],
-    }];
+    return [
+      {
+        type: "group",
+        cls: "chatobby-settings",
+        items: [
+          {
+            name: "Chatobby settings",
+            desc: "Runtime, document handling, and support, with everyday settings available inside Chatobby.",
+            aliases: SETTINGS_SEARCH_ALIASES,
+            render: (setting) => {
+              setting.settingEl.empty();
+              setting.settingEl.addClass("chatobby-settings__definition-host");
+              this.settingsHost = setting.settingEl;
+              this.settingsSurface = "plugin";
+              this.renderSettings(setting.settingEl, "plugin");
+            },
+          },
+        ],
+      },
+    ];
   }
 
   display(): void {
     this.settingsHost = this.containerEl;
-		this.settingsSurface = "plugin";
+    this.settingsSurface = "plugin";
     this.renderSettings(this.containerEl, "plugin");
   }
 
-	/** Render the full user-facing Settings page without changing credential ownership. */
-	renderChatobbySettings(containerEl: HTMLElement): void {
-		this.settingsHost = containerEl;
-		this.settingsSurface = "chatobby";
-		this.renderSettings(containerEl, "chatobby");
-	}
+  /** Render the full user-facing Settings page without changing credential ownership. */
+  renderChatobbySettings(containerEl: HTMLElement): void {
+    this.settingsHost = containerEl;
+    this.settingsSurface = "chatobby";
+    this.renderSettings(containerEl, "chatobby");
+  }
 
-	/** Detach an embedded surface so an asynchronous provider refresh cannot repaint another page. */
-	detachChatobbySettings(containerEl: HTMLElement | null): void {
-		if (containerEl && this.settingsHost === containerEl) this.settingsHost = null;
-	}
+  /** Detach an embedded surface so an asynchronous provider refresh cannot repaint another page. */
+  detachChatobbySettings(containerEl: HTMLElement | null): void {
+    if (containerEl && this.settingsHost === containerEl)
+      this.settingsHost = null;
+  }
 
-  private renderSettings(containerEl: HTMLElement, surface: "plugin" | "chatobby"): void {
+  private renderSettings(
+    containerEl: HTMLElement,
+    surface: "plugin" | "chatobby",
+  ): void {
     containerEl.empty();
     containerEl.addClass("chatobby-settings");
 
@@ -108,41 +138,50 @@ export class ChatobbySettingTab extends PluginSettingTab {
       text: "Local AI sessions, tools, and automations for this vault.",
     });
 
-		if (surface === "plugin") {
-			const moved = containerEl.createDiv({ cls: "chatobby-settings-note chatobby-settings-note--moved" });
-			moved.createEl("strong", { text: "Everyday Chatobby settings moved into Chatobby" });
-			moved.createDiv({
-				text: "Model providers, API keys, local model servers, conversation preferences, and Project behavior are now easier to find from Chatobby's Settings page.",
-			});
-			new Setting(moved)
-				.setName("Open Chatobby Settings")
-				.setDesc("Open a Chatobby view and manage these options there.")
-				.addButton((button) => button.setButtonText("Open Settings").setCta().onClick(() => {
-					void this.plugin.openChatobbySettings();
-				}));
-		}
-		if (surface === "chatobby") {
-			this.renderFirstRunSection(containerEl);
-			this.renderCredentialsSection(containerEl);
-			this.renderWebResearchSection(containerEl);
-			this.renderDisplaySection(containerEl);
-			this.renderProjectsSection(containerEl);
-		}
-		this.renderConnectionSection(containerEl);
-		this.renderDocumentSection(containerEl);
+    if (surface === "plugin") {
+      const moved = containerEl.createDiv({
+        cls: "chatobby-settings-note chatobby-settings-note--moved",
+      });
+      moved.createEl("strong", {
+        text: "Everyday Chatobby settings moved into Chatobby",
+      });
+      moved.createDiv({
+        text: "Model providers, API keys, local model servers, conversation preferences, and Project behavior are now easier to find from Chatobby's Settings page.",
+      });
+      new Setting(moved)
+        .setName("Open Chatobby Settings")
+        .setDesc("Open a Chatobby view and manage these options there.")
+        .addButton((button) =>
+          button
+            .setButtonText("Open Settings")
+            .setCta()
+            .onClick(() => {
+              void this.plugin.openChatobbySettings();
+            }),
+        );
+    }
+    if (surface === "chatobby") {
+      this.renderFirstRunSection(containerEl);
+      this.renderCredentialsSection(containerEl);
+      this.renderWebResearchSection(containerEl);
+      this.renderDisplaySection(containerEl);
+      this.renderProjectsSection(containerEl);
+    }
+    this.renderConnectionSection(containerEl);
+    this.renderDocumentSection(containerEl);
     this.renderHelpSection(containerEl);
   }
 
-	private renderFirstRunSection(containerEl: HTMLElement): void {
-		if (this.plugin.settings.onboardingVersion >= 1) return;
-		const section = containerEl.createDiv({
-			cls: "chatobby-settings-note",
-		});
-		section.createEl("strong", { text: "Start here" });
-		section.createDiv({
-			text: "Chatobby starts its signed local runtime automatically. Connect one model provider below, return to the Chatobby tab, review the active permission profile if needed, then send a message.",
-		});
-	}
+  private renderFirstRunSection(containerEl: HTMLElement): void {
+    if (this.plugin.settings.onboardingVersion >= 1) return;
+    const section = containerEl.createDiv({
+      cls: "chatobby-settings-note",
+    });
+    section.createEl("strong", { text: "Start here" });
+    section.createDiv({
+      text: "Chatobby starts its signed local runtime automatically. Connect one model provider below, return to the Chatobby tab, review the active permission profile if needed, then send a message.",
+    });
+  }
 
   private renderConnectionSection(containerEl: HTMLElement): void {
     new Setting(containerEl).setName("Runtime").setHeading();
@@ -153,37 +192,50 @@ export class ChatobbySettingTab extends PluginSettingTab {
       .setName("Chatobby runtime")
       .setDesc(runtimeStatusDescription(runtimeState));
     if (this.plugin.isReleaseBuild() && runtimeState.status !== "ready") {
-      runtimeSetting.addButton((button) => button
-        .setButtonText("Install runtime")
-        .onClick(() => this.plugin.openRuntimeInstaller()));
-    } else if (this.plugin.isReleaseBuild()) {
-      runtimeSetting.addButton((button) => button
-        .setButtonText("Check for updates")
-        .onClick(() => this.plugin.openRuntimeInstaller()));
-    }
-    runtimeSetting
-      .addButton((button) => {
-        const ready = runtimeState.status === "ready";
+      runtimeSetting.addButton((button) =>
         button
-          .setButtonText(ready ? "Restart" : "Check again")
-          .onClick(() => {
-            const action = ready ? this.plugin.restartRuntime() : this.plugin.startBackend();
-            action.then(() => this.refreshSettingsSurface()).catch((error: unknown) => {
-              console.error("Chatobby: runtime action failed", error);
-              new Notice(error instanceof Error ? error.message : "Chatobby runtime action failed");
-              this.refreshSettingsSurface();
-            });
+          .setButtonText("Install runtime")
+          .onClick(() => this.plugin.openRuntimeInstaller()),
+      );
+    } else if (this.plugin.isReleaseBuild()) {
+      runtimeSetting.addButton((button) =>
+        button
+          .setButtonText("Check for updates")
+          .onClick(() => this.plugin.openRuntimeInstaller()),
+      );
+    }
+    runtimeSetting.addButton((button) => {
+      const ready = runtimeState.status === "ready";
+      button.setButtonText(ready ? "Restart" : "Check again").onClick(() => {
+        const action = ready
+          ? this.plugin.restartRuntime()
+          : this.plugin.startBackend();
+        action
+          .then(() => this.refreshSettingsSurface())
+          .catch((error: unknown) => {
+            console.error("Chatobby: runtime action failed", error);
+            new Notice(
+              error instanceof Error
+                ? error.message
+                : "Chatobby runtime action failed",
+            );
+            this.refreshSettingsSurface();
           });
       });
+    });
 
     if (this.plugin.isReleaseBuild()) {
       new Setting(containerEl)
         .setName("Runtime mode")
-        .setDesc("Managed. Release builds use only the signed runtime installed for Chatobby.");
+        .setDesc(
+          "Managed. Release builds use only the signed runtime installed for Chatobby.",
+        );
     } else {
       new Setting(containerEl)
         .setName("Runtime mode")
-        .setDesc("Managed is recommended. External connects without process ownership; Developer runs a custom local command.")
+        .setDesc(
+          "Managed is recommended. External connects without process ownership; Developer runs a custom local command.",
+        )
         .addDropdown((dropdown) => {
           dropdown
             .addOption("managed", "Managed")
@@ -191,10 +243,15 @@ export class ChatobbySettingTab extends PluginSettingTab {
             .addOption("developer", "Developer")
             .setValue(runtimeMode)
             .onChange((value) => {
-              this.updateSettings({ runtimeMode: value as PluginSettings["runtimeMode"] })
+              this.updateSettings({
+                runtimeMode: value as PluginSettings["runtimeMode"],
+              })
                 .then(() => this.refreshSettingsSurface())
                 .catch((error: unknown) => {
-                  console.error("Chatobby: failed to update runtime mode", error);
+                  console.error(
+                    "Chatobby: failed to update runtime mode",
+                    error,
+                  );
                   new Notice("Failed to update Chatobby runtime mode");
                 });
             });
@@ -208,27 +265,40 @@ export class ChatobbySettingTab extends PluginSettingTab {
         toggle
           .setValue(this.plugin.settings.runtimeAutoStart)
           .onChange((value) => {
-            this.updateSettings({ runtimeAutoStart: value }).catch((error: unknown) => {
-              console.error("Chatobby: failed to update runtime startup preference", error);
-              new Notice("Failed to update runtime startup preference");
-            });
+            this.updateSettings({ runtimeAutoStart: value }).catch(
+              (error: unknown) => {
+                console.error(
+                  "Chatobby: failed to update runtime startup preference",
+                  error,
+                );
+                new Notice("Failed to update runtime startup preference");
+              },
+            );
           });
       });
 
     if (runtimeMode === "managed") {
       new Setting(containerEl)
         .setName("Runtime lifetime")
-        .setDesc("Keep Chatobby only while Obsidian is open, or leave it available for explicitly permitted background Events.")
+        .setDesc(
+          "Keep Chatobby only while Obsidian is open, or leave it available for explicitly permitted background Events.",
+        )
         .addDropdown((dropdown) => {
           dropdown
             .addOption("obsidian-session", "While Obsidian is open")
             .addOption("background", "Allow background Events")
             .setValue(this.plugin.settings.runtimeLifetime)
             .onChange((value) => {
-              this.updateSettings({ runtimeLifetime: value === "background" ? "background" : "obsidian-session" })
+              this.updateSettings({
+                runtimeLifetime:
+                  value === "background" ? "background" : "obsidian-session",
+              })
                 .then(() => this.refreshSettingsSurface())
                 .catch((error: unknown) => {
-                  console.error("Chatobby: failed to update runtime lifetime", error);
+                  console.error(
+                    "Chatobby: failed to update runtime lifetime",
+                    error,
+                  );
                   new Notice("Failed to update Chatobby runtime lifetime");
                 });
             });
@@ -244,16 +314,23 @@ export class ChatobbySettingTab extends PluginSettingTab {
     if (runtimeMode === "external") {
       new Setting(containerEl)
         .setName("External server URL")
-        .setDesc("WebSocket endpoint owned outside Obsidian. Chatobby will connect but will not start or stop it.")
+        .setDesc(
+          "WebSocket endpoint owned outside Obsidian. Chatobby will connect but will not start or stop it.",
+        )
         .addText((text) => {
           text
             .setPlaceholder("ws://127.0.0.1:9222")
             .setValue(this.plugin.settings.externalServerUrl)
             .onChange((value) => {
-              this.plugin.setExternalServerUrl(value.trim()).catch((error: unknown) => {
-                console.error("Chatobby: failed to update external server URL", error);
-                new Notice("Failed to update external Chatobby server URL");
-              });
+              this.plugin
+                .setExternalServerUrl(value.trim())
+                .catch((error: unknown) => {
+                  console.error(
+                    "Chatobby: failed to update external server URL",
+                    error,
+                  );
+                  new Notice("Failed to update external Chatobby server URL");
+                });
             });
         });
     }
@@ -261,28 +338,42 @@ export class ChatobbySettingTab extends PluginSettingTab {
     if (runtimeMode === "developer") {
       new Setting(containerEl)
         .setName("Developer command")
-        .setDesc("Local command used to launch the runtime. Chatobby supplies identity, port, vault, and credential arguments.")
+        .setDesc(
+          "Local command used to launch the runtime. Chatobby supplies identity, port, vault, and credential arguments.",
+        )
         .addText((text) => {
           text
             .setPlaceholder("chatobby")
             .setValue(this.plugin.settings.developerCommand)
             .onChange((value) => {
-              this.updateSettings({ developerCommand: value.trim() }).catch((error: unknown) => {
-                console.error("Chatobby: failed to update developer command", error);
-                new Notice("Failed to update Chatobby developer command");
-              });
+              this.updateSettings({ developerCommand: value.trim() }).catch(
+                (error: unknown) => {
+                  console.error(
+                    "Chatobby: failed to update developer command",
+                    error,
+                  );
+                  new Notice("Failed to update Chatobby developer command");
+                },
+              );
             });
         });
 
       new Setting(containerEl)
         .setName("Developer arguments")
-        .setDesc("Optional command arguments. Runtime lifecycle arguments are reserved and cannot be overridden.")
+        .setDesc(
+          "Optional command arguments. Runtime lifecycle arguments are reserved and cannot be overridden.",
+        )
         .addText((text) => {
           text
             .setValue(formatCommandArgs(this.plugin.settings.developerArgs))
             .onChange((value) => {
-              this.updateSettings({ developerArgs: splitCommandArgs(value) }).catch((error: unknown) => {
-                console.error("Chatobby: failed to update developer arguments", error);
+              this.updateSettings({
+                developerArgs: splitCommandArgs(value),
+              }).catch((error: unknown) => {
+                console.error(
+                  "Chatobby: failed to update developer arguments",
+                  error,
+                );
                 new Notice("Failed to update Chatobby developer arguments");
               });
             });
@@ -291,7 +382,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Command shell")
-      .setDesc("Shell used for terminal commands. Automatic uses Git Bash on Windows and your configured shell or a Bash/sh fallback on macOS and Linux. Changes apply after the runtime restarts.")
+      .setDesc(
+        "Shell used for terminal commands. Automatic uses Git Bash on Windows and your configured shell or a Bash/sh fallback on macOS and Linux. Changes apply after the runtime restarts.",
+      )
       .addDropdown((dropdown) => {
         dropdown
           .addOption("auto", "Automatic (recommended)")
@@ -305,13 +398,20 @@ export class ChatobbySettingTab extends PluginSettingTab {
           .addOption("custom", "Custom executable")
           .setValue(this.plugin.settings.commandShell)
           .onChange((value) => {
-            this.updateSettings({ commandShell: value as PluginSettings["commandShell"] })
+            this.updateSettings({
+              commandShell: value as PluginSettings["commandShell"],
+            })
               .then(() => {
-                new Notice("Command shell saved. Restart Chatobby to apply it.");
+                new Notice(
+                  "Command shell saved. Restart Chatobby to apply it.",
+                );
                 this.refreshSettingsSurface();
               })
               .catch((error: unknown) => {
-                console.error("Chatobby: failed to update command shell", error);
+                console.error(
+                  "Chatobby: failed to update command shell",
+                  error,
+                );
                 new Notice("Failed to update command shell");
               });
           });
@@ -320,7 +420,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
     if (this.plugin.settings.commandShell === "custom") {
       new Setting(containerEl)
         .setName("Shell executable")
-        .setDesc("Executable name on PATH or an absolute path, for example nu, tcsh, or /opt/homebrew/bin/fish.")
+        .setDesc(
+          "Executable name on PATH or an absolute path, for example nu, tcsh, or /opt/homebrew/bin/fish.",
+        )
         .addText((text) => {
           text
             .setPlaceholder("/path/to/shell")
@@ -328,10 +430,15 @@ export class ChatobbySettingTab extends PluginSettingTab {
             .onChange((value) => {
               this.updateSettings({ customShellPath: value.trim() })
                 .then(() => {
-                  new Notice("Command shell saved. Restart Chatobby to apply it.");
+                  new Notice(
+                    "Command shell saved. Restart Chatobby to apply it.",
+                  );
                 })
                 .catch((error: unknown) => {
-                  console.error("Chatobby: failed to update custom shell", error);
+                  console.error(
+                    "Chatobby: failed to update custom shell",
+                    error,
+                  );
                   new Notice("Failed to update custom shell");
                 });
             });
@@ -344,53 +451,84 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Document OCR")
-      .setDesc("Built-in OCR handles scanned images and image-only PDFs. Advanced local OCR preserves more layout but requires MinerU to be installed separately.")
-      .addDropdown((dropdown) => dropdown
-        .addOption("builtin", "Built-in OCR (recommended)")
-        .addOption("advanced", "Advanced local OCR")
-        .setValue(this.plugin.settings.documentOcrEngine)
-        .onChange((value) => {
-          this.updateSettings({ documentOcrEngine: value === "advanced" ? "advanced" : "builtin" })
-            .then(() => {
-              new Notice("Document OCR setting saved. Restart Chatobby to apply it.");
-              this.refreshSettingsSurface();
+      .setDesc(
+        "Built-in OCR handles scanned images and image-only PDFs. Advanced local OCR preserves more layout but requires MinerU to be installed separately.",
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("builtin", "Built-in OCR (recommended)")
+          .addOption("advanced", "Advanced local OCR")
+          .setValue(this.plugin.settings.documentOcrEngine)
+          .onChange((value) => {
+            this.updateSettings({
+              documentOcrEngine: value === "advanced" ? "advanced" : "builtin",
             })
-            .catch((error: unknown) => {
-              console.error("Chatobby: failed to update document OCR", error);
-              new Notice("Failed to update document OCR");
-            });
-        }));
+              .then(() => {
+                new Notice(
+                  "Document OCR setting saved. Restart Chatobby to apply it.",
+                );
+                this.refreshSettingsSurface();
+              })
+              .catch((error: unknown) => {
+                console.error("Chatobby: failed to update document OCR", error);
+                new Notice("Failed to update document OCR");
+              });
+          }),
+      );
 
     new Setting(containerEl)
       .setName("OCR language")
-      .setDesc("Tesseract language code, for example eng or eng+fra. English is available by default; other languages may download data on first use.")
-      .addText((text) => text
-        .setPlaceholder("eng")
-        .setValue(this.plugin.settings.documentOcrLanguage)
-        .onChange((value) => {
-          this.updateSettings({ documentOcrLanguage: value.trim() || "eng" })
-            .then(() => new Notice("OCR language saved. Restart Chatobby to apply it."))
-            .catch((error: unknown) => {
-              console.error("Chatobby: failed to update OCR language", error);
-              new Notice("Failed to update OCR language");
-            });
-        }));
+      .setDesc(
+        "Tesseract language code, for example eng or eng+fra. English is available by default; other languages may download data on first use.",
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("eng")
+          .setValue(this.plugin.settings.documentOcrLanguage)
+          .onChange((value) => {
+            this.updateSettings({ documentOcrLanguage: value.trim() || "eng" })
+              .then(
+                () =>
+                  new Notice(
+                    "OCR language saved. Restart Chatobby to apply it.",
+                  ),
+              )
+              .catch((error: unknown) => {
+                console.error("Chatobby: failed to update OCR language", error);
+                new Notice("Failed to update OCR language");
+              });
+          }),
+      );
 
     if (this.plugin.settings.documentOcrEngine === "advanced") {
       new Setting(containerEl)
         .setName("Advanced OCR command")
-        .setDesc("MinerU executable name on PATH or an absolute executable path. Chatobby invokes it without a shell and applies a five-minute limit.")
-        .addText((text) => text
-          .setPlaceholder("mineru")
-          .setValue(this.plugin.settings.advancedOcrCommand)
-          .onChange((value) => {
-            this.updateSettings({ advancedOcrCommand: value.trim() || "mineru" })
-              .then(() => new Notice("Advanced OCR command saved. Restart Chatobby to apply it."))
-              .catch((error: unknown) => {
-                console.error("Chatobby: failed to update advanced OCR command", error);
-                new Notice("Failed to update advanced OCR command");
-              });
-          }));
+        .setDesc(
+          "MinerU executable name on PATH or an absolute executable path. Chatobby invokes it without a shell and applies a five-minute limit.",
+        )
+        .addText((text) =>
+          text
+            .setPlaceholder("mineru")
+            .setValue(this.plugin.settings.advancedOcrCommand)
+            .onChange((value) => {
+              this.updateSettings({
+                advancedOcrCommand: value.trim() || "mineru",
+              })
+                .then(
+                  () =>
+                    new Notice(
+                      "Advanced OCR command saved. Restart Chatobby to apply it.",
+                    ),
+                )
+                .catch((error: unknown) => {
+                  console.error(
+                    "Chatobby: failed to update advanced OCR command",
+                    error,
+                  );
+                  new Notice("Failed to update advanced OCR command");
+                });
+            }),
+        );
       containerEl.createDiv({
         cls: "chatobby-settings-note",
         text: "Advanced OCR is optional and model-inferred. Chatobby does not install model weights, alter Python, or bypass operating-system security settings.",
@@ -403,7 +541,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Thinking blocks")
-      .setDesc("Choose whether reasoning is hidden, folded, or shown by default.")
+      .setDesc(
+        "Choose whether reasoning is hidden, folded, or shown by default.",
+      )
       .addDropdown((dropdown) => {
         for (const option of THINKING_DISPLAY_OPTIONS) {
           dropdown.addOption(option, labelThinkingDisplay(option));
@@ -411,8 +551,13 @@ export class ChatobbySettingTab extends PluginSettingTab {
         dropdown
           .setValue(this.plugin.settings.thinkingDisplay)
           .onChange((value) => {
-            this.updateSettings({ thinkingDisplay: value as ThinkingDisplay }).catch((error) => {
-              console.error("Chatobby: failed to update thinking display", error);
+            this.updateSettings({
+              thinkingDisplay: value as ThinkingDisplay,
+            }).catch((error) => {
+              console.error(
+                "Chatobby: failed to update thinking display",
+                error,
+              );
               new Notice("Failed to update thinking display");
             });
           });
@@ -420,21 +565,23 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Auto-scroll")
-      .setDesc("Follow new output until you deliberately scroll away from the bottom.")
+      .setDesc(
+        "Follow new output until you deliberately scroll away from the bottom.",
+      )
       .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.autoScroll)
-          .onChange((value) => {
-            this.updateSettings({ autoScroll: value }).catch((error) => {
-              console.error("Chatobby: failed to update auto-scroll", error);
-              new Notice("Failed to update auto-scroll");
-            });
+        toggle.setValue(this.plugin.settings.autoScroll).onChange((value) => {
+          this.updateSettings({ autoScroll: value }).catch((error) => {
+            console.error("Chatobby: failed to update auto-scroll", error);
+            new Notice("Failed to update auto-scroll");
           });
+        });
       });
 
     new Setting(containerEl)
       .setName("Auto-name sessions")
-      .setDesc("Use the beginning of your prompt for free, or ask the active model to create a cleaner title.")
+      .setDesc(
+        "Use the beginning of your prompt for free, or ask the active model to create a cleaner title.",
+      )
       .addDropdown((dropdown) => {
         dropdown
           .addOption("truncate", "Beginning of prompt")
@@ -442,8 +589,13 @@ export class ChatobbySettingTab extends PluginSettingTab {
         dropdown
           .setValue(this.plugin.settings.autoNameStrategy)
           .onChange((value) => {
-            this.updateSettings({ autoNameStrategy: value as "truncate" | "model" }).catch((error) => {
-              console.error("Chatobby: failed to update auto-name strategy", error);
+            this.updateSettings({
+              autoNameStrategy: value as "truncate" | "model",
+            }).catch((error) => {
+              console.error(
+                "Chatobby: failed to update auto-name strategy",
+                error,
+              );
               new Notice("Failed to update auto-name strategy");
             });
           });
@@ -451,7 +603,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Message box keys")
-      .setDesc("These keys depend on the cursor position, so they apply only while the Chatobby message box is focused.");
+      .setDesc(
+        "These keys depend on the cursor position, so they apply only while the Chatobby message box is focused.",
+      );
     this.renderComposerKeybinding(
       containerEl,
       "previousMessage",
@@ -472,31 +626,37 @@ export class ChatobbySettingTab extends PluginSettingTab {
     );
     new Setting(containerEl)
       .setName("Other Chatobby shortcuts")
-      .setDesc("Use Obsidian Settings → Hotkeys and search for Chatobby to bind page navigation, session actions, draft stashing, exports, and runtime controls.");
+      .setDesc(
+        "Use Obsidian Settings → Hotkeys and search for Chatobby to bind page navigation, session actions, draft stashing, exports, and runtime controls.",
+      );
   }
 
-	private renderProjectsSection(containerEl: HTMLElement): void {
-		new Setting(containerEl)
-			.setName("Starting from a Project folder")
-			.setDesc(
-				"Choose what happens when you start a session from a folder that already has Chatobby's canonical Project.",
-			)
-			.addDropdown((dropdown) => {
-				dropdown
-					.addOption("ask", "Ask each time")
-					.addOption("reuse-canonical", "Continue existing Project")
-					.addOption("create-new", "Create a new Project")
-					.setValue(this.plugin.settings.directoryProjectLaunchBehavior)
-					.onChange((value) => {
-						this.updateSettings({
-							directoryProjectLaunchBehavior: value as PluginSettings["directoryProjectLaunchBehavior"],
-						}).catch((error: unknown) => {
-							console.error("Chatobby: failed to update Project folder behavior", error);
-							new Notice("Failed to update Project folder behavior");
-						});
-					});
-			});
-	}
+  private renderProjectsSection(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("Starting from a Project folder")
+      .setDesc(
+        "Choose what happens when you start a session from a folder that already has Chatobby's canonical Project.",
+      )
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("ask", "Ask each time")
+          .addOption("reuse-canonical", "Continue existing Project")
+          .addOption("create-new", "Create a new Project")
+          .setValue(this.plugin.settings.directoryProjectLaunchBehavior)
+          .onChange((value) => {
+            this.updateSettings({
+              directoryProjectLaunchBehavior:
+                value as PluginSettings["directoryProjectLaunchBehavior"],
+            }).catch((error: unknown) => {
+              console.error(
+                "Chatobby: failed to update Project folder behavior",
+                error,
+              );
+              new Notice("Failed to update Project folder behavior");
+            });
+          });
+      });
+  }
 
   private renderComposerKeybinding(
     containerEl: HTMLElement,
@@ -506,41 +666,66 @@ export class ChatobbySettingTab extends PluginSettingTab {
   ): void {
     const setting = new Setting(containerEl).setName(name).setDesc(description);
     setting.addText((text) => {
-      text.setValue(composerKeybindingLabel(this.plugin.settings.composerKeybindings[action]));
+      text.setValue(
+        composerKeybindingLabel(
+          this.plugin.settings.composerKeybindings[action],
+        ),
+      );
       text.inputEl.readOnly = true;
-      text.inputEl.setAttr("aria-label", `${name} shortcut. Focus and press a replacement shortcut.`);
+      text.inputEl.setAttr(
+        "aria-label",
+        `${name} shortcut. Focus and press a replacement shortcut.`,
+      );
       text.inputEl.addEventListener("keydown", (event) => {
         const binding = composerKeybindingFromEvent(event);
         if (!binding) return;
         event.preventDefault();
         event.stopPropagation();
-        if (bindingUsedByAnotherAction(this.plugin.settings.composerKeybindings, action, binding)) {
-          new Notice(`${composerKeybindingLabel(binding)} is already assigned to another Chatobby action.`);
+        if (
+          bindingUsedByAnotherAction(
+            this.plugin.settings.composerKeybindings,
+            action,
+            binding,
+          )
+        ) {
+          new Notice(
+            `${composerKeybindingLabel(binding)} is already assigned to another Chatobby action.`,
+          );
           return;
         }
         text.setValue(composerKeybindingLabel(binding));
         void this.updateSettings({
-          composerKeybindings: { ...this.plugin.settings.composerKeybindings, [action]: binding },
+          composerKeybindings: {
+            ...this.plugin.settings.composerKeybindings,
+            [action]: binding,
+          },
         }).catch((error) => {
           console.error("Chatobby: failed to update composer shortcut", error);
           new Notice("Failed to update composer shortcut");
         });
       });
     });
-    setting.addButton((button) => button
-      .setButtonText("Reset")
-      .setTooltip(`Reset ${name.toLowerCase()}`)
-      .onClick(() => {
-        void this.updateSettings({
-          composerKeybindings: {
-            ...this.plugin.settings.composerKeybindings,
-            [action]: DEFAULT_COMPOSER_KEYBINDINGS[action],
-          },
-        }).then(() => this.refreshSettingsSurface()).catch((error) => {
-          console.error("Chatobby: failed to reset composer shortcut", error);
-          new Notice("Failed to reset composer shortcut");
-        });
-      }));
+    setting.addButton((button) =>
+      button
+        .setButtonText("Reset")
+        .setTooltip(`Reset ${name.toLowerCase()}`)
+        .onClick(() => {
+          void this.updateSettings({
+            composerKeybindings: {
+              ...this.plugin.settings.composerKeybindings,
+              [action]: DEFAULT_COMPOSER_KEYBINDINGS[action],
+            },
+          })
+            .then(() => this.refreshSettingsSurface())
+            .catch((error) => {
+              console.error(
+                "Chatobby: failed to reset composer shortcut",
+                error,
+              );
+              new Notice("Failed to reset composer shortcut");
+            });
+        }),
+    );
   }
 
   private renderCredentialsSection(containerEl: HTMLElement): void {
@@ -551,37 +736,51 @@ export class ChatobbySettingTab extends PluginSettingTab {
     });
 
     new Setting(containerEl)
-      .setName("Local model servers")
-      .setDesc("Connect a model server already running on this computer or network. Chatobby does not start or install the server.")
-      .addButton((button) => button
-        .setButtonText("Add server")
-        .setCta()
-        .onClick(() => this.openLocalProviderModal()));
+      .setName("Local model connections")
+      .setDesc(
+        "Connect any supported server that is already running. Ollama, LM Studio, vLLM, llama.cpp, and compatible OpenAI or Anthropic endpoints use this same connection flow.",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Connect server")
+          .setCta()
+          .onClick(() => this.openLocalProviderModal()),
+      );
 
     for (const provider of this.localProviderDocument?.providers ?? []) {
       this.renderLocalProviderRow(containerEl, provider);
     }
 
-    if (this.localProviderDocument && this.localProviderDocument.providers.length === 0) {
+    if (
+      this.localProviderDocument &&
+      this.localProviderDocument.providers.length === 0
+    ) {
       containerEl.createDiv({
         cls: "chatobby-settings-note",
         text: "No local servers configured. Ollama, LM Studio, vLLM, llama.cpp, and compatible OpenAI or Anthropic Messages endpoints are supported.",
       });
     }
 
+    this.renderManagedLocalModelServers(containerEl);
+
     this.requestProviderCatalog();
 
     if (this.providerCatalogLoading) {
-      containerEl.createDiv({ cls: "chatobby-settings__provider-state", text: "Finding available providers…" });
+      containerEl.createDiv({
+        cls: "chatobby-settings__provider-state",
+        text: "Finding available providers…",
+      });
     } else if (this.providerCatalogError) {
       new Setting(containerEl)
         .setName("Provider discovery unavailable")
         .setDesc(this.providerCatalogError)
-        .addButton((button) => button.setButtonText("Try again").onClick(() => {
-          this.providerCatalogAttempted = false;
-          this.requestProviderCatalog();
-          this.refreshSettingsSurface();
-        }));
+        .addButton((button) =>
+          button.setButtonText("Try again").onClick(() => {
+            this.providerCatalogAttempted = false;
+            this.requestProviderCatalog();
+            this.refreshSettingsSurface();
+          }),
+        );
     }
 
     const providers = this.providerRows();
@@ -601,7 +800,11 @@ export class ChatobbySettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Advanced provider credential")
       .setDesc("Connect a provider id that you manage manually in models.json.")
-      .addButton((button) => button.setButtonText("Add credential").onClick(() => this.openProviderModal()));
+      .addButton((button) =>
+        button
+          .setButtonText("Add credential")
+          .onClick(() => this.openProviderModal()),
+      );
   }
 
   private renderWebResearchSection(containerEl: HTMLElement): void {
@@ -613,60 +816,280 @@ export class ChatobbySettingTab extends PluginSettingTab {
     const configured = this.plugin.hasEnhancedWebSearch();
     const setting = new Setting(containerEl)
       .setName("Enhanced Brave Search")
-      .setDesc(configured
-        ? "Connected through an Obsidian-stored secret. The key is sent only to Chatobby's built-in web-search process."
-        : "Optional. Requires your own Brave Search API account and key; provider pricing and allowances are controlled by Brave.")
-      .addButton((button) => button
-        .setButtonText(configured ? "Update key" : "Connect")
-        .setCta()
-        .onClick(() => new WebSearchCredentialModal(
-          this.app,
-          (key) => this.plugin.setEnhancedWebSearchKey(key),
-          () => this.refreshSettingsSurface(),
-        ).open()))
-      .addButton((button) => button
-        .setButtonText("Brave API docs")
-        .onClick(() => openChatobbyUrl(BRAVE_SEARCH_API_DOCUMENTATION_URL)));
+      .setDesc(
+        configured
+          ? "Connected through an Obsidian-stored secret. The key is sent only to Chatobby's built-in web-search process."
+          : "Optional. Requires your own Brave Search API account and key; provider pricing and allowances are controlled by Brave.",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText(configured ? "Update key" : "Connect")
+          .setCta()
+          .onClick(() =>
+            new WebSearchCredentialModal(
+              this.app,
+              (key) => this.plugin.setEnhancedWebSearchKey(key),
+              () => this.refreshSettingsSurface(),
+            ).open(),
+          ),
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Brave API docs")
+          .onClick(() => openChatobbyUrl(BRAVE_SEARCH_API_DOCUMENTATION_URL)),
+      );
     if (configured) {
       setting.addButton((button) => {
         button.setButtonText("Disconnect");
         button.buttonEl.addClass("mod-warning");
         button.onClick(() => {
-          void this.plugin.removeEnhancedWebSearchKey()
+          void this.plugin
+            .removeEnhancedWebSearchKey()
             .then(() => {
               new Notice("Enhanced web search disconnected");
               this.refreshSettingsSurface();
             })
             .catch((error: unknown) => {
-              console.error("Chatobby: failed to disconnect enhanced web search", error);
+              console.error(
+                "Chatobby: failed to disconnect enhanced web search",
+                error,
+              );
               new Notice("Could not disconnect enhanced web search");
             });
         });
       });
     }
-    setting.settingEl.addClass("chatobby-settings__provider", configured ? "is-connected" : "is-available");
+    setting.settingEl.addClass(
+      "chatobby-settings__provider",
+      configured ? "is-connected" : "is-available",
+    );
   }
 
-  private renderLocalProviderRow(containerEl: HTMLElement, provider: WsLocalModelProvider): void {
+  private renderLocalProviderRow(
+    containerEl: HTMLElement,
+    provider: WsLocalModelProvider,
+  ): void {
     const api = localModelApiLabel(provider.api);
     const setting = new Setting(containerEl)
       .setName(provider.name)
-      .setDesc(`${localModelPresetLabel(provider.preset)} · ${api} · ${provider.models.length} model${provider.models.length === 1 ? "" : "s"} · ${provider.baseUrl}`)
-      .addButton((button) => button.setButtonText("Test").onClick(() => {
-        void this.testLocalProvider(provider).then((result) => {
-          new Notice(`${provider.name}: ${result.message}`);
-        }).catch((error: unknown) => {
-          console.error("Chatobby: local model server test failed", error);
-          new Notice(error instanceof Error ? error.message : "Local model server test failed");
-        });
-      }))
-      .addButton((button) => button.setButtonText("Edit").onClick(() => this.openLocalProviderModal(provider)))
+      .setDesc(
+        `${localModelPresetLabel(provider.preset)} · ${api} · ${provider.models.length} model${provider.models.length === 1 ? "" : "s"} · ${provider.baseUrl}`,
+      )
+      .addButton((button) =>
+        button.setButtonText("Test").onClick(() => {
+          void this.testLocalProvider(provider)
+            .then((result) => {
+              new Notice(`${provider.name}: ${result.message}`);
+            })
+            .catch((error: unknown) => {
+              console.error("Chatobby: local model server test failed", error);
+              new Notice(
+                error instanceof Error
+                  ? error.message
+                  : "Local model server test failed",
+              );
+            });
+        }),
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Edit")
+          .onClick(() => this.openLocalProviderModal(provider)),
+      )
       .addButton((button) => {
         button.setButtonText("Remove");
         button.buttonEl.addClass("mod-warning");
         button.onClick(() => void this.removeLocalProvider(provider));
       });
     setting.settingEl.addClass("chatobby-settings__provider", "is-connected");
+  }
+
+  private renderManagedLocalModelServers(containerEl: HTMLElement): void {
+    const snapshot = this.managedLocalModelSnapshot;
+    const candidates = this.managedServerProviderCandidates();
+    const heading = new Setting(containerEl)
+      .setName("Managed llama.cpp")
+      .setDesc(
+        "Optional process management for llama.cpp only. Other local server types remain fully supported as connections above, but Chatobby does not start or stop them yet.",
+      );
+    if (candidates.length > 0) {
+      heading.addButton((button) =>
+        button
+          .setButtonText("Set up managed server")
+          .onClick(() => this.openManagedLocalModelServerModal()),
+      );
+    }
+
+    for (const profile of snapshot?.document.profiles ?? []) {
+      const status = snapshot?.statuses.find(
+        (candidate) => candidate.profileId === profile.id,
+      );
+      this.renderManagedLocalModelServerRow(containerEl, profile, status);
+    }
+
+    if (snapshot && snapshot.document.profiles.length === 0) {
+      containerEl.createDiv({
+        cls: "chatobby-settings-note",
+        text:
+          candidates.length > 0
+            ? "No managed process configured. Existing local servers keep working exactly as before."
+            : "Add a llama.cpp local model server above before configuring managed startup.",
+      });
+    }
+  }
+
+  private renderManagedLocalModelServerRow(
+    containerEl: HTMLElement,
+    profile: WsManagedLocalModelServerProfile,
+    status: WsManagedLocalModelServerStatus | undefined,
+  ): void {
+    const description = [
+      managedLocalModelStatusLabel(status),
+      launchPolicyLabel(profile.launchPolicy),
+      `${profile.settings.contextSize.toLocaleString()} context`,
+      `${profile.settings.gpuLayers} GPU layers`,
+    ].join(" · ");
+    const setting = new Setting(containerEl)
+      .setName(profile.name)
+      .setDesc(
+        status?.failure
+          ? `${description}. ${status.failure.message}`
+          : description,
+      );
+    const controllable = status?.ownership !== "other-runtime";
+    if (
+      status?.ready ||
+      status?.phase === "starting" ||
+      status?.phase === "probing"
+    ) {
+      setting.addButton((button) =>
+        button
+          .setButtonText("Stop")
+          .setDisabled(!controllable)
+          .onClick(
+            () => void this.controlManagedLocalModelServer("stop", profile.id),
+          ),
+      );
+    } else {
+      setting.addButton((button) =>
+        button
+          .setButtonText("Start")
+          .setDisabled(!controllable)
+          .onClick(
+            () => void this.controlManagedLocalModelServer("start", profile.id),
+          ),
+      );
+    }
+    setting
+      .addButton((button) =>
+        button
+          .setButtonText("Restart")
+          .setDisabled(!controllable)
+          .onClick(
+            () =>
+              void this.controlManagedLocalModelServer("restart", profile.id),
+          ),
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Edit")
+          .onClick(() => this.openManagedLocalModelServerModal(profile)),
+      )
+      .addButton((button) => {
+        button.setButtonText("Remove");
+        button.buttonEl.addClass("mod-warning");
+        button.onClick(() => void this.removeManagedLocalModelServer(profile));
+      });
+    setting.settingEl.addClass("chatobby-settings__provider");
+    setting.settingEl.addClass("is-managed");
+  }
+
+  private managedServerProviderCandidates(): WsLocalModelProvider[] {
+    const linked = new Set(
+      this.managedLocalModelSnapshot?.document.profiles.map(
+        (profile) => profile.providerId,
+      ) ?? [],
+    );
+    return (this.localProviderDocument?.providers ?? []).filter(
+      (provider) => provider.preset === "llama-cpp" && !linked.has(provider.id),
+    );
+  }
+
+  private openManagedLocalModelServerModal(
+    profile?: WsManagedLocalModelServerProfile,
+  ): void {
+    new ManagedLocalModelServerModal(
+      this.app,
+      profile,
+      profile
+        ? (this.localProviderDocument?.providers ?? []).filter(
+            (provider) => provider.id === profile.providerId,
+          )
+        : this.managedServerProviderCandidates(),
+      async (candidate) => {
+        const transport = await this.runtimeTransport();
+        this.managedLocalModelSnapshot =
+          await transport.saveManagedLocalModelServer(
+            this.managedLocalModelSnapshot?.document.revision ?? 0,
+            candidate,
+          );
+        new Notice(`${candidate.name} managed startup saved`);
+        this.refreshSettingsSurface();
+      },
+    ).open();
+  }
+
+  private async controlManagedLocalModelServer(
+    action: "start" | "stop" | "restart",
+    profileId: string,
+  ): Promise<void> {
+    try {
+      const transport = await this.runtimeTransport();
+      const status = await transport.controlManagedLocalModelServer(
+        action,
+        profileId,
+      );
+      this.managedLocalModelSnapshot =
+        await transport.getManagedLocalModelServers();
+      new Notice(
+        status.ready
+          ? "Local model server is ready"
+          : managedLocalModelStatusLabel(status),
+      );
+    } catch (error) {
+      console.error(
+        `Chatobby: failed to ${action} managed local model server`,
+        error,
+      );
+      new Notice(
+        error instanceof Error
+          ? error.message
+          : `Could not ${action} local model server`,
+      );
+    } finally {
+      this.refreshSettingsSurface();
+    }
+  }
+
+  private async removeManagedLocalModelServer(
+    profile: WsManagedLocalModelServerProfile,
+  ): Promise<void> {
+    const confirmed = await confirmAction(this.app, {
+      title: `Stop managing ${profile.name}?`,
+      message:
+        "Chatobby will stop a process it owns and remove this launch profile. The GGUF model and llama.cpp installation are not deleted.",
+      confirmLabel: "Remove managed server",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const transport = await this.runtimeTransport();
+    this.managedLocalModelSnapshot =
+      await transport.deleteManagedLocalModelServer(
+        this.managedLocalModelSnapshot?.document.revision ?? 0,
+        profile.id,
+      );
+    new Notice(`${profile.name} is no longer managed by Chatobby`);
+    this.refreshSettingsSurface();
   }
 
   private openLocalProviderModal(provider?: WsLocalModelProvider): void {
@@ -676,7 +1099,11 @@ export class ChatobbySettingTab extends PluginSettingTab {
       provider,
       async (candidate, apiKey) => {
         const transport = await this.runtimeTransport();
-        this.localProviderDocument = await transport.saveLocalModelProvider(revision, candidate, apiKey);
+        this.localProviderDocument = await transport.saveLocalModelProvider(
+          revision,
+          candidate,
+          apiKey,
+        );
         await this.refreshProviderCatalog(false, false);
         new Notice(`${candidate.name} saved`);
       },
@@ -688,13 +1115,19 @@ export class ChatobbySettingTab extends PluginSettingTab {
     provider: WsLocalModelProvider,
     apiKey?: string,
   ): Promise<WsLocalModelProviderProbeResult> {
-    return (await this.runtimeTransport()).testLocalModelProvider(provider, apiKey);
+    return (await this.runtimeTransport()).testLocalModelProvider(
+      provider,
+      apiKey,
+    );
   }
 
-  private async removeLocalProvider(provider: WsLocalModelProvider): Promise<void> {
+  private async removeLocalProvider(
+    provider: WsLocalModelProvider,
+  ): Promise<void> {
     const confirmed = await confirmAction(this.app, {
       title: `Remove ${provider.name}?`,
-      message: "This removes the server and its stored credential from Chatobby. It does not stop or uninstall the local model server.",
+      message:
+        "This removes the server and its stored credential from Chatobby. It does not stop or uninstall the local model server.",
       confirmLabel: "Remove server",
       destructive: true,
     });
@@ -721,34 +1154,59 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Documentation")
-      .setDesc("Installation, first-run guidance, privacy details, and known alpha limitations.")
-      .addButton((button) => button
-        .setButtonText("View documentation")
-        .onClick(() => openChatobbyUrl(CHATOBBY_CONNECTOR_REPOSITORY_URL)));
+      .setDesc(
+        "Installation, first-run guidance, privacy details, and known alpha limitations.",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("View documentation")
+          .onClick(() => openChatobbyUrl(CHATOBBY_CONNECTOR_REPOSITORY_URL)),
+      );
 
     new Setting(containerEl)
       .setName("Support")
-      .setDesc("Report a reproducible problem without credentials or private vault content.")
-      .addButton((button) => button
-        .setButtonText("Report issue")
-        .onClick(() => openChatobbyUrl(CHATOBBY_SUPPORT_URL)));
+      .setDesc(
+        "Report a reproducible problem without credentials or private vault content.",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Report issue")
+          .onClick(() => openChatobbyUrl(CHATOBBY_SUPPORT_URL)),
+      );
 
     new Setting(containerEl)
       .setName("Support development")
-      .setDesc("Chatobby is free during alpha. Patreon support is optional and does not unlock product features.")
-      .addButton((button) => button
-        .setButtonText("Patreon")
-        .onClick(() => openChatobbyUrl(CHATOBBY_PATREON_URL)));
+      .setDesc(
+        "Chatobby is free during alpha. Patreon support is optional and does not unlock product features.",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Patreon")
+          .onClick(() => openChatobbyUrl(CHATOBBY_PATREON_URL)),
+      );
   }
 
-  private renderProviderRow(containerEl: HTMLElement, provider: WsProviderInfo): void {
-    const configured = provider.configured || this.plugin.settings.providerKeys[provider.id] === true;
-    const removable = provider.authSource === "stored" || this.plugin.settings.providerKeys[provider.id] === true;
+  private renderProviderRow(
+    containerEl: HTMLElement,
+    provider: WsProviderInfo,
+  ): void {
+    const configured =
+      provider.configured ||
+      this.plugin.settings.providerKeys[provider.id] === true;
+    const removable =
+      provider.authSource === "stored" ||
+      this.plugin.settings.providerKeys[provider.id] === true;
     const setting = new Setting(containerEl)
-      .setName(provider.name === provider.id ? provider.id : `${provider.name} (${provider.id})`)
+      .setName(
+        provider.name === provider.id
+          ? provider.id
+          : `${provider.name} (${provider.id})`,
+      )
       .setDesc(providerDescription(provider, configured))
       .addButton((button) => {
-        button.setButtonText(configured ? "Update key" : "Connect").onClick(() => this.openProviderModal(provider));
+        button
+          .setButtonText(configured ? "Update key" : "Connect")
+          .onClick(() => this.openProviderModal(provider));
       });
     setting.settingEl.addClass("chatobby-settings__provider");
     setting.settingEl.toggleClass("is-connected", configured);
@@ -757,7 +1215,8 @@ export class ChatobbySettingTab extends PluginSettingTab {
         button.setButtonText("Disconnect");
         button.buttonEl.addClass("mod-warning");
         button.onClick(() => {
-          this.plugin.removeProviderKey(provider.id)
+          this.plugin
+            .removeProviderKey(provider.id)
             .then(() => this.refreshAfterProviderChange())
             .catch((error) => {
               console.error("Chatobby: failed to remove provider key", error);
@@ -769,7 +1228,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   private openProviderModal(provider?: WsProviderInfo): void {
-    new ProviderCredentialModal(this.app, provider, (providerId, key) => this.saveProvider(providerId, key)).open();
+    new ProviderCredentialModal(this.app, provider, (providerId, key) =>
+      this.saveProvider(providerId, key),
+    ).open();
   }
 
   private async saveProvider(provider: string, key: string): Promise<void> {
@@ -788,12 +1249,19 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   private refreshSettingsSurface(): void {
-    const host = this.settingsHost?.isConnected ? this.settingsHost : this.containerEl;
-		this.renderSettings(host, this.settingsSurface);
+    const host = this.settingsHost?.isConnected
+      ? this.settingsHost
+      : this.containerEl;
+    this.renderSettings(host, this.settingsSurface);
   }
 
   private requestProviderCatalog(): void {
-    if (this.providerCatalog || this.providerCatalogLoading || this.providerCatalogAttempted) return;
+    if (
+      this.providerCatalog ||
+      this.providerCatalogLoading ||
+      this.providerCatalogAttempted
+    )
+      return;
     this.providerCatalogAttempted = true;
     void this.refreshProviderCatalog(true, false, false);
   }
@@ -811,19 +1279,28 @@ export class ChatobbySettingTab extends PluginSettingTab {
       if (startBackend) {
         await this.plugin.startBackend();
       }
-      const transport = startBackend ? this.plugin.createTransport() : this.plugin.transport;
+      const transport = startBackend
+        ? this.plugin.createTransport()
+        : this.plugin.transport;
       if (!transport) throw new Error("Chatobby backend is not connected");
       if (!transport.isConnected) {
         if (!startBackend) throw new Error("Chatobby backend is not connected");
         await transport.connect();
       }
-      [this.providerCatalog, this.localProviderDocument] = await Promise.all([
+      [
+        this.providerCatalog,
+        this.localProviderDocument,
+        this.managedLocalModelSnapshot,
+      ] = await Promise.all([
         transport.getProviders(),
         transport.getLocalModelProviders(),
+        transport.getManagedLocalModelServers(),
       ]);
     } catch (error) {
-      this.providerCatalogError = error instanceof Error ? error.message : String(error);
-      if (showFailureNotice) new Notice("Could not discover Chatobby providers");
+      this.providerCatalogError =
+        error instanceof Error ? error.message : String(error);
+      if (showFailureNotice)
+        new Notice("Could not discover Chatobby providers");
     } finally {
       this.providerCatalogLoading = false;
       this.refreshSettingsSurface();
@@ -839,7 +1316,12 @@ export class ChatobbySettingTab extends PluginSettingTab {
   private providerRows(): WsProviderInfo[] {
     const byId = new Map<string, WsProviderInfo>();
     for (const provider of this.providerCatalog ?? []) {
-      if (this.localProviderDocument?.providers.some((local) => local.id === provider.id)) continue;
+      if (
+        this.localProviderDocument?.providers.some(
+          (local) => local.id === provider.id,
+        )
+      )
+        continue;
       byId.set(provider.id, provider);
     }
 
@@ -856,9 +1338,14 @@ export class ChatobbySettingTab extends PluginSettingTab {
     }
 
     return [...byId.values()].sort((a, b) => {
-      const aConfigured = a.configured || this.plugin.settings.providerKeys[a.id] === true;
-      const bConfigured = b.configured || this.plugin.settings.providerKeys[b.id] === true;
-      return Number(bConfigured) - Number(aConfigured) || a.name.localeCompare(b.name);
+      const aConfigured =
+        a.configured || this.plugin.settings.providerKeys[a.id] === true;
+      const bConfigured =
+        b.configured || this.plugin.settings.providerKeys[b.id] === true;
+      return (
+        Number(bConfigured) - Number(aConfigured) ||
+        a.name.localeCompare(b.name)
+      );
     });
   }
 }
@@ -871,7 +1358,10 @@ class ProviderCredentialModal extends Modal {
   constructor(
     app: App,
     private readonly provider: WsProviderInfo | undefined,
-    private readonly saveProvider: (providerId: string, key: string) => Promise<void>,
+    private readonly saveProvider: (
+      providerId: string,
+      key: string,
+    ) => Promise<void>,
   ) {
     super(app);
     this.providerId = provider?.id ?? "";
@@ -879,7 +1369,11 @@ class ProviderCredentialModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("chatobby-provider-modal");
-    this.titleEl.setText(this.provider ? `Connect ${this.provider.name}` : "Connect custom provider");
+    this.titleEl.setText(
+      this.provider
+        ? `Connect ${this.provider.name}`
+        : "Connect custom provider",
+    );
     this.contentEl.empty();
     this.contentEl.createDiv({
       cls: "chatobby-provider-modal__intro",
@@ -888,25 +1382,39 @@ class ProviderCredentialModal extends Modal {
         : "Use the exact provider id from your models.json configuration.",
     });
     if (!this.provider) {
-      new Setting(this.contentEl).setName("Provider id").addText((text) => text
-        .setPlaceholder("provider-id")
-        .onChange((value) => { this.providerId = value.trim(); }));
+      new Setting(this.contentEl).setName("Provider id").addText((text) =>
+        text.setPlaceholder("provider-id").onChange((value) => {
+          this.providerId = value.trim();
+        }),
+      );
     }
     let keyInput: HTMLInputElement | null = null;
     new Setting(this.contentEl).setName("API key").addText((text) => {
       keyInput = text.inputEl;
       text.inputEl.type = "password";
-      text.setPlaceholder("Paste API key").onChange((value) => { this.key = value.trim(); });
+      text.setPlaceholder("Paste API key").onChange((value) => {
+        this.key = value.trim();
+      });
     });
     const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
-    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    const cancel = actions.createEl("button", {
+      text: "Cancel",
+      attr: { type: "button" },
+    });
     cancel.addEventListener("click", () => this.close());
-    const connect = actions.createEl("button", { cls: "mod-cta", text: "Connect", attr: { type: "button" } });
+    const connect = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "Connect",
+      attr: { type: "button" },
+    });
     connect.addEventListener("click", () => void this.connect(connect, cancel));
     window.requestAnimationFrame(() => keyInput?.focus());
   }
 
-  private async connect(connect: HTMLButtonElement, cancel: HTMLButtonElement): Promise<void> {
+  private async connect(
+    connect: HTMLButtonElement,
+    cancel: HTMLButtonElement,
+  ): Promise<void> {
     if (this.saving) return;
     if (!this.providerId || !this.key) {
       new Notice("Provider and API key are required");
@@ -953,17 +1461,29 @@ class WebSearchCredentialModal extends Modal {
     new Setting(this.contentEl).setName("API key").addText((text) => {
       keyInput = text.inputEl;
       text.inputEl.type = "password";
-      text.setPlaceholder("Paste Brave Search API key").onChange((value) => { this.key = value.trim(); });
+      text.setPlaceholder("Paste Brave Search API key").onChange((value) => {
+        this.key = value.trim();
+      });
     });
     const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
-    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    const cancel = actions.createEl("button", {
+      text: "Cancel",
+      attr: { type: "button" },
+    });
     cancel.addEventListener("click", () => this.close());
-    const connect = actions.createEl("button", { cls: "mod-cta", text: "Connect", attr: { type: "button" } });
+    const connect = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "Connect",
+      attr: { type: "button" },
+    });
     connect.addEventListener("click", () => void this.connect(connect, cancel));
     window.requestAnimationFrame(() => keyInput?.focus());
   }
 
-  private async connect(connect: HTMLButtonElement, cancel: HTMLButtonElement): Promise<void> {
+  private async connect(
+    connect: HTMLButtonElement,
+    cancel: HTMLButtonElement,
+  ): Promise<void> {
     if (this.saving) return;
     if (!this.key) {
       new Notice("A Brave Search API key is required");
@@ -997,141 +1517,263 @@ class LocalModelProviderModal extends Modal {
   constructor(
     app: App,
     provider: WsLocalModelProvider | undefined,
-    private readonly saveProvider: (provider: WsLocalModelProvider, apiKey?: string) => Promise<void>,
+    private readonly saveProvider: (
+      provider: WsLocalModelProvider,
+      apiKey?: string,
+    ) => Promise<void>,
     private readonly testProvider: (
       provider: WsLocalModelProvider,
       apiKey?: string,
     ) => Promise<WsLocalModelProviderProbeResult>,
   ) {
     super(app);
-    this.candidate = provider ? structuredClone(provider) : defaultLocalModelProvider("ollama");
-    this.modelLines = this.candidate.models.map((model) => (
-      model.name === model.id ? model.id : `${model.id} | ${model.name}`
-    )).join("\n");
+    this.candidate = provider
+      ? structuredClone(provider)
+      : defaultLocalModelProvider("ollama");
+    this.modelLines = this.candidate.models
+      .map((model) =>
+        model.name === model.id ? model.id : `${model.id} | ${model.name}`,
+      )
+      .join("\n");
   }
 
   onOpen(): void {
-    this.modalEl.addClass("chatobby-provider-modal", "chatobby-local-model-modal");
+    this.modalEl.addClass(
+      "chatobby-provider-modal",
+      "chatobby-local-model-modal",
+    );
     this.render();
   }
 
   private render(): void {
-    this.titleEl.setText(this.candidate.id ? `Local model server: ${this.candidate.name}` : "Add local model server");
+    this.titleEl.setText(
+      this.candidate.id
+        ? `Local model server: ${this.candidate.name}`
+        : "Add local model server",
+    );
     this.contentEl.empty();
     this.contentEl.createDiv({
       cls: "chatobby-provider-modal__intro",
-      text: "Chatobby connects to a server you run separately. Configuration is stored locally; bearer tokens stay in the runtime credential store.",
+      text: "Choose the software serving your model, then enter its local URL and the model ids it exposes. Presets fill common defaults, but you can edit the API format and URL for custom or remote-compatible servers. Chatobby stores this configuration locally; tokens stay in the runtime credential store.",
     });
 
-    new Setting(this.contentEl).setName("Server type").addDropdown((dropdown) => dropdown
-      .addOption("ollama", "Ollama")
-      .addOption("lm-studio", "LM Studio")
-      .addOption("vllm", "vLLM")
-      .addOption("llama-cpp", "llama.cpp")
-      .addOption("openai-compatible", "OpenAI-compatible")
-      .addOption("anthropic-compatible", "Anthropic Messages-compatible")
-      .setValue(this.candidate.preset)
-      .onChange((value) => {
-        const preset = value as WsLocalModelProvider["preset"];
-        const defaults = defaultLocalModelProvider(preset);
-        this.candidate = {
-          ...this.candidate,
-          preset,
-          api: defaults.api,
-          baseUrl: defaults.baseUrl,
-          authentication: defaults.authentication,
-        };
-        this.render();
-      }));
+    new Setting(this.contentEl).setName("Server type").addDropdown((dropdown) =>
+      dropdown
+        .addOption("ollama", "Ollama")
+        .addOption("lm-studio", "LM Studio")
+        .addOption("vllm", "vLLM")
+        .addOption("llama-cpp", "llama.cpp")
+        .addOption("openai-compatible", "OpenAI-compatible")
+        .addOption("anthropic-compatible", "Anthropic Messages-compatible")
+        .setValue(this.candidate.preset)
+        .onChange((value) => {
+          const preset = value as WsLocalModelProvider["preset"];
+          const defaults = defaultLocalModelProvider(preset);
+          this.candidate = {
+            ...this.candidate,
+            preset,
+            api: defaults.api,
+            baseUrl: defaults.baseUrl,
+            authentication: defaults.authentication,
+          };
+          this.render();
+        }),
+    );
 
-    new Setting(this.contentEl).setName("Name").addText((text) => text
-      .setValue(this.candidate.name)
-      .setPlaceholder("My local server")
-      .onChange((value) => { this.candidate = { ...this.candidate, name: value }; }));
+    new Setting(this.contentEl).setName("Name").addText((text) =>
+      text
+        .setValue(this.candidate.name)
+        .setPlaceholder("My local server")
+        .onChange((value) => {
+          this.candidate = { ...this.candidate, name: value };
+        }),
+    );
     new Setting(this.contentEl)
       .setName("Provider id")
-      .setDesc("Stable lowercase id used in model selectors. Changing it creates a different provider.")
-      .addText((text) => text
-        .setValue(this.candidate.id)
-        .setPlaceholder("local-models")
-        .onChange((value) => { this.candidate = { ...this.candidate, id: value.trim().toLowerCase() }; }));
-    new Setting(this.contentEl).setName("Server URL").addText((text) => text
-      .setValue(this.candidate.baseUrl)
-      .setPlaceholder("http://127.0.0.1:11434/v1")
-      .onChange((value) => { this.candidate = { ...this.candidate, baseUrl: value.trim() }; }));
-    new Setting(this.contentEl).setName("API format").addDropdown((dropdown) => dropdown
-      .addOption("openai-completions", "OpenAI Chat Completions")
-      .addOption("openai-responses", "OpenAI Responses")
-      .addOption("anthropic-messages", "Anthropic Messages")
-      .setValue(this.candidate.api)
-      .onChange((value) => {
-        this.candidate = { ...this.candidate, api: value as WsLocalModelProvider["api"] };
-      }));
-    new Setting(this.contentEl).setName("Authentication").addDropdown((dropdown) => dropdown
-      .addOption("none", "None")
-      .addOption("api-key", "Provider API key")
-      .addOption("bearer", "Bearer token")
-      .setValue(this.candidate.authentication)
-      .onChange((value) => {
-        this.candidate = { ...this.candidate, authentication: value as WsLocalModelProvider["authentication"] };
-        this.render();
-      }));
+      .setDesc(
+        "Stable lowercase id used in model selectors. Changing it creates a different provider.",
+      )
+      .addText((text) =>
+        text
+          .setValue(this.candidate.id)
+          .setPlaceholder("local-models")
+          .onChange((value) => {
+            this.candidate = {
+              ...this.candidate,
+              id: value.trim().toLowerCase(),
+            };
+          }),
+      );
+    new Setting(this.contentEl)
+      .setName("Server URL")
+      .setDesc(localModelServerUrlDescription(this.candidate.preset))
+      .addText((text) =>
+        text
+          .setValue(this.candidate.baseUrl)
+          .setPlaceholder("http://127.0.0.1:11434/v1")
+          .onChange((value) => {
+            this.candidate = { ...this.candidate, baseUrl: value.trim() };
+          }),
+      );
+    new Setting(this.contentEl)
+      .setName("API format")
+      .setDesc(
+        "Select the request protocol implemented by the server. This is independent of the model family or model name.",
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("openai-completions", "OpenAI Chat Completions")
+          .addOption("openai-responses", "OpenAI Responses")
+          .addOption("anthropic-messages", "Anthropic Messages")
+          .setValue(this.candidate.api)
+          .onChange((value) => {
+            this.candidate = {
+              ...this.candidate,
+              api: value as WsLocalModelProvider["api"],
+            };
+          }),
+      );
+    new Setting(this.contentEl)
+      .setName("Authentication")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("none", "None")
+          .addOption("api-key", "Provider API key")
+          .addOption("bearer", "Bearer token")
+          .setValue(this.candidate.authentication)
+          .onChange((value) => {
+            this.candidate = {
+              ...this.candidate,
+              authentication: value as WsLocalModelProvider["authentication"],
+            };
+            this.render();
+          }),
+      );
     if (this.candidate.authentication !== "none") {
       new Setting(this.contentEl)
-        .setName(this.candidate.authentication === "api-key" ? "Provider API key" : "Bearer token")
-        .setDesc("Optional when editing: leave blank to keep the existing credential.")
+        .setName(
+          this.candidate.authentication === "api-key"
+            ? "Provider API key"
+            : "Bearer token",
+        )
+        .setDesc(
+          "Optional when editing: leave blank to keep the existing credential.",
+        )
         .addText((text) => {
           text.inputEl.type = "password";
-          text.setPlaceholder("Token").onChange((value) => { this.apiKey = value.trim(); });
+          text.setPlaceholder("Token").onChange((value) => {
+            this.apiKey = value.trim();
+          });
         });
     }
     new Setting(this.contentEl)
       .setName("Models")
-      .setDesc("One model per line. Use model-id or model-id | Display name.")
+      .setDesc(
+        "One server model id per line. Use model-id, or model-id | Friendly name. Example: qwen3.5:4b | Qwen 3.5 4B. The id must match what the server accepts in API requests.",
+      )
       .addTextArea((text) => {
         text.inputEl.rows = 4;
-        text.setValue(this.modelLines).setPlaceholder("model-id | Friendly name").onChange((value) => {
-          this.modelLines = value;
-        });
+        text
+          .setValue(this.modelLines)
+          .setPlaceholder("model-id | Friendly name")
+          .onChange((value) => {
+            this.modelLines = value;
+          });
       });
 
-    const first = this.candidate.models[0] ?? defaultLocalModelProvider(this.candidate.preset).models[0]!;
-    new Setting(this.contentEl).setName("Context window").addText((text) => text
-      .setValue(String(first.contextWindow))
-      .onChange((value) => this.updateModelDefaults({ contextWindow: Number(value) })));
-    new Setting(this.contentEl).setName("Maximum output tokens").addText((text) => text
-      .setValue(String(first.maxTokens))
-      .onChange((value) => this.updateModelDefaults({ maxTokens: Number(value) })));
-    new Setting(this.contentEl).setName("Reasoning model").addToggle((toggle) => toggle
-      .setValue(first.reasoning)
-      .onChange((value) => this.updateModelDefaults({ reasoning: value })));
-    new Setting(this.contentEl).setName("Accepts images").addToggle((toggle) => toggle
-      .setValue(first.imageInput)
-      .onChange((value) => this.updateModelDefaults({ imageInput: value })));
+    const first =
+      this.candidate.models[0] ??
+      defaultLocalModelProvider(this.candidate.preset).models[0]!;
+    new Setting(this.contentEl)
+      .setName("Context window")
+      .setDesc(
+        "Maximum input context Chatobby may send to each listed model. Enter a whole token count, such as 32768 or 204800, and keep it within the server's configured limit.",
+      )
+      .addText((text) =>
+        text
+          .setValue(String(first.contextWindow))
+          .onChange((value) =>
+            this.updateModelDefaults({ contextWindow: Number(value) }),
+          ),
+      );
+    new Setting(this.contentEl)
+      .setName("Maximum output tokens")
+      .setDesc(
+        "Maximum tokens Chatobby may request for one response. This must not exceed the model server's output limit.",
+      )
+      .addText((text) =>
+        text
+          .setValue(String(first.maxTokens))
+          .onChange((value) =>
+            this.updateModelDefaults({ maxTokens: Number(value) }),
+          ),
+      );
+    new Setting(this.contentEl)
+      .setName("Reasoning model")
+      .setDesc(
+        "Enable when the endpoint exposes a reasoning-capable model and its response format is compatible with the selected API.",
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(first.reasoning)
+          .onChange((value) => this.updateModelDefaults({ reasoning: value })),
+      );
+    new Setting(this.contentEl)
+      .setName("Accepts images")
+      .setDesc(
+        "Enable only when this exact model and server endpoint accept image inputs. Changing models later may require updating this capability.",
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(first.imageInput)
+          .onChange((value) => this.updateModelDefaults({ imageInput: value })),
+      );
 
-    const status = this.contentEl.createDiv({ cls: "chatobby-local-model-modal__status" });
+    const status = this.contentEl.createDiv({
+      cls: "chatobby-local-model-modal__status",
+    });
     const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
-    const test = actions.createEl("button", { text: "Test connection", attr: { type: "button" } });
-    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
-    const save = actions.createEl("button", { cls: "mod-cta", text: "Save", attr: { type: "button" } });
+    const test = actions.createEl("button", {
+      text: "Test connection",
+      attr: { type: "button" },
+    });
+    const cancel = actions.createEl("button", {
+      text: "Cancel",
+      attr: { type: "button" },
+    });
+    const save = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "Save",
+      attr: { type: "button" },
+    });
     cancel.addEventListener("click", () => this.close());
     test.addEventListener("click", () => void this.test(test, save, status));
     save.addEventListener("click", () => void this.save(save, test, cancel));
   }
 
-  private updateModelDefaults(patch: Partial<WsLocalModelProvider["models"][number]>): void {
-    const current = this.candidate.models[0] ?? defaultLocalModelProvider(this.candidate.preset).models[0]!;
+  private updateModelDefaults(
+    patch: Partial<WsLocalModelProvider["models"][number]>,
+  ): void {
+    const current =
+      this.candidate.models[0] ??
+      defaultLocalModelProvider(this.candidate.preset).models[0]!;
     this.candidate = { ...this.candidate, models: [{ ...current, ...patch }] };
   }
 
   private assembledCandidate(): WsLocalModelProvider {
-    const defaults = this.candidate.models[0] ?? defaultLocalModelProvider(this.candidate.preset).models[0]!;
-    const models = this.modelLines.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map((line) => {
-      const [idPart, ...nameParts] = line.split("|");
-      const id = idPart?.trim() ?? "";
-      const name = nameParts.join("|").trim() || id;
-      return { ...defaults, id, name };
-    });
+    const defaults =
+      this.candidate.models[0] ??
+      defaultLocalModelProvider(this.candidate.preset).models[0]!;
+    const models = this.modelLines
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [idPart, ...nameParts] = line.split("|");
+        const id = idPart?.trim() ?? "";
+        const name = nameParts.join("|").trim() || id;
+        return { ...defaults, id, name };
+      });
     return { ...this.candidate, name: this.candidate.name.trim(), models };
   }
 
@@ -1144,12 +1786,17 @@ class LocalModelProviderModal extends Modal {
     save.disabled = true;
     status.setText("Testing connection…");
     try {
-      const result = await this.testProvider(this.assembledCandidate(), this.apiKey || undefined);
+      const result = await this.testProvider(
+        this.assembledCandidate(),
+        this.apiKey || undefined,
+      );
       status.setText(`${result.message} ${result.latencyMs} ms.`);
       status.toggleClass("is-success", result.status === "reachable");
       status.toggleClass("is-error", result.status !== "reachable");
     } catch (error) {
-      status.setText(error instanceof Error ? error.message : "Connection test failed");
+      status.setText(
+        error instanceof Error ? error.message : "Connection test failed",
+      );
       status.removeClass("is-success");
       status.addClass("is-error");
     } finally {
@@ -1169,11 +1816,18 @@ class LocalModelProviderModal extends Modal {
     test.disabled = true;
     cancel.disabled = true;
     try {
-      await this.saveProvider(this.assembledCandidate(), this.apiKey || undefined);
+      await this.saveProvider(
+        this.assembledCandidate(),
+        this.apiKey || undefined,
+      );
       this.close();
     } catch (error) {
       console.error("Chatobby: failed to save local model server", error);
-      new Notice(error instanceof Error ? error.message : "Could not save local model server");
+      new Notice(
+        error instanceof Error
+          ? error.message
+          : "Could not save local model server",
+      );
       save.disabled = false;
       test.disabled = false;
       cancel.disabled = false;
@@ -1183,45 +1837,553 @@ class LocalModelProviderModal extends Modal {
   }
 }
 
-function defaultLocalModelProvider(preset: WsLocalModelProvider["preset"]): WsLocalModelProvider {
+class ManagedLocalModelServerModal extends Modal {
+  private candidate: WsManagedLocalModelServerProfile;
+  private saving = false;
+
+  constructor(
+    app: App,
+    profile: WsManagedLocalModelServerProfile | undefined,
+    private readonly providers: WsLocalModelProvider[],
+    private readonly saveProfile: (
+      profile: WsManagedLocalModelServerProfile,
+    ) => Promise<void>,
+  ) {
+    super(app);
+    const provider =
+      providers.find((candidate) => candidate.id === profile?.providerId) ??
+      providers[0];
+    if (!provider)
+      throw new Error(
+        "A llama.cpp local model provider is required before managed startup can be configured.",
+      );
+    this.candidate = profile
+      ? structuredClone(profile)
+      : defaultManagedLocalModelServer(provider);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass(
+      "chatobby-provider-modal",
+      "chatobby-local-model-modal",
+    );
+    this.titleEl.setText(this.candidate.name || "Managed llama.cpp server");
+    this.render();
+  }
+
+  private render(): void {
+    this.contentEl.empty();
+    this.contentEl.createDiv({
+      cls: "chatobby-provider-modal__intro",
+      text: "This optional form manages a llama.cpp server for an existing llama.cpp connection. Chatobby launches the executable directly with validated settings, never through a shell, and binds it to this computer only. Ollama, LM Studio, vLLM, and custom endpoints should be connected above and continue managing their own processes.",
+    });
+
+    new Setting(this.contentEl)
+      .setName("Local model connection")
+      .setDesc(
+        "The provider and managed process share one provider id and loopback port.",
+      )
+      .addDropdown((dropdown) => {
+        for (const provider of this.providers)
+          dropdown.addOption(provider.id, provider.name);
+        dropdown
+          .setValue(this.candidate.providerId)
+          .setDisabled(this.providers.length === 1)
+          .onChange((providerId) => {
+            const provider = this.providers.find(
+              (candidate) => candidate.id === providerId,
+            );
+            if (provider)
+              this.candidate = rebindManagedLocalModelServer(
+                this.candidate,
+                provider,
+              );
+            this.render();
+          });
+      });
+    new Setting(this.contentEl).setName("Name").addText((text) =>
+      text
+        .setValue(this.candidate.name)
+        .setPlaceholder("My llama.cpp server")
+        .onChange((value) => {
+          this.candidate = { ...this.candidate, name: value };
+        }),
+    );
+    new Setting(this.contentEl)
+      .setName("Launch behavior")
+      .setDesc(
+        "On demand starts before a chat uses this provider. Runtime start launches with Chatobby. Manual starts only from this page.",
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("on-demand", "On demand")
+          .addOption("runtime-start", "When Chatobby starts")
+          .addOption("manual", "Manual")
+          .setValue(this.candidate.launchPolicy)
+          .onChange((value) => {
+            this.candidate = {
+              ...this.candidate,
+              launchPolicy:
+                value as WsManagedLocalModelServerProfile["launchPolicy"],
+            };
+          }),
+      );
+    new Setting(this.contentEl)
+      .setName("llama.cpp executable")
+      .setDesc(
+        "Absolute path to llama-server or llama-server.exe. Keep its backend libraries beside the executable.",
+      )
+      .addText((text) =>
+        text
+          .setValue(this.candidate.executablePath)
+          .setPlaceholder(platformPathExample("llama-server"))
+          .onChange((value) => {
+            this.candidate = {
+              ...this.candidate,
+              executablePath: value.trim(),
+            };
+          }),
+      );
+    new Setting(this.contentEl)
+      .setName("GGUF model")
+      .setDesc(
+        "Absolute path to the model file. Chatobby does not download, copy, or delete it.",
+      )
+      .addText((text) =>
+        text
+          .setValue(this.candidate.modelPath)
+          .setPlaceholder(platformPathExample("model.gguf"))
+          .onChange((value) => {
+            this.candidate = { ...this.candidate, modelPath: value.trim() };
+          }),
+      );
+    new Setting(this.contentEl)
+      .setName("Server address")
+      .setDesc(
+        `127.0.0.1:${this.candidate.port}, derived from the selected local model connection.`,
+      );
+
+    new Setting(this.contentEl)
+      .setName("Context window")
+      .setDesc(
+        "Context allocated by llama.cpp for the server. Large values substantially increase KV-cache memory even for a small model.",
+      )
+      .addText((text) =>
+        numericText(text, this.candidate.settings.contextSize, (contextSize) =>
+          this.updateSettings({ contextSize }),
+        ),
+      );
+    new Setting(this.contentEl)
+      .setName("GPU layers")
+      .setDesc(
+        "Use 0 for CPU-only. Higher values prioritize model weights on the GPU when llama.cpp supports it.",
+      )
+      .addText((text) =>
+        numericText(text, this.candidate.settings.gpuLayers, (gpuLayers) =>
+          this.updateSettings({ gpuLayers }),
+        ),
+      );
+    new Setting(this.contentEl)
+      .setName("K cache")
+      .setDesc(
+        "KV-cache key precision. Lower precision reduces memory use; support and quality tradeoffs depend on the llama.cpp build and model.",
+      )
+      .addDropdown((dropdown) =>
+        cacheTypeDropdown(
+          dropdown,
+          this.candidate.settings.cacheTypeK,
+          (cacheTypeK) => this.updateSettings({ cacheTypeK }),
+        ),
+      );
+    new Setting(this.contentEl)
+      .setName("V cache")
+      .setDesc(
+        "KV-cache value precision. Quantized V cache requires flash attention and enables it automatically.",
+      )
+      .addDropdown((dropdown) =>
+        cacheTypeDropdown(
+          dropdown,
+          this.candidate.settings.cacheTypeV,
+          (cacheTypeV) =>
+            this.updateSettings({
+              cacheTypeV,
+              ...(cacheTypeV === "f16" ? {} : { flashAttention: true }),
+            }),
+        ),
+      );
+    const quantizedVCache = this.candidate.settings.cacheTypeV !== "f16";
+    new Setting(this.contentEl)
+      .setName("Flash attention")
+      .setDesc(
+        quantizedVCache
+          ? "Required by the selected quantized V cache. Choose F16 V cache to turn it off."
+          : "Uses llama.cpp flash attention when supported. This is required for quantized V cache.",
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.candidate.settings.flashAttention)
+          .setDisabled(quantizedVCache)
+          .onChange((flashAttention) =>
+            this.updateSettings({ flashAttention }),
+          ),
+      );
+    new Setting(this.contentEl)
+      .setName("CPU threads (optional)")
+      .addText((text) =>
+        optionalNumericText(text, this.candidate.settings.threads, (threads) =>
+          this.updateSettings({ threads }),
+        ),
+      );
+    new Setting(this.contentEl)
+      .setName("Batch size (optional)")
+      .addText((text) =>
+        optionalNumericText(
+          text,
+          this.candidate.settings.batchSize,
+          (batchSize) => this.updateSettings({ batchSize }),
+        ),
+      );
+    new Setting(this.contentEl)
+      .setName("Micro-batch size (optional)")
+      .addText((text) =>
+        optionalNumericText(
+          text,
+          this.candidate.settings.microBatchSize,
+          (microBatchSize) => this.updateSettings({ microBatchSize }),
+        ),
+      );
+    new Setting(this.contentEl)
+      .setName("Parallel slots (optional)")
+      .addText((text) =>
+        optionalNumericText(
+          text,
+          this.candidate.settings.parallelSlots,
+          (parallelSlots) => this.updateSettings({ parallelSlots }),
+        ),
+      );
+    new Setting(this.contentEl)
+      .setName("Startup timeout (seconds)")
+      .addText((text) =>
+        numericText(
+          text,
+          this.candidate.startupTimeoutSeconds,
+          (startupTimeoutSeconds) => {
+            this.candidate = { ...this.candidate, startupTimeoutSeconds };
+          },
+        ),
+      );
+
+    const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
+    const cancel = actions.createEl("button", {
+      text: "Cancel",
+      attr: { type: "button" },
+    });
+    const save = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "Save managed server",
+      attr: { type: "button" },
+    });
+    cancel.addEventListener("click", () => this.close());
+    save.addEventListener("click", () => void this.save(save, cancel));
+  }
+
+  private updateSettings(
+    patch: Partial<WsManagedLocalModelServerProfile["settings"]>,
+  ): void {
+    this.candidate = {
+      ...this.candidate,
+      settings: { ...this.candidate.settings, ...patch },
+    };
+  }
+
+  private async save(
+    save: HTMLButtonElement,
+    cancel: HTMLButtonElement,
+  ): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    save.disabled = true;
+    cancel.disabled = true;
+    try {
+      await this.saveProfile({
+        ...this.candidate,
+        name: this.candidate.name.trim(),
+      });
+      this.close();
+    } catch (error) {
+      console.error(
+        "Chatobby: failed to save managed local model server",
+        error,
+      );
+      new Notice(
+        error instanceof Error
+          ? error.message
+          : "Could not save managed local model server",
+      );
+      save.disabled = false;
+      cancel.disabled = false;
+    } finally {
+      this.saving = false;
+    }
+  }
+}
+
+function defaultLocalModelProvider(
+  preset: WsLocalModelProvider["preset"],
+): WsLocalModelProvider {
   const common = {
     id: preset,
     name: localModelPresetLabel(preset),
     preset,
-    models: [{ id: "model", name: "model", contextWindow: 32_768, maxTokens: 4_096, reasoning: false, imageInput: false }],
+    models: [
+      {
+        id: "model",
+        name: "model",
+        contextWindow: 32_768,
+        maxTokens: 4_096,
+        reasoning: false,
+        imageInput: false,
+      },
+    ],
   };
   switch (preset) {
     case "ollama":
-      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:11434/v1", authentication: "none" };
+      return {
+        ...common,
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:11434/v1",
+        authentication: "none",
+      };
     case "lm-studio":
-      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:1234/v1", authentication: "none" };
+      return {
+        ...common,
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:1234/v1",
+        authentication: "none",
+      };
     case "vllm":
-      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:8000/v1", authentication: "none" };
+      return {
+        ...common,
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:8000/v1",
+        authentication: "none",
+      };
     case "llama-cpp":
-      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:8080/v1", authentication: "none" };
+      return {
+        ...common,
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:8080/v1",
+        authentication: "none",
+      };
     case "openai-compatible":
-      return { ...common, api: "openai-completions", baseUrl: "http://127.0.0.1:8000/v1", authentication: "bearer" };
+      return {
+        ...common,
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:8000/v1",
+        authentication: "bearer",
+      };
     case "anthropic-compatible":
-      return { ...common, api: "anthropic-messages", baseUrl: "http://127.0.0.1:8000/v1", authentication: "api-key" };
+      return {
+        ...common,
+        api: "anthropic-messages",
+        baseUrl: "http://127.0.0.1:8000/v1",
+        authentication: "api-key",
+      };
+  }
+}
+
+function defaultManagedLocalModelServer(
+  provider: WsLocalModelProvider,
+): WsManagedLocalModelServerProfile {
+  return {
+    schemaVersion: 1,
+    id: `${provider.id}-server`,
+    providerId: provider.id,
+    name: `${provider.name} managed server`,
+    engine: "llama-cpp",
+    launchPolicy: "on-demand",
+    executablePath: "",
+    modelPath: "",
+    host: "127.0.0.1",
+    port: localProviderPort(provider),
+    settings: {
+      contextSize: provider.models[0]?.contextWindow ?? 204_800,
+      gpuLayers: 0,
+      cacheTypeK: "q8_0",
+      cacheTypeV: "q8_0",
+      flashAttention: true,
+      parallelSlots: 1,
+    },
+    startupTimeoutSeconds: 180,
+  };
+}
+
+function rebindManagedLocalModelServer(
+  profile: WsManagedLocalModelServerProfile,
+  provider: WsLocalModelProvider,
+): WsManagedLocalModelServerProfile {
+  return {
+    ...profile,
+    providerId: provider.id,
+    name: profile.name || `${provider.name} managed server`,
+    port: localProviderPort(provider),
+  };
+}
+
+function localProviderPort(provider: WsLocalModelProvider): number {
+  try {
+    const url = new URL(provider.baseUrl);
+    if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+      throw new Error(
+        "Managed llama.cpp requires a loopback local model connection.",
+      );
+    }
+    if (url.port) return Number(url.port);
+    return url.protocol === "https:" ? 443 : 80;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("loopback"))
+      throw error;
+    throw new Error(
+      `Local model connection ${provider.name} has an invalid server URL.`,
+    );
+  }
+}
+
+function numericText(
+  component: TextComponent,
+  value: number,
+  update: (value: number) => void,
+): TextComponent {
+  component.inputEl.type = "number";
+  return component.setValue(String(value)).onChange((text) => {
+    const parsed = Number(text);
+    if (Number.isSafeInteger(parsed)) update(parsed);
+  });
+}
+
+function optionalNumericText(
+  component: TextComponent,
+  value: number | undefined,
+  update: (value: number | undefined) => void,
+): TextComponent {
+  component.inputEl.type = "number";
+  return component
+    .setValue(value === undefined ? "" : String(value))
+    .onChange((text) => {
+      if (!text.trim()) {
+        update(undefined);
+        return;
+      }
+      const parsed = Number(text);
+      if (Number.isSafeInteger(parsed)) update(parsed);
+    });
+}
+
+function cacheTypeDropdown(
+  dropdown: DropdownComponent,
+  value: WsManagedLocalModelServerProfile["settings"]["cacheTypeK"],
+  update: (
+    value: WsManagedLocalModelServerProfile["settings"]["cacheTypeK"],
+  ) => void,
+): DropdownComponent {
+  return dropdown
+    .addOption("f16", "F16")
+    .addOption("q8_0", "Q8_0")
+    .addOption("q4_0", "Q4_0")
+    .setValue(value)
+    .onChange((next) =>
+      update(
+        next as WsManagedLocalModelServerProfile["settings"]["cacheTypeK"],
+      ),
+    );
+}
+
+function platformPathExample(name: string): string {
+  if (!Platform.isWin) return `/opt/llama/${name}`;
+  return `C:\\Tools\\llama\\${name}${name.endsWith(".gguf") ? "" : ".exe"}`;
+}
+
+function localModelServerUrlDescription(
+  preset: WsLocalModelProvider["preset"],
+): string {
+  switch (preset) {
+    case "ollama":
+      return "Ollama commonly uses http://127.0.0.1:11434/v1 when accessed through its OpenAI-compatible API.";
+    case "lm-studio":
+      return "LM Studio commonly uses http://127.0.0.1:1234/v1 after its local server is started.";
+    case "vllm":
+      return "vLLM commonly uses http://127.0.0.1:8000/v1; use the host and port chosen when starting the server.";
+    case "llama-cpp":
+      return "llama.cpp commonly uses http://127.0.0.1:8080/v1. Configure managed startup separately after saving this connection if Chatobby should run it.";
+    case "openai-compatible":
+      return "Enter the endpoint's OpenAI-compatible base URL, normally ending in /v1. Loopback and network URLs are both supported subject to permissions.";
+    case "anthropic-compatible":
+      return "Enter the server's Anthropic Messages-compatible base URL. Do not append an OpenAI /v1 route unless the server documents it.";
+  }
+}
+
+function managedLocalModelStatusLabel(
+  status: WsManagedLocalModelServerStatus | undefined,
+): string {
+  if (!status) return "Status unavailable";
+  if (status.ownership === "other-runtime")
+    return "Running in another Chatobby runtime";
+  switch (status.phase) {
+    case "ready":
+      return "Ready";
+    case "preflighting":
+      return "Checking files";
+    case "starting":
+      return "Starting";
+    case "probing":
+      return "Waiting for health check";
+    case "stopping":
+      return "Stopping";
+    case "failed":
+      return "Needs attention";
+    case "stopped":
+      return "Stopped";
+  }
+}
+
+function launchPolicyLabel(
+  policy: WsManagedLocalModelServerProfile["launchPolicy"],
+): string {
+  switch (policy) {
+    case "manual":
+      return "Manual start";
+    case "on-demand":
+      return "Starts on demand";
+    case "runtime-start":
+      return "Starts with Chatobby";
   }
 }
 
 function localModelPresetLabel(preset: WsLocalModelProvider["preset"]): string {
   switch (preset) {
-    case "ollama": return "Ollama";
-    case "lm-studio": return "LM Studio";
-    case "vllm": return "vLLM";
-    case "llama-cpp": return "llama.cpp";
-    case "openai-compatible": return "OpenAI-compatible";
-    case "anthropic-compatible": return "Anthropic Messages-compatible";
+    case "ollama":
+      return "Ollama";
+    case "lm-studio":
+      return "LM Studio";
+    case "vllm":
+      return "vLLM";
+    case "llama-cpp":
+      return "llama.cpp";
+    case "openai-compatible":
+      return "OpenAI-compatible";
+    case "anthropic-compatible":
+      return "Anthropic Messages-compatible";
   }
 }
 
 function localModelApiLabel(api: WsLocalModelProvider["api"]): string {
   switch (api) {
-    case "openai-completions": return "Chat Completions";
-    case "openai-responses": return "Responses API";
-    case "anthropic-messages": return "Messages API";
+    case "openai-completions":
+      return "Chat Completions";
+    case "openai-responses":
+      return "Responses API";
+    case "anthropic-messages":
+      return "Messages API";
   }
 }
 
@@ -1241,13 +2403,23 @@ function bindingUsedByAnotherAction(
   action: ComposerKeybindingAction,
   binding: string,
 ): boolean {
-  return (Object.entries(bindings) as Array<[ComposerKeybindingAction, string]>)
-    .some(([candidate, value]) => candidate !== action && value === binding);
+  return (
+    Object.entries(bindings) as Array<[ComposerKeybindingAction, string]>
+  ).some(([candidate, value]) => candidate !== action && value === binding);
 }
 
-function providerDescription(provider: WsProviderInfo, configured: boolean): string {
-  const available = provider.availableModelCount === 1 ? "1 model available" : `${provider.availableModelCount} models available`;
-  if (!configured) return provider.modelCount > 0 ? `Not connected · ${provider.modelCount} supported models` : "Not connected";
+function providerDescription(
+  provider: WsProviderInfo,
+  configured: boolean,
+): string {
+  const available =
+    provider.availableModelCount === 1
+      ? "1 model available"
+      : `${provider.availableModelCount} models available`;
+  if (!configured)
+    return provider.modelCount > 0
+      ? `Not connected · ${provider.modelCount} supported models`
+      : "Not connected";
   return `Connected${authSourceLabel(provider)} · ${available}`;
 }
 
@@ -1256,9 +2428,13 @@ function authSourceLabel(provider: WsProviderInfo): string {
     case "stored":
       return "";
     case "runtime":
-      return provider.authLabel ? ` through ${provider.authLabel}` : " through the runtime";
+      return provider.authLabel
+        ? ` through ${provider.authLabel}`
+        : " through the runtime";
     case "environment":
-      return provider.authLabel ? ` through ${provider.authLabel}` : " through the environment";
+      return provider.authLabel
+        ? ` through ${provider.authLabel}`
+        : " through the environment";
     case "fallback":
       return " through fallback credentials";
     case "models_json_key":

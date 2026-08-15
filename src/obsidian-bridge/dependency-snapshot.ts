@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import { delimiter, extname, isAbsolute, join } from "node:path";
 import type { App } from "obsidian";
 import type {
   ObsidianCapabilityState,
@@ -21,42 +19,21 @@ interface CorePluginRegistry {
   plugins?: Record<string, CorePluginRecord>;
 }
 
-/** Capture installed/enabled integrations plus local executable dependencies. */
+/** Capture installed/enabled integrations and connector-owned capabilities. */
 export function collectObsidianCapabilityState(app: App): ObsidianCapabilityState {
   const registries = app as unknown as {
     version?: string;
     plugins?: CommunityPluginRegistry;
     internalPlugins?: CorePluginRegistry;
   };
-  const cliSupported = !registries.version || versionAtLeast(registries.version, 1, 12);
   return {
     capabilities: [...PLUGIN_CAPABILITIES],
     plugins: [
       ...communityPluginStates(registries.plugins),
       ...corePluginStates(registries.internalPlugins),
     ],
-    runtimeDependencies: [{
-      id: "obsidian-cli",
-      name: "Obsidian CLI",
-      available: cliSupported && obsidianCliAvailable(),
-      detail: cliSupported
-        ? "Required for CLI-backed daily note, Bases, Sync, plugin, and diagnostics tools."
-        : `Obsidian CLI requires Obsidian 1.12 or later; this vault is running ${registries.version}.`,
-    }],
+    runtimeDependencies: [],
   };
-}
-
-function versionAtLeast(value: string, requiredMajor: number, requiredMinor: number): boolean {
-  const [major = 0, minor = 0] = value.split(".").map((part) => Number.parseInt(part, 10));
-  return major > requiredMajor || (major === requiredMajor && minor >= requiredMinor);
-}
-
-function obsidianCliAvailable(): boolean {
-  const explicit = process.env.CHATOBBY_OBSIDIAN_CLI_BIN || process.env.CHATOBBY_OBSIDIAN_CLI;
-  if (explicit) return executableAvailable(explicit);
-  if (executableAvailable("obsidian")) return true;
-  if (process.platform !== "win32" || !process.env.LOCALAPPDATA) return false;
-  return existsSync(join(process.env.LOCALAPPDATA, "Programs", "obsidian", "Obsidian.com"));
 }
 
 export function capabilityStateFingerprint(state: ObsidianCapabilityState): string {
@@ -94,20 +71,4 @@ function corePluginStates(registry: CorePluginRegistry | undefined): ObsidianPlu
     installed: true,
     enabled: plugin.enabled === true,
   }));
-}
-
-function executableAvailable(command: string): boolean {
-  const candidate = command.trim().replace(/^['"]|['"]$/g, "");
-  if (!candidate) return false;
-  if (isAbsolute(candidate) || candidate.includes("/") || candidate.includes("\\")) return existsSync(candidate);
-  const extensions = process.platform === "win32"
-    ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";")
-    : [""];
-  const suffixes = extname(candidate) ? [""] : extensions;
-  for (const directory of (process.env.PATH ?? "").split(delimiter).filter(Boolean)) {
-    for (const suffix of suffixes) {
-      if (existsSync(join(directory, `${candidate}${suffix}`))) return true;
-    }
-  }
-  return false;
 }

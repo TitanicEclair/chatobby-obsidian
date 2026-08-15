@@ -335,6 +335,43 @@ describe("FeedRenderer", () => {
     expect(image?.alt).toBe("Attached image/png");
   });
 
+  it("renders trailing @ references as a dedicated summary instead of message prose", () => {
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      blocks: [{
+        type: "user",
+        id: "block-user-references",
+        messageId: "msg-user-references",
+        message: {
+          role: "user",
+          content: "Compare these @[[Notes/Cerebrum.md]] @[[Projects/Plans/]]",
+        },
+      }],
+    };
+    const renderer = new FeedRenderer(createMockFeedHost(state));
+    const el = mount(renderer);
+
+    expect(el.querySelector(".chatobby-user-block__content")?.textContent).toContain("Compare these");
+    expect(el.querySelector(".chatobby-user-block__content")?.textContent).not.toContain("Notes/Cerebrum.md");
+    expect(el.querySelector(".chatobby-message-reference-summary")?.textContent).toBe("@2 references");
+  });
+
+  it("names the referenced file when a user message has one @ reference", () => {
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      blocks: [{
+        type: "user",
+        id: "block-user-reference",
+        messageId: "msg-user-reference",
+        message: { role: "user", content: "Review @[[Notes/Cerebrum.md]]" },
+      }],
+    };
+    const renderer = new FeedRenderer(createMockFeedHost(state));
+    const el = mount(renderer);
+
+    expect(el.querySelector(".chatobby-message-reference-summary")?.textContent).toBe("@Cerebrum.md");
+  });
+
   it("renders named file attachments and reveals the stored file on click", () => {
     const path = "C:/vault/.chatobby/attachments/report.xlsx";
     const state: LegacyFeedState = {

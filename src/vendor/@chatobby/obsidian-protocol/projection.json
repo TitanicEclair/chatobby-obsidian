@@ -8,7 +8,7 @@
   "sourceFiles": [
     {
       "path": "bridge-capabilities.ts",
-      "sha256": "c3e63a5eb664bea339278ae9f6e1272d7445d382482fc751cf14c53ce6d437dd"
+      "sha256": "3dac58bfe4c8dde012ebda4f37167e0034df71af6730a3470ae02d5013b46af1"
     },
     {
       "path": "bridge-config.ts",
@@ -16,11 +16,11 @@
     },
     {
       "path": "bridge-errors.ts",
-      "sha256": "1c44d861f458fdb318e2a9eaf6fe7f9b17b45263908f33c069f1f6c9f8ab2c0b"
+      "sha256": "241a44da30e95ba9268f9af3170db106829faf9a9b43061b0f41c3c6843f6b9e"
     },
     {
       "path": "bridge-operations.ts",
-      "sha256": "e995de2920f9c94800c783db1d54e56396783046982ea91364fc21b5a9237054"
+      "sha256": "cf839cb4e8c958c3e235662173fa53dc2a6df8bc51c1af5e1db16c49168e959a"
     },
     {
       "path": "bridge-protocol.ts",
@@ -32,27 +32,23 @@
     },
     {
       "path": "index.ts",
-      "sha256": "a01b1a458eefca5403d97364ec07c2f0ebc1b2bdb2a1597ce60b66563f12d0c6"
+      "sha256": "170c5e2e1d42b4a9d8c52fe6e1e1e88208aec6af5b7437c072095dd22e3d3fcd"
     },
     {
       "path": "mcp-policy.ts",
-      "sha256": "78e7263a5f402940e1c7d50e64604112867aacc6c3c5ea95be478d3698d53710"
+      "sha256": "b4f8052f87f6be0288d842fff273055efa48b0396653db63d5d36bdf36eed65e"
     },
     {
       "path": "mcp-tool-catalog.ts",
-      "sha256": "ad7a387b8d302ecced53f6ee5f7d17fcd55eb7f41f9e0e550460eceb31ef7f3f"
+      "sha256": "f3a9af0d81949723174c85c25160544f01e859695a2df3a272a3522617c98f36"
     },
     {
       "path": "project-directory-protocol.ts",
       "sha256": "9d3c5f734ecce5dd09f58f238f61dc6d75efc2c2211272403879759aef5301e0"
     },
     {
-      "path": "retrieval-protocol.ts",
-      "sha256": "d1fda5c3f99d53d9f86cad33d1bac682f05ace178f1136afe157eff29d6bb80e"
-    },
-    {
       "path": "tool-capabilities.ts",
-      "sha256": "3bdd3a26ce0b876593e9805c71dc23c10b0020d1abbeb14eb9ea9d1437fbb454"
+      "sha256": "a951a338349d7366b7278d120628231c530bc1a5e1c65a260f404fe0c9499bb9"
     },
     {
       "path": "vault-paths.ts",
@@ -62,13 +58,13 @@
   "files": [
     {
       "path": "bridge-capabilities.d.ts",
-      "size": 642,
-      "sha256": "d01655396a5cb0b027821c890739640bb844a859263880a527c3b0899b7370a8"
+      "size": 578,
+      "sha256": "ed73ea3f84eb8ce62e50abe9f0ebdc50ce56ab434d504221fa29066b262742cd"
     },
     {
       "path": "bridge-capabilities.ts",
-      "size": 1132,
-      "sha256": "c3e63a5eb664bea339278ae9f6e1272d7445d382482fc751cf14c53ce6d437dd"
+      "size": 1062,
+      "sha256": "3dac58bfe4c8dde012ebda4f37167e0034df71af6730a3470ae02d5013b46af1"
     },
     {
       "path": "bridge-config.d.ts",
@@ -83,22 +79,22 @@
     {
       "path": "bridge-errors.d.ts",
       "size": 1157,
-      "sha256": "add9c9ceec36f90c672075c947ffc0dc6a2f165a1ba0d8f42583c78132f71a60"
+      "sha256": "9d7e1779d47805cd9806cb0282b16c3e59666b9f3988bac73635279158846cb0"
     },
     {
       "path": "bridge-errors.ts",
       "size": 2558,
-      "sha256": "1c44d861f458fdb318e2a9eaf6fe7f9b17b45263908f33c069f1f6c9f8ab2c0b"
+      "sha256": "241a44da30e95ba9268f9af3170db106829faf9a9b43061b0f41c3c6843f6b9e"
     },
     {
       "path": "bridge-operations.d.ts",
-      "size": 2835,
-      "sha256": "d3d835d292e49fb40f86b41e89ab4d4004341fa67deedac4a995b937d8ef7eb0"
+      "size": 1630,
+      "sha256": "533c7877440153001253daa1037f9c22294f8b93e2cc48ad657f20a3eba6b199"
     },
     {
       "path": "bridge-operations.ts",
-      "size": 3729,
-      "sha256": "e995de2920f9c94800c783db1d54e56396783046982ea91364fc21b5a9237054"
+      "size": 2194,
+      "sha256": "cf839cb4e8c958c3e235662173fa53dc2a6df8bc51c1af5e1db16c49168e959a"
     },
     {
       "path": "bridge-protocol.d.ts",
@@ -122,33 +118,33 @@
     },
     {
       "path": "index.d.ts",
-      "size": 4311,
-      "sha256": "c165e532460fb67ae7319c6b3bc52db6f87bdcc04669fb8ac9b033b83b61b1c1"
+      "size": 3278,
+      "sha256": "2aadecba50ca4ed7d4aa62ba6f6d8c78100fc40f70851a192ba1f3ebc84175c5"
     },
     {
       "path": "index.ts",
-      "size": 4862,
-      "sha256": "a01b1a458eefca5403d97364ec07c2f0ebc1b2bdb2a1597ce60b66563f12d0c6"
+      "size": 3769,
+      "sha256": "170c5e2e1d42b4a9d8c52fe6e1e1e88208aec6af5b7437c072095dd22e3d3fcd"
     },
     {
       "path": "mcp-policy.d.ts",
-      "size": 1972,
-      "sha256": "8674b07861b87c7aa27ff984ea372b69bab48710b49083ac156f9de8e46c97af"
+      "size": 1357,
+      "sha256": "67bd345575f0fade06e305506664ebc728a67882dbf40edd6cfb135f76064280"
     },
     {
       "path": "mcp-policy.ts",
-      "size": 3988,
-      "sha256": "78e7263a5f402940e1c7d50e64604112867aacc6c3c5ea95be478d3698d53710"
+      "size": 2927,
+      "sha256": "b4f8052f87f6be0288d842fff273055efa48b0396653db63d5d36bdf36eed65e"
     },
     {
       "path": "mcp-tool-catalog.d.ts",
-      "size": 19078,
-      "sha256": "d72c0d40a37d6b36d6d87b3b01384f07181aac37865d477bdc9ba59faa8c9fc7"
+      "size": 6185,
+      "sha256": "625fda19cd3ab9fd909d0953d5d641bf615f3518143581460e75e423f38a374e"
     },
     {
       "path": "mcp-tool-catalog.ts",
-      "size": 7985,
-      "sha256": "ad7a387b8d302ecced53f6ee5f7d17fcd55eb7f41f9e0e550460eceb31ef7f3f"
+      "size": 3369,
+      "sha256": "f3a9af0d81949723174c85c25160544f01e859695a2df3a272a3522617c98f36"
     },
     {
       "path": "project-directory-protocol.d.ts",
@@ -161,24 +157,14 @@
       "sha256": "9d3c5f734ecce5dd09f58f238f61dc6d75efc2c2211272403879759aef5301e0"
     },
     {
-      "path": "retrieval-protocol.d.ts",
-      "size": 3435,
-      "sha256": "c9e62c694514727ddd3b673355cd98b311d48817383b2be2bd09b2f74626088d"
-    },
-    {
-      "path": "retrieval-protocol.ts",
-      "size": 14782,
-      "sha256": "d1fda5c3f99d53d9f86cad33d1bac682f05ace178f1136afe157eff29d6bb80e"
-    },
-    {
       "path": "tool-capabilities.d.ts",
       "size": 1863,
       "sha256": "4e24f431d9f7393d630ef1b5f20e10cebb5e9718fd6186f6319e73b9f37effd7"
     },
     {
       "path": "tool-capabilities.ts",
-      "size": 5839,
-      "sha256": "3bdd3a26ce0b876593e9805c71dc23c10b0020d1abbeb14eb9ea9d1437fbb454"
+      "size": 4299,
+      "sha256": "a951a338349d7366b7278d120628231c530bc1a5e1c65a260f404fe0c9499bb9"
     },
     {
       "path": "vault-paths.d.ts",

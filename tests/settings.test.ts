@@ -28,24 +28,79 @@ describe("ChatobbySettingTab", () => {
       getLocalModelProviders: vi.fn(async () => ({
         schemaVersion: 1 as const,
         revision: 1,
-        providers: [{
-          id: "ollama",
-          name: "Ollama on this computer",
-          preset: "ollama" as const,
-          api: "openai-completions" as const,
-          baseUrl: "http://127.0.0.1:11434/v1",
-          authentication: "none" as const,
-          models: [{
-            id: "qwen3",
-            name: "Qwen 3",
-            contextWindow: 32_768,
-            maxTokens: 4_096,
-            reasoning: true,
-            imageInput: false,
-          }],
-        }],
+        providers: [
+          {
+            id: "local-qwen",
+            name: "llama.cpp on this computer",
+            preset: "llama-cpp" as const,
+            api: "openai-completions" as const,
+            baseUrl: "http://127.0.0.1:8080/v1",
+            authentication: "none" as const,
+            models: [
+              {
+                id: "qwen3",
+                name: "Qwen 3",
+                contextWindow: 32_768,
+                maxTokens: 4_096,
+                reasoning: true,
+                imageInput: false,
+              },
+            ],
+          },
+        ],
         updatedAt: "2026-08-08T00:00:00.000Z",
         containsSecretValues: false as const,
+      })),
+      getManagedLocalModelServers: vi.fn(async () => ({
+        schemaVersion: 1 as const,
+        document: {
+          schemaVersion: 1 as const,
+          revision: 1,
+          profiles: [
+            {
+              schemaVersion: 1 as const,
+              id: "local-qwen-server",
+              providerId: "local-qwen",
+              name: "Qwen managed server",
+              engine: "llama-cpp" as const,
+              launchPolicy: "on-demand" as const,
+              executablePath: "C:\\Tools\\llama\\llama-server.exe",
+              modelPath: "C:\\Tools\\llama\\qwen.gguf",
+              host: "127.0.0.1" as const,
+              port: 8080,
+              settings: {
+                contextSize: 204_800,
+                gpuLayers: 24,
+                cacheTypeK: "q8_0" as const,
+                cacheTypeV: "q8_0" as const,
+                flashAttention: true,
+              },
+              startupTimeoutSeconds: 180,
+            },
+          ],
+          updatedAt: "2026-08-15T00:00:00.000Z",
+          containsSecretValues: false as const,
+        },
+        statuses: [
+          {
+            schemaVersion: 1 as const,
+            profileId: "local-qwen-server",
+            providerId: "local-qwen",
+            phase: "stopped" as const,
+            ownership: "none" as const,
+            ready: false,
+            checkedAt: "2026-08-15T00:00:00.000Z",
+          },
+        ],
+      })),
+      controlManagedLocalModelServer: vi.fn(async () => ({
+        schemaVersion: 1 as const,
+        profileId: "local-qwen-server",
+        providerId: "local-qwen",
+        phase: "ready" as const,
+        ownership: "this-runtime" as const,
+        ready: true,
+        checkedAt: "2026-08-15T00:00:01.000Z",
       })),
     };
     const plugin = {
@@ -65,14 +120,17 @@ describe("ChatobbySettingTab", () => {
         externalServerUrl: "",
         developerCommand: "chatobby",
         developerArgs: [],
-      providerKeys: { deepseek: true },
-      onboardingVersion: 1,
+        providerKeys: { deepseek: true },
+        onboardingVersion: 1,
       },
       transport,
       getRuntimeMode: () => "managed",
       getRuntimeState: () => ({
         status: "ready",
-        runtime: { identity: { runtimeVersion: "0.1.0" }, ownership: "managed" },
+        runtime: {
+          identity: { runtimeVersion: "0.1.0" },
+          ownership: "managed",
+        },
       }),
       isReleaseBuild: () => true,
       startBackend: vi.fn(async () => {}),
@@ -89,17 +147,33 @@ describe("ChatobbySettingTab", () => {
     } as unknown as ChatobbyPlugin;
     const tab = new ChatobbySettingTab({} as never, plugin);
 
-    expect(tab.getSettingDefinitions()).toMatchObject([{ type: "group", items: [{
-      name: "Chatobby settings",
-      aliases: expect.arrayContaining(["install runtime", "API key", "auto-scroll", "composer shortcuts"]),
-      render: expect.any(Function),
-    }] }]);
+    expect(tab.getSettingDefinitions()).toMatchObject([
+      {
+        type: "group",
+        items: [
+          {
+            name: "Chatobby settings",
+            aliases: expect.arrayContaining([
+              "install runtime",
+              "API key",
+              "auto-scroll",
+              "composer shortcuts",
+            ]),
+            render: expect.any(Function),
+          },
+        ],
+      },
+    ]);
 
     tab.display();
 
-    expect(tab.containerEl.textContent).toContain("Everyday Chatobby settings moved into Chatobby");
+    expect(tab.containerEl.textContent).toContain(
+      "Everyday Chatobby settings moved into Chatobby",
+    );
     expect(tab.containerEl.textContent).toContain("Open Chatobby Settings");
-    expect(tab.containerEl.textContent).not.toContain("Finding available providers");
+    expect(tab.containerEl.textContent).not.toContain(
+      "Finding available providers",
+    );
     expect(tab.containerEl.textContent).not.toContain("Get runtime");
     expect(tab.containerEl.textContent).toContain("Support development");
     expect(tab.containerEl.textContent).toContain("Patreon");
@@ -107,10 +181,23 @@ describe("ChatobbySettingTab", () => {
     const embedded = document.body.createDiv();
     tab.renderChatobbySettings(embedded);
     expect(embedded.textContent).toContain("Finding available providers");
-    await vi.waitFor(() => expect(transport.getProviders).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(transport.getLocalModelProviders).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(transport.getProviders).toHaveBeenCalledOnce(),
+    );
+    await vi.waitFor(() =>
+      expect(transport.getLocalModelProviders).toHaveBeenCalledOnce(),
+    );
+    await vi.waitFor(() =>
+      expect(transport.getManagedLocalModelServers).toHaveBeenCalledOnce(),
+    );
     await vi.waitFor(() => expect(embedded.textContent).toContain("OpenAI"));
-    expect(embedded.textContent).toContain("Ollama on this computer");
+    expect(embedded.textContent).toContain("llama.cpp on this computer");
+    expect(embedded.textContent).toContain("Qwen managed server");
+    expect(embedded.textContent).toContain("Starts on demand");
+    expect(embedded.textContent).toContain("Local model connections");
+    expect(embedded.textContent).toContain(
+      "Other local server types remain fully supported as connections",
+    );
     expect(embedded.textContent).toContain("Web research");
     expect(embedded.textContent).toContain("Enhanced Brave Search");
     expect(embedded.textContent).toContain("Basic public-web search");
@@ -118,10 +205,14 @@ describe("ChatobbySettingTab", () => {
     expect(embedded.textContent).toContain("Patreon");
     expect(plugin.startBackend).toHaveBeenCalledOnce();
     expect(embedded.textContent).not.toContain("Load providers");
-    const names = Array.from(embedded.querySelectorAll(".chatobby-settings__provider .setting-item-name"))
-      .map((element) => element.textContent);
+    const names = Array.from(
+      embedded.querySelectorAll(
+        ".chatobby-settings__provider .setting-item-name",
+      ),
+    ).map((element) => element.textContent);
     expect(names).toEqual([
-      "Ollama on this computer",
+      "llama.cpp on this computer",
+      "Qwen managed server",
       "DeepSeek (deepseek)",
       "OpenAI (openai)",
       "Enhanced Brave Search",

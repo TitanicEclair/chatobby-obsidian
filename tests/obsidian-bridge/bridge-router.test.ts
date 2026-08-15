@@ -76,7 +76,7 @@ describe("routeInboundFrame", () => {
     const inFlight = makeInFlight();
     const abortController = new AbortController();
     inFlight.set("req-1", {
-      operation: "note.read",
+		operation: "context.get",
       args: {},
       abortController,
       deadline: new Date(Date.now() + 10000),
@@ -127,7 +127,7 @@ describe("routeInboundFrame", () => {
 
     const deadline = new Date(Date.now() + 10000).toISOString();
     const result = await routeInboundFrame(
-      { type: "invoke", requestId: "req-slow", operation: "note.read", arguments: {}, deadline },
+		{ type: "invoke", requestId: "req-slow", operation: "context.get", arguments: {}, deadline },
       app,
       inFlight,
     );
@@ -146,7 +146,7 @@ describe("routeInboundFrame", () => {
     // Create an AbortController and add it to the map manually
     const testController = new AbortController();
     inFlight.set("req-cancel-test", {
-      operation: "note.read",
+		operation: "context.get",
       args: {},
       abortController: testController,
       deadline: new Date(Date.now() + 10000),
@@ -204,7 +204,7 @@ describe("routeInboundFrame", () => {
 
     // Start invoke - this registers the entry BEFORE awaiting executeOperation
     const invokePromise = routeInboundFrame(
-      { type: "invoke", requestId: "req-slow-cancel", operation: "note.read", arguments: {}, deadline: new Date(Date.now() + 10000).toISOString() },
+		{ type: "invoke", requestId: "req-slow-cancel", operation: "context.get", arguments: {}, deadline: new Date(Date.now() + 10000).toISOString() },
       app,
       inFlight,
     );

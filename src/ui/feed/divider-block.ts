@@ -12,6 +12,7 @@ export class DividerBlockView extends ChatobbyComponent {
   private activityEl: HTMLElement | null = null;
   private activityLabelEl: HTMLElement | null = null;
   private activityDetailEl: HTMLElement | null = null;
+  private activityStepsEl: HTMLElement | null = null;
   private labelTextEl: HTMLElement | null = null;
   private dotsEl: HTMLElement | null = null;
   private clock: number | null = null;
@@ -36,6 +37,7 @@ export class DividerBlockView extends ChatobbyComponent {
       this.activityDetailEl.textContent = block.detail ?? "";
       this.activityDetailEl.toggleClass("is-hidden", !block.detail);
     }
+    this.renderSteps(block);
     this.syncClock(block);
   }
 
@@ -45,6 +47,7 @@ export class DividerBlockView extends ChatobbyComponent {
     this.activityEl = container.createDiv({ cls: "chatobby-divider-block__activity is-hidden" });
     this.activityLabelEl = this.activityEl.createDiv({ cls: "chatobby-divider-block__activity-label" });
     this.activityDetailEl = this.activityEl.createDiv({ cls: "chatobby-divider-block__activity-detail is-hidden" });
+    this.activityStepsEl = this.activityEl.createDiv({ cls: "chatobby-divider-block__steps is-hidden" });
     const ruleRow = container.createDiv({ cls: "chatobby-divider-block__rule-row" });
     ruleRow.createSpan({ cls: "chatobby-divider-block__rule" });
     const label = ruleRow.createSpan({ cls: "chatobby-divider-block__label" });
@@ -64,6 +67,21 @@ export class DividerBlockView extends ChatobbyComponent {
     this.renderElapsed(block);
     if (block.activityStartedAt !== undefined && block.activityEndedAt === undefined) {
       this.clock = window.setInterval(() => this.renderElapsed(this.block), 1_000);
+    }
+  }
+
+  private renderSteps(block: DividerBlock): void {
+    if (!this.activityStepsEl) return;
+    this.activityStepsEl.empty();
+    const steps = block.activitySteps ?? [];
+    this.activityStepsEl.toggleClass("is-hidden", steps.length === 0);
+    for (const step of steps) {
+      const item = this.activityStepsEl.createDiv({
+        cls: `chatobby-divider-block__step is-${step.state}`,
+        attr: { "data-step-id": step.id },
+      });
+      item.createSpan({ cls: "chatobby-divider-block__step-marker", attr: { "aria-hidden": "true" } });
+      item.createSpan({ cls: "chatobby-divider-block__step-label", text: step.label });
     }
   }
 

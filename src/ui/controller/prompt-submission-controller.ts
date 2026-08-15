@@ -2,9 +2,10 @@ import type { FeedStore } from "../../features/feed/public";
 import type { AttachmentContent, WsPromptAttachment, WsPromptContextPacket } from "../../types";
 import type { ChatobbyTransport } from "../../transport/ws-client";
 import type { PromptSubmissionOutcome } from "../composer/composer";
+import { CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS } from "../../vendor/chatobby-client/control/contracts";
 import { withTimeout } from "./view-utils";
 
-export const PROMPT_START_TIMEOUT_MS = 30_000;
+export const PROMPT_START_TIMEOUT_MS = CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS;
 type PromptTransport = Pick<ChatobbyTransport, "isConnected" | "prompt" | "retractPrompt">;
 type PromptFeedStore = Pick<FeedStore, "dispatch">;
 

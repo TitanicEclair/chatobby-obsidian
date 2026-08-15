@@ -21,59 +21,39 @@ describe("executeOperation", () => {
     abortedController.abort();
 
     await expect(
-      executeOperation("note.read", { path: "test.md" }, abortedController.signal, app),
+		executeOperation("context.get", {}, abortedController.signal, app),
     ).rejects.toThrow(BridgeError);
   });
 
   it("dispatches core operations", async () => {
-    // note.read with non-existent file should throw NOTE_NOT_FOUND
-    await expect(
-      executeOperation("note.read", { path: "nonexistent.md" }, signal, app),
-    ).rejects.toThrow(BridgeError);
+		const result = await executeOperation("note.resolve", { ref: "nonexistent.md", mode: "path" }, signal, app);
+		expect(result).toMatchObject({ status: "not_found" });
   });
 
-  it("dispatches plugin-native operations (registry.status is implemented)", async () => {
-    const result = await executeOperation("registry.status", {}, signal, app) as Record<string, unknown>;
-    expect(result.vault).toBeDefined();
-    expect(Array.isArray(result.capabilities)).toBe(true);
-  });
-
-  it("dispatches retrieval operations (implemented — invalid input throws)", async () => {
-    await expect(
-      executeOperation("retrieval.explore", {}, signal, app),
-    ).rejects.toThrow(BridgeError);
-  });
-
-  it("rejects runtime-owned CLI process operations", async () => {
+	it("rejects runtime-owned CLI and removed connector operations", async () => {
     await expect(
       executeOperation("cli.daily", {}, signal, app),
     ).rejects.toMatchObject({ code: "UNSUPPORTED_OPERATION" });
+		await expect(executeOperation("note.read" as never, {}, signal, app))
+			.rejects.toMatchObject({ code: "UNSUPPORTED_OPERATION" });
   });
 
   it("implements every static operation in the vendored protocol", () => {
     const implemented = new Set(listImplementedOperations());
-    // Only operations requiring the live Obsidian process are connector-owned.
-    expect(implemented.size).toBe(56);
+		expect(implemented.size).toBe(26);
     for (const op of [
-      "context.get", "note.read", "vault.search", "note.resolve", "attachment.read",
-      "vault.list", "note.write", "note.edit", "note.open", "app.open",
-      "registry.status", "metadata.get", "folder.create", "entry.copy", "entry.move",
-      "entry.trash", "attachment.import", "links.generate", "tags.list", "properties.list",
-      "frontmatter.update", "links.get", "links.audit", "graph.traverse", "tasks.list",
-      "tasks.update", "editor.get", "editor.edit", "editor.focus", "workspace.get",
-      "workspace.manage", "commands.list", "commands.execute", "hotkeys.list",
+		"context.get", "note.resolve", "attachment.import", "links.audit",
+		"editor.get", "editor.edit", "editor.focus", "editor.history", "workspace.get", "workspace.manage",
       "browser.open", "browser.navigate", "browser.list", "browser.snapshot",
       "browser.read", "browser.dom", "browser.click", "browser.pointer", "browser.type",
       "browser.press", "browser.wait", "browser.screenshot", "browser.diagnostics",
       "browser.close",
-      "ui.snapshot", "ui.interact",
-      "retrieval.explore", "retrieval.trace", "retrieval.related", "retrieval.hubs",
-      "retrieval.communities", "retrieval.explain",
+		"ui.snapshot", "ui.interact",
     ]) {
       expect(implemented.has(op)).toBe(true);
     }
 
-    for (const op of ["cli.result.read", "cli.run", "cli.daily", "cli.outline"]) {
+		for (const op of ["cli.run", "cli.daily", "note.read", "commands.execute", "retrieval.explore"]) {
       expect(implemented.has(op)).toBe(false);
     }
   });

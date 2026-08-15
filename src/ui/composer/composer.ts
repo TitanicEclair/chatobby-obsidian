@@ -38,6 +38,7 @@ import { attachmentMeta, attachmentVisual } from "../attachments/attachment-pres
 import type { ComposerVaultReference } from "./vault-reference-search";
 
 const MAX_COMPOSER_ATTACHMENTS = 8;
+let composerReferencePanelSequence = 0;
 const COMPOSER_ATTACHMENT_ACCEPT = [
   ".png", ".jpg", ".jpeg", ".gif", ".webp",
   ".pdf", ".docx", ".pptx", ".xlsx", ".odt", ".odp", ".ods", ".rtf",
@@ -129,6 +130,8 @@ export class Composer extends ChatobbyComponent {
   private sendBtn: HTMLButtonElement | null = null;
   private stopBtn: HTMLButtonElement | null = null;
   private referenceMenuEl: HTMLElement | null = null;
+  private referencePanelEl: HTMLElement | null = null;
+  private referenceSummaryButton: HTMLButtonElement | null = null;
 
   private state = createInitialComposerState();
 	private isStreaming = false;
@@ -160,6 +163,13 @@ export class Composer extends ChatobbyComponent {
   private referenceIndex = 0;
   private referenceSearchSequence = 0;
   private selectedReferences: ComposerVaultReference[] = [];
+  private referencesCollapsed = false;
+  private referencePanelOpen = false;
+  private referencePanelIndex = 0;
+  private referenceExpandedWidth = 0;
+  private referenceMeasureFrame = 0;
+  private referenceResizeObserver: ResizeObserver | null = null;
+  private readonly referencePanelId = `chatobby-composer-reference-panel-${++composerReferencePanelSequence}`;
 
   constructor(private host: ComposerHost) {
     super();
@@ -171,7 +181,11 @@ export class Composer extends ChatobbyComponent {
 
   destroy(): void {
     if (this.highlightSyncFrame) window.cancelAnimationFrame(this.highlightSyncFrame);
+    if (this.referenceMeasureFrame) window.cancelAnimationFrame(this.referenceMeasureFrame);
     this.highlightSyncFrame = 0;
+    this.referenceMeasureFrame = 0;
+    this.referenceResizeObserver?.disconnect();
+    this.referenceResizeObserver = null;
     super.destroy();
   }
 
@@ -191,6 +205,11 @@ export class Composer extends ChatobbyComponent {
     const card = this.inputEl.closest<HTMLElement>(".chatobby-composer-card");
     this.composerCardEl = card;
     this.referenceMenuEl = card?.createDiv({ cls: "chatobby-reference-menu is-hidden" }) ?? null;
+    this.referencePanelEl = card?.createDiv({
+      cls: "chatobby-reference-panel is-hidden",
+      attr: { tabindex: "-1", role: "listbox", "aria-label": "Selected references" },
+    }) ?? null;
+    this.referencePanelEl?.addEventListener("keydown", (event) => this.handleReferencePanelKey(event));
     this.interactionRailEl = card?.createDiv({ cls: "chatobby-interaction-rail is-hidden" }) ?? null;
     this.attachmentRailEl = card?.createDiv({ cls: "chatobby-attachment-rail is-hidden" }) ?? null;
     this.referenceRailEl = card?.createDiv({ cls: "chatobby-reference-rail is-hidden" }) ?? null;
@@ -198,11 +217,16 @@ export class Composer extends ChatobbyComponent {
     if (this.attachmentRailEl && card) {
       const inputWrap = card.querySelector(".chatobby-input-wrap");
       if (inputWrap && this.referenceMenuEl) card.insertBefore(this.referenceMenuEl, inputWrap);
+      if (inputWrap && this.referencePanelEl) card.insertBefore(this.referencePanelEl, inputWrap);
       if (inputWrap && this.interactionRailEl) card.insertBefore(this.interactionRailEl, inputWrap);
       if (inputWrap) card.insertBefore(this.attachmentRailEl, inputWrap);
       if (inputWrap && this.referenceRailEl) card.insertBefore(this.referenceRailEl, inputWrap);
       if (inputWrap && this.activationRailEl) card.insertBefore(this.activationRailEl, inputWrap);
       this.bindAttachmentEvents(card);
+    }
+    if (this.referenceRailEl && typeof ResizeObserver !== "undefined") {
+      this.referenceResizeObserver = new ResizeObserver(() => this.reconcileReferenceOverflow());
+      this.referenceResizeObserver.observe(this.referenceRailEl);
     }
     if (card) this.bindAttachmentPicker(card);
     this.renderState();
@@ -236,6 +260,10 @@ export class Composer extends ChatobbyComponent {
   /** Present one blocking request in the composer without mixing it into the user's next prompt. */
   setInteraction(interaction: InteractionState | null): void {
     this.activeInteraction = interaction;
+    if (interaction) {
+      this.referencePanelOpen = false;
+      this.renderReferencePanel();
+    }
     this.composerCardEl?.toggleClass("has-interaction", interaction !== null);
     if (this.inputEl) {
       this.inputEl.readOnly = interaction !== null && interaction.method !== "input";
@@ -701,19 +729,37 @@ export class Composer extends ChatobbyComponent {
     this.referenceMenuEl?.addClass("is-hidden");
   }
 
-  private renderReferences(): void {
+  private renderReferences(remeasure = true): void {
     const rail = this.referenceRailEl;
     if (!rail) return;
+    if (remeasure) {
+      this.referencesCollapsed = false;
+      this.referenceExpandedWidth = 0;
+    }
+    this.referenceSummaryButton = null;
     rail.empty();
-    rail.toggleClass("is-hidden", this.selectedReferences.length === 0);
+    const empty = this.selectedReferences.length === 0;
+    rail.toggleClass("is-hidden", empty);
+    if (empty) {
+      this.referencePanelOpen = false;
+      this.referencePanelIndex = 0;
+      this.renderReferencePanel();
+      return;
+    }
+
+    if (this.referencesCollapsed && this.selectedReferences.length > 1) {
+      this.renderReferenceSummary(rail);
+      this.renderReferencePanel();
+      return;
+    }
+
     for (const reference of this.selectedReferences) {
       const chip = rail.createDiv({ cls: "chatobby-reference-chip" });
       const open = chip.createEl("button", {
         cls: "chatobby-reference-chip__open",
         attr: { type: "button", title: reference.localPath ?? reference.vaultRelativePath ?? reference.path },
       });
-      const icon = open.createSpan({ cls: "chatobby-reference-chip__icon", attr: { "aria-hidden": "true" } });
-      setIcon(icon, reference.kind === "folder" ? "folder" : "file-text");
+      open.createSpan({ cls: "chatobby-reference-chip__icon", text: "@", attr: { "aria-hidden": "true" } });
       open.createSpan({ cls: "chatobby-reference-chip__label", text: referenceChipLabel(reference) });
       open.addEventListener("click", () => this.host.openVaultReference?.(reference));
       const remove = chip.createEl("button", {
@@ -721,12 +767,145 @@ export class Composer extends ChatobbyComponent {
         attr: { type: "button", "aria-label": `Remove ${reference.label}` },
       });
       setIcon(remove, "x");
-      remove.addEventListener("click", () => {
-        this.selectedReferences = this.selectedReferences.filter((candidate) => candidate.id !== reference.id);
-        this.renderReferences();
-        this.updateControls();
-        this.inputEl?.focus();
+      remove.addEventListener("click", () => this.removeReference(reference.id));
+    }
+    this.referencePanelOpen = false;
+    this.renderReferencePanel();
+    this.scheduleReferenceOverflowCheck();
+  }
+
+  private renderReferenceSummary(rail: HTMLElement): void {
+    const button = rail.createEl("button", {
+      cls: "chatobby-reference-summary",
+      attr: {
+        type: "button",
+        title: `${this.selectedReferences.length} selected references`,
+        "aria-expanded": String(this.referencePanelOpen),
+        "aria-controls": this.referencePanelId,
+      },
+    });
+    this.referenceSummaryButton = button;
+    button.createSpan({ cls: "chatobby-reference-summary__at", text: "@", attr: { "aria-hidden": "true" } });
+    button.createSpan({ cls: "chatobby-reference-summary__label", text: `${this.selectedReferences.length} references` });
+    button.addEventListener("click", () => {
+      this.referencePanelOpen = !this.referencePanelOpen;
+      this.referencePanelIndex = Math.min(this.referencePanelIndex, this.selectedReferences.length - 1);
+      this.renderReferencePanel();
+      button.setAttr("aria-expanded", String(this.referencePanelOpen));
+      if (this.referencePanelOpen) window.requestAnimationFrame(() => this.referencePanelEl?.focus());
+    });
+  }
+
+  private renderReferencePanel(): void {
+    const panel = this.referencePanelEl;
+    if (!panel) return;
+    panel.empty();
+    panel.id = this.referencePanelId;
+    const visible = this.referencePanelOpen && this.referencesCollapsed && this.selectedReferences.length > 1;
+    panel.toggleClass("is-hidden", !visible);
+    panel.toggleClass("is-open", visible);
+    if (!visible) return;
+
+    const list = panel.createDiv({ cls: "chatobby-reference-panel__list" });
+    this.selectedReferences.forEach((reference, index) => {
+      const row = list.createDiv({
+        cls: `chatobby-reference-panel__row${index === this.referencePanelIndex ? " is-active" : ""}`,
+        attr: { "data-reference-panel-index": String(index), role: "option", "aria-selected": String(index === this.referencePanelIndex) },
       });
+      const open = row.createEl("button", {
+        cls: "chatobby-reference-panel__open",
+        attr: { type: "button", title: reference.localPath ?? reference.vaultRelativePath ?? reference.path },
+      });
+      open.createSpan({ cls: "chatobby-reference-panel__at", text: "@", attr: { "aria-hidden": "true" } });
+      const copy = open.createSpan({ cls: "chatobby-reference-panel__copy" });
+      copy.createSpan({ cls: "chatobby-reference-panel__name", text: referenceChipLabel(reference) });
+      copy.createSpan({ cls: "chatobby-reference-panel__path", text: reference.relativePath ?? reference.path });
+      open.addEventListener("click", () => this.host.openVaultReference?.(reference));
+      const remove = row.createEl("button", {
+        cls: "chatobby-reference-panel__remove",
+        attr: { type: "button", "aria-label": `Remove ${reference.label}` },
+      });
+      setIcon(remove, "x");
+      remove.addEventListener("click", () => this.removeReference(reference.id, true));
+    });
+  }
+
+  private removeReference(referenceId: string, keepPanel = false): void {
+    this.selectedReferences = this.selectedReferences.filter((candidate) => candidate.id !== referenceId);
+    this.referencePanelIndex = Math.min(this.referencePanelIndex, Math.max(0, this.selectedReferences.length - 1));
+    if (keepPanel && this.selectedReferences.length > 1) {
+      this.referencesCollapsed = true;
+      this.referencePanelOpen = true;
+      this.renderReferences(false);
+      window.requestAnimationFrame(() => this.referencePanelEl?.focus());
+    } else {
+      this.referencePanelOpen = false;
+      this.renderReferences();
+      this.inputEl?.focus();
+    }
+    this.updateControls();
+  }
+
+  private scheduleReferenceOverflowCheck(): void {
+    if (this.referenceMeasureFrame) window.cancelAnimationFrame(this.referenceMeasureFrame);
+    this.referenceMeasureFrame = window.requestAnimationFrame(() => {
+      this.referenceMeasureFrame = 0;
+      const rail = this.referenceRailEl;
+      if (!rail || this.selectedReferences.length <= 1 || this.referencesCollapsed) return;
+      this.referenceExpandedWidth = rail.scrollWidth;
+      if (rail.clientWidth <= 0 || rail.scrollWidth <= rail.clientWidth + 1) return;
+      this.referencesCollapsed = true;
+      this.renderReferences(false);
+    });
+  }
+
+  private reconcileReferenceOverflow(): void {
+    const rail = this.referenceRailEl;
+    if (!rail || this.selectedReferences.length <= 1) return;
+    if (this.referencesCollapsed) {
+      if (this.referenceExpandedWidth > 0 && rail.clientWidth >= this.referenceExpandedWidth) this.renderReferences();
+      return;
+    }
+    this.scheduleReferenceOverflowCheck();
+  }
+
+  private handleReferencePanelKey(event: KeyboardEvent): void {
+    if (!this.referencePanelOpen || this.selectedReferences.length === 0) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this.referencePanelOpen = false;
+      this.renderReferencePanel();
+      this.referenceSummaryButton?.setAttr("aria-expanded", "false");
+      this.referenceSummaryButton?.focus();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      if (event.key === "Home") this.referencePanelIndex = 0;
+      else if (event.key === "End") this.referencePanelIndex = this.selectedReferences.length - 1;
+      else {
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        this.referencePanelIndex = (this.referencePanelIndex + delta + this.selectedReferences.length)
+          % this.selectedReferences.length;
+      }
+      this.renderReferencePanel();
+      window.requestAnimationFrame(() => {
+        this.referencePanelEl
+          ?.querySelector<HTMLElement>(`[data-reference-panel-index="${this.referencePanelIndex}"]`)
+          ?.scrollIntoView({ block: "nearest" });
+      });
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const reference = this.selectedReferences[this.referencePanelIndex];
+      if (reference) this.host.openVaultReference?.(reference);
+      return;
+    }
+    if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      const reference = this.selectedReferences[this.referencePanelIndex];
+      if (reference) this.removeReference(reference.id, true);
     }
   }
 
@@ -1493,9 +1672,9 @@ function activationIcon(command: SlashCommandSpec): string {
 }
 
 function referenceChipLabel(reference: ComposerVaultReference): string {
-  if (reference.kind === "file") return `@${reference.label}`;
+  if (reference.kind === "file") return reference.label;
   const path = reference.relativePath || reference.label;
-  return `@${path.replace(/[\\/]$/u, "")}/`;
+  return `${path.replace(/[\\/]$/u, "")}/`;
 }
 
 function activationKindLabel(command: SlashCommandSpec): string {

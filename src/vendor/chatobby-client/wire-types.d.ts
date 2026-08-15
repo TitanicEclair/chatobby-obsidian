@@ -115,6 +115,14 @@ export type WireSessionEvent = {
     reason: "manual" | "threshold" | "overflow";
     customInstructions?: string;
 } | {
+    type: "compaction_progress";
+    reason: "manual" | "threshold" | "overflow";
+    phase: "preparing" | "writing-checkpoint" | "validating-coverage" | "rebuilding-context" | "rehydrating-context";
+    completedSteps: number;
+    totalSteps: number;
+    tokensBefore?: number;
+    targetTokensAfter?: number;
+} | {
     type: "session_info_changed";
     name: string | undefined;
 } | {

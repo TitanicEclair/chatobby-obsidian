@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-15
+
+- Keep prompt submission pending through runtime-managed compaction instead of
+  surfacing a false 30-second failure; completed checkpoints remain visible
+  and the context meter refreshes from rebuilt post-compaction usage.
+
+- Add cross-platform managed llama.cpp profiles with manual, on-demand, and
+  runtime-start lifecycles; bounded GPU/context/cache settings; truthful
+  readiness and failure state; and Settings controls that never expose an
+  arbitrary shell command or delete user model files.
+- Separate general local-model connections from llama.cpp-only process
+  management in Settings, document input formats and common endpoint defaults,
+  and prevent quantized V-cache profiles from being saved without flash
+  attention.
+- Clarify in the README, public provider guide, and in-vault Chatobby Guide how
+  local-model connections differ from managed llama.cpp profiles, what every
+  configuration field controls, and exactly what Stop and both Remove actions
+  preserve or disable.
+
+- Refresh an already-open context popover when the runtime replaces its
+  model-specific automatic-compaction settings, preventing the bootstrap
+  threshold from remaining visible after reconnect.
+- Recover a Chatobby leaf whose persisted session file was removed by loading
+  the runtime's current session and persisting the repaired leaf state, while
+  continuing to surface non-recoverable session conflicts.
+- Render context compaction as one dedicated five-stage activity with a live
+  elapsed timer and bounded token target, while keeping checkpoint draft text
+  out of ordinary assistant and tool output.
+- Present composer `@` file and folder references as compact, responsive
+  reference chips. Overflowing references collapse into an expandable,
+  keyboard-scrollable removal panel, and sent user messages show a dedicated
+  muted reference summary instead of appending reference paths to their prose.
+
+- Reduce the connector bridge to compact context, exact note resolution,
+  attachment import, scoped link audit, live editor transactions, workspace
+  and host UI state, and Web Viewer operations. Runtime-owned Obsidian CLI
+  discovery and execution no longer cross the bridge as duplicate wrappers.
+- Publish exact vault link and new-attachment conventions in the bounded
+  environment packet so Chatobby can create and resolve Markdown links,
+  wikilinks, and image embeds without a dedicated link-generation tool.
+- Refresh runtime CLI capability discovery when the connector's plugin and
+  capability revision changes while keeping the connector transport-only.
+
 ## [0.3.4] - 2026-08-12
 
 - Make composer `@` references visible while typing, rank the active Project's
@@ -63,7 +106,6 @@
 - Pair the connector with the 0.3.2 runtime recovery path for vaults affected
   by interrupted or out-of-disk-space Projects migrations.
 
-
 ## [0.3.1] - 2026-08-11
 
 - Address Project chat actions by stable session ID instead of converting them
@@ -100,6 +142,7 @@
 
 - Remove a redundant Project-screen assertion so release linting uses the
   discriminated frontend screen contract consistently on every platform.
+
 ### Added
 
 - Added optional enhanced web search through a user-supplied Brave Search API
@@ -1067,7 +1110,7 @@ green (281 tests). Verified live via `obsidian dev:screenshot` + `plugin:reload`
   `WsSessionState.sessionName`, fallback "New chat") instead of the raw UUID.
 - **New commands:** `chatobby:focus-chat` (focus the message box) and `chatobby:focus-editor`
   (return focus to the active note) for a keyboard loop between note and agent.
-- Friendlier placeholder: "Send a message…  type / for commands".
+- Friendlier placeholder: "Send a message… type / for commands".
 
 ### Changed — Frontend pass: streaming fix, composer controls, commands (2026-07-02)
 
@@ -1309,11 +1352,13 @@ Synced plugin docs to the current `pi-mono` backend after auditing the consumed 
 - **Verified accurate, no change needed**: the 29 WS commands (stub matches `ws-types.ts`/`ws-client.ts` exactly), the `AgentSessionEvent` stream (`agent_start`, `turn_start/end`, `message_start/update/end`, `tool_execution_start/update/end`, `queue_update`, `compaction_start/end`, `session_info_changed`, `thinking_level_changed`, `auto_retry_start/end`, `agent_end`), and the 7 extension UI methods (`select`/`confirm`/`input`/`editor`/`notify`/`setWidget`/`setTitle`). The `text_delta`/`thinking_delta`/`toolcall_delta` families are the nested `AssistantMessageEvent` inside `message_update`, not top-level events.
 
 ### Added
+
 - `docs/obsidian-css-variables.md` — comprehensive Obsidian CSS variable reference with chatobby usage mapping
 - `docs/ui-design-concepts.md` — semantic design patterns from chaude analysis (favourable vs unfavourable)
 - `docs/chatobby-style-plan.md` — authoritative CSS architecture and style plan for chatobby
 
 ### Added
+
 - Phase 0 foundation: types, constants, base component class, utils, state machines, transport wrapper
 - Three-layer state model: PluginSettings (infrastructure), SessionPreferences (session defaults), SessionState (server-authoritative)
 - Pure state machine functions for connection and session lifecycles
@@ -1328,6 +1373,7 @@ Synced plugin docs to the current `pi-mono` backend after auditing the consumed 
 - Unit tests for connection and session state machines (17 tests)
 
 ### Changed
+
 - Plugin settings now separate infrastructure (PluginSettings) from session defaults (SessionPreferences)
 - Model and thinking level are managed by SessionControls popover, NOT the settings tab
 - Active tools left as server defaults — plugin does not manage them
@@ -1335,6 +1381,7 @@ Synced plugin docs to the current `pi-mono` backend after auditing the consumed 
 - Backend stubs and protocol docs now track `AgentSessionEvent`, direct `ChatobbyWsClient` return values, and the current attachment blocker.
 
 ### Fixed
+
 - Consolidated loadData/saveData into single read/write cycle to avoid race conditions
 - Added missing `.catch()` on async void calls (transport.connect, transport.prompt, transport.disconnect)
 - Cleaned up transport subscription lifecycle (connection + event listeners properly unsubscribed on view close)
@@ -1342,6 +1389,7 @@ Synced plugin docs to the current `pi-mono` backend after auditing the consumed 
 - Fixed MarkdownRenderer.render call signature (added missing app parameter)
 
 ### Added (docs)
+
 - Feature ideation document (`docs/feature-ideation.md`) — 67 features mapped from chaude's 58-feature inventory + industry patterns, categorized as PORT/PORT+MODIFY/NEW/SERVER with 6-phase implementation plan
 - Vault & directory-based session preferences design spec (`docs/vault-session-prefs.md`) — supersedes previous "seed from previous tab" rules
 - Session creation now resolves prefs via walk-up directory hierarchy from `.chatobby/session-dirs.json`
@@ -1350,6 +1398,7 @@ Synced plugin docs to the current `pi-mono` backend after auditing the consumed 
 - Added VaultSessionConfig and DirectoryPrefs types to State Model section
 
 ### Changed
+
 - Session tab architecture: each tab owns a complete state snapshot (SessionTab) — switching tabs swaps messages, composer text, permission mode, feed scroll, streaming state
 - New session creation resolves preferences from `.chatobby/session-dirs.json` via walk-up directory hierarchy (supersedes "seed from previous tab" — see `docs/vault-session-prefs.md`)
 - SessionPreferences now includes permissionMode field

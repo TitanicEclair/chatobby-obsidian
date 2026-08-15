@@ -26,6 +26,8 @@ describe("Chatobby guide", () => {
     expect(completeGuide).toContain("secret name versus secret value");
     expect(completeGuide).toContain("Creating a secret does not automatically link it");
     expect(completeGuide).toContain("Which account sign-ins work?");
+    expect(completeGuide).toContain("Connection and managed process are different");
+    expect(completeGuide).toContain("chats cannot use it until you restore a connection");
     expect(completeGuide).toContain("[[02 - Permissions and safety|Permissions]]");
   });
 

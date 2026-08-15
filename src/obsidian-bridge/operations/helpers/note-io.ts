@@ -1,16 +1,7 @@
-// Note I/O helpers — read/write/edit/resolve against app.vault + app.metadataCache.
-// Ported business logic from chaude/src/read-tools.ts and chaude/src/vault-refs.ts.
-//
-// See docs/tooling/bridge-executor.md §8 for the Obsidian API mapping.
+import type { App, TFile } from "obsidian";
+import { isTFile } from "./file-types";
 
-import type { App, TAbstractFile, TFile, TFolder } from "obsidian";
-import { normalizeVaultFolderPath } from "../../../vendor/@chatobby/obsidian-protocol/index.js";
-import { BridgeError } from "../../types";
-import { pageTextLines } from "./paging";
-import { computeDiff, type DiffHunk } from "../../../utils/diff";
-import { isTFile, isTFolder } from "./file-types";
-
-/** ObsidianNoteRef — JSON-serializable note reference (no TFile crosses the wire). */
+/** JSON-serializable note reference; no TFile crosses the bridge. */
 export interface ObsidianNoteRef {
   path: string;
   basename: string;
@@ -18,182 +9,12 @@ export interface ObsidianNoteRef {
   ctime?: number;
 }
 
-export interface ObsidianEntryRef {
-  path: string;
-  name: string;
-  basename: string;
-  type: "folder" | "file" | "note" | "attachment";
-  extension?: string;
-  mtime?: number;
-  ctime?: number;
-}
-
-/** Note read result with paging metadata. */
-export interface NoteReadResult {
-  note: ObsidianNoteRef;
-  content: string;
-  frontmatter?: Record<string, unknown>;
-  startLine: number;
-  lineCount: number;
-  totalLines: number;
-  hasMore: boolean;
-  nextStartLine?: number;
-}
-
-/**
- * Read a note with paging.
- * Returns null if the note is not found.
- */
-export async function readNote(
-  app: App,
-  path: string,
-  opts: { startLine: number; lineLimit: number; maxChars: number },
-): Promise<NoteReadResult | null> {
-  const file = app.vault.getAbstractFileByPath(path);
-  if (!isTFile(file)) return null;
-
-  const content = await app.vault.cachedRead(file);
-  const page = pageTextLines(content, opts.startLine, opts.lineLimit, opts.maxChars);
-
-  // Get frontmatter from metadata cache
-  const cached = app.metadataCache.getFileCache(file);
-  const frontmatter = cached?.frontmatter;
-
-  return {
-    note: toNoteRef(file),
-    content: page.content,
-    ...(frontmatter ? { frontmatter } : {}),
-    startLine: page.startLine + 1,
-    lineCount: page.endLine - page.startLine + 1,
-    totalLines: page.totalLines,
-    hasMore: page.hasMore,
-    ...(page.nextStartLine !== null ? { nextStartLine: page.nextStartLine + 1 } : {}),
-  };
-}
-
-/**
- * Write a new note.
- * Throws PATH_EXISTS if the file already exists.
- */
-export async function writeNote(
-  app: App,
-  path: string,
-  content: string,
-): Promise<ObsidianNoteRef> {
-  const existing = app.vault.getAbstractFileByPath(path);
-  if (existing) {
-    throw new BridgeError("PATH_EXISTS", `File already exists: ${path}`);
-  }
-
-  // Ensure parent folder exists
-  const parts = path.split("/");
-  if (parts.length > 1) {
-    const folderPath = parts.slice(0, -1).join("/");
-    const folder = app.vault.getAbstractFileByPath(folderPath);
-    if (!folder) {
-      await app.vault.createFolder(folderPath).catch(() => {});
-    }
-  }
-
-  const file = await app.vault.create(path, content);
-  return toNoteRef(file);
-}
-
-/**
- * Edit a note with conflict detection.
- * Throws REVISION_CONFLICT if expectedMtime doesn't match.
- * Throws NOTE_NOT_FOUND if the file doesn't exist.
- */
-export async function editNote(
-  app: App,
-  path: string,
-  edit: Record<string, unknown>,
-  expectedMtime?: number,
-): Promise<{ note: ObsidianNoteRef; changed: boolean; mtime: number; diff?: DiffHunk[] }> {
-  const file = app.vault.getAbstractFileByPath(path);
-  if (!isTFile(file)) {
-    throw new BridgeError("NOTE_NOT_FOUND", `Note not found: ${path}`);
-  }
-
-  // Revision conflict check
-  if (expectedMtime !== undefined && file.stat.mtime !== expectedMtime) {
-    throw new BridgeError(
-      "REVISION_CONFLICT",
-      `File was modified since last read (expected mtime ${expectedMtime}, got ${file.stat.mtime})`,
-    );
-  }
-
-  const mode = edit.mode as string;
-  const editContent = edit.content as string | undefined;
-  let diff: DiffHunk[] = [];
-  await app.vault.process(file, (currentContent) => {
-    if (expectedMtime !== undefined && file.stat.mtime !== expectedMtime) {
-      throw new BridgeError(
-        "REVISION_CONFLICT",
-        `File was modified since last read (expected mtime ${expectedMtime}, got ${file.stat.mtime})`,
-      );
-    }
-
-    let newContent: string;
-    switch (mode) {
-      case "append":
-        newContent = currentContent + (editContent ?? "");
-        break;
-      case "prepend":
-        newContent = (editContent ?? "") + currentContent;
-        break;
-      case "replace_all":
-        newContent = editContent ?? "";
-        break;
-      case "replace_exact": {
-        const find = edit.find as string | undefined;
-        const replace = edit.replace as string | undefined;
-        if (find === undefined) {
-          throw new BridgeError("INVALID_INPUT", "replace_exact requires 'find'");
-        }
-        if (!currentContent.includes(find)) {
-          throw new BridgeError("INVALID_INPUT", `Find string not found in note: ${find}`);
-        }
-        newContent = currentContent.replace(find, replace ?? "");
-        break;
-      }
-      default:
-        throw new BridgeError("INVALID_INPUT", `Unknown edit mode: ${mode}`);
-    }
-
-    // Capture a unified diff before writing so the edit tool can render hunks (the result
-    // round-trips bridge → server → tool_execution_end → renderer).
-    diff = computeDiff(currentContent, newContent);
-    return newContent;
-  });
-
-  return {
-    note: toNoteRef(file),
-    changed: true,
-    mtime: file.stat.mtime,
-    ...(diff.length > 0 ? { diff } : {}),
-  };
-}
-
-/**
- * note.resolve result — structured status matching the MCP contract.
- */
 export type NoteResolveResult =
   | { status: "resolved"; note: ObsidianNoteRef }
   | { status: "ambiguous"; candidates: ObsidianNoteRef[] }
   | { status: "not_found"; candidates: ObsidianNoteRef[] };
 
-/**
- * Resolve a reference to a note using the specified mode.
- *
- * Modes:
- *   - "path": direct vault path lookup
- *   - "wikilink": metadataCache linkpath resolution (needs sourcePath)
- *   - "name": basename match across all markdown files
- *   - "any" (default): try path → wikilink → name
- *
- * Returns structured resolved/ambiguous/not_found with candidates.
- */
+/** Resolve a note by exact path, wikilink context, name, or that order. */
 export function resolveNote(
   app: App,
   ref: string,
@@ -203,105 +24,41 @@ export function resolveNote(
 ): NoteResolveResult {
   const tryPath = (): ObsidianNoteRef | null => {
     const file = app.vault.getAbstractFileByPath(ref);
-    if (isTFile(file)) return toNoteRef(file);
-    return null;
+    return isTFile(file) ? toNoteRef(file) : null;
   };
 
   const tryWikilink = (): ObsidianNoteRef | null => {
     const resolved = app.metadataCache.getFirstLinkpathDest(ref, sourcePath);
-    if (resolved) return toNoteRef(resolved);
-    return null;
+    return resolved ? toNoteRef(resolved) : null;
   };
 
   const tryName = (): ObsidianNoteRef[] => {
     const lower = ref.toLowerCase();
     return app.vault
       .getMarkdownFiles()
-      .filter((f) => f.basename.toLowerCase() === lower || f.name.toLowerCase() === lower)
+      .filter((file) => file.basename.toLowerCase() === lower || file.name.toLowerCase() === lower)
       .slice(0, limit)
       .map(toNoteRef);
   };
 
-  // Single-mode resolution
   if (mode === "path") {
     const found = tryPath();
-    return found
-      ? { status: "resolved", note: found }
-      : { status: "not_found", candidates: [] };
+    return found ? { status: "resolved", note: found } : { status: "not_found", candidates: [] };
   }
-
   if (mode === "wikilink") {
     const found = tryWikilink();
-    return found
-      ? { status: "resolved", note: found }
-      : { status: "not_found", candidates: [] };
+    return found ? { status: "resolved", note: found } : { status: "not_found", candidates: [] };
   }
+  if (mode === "name") return candidatesResult(tryName());
 
-  if (mode === "name") {
-    const candidates = tryName();
-    if (candidates.length === 1) return { status: "resolved", note: candidates[0]! };
-    if (candidates.length > 1) return { status: "ambiguous", candidates };
-    return { status: "not_found", candidates: [] };
-  }
-
-  // mode === "any": try path → wikilink → name
   const byPath = tryPath();
   if (byPath) return { status: "resolved", note: byPath };
-
   const byWikilink = tryWikilink();
   if (byWikilink) return { status: "resolved", note: byWikilink };
-
-  const byName = tryName();
-  if (byName.length === 1) return { status: "resolved", note: byName[0]! };
-  if (byName.length > 1) return { status: "ambiguous", candidates: byName };
-  return { status: "not_found", candidates: [] };
+  return candidatesResult(tryName());
 }
 
-/**
- * List entries in a folder.
- * Returns null if the folder doesn't exist.
- */
-export function listEntries(
-  app: App,
-  folderPath: string,
-  opts: { recursive?: boolean; entryTypes?: string[] } = {},
-): { entries: ObsidianEntryRef[] } | null {
-  let normalizedFolder: string;
-  try {
-    normalizedFolder = normalizeVaultFolderPath(folderPath);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid vault folder path.";
-    throw new BridgeError("INVALID_INPUT", message);
-  }
-  const folder = normalizedFolder === ""
-    ? app.vault.getRoot()
-    : app.vault.getAbstractFileByPath(normalizedFolder);
-  if (!isTFolder(folder)) return null;
-
-  const allowedTypes = opts.entryTypes ? new Set(opts.entryTypes) : null;
-  const entries: ObsidianEntryRef[] = [];
-
-  const visit = (current: TFolder): void => {
-    for (const child of current.children) {
-      const entry = toEntryRef(child);
-      if (!allowedTypes || allowedTypes.has(entry.type) || (entry.type === "note" && allowedTypes.has("file"))) {
-        entries.push(entry);
-      }
-      if (opts.recursive && isTFolder(child)) {
-        visit(child);
-      }
-    }
-  };
-
-  visit(folder);
-
-  return { entries };
-}
-
-/**
- * Build a context excerpt around anchor lines.
- * Ported from chaude/src/note-context.ts:40.
- */
+/** Build the bounded active-note excerpt shared by semantic context. */
 export function buildNoteContextExcerpt(
   content: string,
   anchorFromLine: number,
@@ -318,35 +75,17 @@ export function buildNoteContextExcerpt(
   return { fromLine, toLine, text: lines.slice(fromLine, toLine + 1).join("\n") };
 }
 
-/** Convert a TFile to a JSON-serializable ObsidianNoteRef. */
+function candidatesResult(candidates: ObsidianNoteRef[]): NoteResolveResult {
+  if (candidates.length === 1) return { status: "resolved", note: candidates[0]! };
+  if (candidates.length > 1) return { status: "ambiguous", candidates };
+  return { status: "not_found", candidates: [] };
+}
+
 function toNoteRef(file: TFile): ObsidianNoteRef {
   return {
     path: file.path,
     basename: file.basename,
     mtime: file.stat.mtime,
     ctime: file.stat.ctime,
-  };
-}
-
-function toEntryRef(entry: TAbstractFile): ObsidianEntryRef {
-  if (isTFolder(entry)) {
-    return {
-      path: entry.path,
-      name: entry.name,
-      basename: entry.name,
-      type: "folder",
-    };
-  }
-
-  if (!isTFile(entry)) throw new Error(`Unsupported vault entry: ${entry.path}`);
-  const extension = entry.extension || entry.name.split(".").pop() || "";
-  return {
-    path: entry.path,
-    name: entry.name,
-    basename: entry.basename,
-    type: extension === "md" ? "note" : "attachment",
-    ...(extension ? { extension } : {}),
-    mtime: entry.stat.mtime,
-    ctime: entry.stat.ctime,
   };
 }

@@ -1,6 +1,6 @@
 # Flows guide (legacy)
 
-> **Scheduled for deprecation in 0.4.0:** this page documents Chatobby's current
+> **Deprecated in 0.4.0:** this page documents Chatobby's current
 > subagent-only **Flows** feature while it remains available in the 0.3.x
 > alpha. Prefer a direct subagent for new one-off delegation. A future
 > general-purpose workflow system is planned so workflow steps will not all
