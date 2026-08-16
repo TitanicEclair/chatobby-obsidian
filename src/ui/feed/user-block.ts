@@ -1,3 +1,4 @@
+import { setIcon } from "obsidian";
 import type { AttachmentContent, ImageContent, UserMessage } from "../../types";
 import { ChatobbyComponent } from "../shared/component";
 import { decorateAfterMarkdown } from "./decorations";
@@ -38,6 +39,7 @@ export class UserBlockView extends ChatobbyComponent {
       const parsed = parsePromptReferences(content);
       if (parsed.text) this.renderMarkdown(parsed.text, this.contentEl);
       renderReferenceSummary(this.contentEl, parsed.references);
+      renderSkillInvocations(this.contentEl, message.skillInvocations ?? []);
       return;
     }
     const attachments: AttachmentContent[] = [];
@@ -54,6 +56,7 @@ export class UserBlockView extends ChatobbyComponent {
       }
     }
     renderReferenceSummary(this.contentEl, references);
+    renderSkillInvocations(this.contentEl, message.skillInvocations ?? []);
     renderMessageAttachments(this.contentEl, attachments, this.host);
   }
 
@@ -63,6 +66,22 @@ export class UserBlockView extends ChatobbyComponent {
       openVaultLink: (path) => this.host.openVaultLink(path),
       openSystemPath: (path) => this.host.openSystemPath(path),
     });
+  }
+}
+
+function renderSkillInvocations(
+  container: HTMLElement,
+  skills: readonly { readonly name: string }[],
+): void {
+  const unique = skills.filter((skill, index) => skills.findIndex((candidate) => candidate.name === skill.name) === index);
+  for (const skill of unique) {
+    const chip = container.createDiv({
+      cls: "chatobby-message-reference-summary chatobby-message-skill-invocation",
+      attr: { "aria-label": `Invoked skill ${skill.name}`, title: `Skill: ${skill.name}` },
+    });
+    const icon = chip.createSpan({ cls: "chatobby-message-skill-invocation__icon", attr: { "aria-hidden": "true" } });
+    setIcon(icon, "sparkles");
+    chip.createSpan({ cls: "chatobby-message-reference-summary__label", text: skill.name });
   }
 }
 

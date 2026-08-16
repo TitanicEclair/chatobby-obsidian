@@ -55,6 +55,25 @@ describe("FrontendStore", () => {
     expect(store.snapshot?.taskPlan).toEqual(taskPlan);
   });
 
+  it("applies live local-command catalogue replacements", () => {
+    const store = new FrontendStore();
+    store.replace(bootstrap());
+    const localCommands = [{
+      name: "skill:daily-review",
+      description: "Review the current day",
+      kind: "runtime" as const,
+      source: "skill" as const,
+      action: "send-raw-prompt" as const,
+      argument: { kind: "optional-rest" as const },
+      surroundingTextPolicy: "forbid" as const,
+      showInMenu: true,
+    }];
+
+    store.apply(createPatch(1, 0, [{ type: "local-commands.replace", localCommands }]));
+
+    expect(store.snapshot?.localCommands).toEqual(localCommands);
+  });
+
   it("replays an existing bootstrap to late subscribers", () => {
     const store = new FrontendStore();
     const snapshot = bootstrap();

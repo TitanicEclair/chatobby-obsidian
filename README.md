@@ -82,7 +82,7 @@ alpha experience.
 - [Memory](#memory)
 - [Context Queries](#context-queries)
 - [Skills](#skills)
-- [Tasks, roles, subagents, Flows, and channels](#tasks-roles-subagents-flows-and-channels)
+- [Tasks, roles, subagents, and channels](#tasks-roles-subagents-and-channels)
 - [Events](#events)
 - [Permission policies](#permission-policies)
 - [More things to ask Chatobby](#more-things-to-ask-chatobby)
@@ -104,7 +104,7 @@ an agent is allowed to do useful work, and track tasks for you.
 | Projects                   | Keep related chats and one or more working folders together while Vault chats remain available for general work.                                           |
 | Permission policies        | Decide which files, commands, tools, channels, and automated actions a session may use. Create fully customizable permission presets.                      |
 | Memory and context         | Retain approved knowledge and inject small pieces of live project data when needed.                                                                        |
-| Subagents and legacy Flows | Delegate focused work without losing the main conversation. The current subagent-only Flows surface is deprecated in 0.4.0.                                |
+| Subagents                  | Delegate focused work without losing the main conversation, using reusable roles and governed direct runs.                                             |
 | Events                     | Run bounded one-off or repeating work with an assigned project, agent, policy, and runtime limits.                                                         |
 | Local model servers        | Connect Ollama, LM Studio, vLLM, llama.cpp, or another compatible server through Chatobby settings.                                                        |
 | Custom project prompt      | Use the automatically prepared `chatobby.md` to add durable system guidance and choose optional prompt modules.                                            |
@@ -141,8 +141,10 @@ or select only the portion you need.
 
 Type `@` in the composer to attach a file or folder reference. Chatobby suggests
 the running Project's working folders first, including registered folders outside
-the vault, and keeps each selection as an openable chip. A reference tells the
-agent which item you mean; it does not bypass the active permission policy.
+the vault, keeps matching while you type names that contain spaces, and closes
+the suggestion list only when you select an item or press Escape. Each selection
+becomes an openable chip. A reference tells the agent which item you mean; it
+does not bypass the active permission policy.
 
 ### Work with images and documents
 
@@ -247,11 +249,9 @@ each active subagent. Every subagent has its own feed instead of being rendered
 as an undifferentiated block in the main conversation.
 
 Reusable roles provide consistent instructions, model choices, limits, and
-permission policies. The existing subagent-only **Flows** feature can connect
-multiple roles into a validated execution graph, but it is deprecated in
-0.4.0. New work should normally use direct subagents while a
-future general-purpose workflow system is designed around more than subagent
-nodes.
+permission policies. Launch direct bounded subagents for separable research,
+review, or implementation work; Chatobby keeps the main conversation as the
+supervisor and integration point.
 
 Channels provide a durable, inspectable place for agent-to-agent communication.
 They are separate from user-facing session messages, so operational
@@ -285,7 +285,7 @@ Examples:
 
 - `Every weekday at 6 PM, summarize today's project notes into the daily note.`
 - `On the first day of each month, review unresolved tasks in this project.`
-- `Tomorrow at 9 AM, run the saved research workflow with the review policy.`
+- `Tomorrow at 9 AM, launch the Research role with the review policy and summarize its result.`
 
 ### Choose what the agent may do
 
@@ -445,7 +445,6 @@ the agent to create or manage the feature for you:
 | [MCP connections](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/mcp-connections.md)           | Add verified or custom online and local connections, test them, and permission their discovered tools deliberately.                                |
 | [Context Queries](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/context-queries.md)           | Safely compute small typed project data at session start or before a turn, including the complete supported script and SDK contract.               |
 | [Subagents](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md)                       | Launch bounded specialist workers with appropriate roles, policies, limits, communication, and lifecycle handling.                                 |
-| [Flows (legacy)](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md)                  | Review the existing subagent-only Flow feature while it remains available. It is deprecated in 0.4.0 in favor of future general-purpose workflows. |
 | [Events](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/events.md)                             | Create deliberate one-off or repeating automated work with schedules, policies, limits, and inspectable history.                                   |
 
 You can build these features through their pages or describe the outcome to
@@ -593,8 +592,9 @@ For a repository, put instructions such as these in `AGENTS.md`:
 Use additional `AGENTS.md` files in nested directories when a particular part
 of a repository needs more specific guidance. Existing `CLAUDE.md` files are
 supported as a compatibility alternative and use the same path-scoped loading.
-If both names exist in one directory, Chatobby uses `AGENTS.md` for that
-directory. Avoid duplicating contradictory rules across `chatobby.md`,
+If both names exist in one directory, Chatobby uses a non-empty `AGENTS.md` for
+that directory. An empty `AGENTS.md` does not suppress compatible guidance in
+`CLAUDE.md`. Avoid duplicating contradictory rules across `chatobby.md`,
 `AGENTS.md`, and `CLAUDE.md`.
 
 ## Memory
@@ -621,6 +621,19 @@ Poor memory:
 - a large transcript;
 - an instruction intended to bypass permission;
 - a value that changes every few minutes.
+
+### Follow-up obligations
+
+An explicit commitment such as `Remind me to email Sam after dinner` can be
+stored as an active memory obligation. Unlike an ordinary recalled memory, the
+complete active set stays available across turns, compaction, and restart.
+Chatobby acts only when the stated conversation, work-event, or time evidence
+matches; ambiguous evidence leaves the obligation active instead of guessing.
+
+The eventual action still uses the current permission policy. A time-based
+commitment that must fire without an active chat belongs to Events, while an
+obligation can preserve its user-facing identity and verified completion
+receipt.
 
 ## Context Queries
 
@@ -707,6 +720,11 @@ one oversized prompt. A useful suite has one discoverable entry page, focused
 resources for deeper cases, primary references, failure and recovery guidance,
 and an executable or observable verification method. For example:
 
+When Chatobby creates or updates a managed skill, the current view refreshes
+its skill slash commands and any open subagent role editor immediately. Invoking
+a skill shows a compact skill chip in your message; its expanded instructions
+remain agent context and are not presented as text you wrote.
+
 - `Load the relevant native guidance, then plan a large Canvas with a deterministic structural audit and a separate rendered review.`
 - `Turn this QuickAdd workflow into a Project skill with exact API references, cancellation and rerun tests, and a live verification checklist.`
 - `Create a user skill for this study-note method. Keep the entry concise and move notation rules and examples into focused resources.`
@@ -728,10 +746,9 @@ be selected or closed as an Obsidian pane, but reading, clicking, typing, and
 page diagnostics happen inside its webpage. Host-interface and webpage
 references are not interchangeable.
 
-## Tasks, roles, subagents, Flows, and channels
+## Tasks, roles, subagents, and channels
 
-Full instructions: [Subagents guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md) and
-[Workflows guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/workflows.md).
+Full instructions: [Subagents guide](https://github.com/TitanicEclair/chatobby-obsidian/blob/main/docs/subagents.md).
 
 These surfaces cover different levels of coordination:
 
@@ -740,22 +757,18 @@ These surfaces cover different levels of coordination:
 | Task          | Tracks one session's current multi-step work                                             |
 | Role          | Defines a reusable kind of specialist agent                                              |
 | Subagent run  | Performs one bounded delegated assignment                                                |
-| Flow (legacy) | Connects reusable subagent roles into a validated execution graph during the 0.3.x alpha |
 | Channel       | Carries durable agent-to-agent communication                                             |
 
-Start with one subagent when a task has a clearly separable research or review
-component. The current subagent-only Flows feature is scheduled for deprecation
-in 0.4.0, so avoid building new long-lived processes around it. Existing Flows
-remain documented so their behavior is understandable while Chatobby moves
-toward a general-purpose workflow design whose steps do not all have to be
-subagents.
+Start with one subagent when a task has a clearly separable research, review,
+or implementation component. Add another only when the work is genuinely
+independent enough to benefit from parallel execution.
 
 Example requests:
 
 - `Delegate a bounded review of these sources to one research subagent. Limit it to five sources and reconcile the findings here.`
 - `Create a reusable role for web-only fact checking with a focused permission policy.`
-- `Inspect this existing Flow, explain its dependencies, and tell me what should be preserved before Flows are retired.`
-- `Show me the active Flow, its blocked nodes, and any permission request that needs my decision.`
+- `Launch a review subagent for this migration and ask it to report only material risks.`
+- `Show me every active subagent and any permission request that needs my decision.`
 
 The main agent remains the supervisor. Delegation must not be used to bypass
 permissions or conceal work from the user.
@@ -802,6 +815,10 @@ chats**. A chat explicitly bound to Full access continues to use Full access
 even when Obsidian is the installation default. The default is not evidence of
 the open chat's effective policy, and each tool operation is still checked
 against the effective binding when it runs.
+
+Reloading or restarting the Obsidian application always asks for a fresh user
+decision. Full access, Auto classification, and an earlier approval for another
+Obsidian CLI command do not authorize those application-lifecycle actions.
 
 When customizing a policy:
 

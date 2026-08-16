@@ -6,7 +6,7 @@ import {
 } from "../../../ui/shared/page-shell";
 import type { SubagentScreenActions, SubagentScreenTab, SubagentStartDraft } from "../domain/screen-model";
 import type { SubagentStore, SubagentViewState } from "../state/subagent-store";
-import { renderAgentsPanel, renderSettingsPanel, renderWorkflowsPanel } from "./catalog-panels";
+import { renderAgentsPanel, renderSettingsPanel } from "./catalog-panels";
 import { AgentConversationView, type SubagentFeedHostFactory } from "./agent-conversation-view";
 import { renderRunWorkspace } from "./run-panels";
 import { renderInboxPanel } from "./inbox-panel";
@@ -133,7 +133,6 @@ export class SubagentsView extends ChatobbyComponent {
       ["runs", "Runs"],
       ["inbox", "Inbox"],
       ["agents", "Roles"],
-      ["workflows", "Flows"],
       ["settings", "Settings"],
     ];
     shell.setTabs(labels.map(([tab, label]) => ({
@@ -174,7 +173,7 @@ export class SubagentsView extends ChatobbyComponent {
         createPageState(body, {
           kind: "loading",
           title: "Loading subagents",
-          description: "Reading runs, roles, workflows, and messages.",
+          description: "Reading runs, roles, and messages.",
         });
         return;
       }
@@ -192,7 +191,6 @@ export class SubagentsView extends ChatobbyComponent {
       }
       else if (this.tab === "inbox") renderInboxPanel(body, state, this.props.actions);
       else if (this.tab === "agents") renderAgentsPanel(body, state, this.props.actions);
-      else if (this.tab === "workflows") renderWorkflowsPanel(body, state, this.props.actions);
       else renderSettingsPanel(body, state, this.props.actions);
     });
   }

@@ -391,7 +391,7 @@ documented application codes.
 | Rotated runtime logs | machine-local logs directory | diagnostics without vault noise |
 | Agent configuration and credentials | vault `.chatobby/agent` | existing vault-scoped runtime contract |
 | Attachments | vault `.chatobby/attachments` | existing vault-scoped artifact contract |
-| Sessions, tasks, memory, workflows | existing backend-owned vault/agent paths | unchanged by lifecycle work |
+| Sessions, tasks, memory, Events, subagents | existing backend-owned vault/agent paths | unchanged by lifecycle work |
 
 Platform paths must come from one `platform-paths.ts` abstraction. The view and
 feature code must not hardcode `.obsidian`, `%LOCALAPPDATA%`, or equivalent

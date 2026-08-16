@@ -38,6 +38,7 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
           messageId: block.id,
           message: {
             role: "user",
+            skillInvocations: block.skillInvocations,
             content: attachments?.length
               ? [
                   ...(block.text

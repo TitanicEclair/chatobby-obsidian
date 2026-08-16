@@ -159,6 +159,7 @@ export class Composer extends ChatobbyComponent {
   private activeInteraction: InteractionState | null = null;
   private defaultPlaceholder = "";
   private referenceToken: ReferenceToken | null = null;
+  private cancelledReferenceStart: number | null = null;
   private referenceMatches: readonly ComposerVaultReference[] = [];
   private referenceIndex = 0;
   private referenceSearchSequence = 0;
@@ -290,6 +291,7 @@ export class Composer extends ChatobbyComponent {
     this.selectedReferences = [];
     this.activations = [];
     this.cancelledToken = null;
+    this.cancelledReferenceStart = null;
     this.pendingArgumentCompletion = null;
     this.closeReferenceMenu();
     if (this.inputEl) {
@@ -314,6 +316,7 @@ export class Composer extends ChatobbyComponent {
     this.selectedReferences = [];
     this.activations = [];
     this.cancelledToken = null;
+    this.cancelledReferenceStart = null;
     this.pendingArgumentCompletion = null;
     this.closeReferenceMenu();
     if (this.inputEl) {
@@ -486,7 +489,7 @@ export class Composer extends ChatobbyComponent {
       if (e.key === "ArrowDown") { e.preventDefault(); this.moveReference(1); return; }
       if (e.key === "ArrowUp") { e.preventDefault(); this.moveReference(-1); return; }
       if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); this.commitReference(); return; }
-      if (e.key === "Escape") { e.preventDefault(); this.closeReferenceMenu(); return; }
+      if (e.key === "Escape") { e.preventDefault(); this.closeReferenceMenu(true); return; }
     }
 
     if (e.key === " " && !e.shiftKey && this.activateCurrentTokenOnSpace()) {
@@ -587,8 +590,9 @@ export class Composer extends ChatobbyComponent {
       this.state.text = this.inputEl.value;
     }
     this.updateControls();
-    // The textarea itself is transparent; the highlight mirror is the visible
-    // text. Keep it current even while @ suggestions own autocomplete.
+    // Keep the mirror current even while @ suggestions own autocomplete.
+    // Ordinary prose stays native textarea text; the mirror takes over only
+    // while an activated slash command needs mixed syntax colours.
     this.refreshSlashState();
     if (this.refreshReferenceState()) this.host.closeSlash?.();
   }
@@ -615,7 +619,16 @@ export class Composer extends ChatobbyComponent {
       this.closeReferenceMenu();
       return false;
     }
-    const token = findReferenceToken(input.value, input.selectionStart ?? input.value.length);
+    let token = findReferenceToken(input.value, input.selectionStart ?? input.value.length);
+    if (this.cancelledReferenceStart !== null) {
+      if (input.value[this.cancelledReferenceStart] !== "@") {
+        this.cancelledReferenceStart = null;
+      } else if (token?.start === this.cancelledReferenceStart) {
+        token = null;
+      } else if (token && token.start > this.cancelledReferenceStart) {
+        this.cancelledReferenceStart = null;
+      }
+    }
     if (!token) {
       this.closeReferenceMenu();
       return false;
@@ -720,7 +733,8 @@ export class Composer extends ChatobbyComponent {
     this.updateControls();
   }
 
-  private closeReferenceMenu(): void {
+  private closeReferenceMenu(cancelled = false): void {
+    if (cancelled && this.referenceToken) this.cancelledReferenceStart = this.referenceToken.start;
     this.referenceSearchSequence += 1;
     this.referenceToken = null;
     this.referenceMatches = [];
@@ -1530,6 +1544,11 @@ export class Composer extends ChatobbyComponent {
     if (!this.highlightEl) return;
     this.highlightEl.empty();
 
+    const inputWrap = this.inputEl?.closest<HTMLElement>(".chatobby-input-wrap") ?? null;
+    const isSyntaxHighlighting = ranges.length > 0;
+    inputWrap?.toggleClass("is-syntax-highlighting", isSyntaxHighlighting);
+    this.highlightEl.toggleClass("is-active", isSyntaxHighlighting);
+
     let cursor = 0;
     for (const range of ranges) {
       if (range.start > cursor) {
@@ -1611,11 +1630,11 @@ interface ReferenceToken {
 
 function findReferenceToken(text: string, cursor: number): ReferenceToken | null {
   if (cursor <= 0 || cursor > text.length) return null;
-  let start = cursor - 1;
-  while (start >= 0 && !isReferenceBoundary(text[start])) start -= 1;
-  start += 1;
-  if (text[start] !== "@") return null;
-  if (start > 0 && !isReferenceBoundary(text[start - 1])) return null;
+  let start = text.lastIndexOf("@", cursor - 1);
+  while (start >= 0 && start > 0 && !isReferenceBoundary(text[start - 1])) {
+    start = text.lastIndexOf("@", start - 1);
+  }
+  if (start < 0) return null;
   const query = text.slice(start + 1, cursor);
   if (query.includes("[") || query.includes("]")) return null;
   return { start, end: cursor, query };

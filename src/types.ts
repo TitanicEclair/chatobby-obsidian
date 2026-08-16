@@ -77,6 +77,7 @@ export interface AttachmentContent {
 export interface UserMessage {
   role: "user";
   content: string | (TextContent | ImageContent | AttachmentContent)[];
+  skillInvocations?: readonly { readonly name: string }[];
   timestamp?: number;
 }
 

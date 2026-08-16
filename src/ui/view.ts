@@ -249,7 +249,7 @@ export class ChatobbyView extends ItemView {
     });
     this.slashCommands = new SlashCommandController({
       sendPrompt: async (text, attachments) => { await this.sendPrompt(text, attachments); },
-      sendRawPrompt: (text) => this.sendRawPrompt(text),
+      sendRawPrompt: (text, presentation) => this.sendRawPrompt(text, { presentation }),
       renderFeedback: (input, guidance) => this.getFeedStore().dispatch({ type: "feed.local-feedback-appended", input, guidance }),
       notify: (message) => { new Notice(message); },
       isVaultDirectory: (path) => this.isVaultDirectoryPath(path),
@@ -883,7 +883,13 @@ export class ChatobbyView extends ItemView {
     const draftId = this.sessionState.sessionId ?? `draft-${Date.now()}`;
     return Promise.all(files.map((file) => storeComposerFile(this.app, file, draftId)));
   }
-  private async sendRawPrompt(message: string, options: { startRun?: boolean } = {}): Promise<void> {
+  private async sendRawPrompt(message: string, options: {
+    startRun?: boolean;
+    presentation?: {
+      readonly text: string;
+      readonly skillInvocations?: readonly { readonly name: string }[];
+    };
+  } = {}): Promise<void> {
     this.closeSlashMenu();
     const transport = await this.ensureConnectedTransport();
     if (!transport) return;
@@ -892,7 +898,8 @@ export class ChatobbyView extends ItemView {
 
     this.getFeedStore().dispatch({
       type: "feed.user-prompt-submitted",
-      text: message,
+      text: options.presentation?.text ?? message,
+      skillInvocations: options.presentation?.skillInvocations,
       startRun: options.startRun !== false,
     });
 

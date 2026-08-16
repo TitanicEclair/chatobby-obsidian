@@ -21,6 +21,7 @@ function createBoundComposer(): {
   const inputWrap = document.createElement("div");
   inputWrap.className = "chatobby-input-wrap";
   const highlight = document.createElement("div");
+  highlight.className = "chatobby-input-highlight";
   const input = document.createElement("textarea");
   const controls = document.createElement("div");
   controls.className = "chatobby-composer-controls-host";
@@ -45,6 +46,8 @@ describe("composer text mirror", () => {
     composer.handleInput();
 
     expect(highlight.textContent).toBe("first line\n ");
+    expect(highlight.classList.contains("is-active")).toBe(false);
+    expect(input.parentElement?.classList.contains("is-syntax-highlighting")).toBe(false);
     composer.destroy();
   });
 

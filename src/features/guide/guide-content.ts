@@ -106,7 +106,7 @@ Example:
 
 > Keep literature notes in \`Sources\`. Never replace quoted text. Use YYYY-MM-DD dates. After editing a Dataview block, check the rendered note for errors.
 
-\`AGENTS.md\` can also provide instructions, especially for coding projects. Keep rules short, specific, and relevant to the folder.
+\`AGENTS.md\` can also provide instructions, especially for coding projects. Existing \`CLAUDE.md\` files use the same path-scoped compatibility route. A non-empty \`AGENTS.md\` takes precedence in its directory; an empty one falls through to \`CLAUDE.md\`. Keep rules short, specific, and relevant to the folder.
 
 ## Tips
 
@@ -177,6 +177,8 @@ Assign that policy to the main session, subagent role, or event that needs it. S
 
 Policy changes apply to later tool calls. A request already received by an external service may not be recallable, so stop active work before tightening permissions when timing matters.
 
+Reloading or restarting the Obsidian application always requires a fresh user decision. Full access, Auto classification, and a previous approval for another Obsidian CLI command do not authorize those application-lifecycle actions.
+
 Chatobby also has built-in operating and safety instructions. Your messages, memories, and project instructions add context, but cannot remove those protected requirements.
 
 If an exact capability is denied and still succeeds, stop the session, copy diagnostics, and report it as a security bug.
@@ -208,6 +210,7 @@ Use **memory** when information should be retrieved when relevant. Use \`chatobb
 | Always follow a project naming rule | \`chatobby.md\` |
 | Run a calculation at the start of sessions | Context query |
 | Repeat work on a schedule | Event |
+| Keep a follow-up until a stated trigger is proven | Memory obligation |
 | Learn a reusable procedure with supporting files | Skill |
 
 ## Ask Chatobby to remember something
@@ -232,6 +235,12 @@ A parent project does not read memories owned by a child project. A child can ex
 Use category filters and sorting to find older, recently used, or project-specific records. Expand a record to see its full text, edit it, archive it, delete it, or review its history.
 
 For a large cleanup, ask Chatobby to inspect the complete relevant memory scope before proposing changes. A short search result is ranked for relevance and does not prove that no other records exist.
+
+## Follow-up obligations
+
+An explicit commitment such as “remind me to email Sam after dinner” can become a durable memory obligation. Chatobby keeps the complete active set available across turns, compaction, and restart. It acts only from explicit conversation evidence, an exact work event, or a due time with an active-session or Events receipt. Ambiguous evidence leaves the obligation active rather than guessing, and exact revision receipts prevent duplicate completion.
+
+The eventual action remains subject to the current permission policy. Use a normal Event when a time-based trigger must fire while no interactive session is active.
 
 ## Tips
 
@@ -297,7 +306,7 @@ An agent needs both the channel capability and access to the specific channel. T
 
 A message addressed to a live agent wakes it for delivery. A waiting agent remains addressable without continuously spending model tokens. Agents should not repeatedly poll a channel for updates.
 
-## Example workflow
+## Example collaboration
 
 > Create a channel for this project. Launch a vault researcher and a web researcher using the “Research” policy. Ask each to send its findings to the channel, then combine those messages into one answer with note paths and source links.
 
@@ -624,7 +633,7 @@ Use Stop once. The timer, composer button, and running state should all settle. 
 
 Compaction writes a smaller continuity checkpoint before work continues. A message sent during automatic compaction is accepted once and waits behind that checkpoint; it should not show a false 30-second prompt timeout or start a duplicate turn. When compaction finishes, the feed should show **Context compacted**, then the queued message and response in order.
 
-The context meter may briefly say that it is calculating while the checkpoint is installed, but it should refresh to the post-compaction usage without showing the old pre-compaction total. If the meter remains empty, the queued message appears twice, or the feed never records completion, stop once and copy diagnostics with the visible compaction stage.
+The context meter may briefly say that it is calculating while the checkpoint is installed, but it should refresh to the post-compaction usage without showing the old pre-compaction total. If compaction cannot commit, its feed block reports the last maintenance stage and a bounded validator or provider-submission cause; the original context remains usable. If the meter remains empty, the queued message appears twice, or the feed never records completion, stop once and copy those details with the visible compaction stage.
 
 ## Obsidian becomes slow or reloads
 
@@ -703,6 +712,8 @@ Ask Chatobby to reproduce the exact UI state, inspect current Obsidian diagnosti
 > Turn this recurring project-note workflow into a managed Project skill. Use a concise entry page, put the edge cases and audit script in separate resources, link the primary references, and test discovery and loading before I rely on it.
 
 Chatobby should preserve the skill as a maintainable knowledge suite rather than copying a long chat into one file. Review scripts and external links as you would other project code.
+
+After Chatobby creates or updates a managed skill, the current view refreshes its skill slash commands and any open subagent role editor automatically. Invoking a skill renders a compact skill chip in the conversation; the expanded instructions remain agent context rather than appearing as text you authored.
 
 [[00 - Start Here|Guide index]] · [[01 - Sessions and vault work|Project instructions]] · [[03 - Memory and instructions|Memory choices]] · [[09 - Troubleshooting and limits|Troubleshoot failures]]
 `,

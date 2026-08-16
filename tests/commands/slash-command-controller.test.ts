@@ -153,6 +153,33 @@ describe("SlashCommandController runtime catalogue", () => {
     expect(controller.catalog().find((entry) => entry.name === "skill:internal-vault-work")).toBeDefined();
   });
 
+  it("submits a skill command with chip metadata instead of presenting the raw command", async () => {
+    const options = createOptions();
+    const controller = new SlashCommandController(options);
+    controller.setRuntimeCommands([
+      command("skill:study-notes", "send-raw-prompt", {
+        source: "skill",
+        argument: { kind: "optional-rest" },
+      }),
+    ]);
+    const spec = controller.catalog()[0]!;
+    const invocation: SlashParsedCommand = {
+      ...parsed(spec),
+      args: ["Turn this lecture into revision notes"],
+      raw: "/skill:study-notes Turn this lecture into revision notes",
+    };
+
+    await spec.execute?.(invocation);
+
+    expect(options.sendRawPrompt).toHaveBeenCalledWith(
+      invocation.raw,
+      {
+        text: "Turn this lecture into revision notes",
+        skillInvocations: [{ name: "study-notes" }],
+      },
+    );
+  });
+
   it("surfaces a producer-owned operation conflict without keeping its own lock", async () => {
     const options = createOptions();
     options.compact = vi.fn(async () => {

@@ -7,7 +7,6 @@ import type {
   FrontendSubagentAgentDefinition,
   FrontendSubagentRunViewModel,
   FrontendSubagentScreenViewModel,
-  FrontendSubagentWorkflowDefinition,
 } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 import { mount } from "./helpers/mount";
 import { createMockFeedHostForStore } from "./helpers/mock-host";
@@ -226,122 +225,17 @@ describe("SubagentsView", () => {
     const store = createStore();
     const element = mount(createView(store));
     const tabs = Array.from(element.querySelectorAll<HTMLButtonElement>("[role='tab']"));
-    const workflows = tabs.find((button) => button.textContent === "Flows");
-    if (!workflows) throw new Error("Flows tab missing");
+    const roles = tabs.find((button) => button.textContent === "Roles");
+    if (!roles) throw new Error("Roles tab missing");
 
-    workflows.click();
-    expect(workflows.getAttribute("aria-selected")).toBe("true");
-    expect(element.textContent).toContain("Flows will be deprecated in Chatobby 0.4.0");
+    roles.click();
+    expect(roles.getAttribute("aria-selected")).toBe("true");
     expect(tabs.find((button) => button.textContent === "Runs")?.getAttribute("aria-selected")).toBe("false");
 
-    workflows.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    roles.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     const controls = tabs.find((button) => button.textContent === "Settings");
     expect(controls?.getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(controls);
-  });
-
-  it("builds workflows with guided step fields instead of raw JSON", async () => {
-    const store = createStore();
-    const callbacks = actions();
-    const element = mount(createView(store, callbacks));
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Flows")?.click();
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
-
-    expect(element.textContent).toContain("Steps");
-    expect(element.textContent).not.toContain("Workflow JSON");
-    const name = element.querySelector<HTMLInputElement>("input[placeholder='Research and review']");
-    const task = element.querySelector<HTMLTextAreaElement>("textarea[placeholder*='What should this agent produce']");
-    if (!name || !task) throw new Error("workflow fields missing");
-    name.value = "Research and review";
-    task.value = "Collect sources and verify every claim.";
-    task.dispatchEvent(new Event("input"));
-    element.querySelector<HTMLFormElement>(".chatobby-subagents__workflow-form")?.dispatchEvent(new Event("submit"));
-    await Promise.resolve();
-
-    expect(callbacks.saveWorkflow).toHaveBeenCalledWith(expect.objectContaining({
-      id: "research-and-review",
-      name: "Research and review",
-      nodes: [expect.objectContaining({ agentId: "researcher", task: "Collect sources and verify every claim." })],
-    }));
-  });
-
-  it("keeps workflow step ids unique after removing and adding steps", async () => {
-    const store = createStore();
-    const callbacks = actions();
-    const element = mount(createView(store, callbacks));
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Flows")?.click();
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
-
-    const addStep = (): void => {
-      Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Add step")?.click();
-    };
-    addStep();
-    addStep();
-    Array.from(element.querySelectorAll<HTMLButtonElement>(".chatobby-subagents__workflow-step .mod-warning"))[1]?.click();
-    addStep();
-
-    const name = element.querySelector<HTMLInputElement>("input[placeholder='Research and review']");
-    if (!name) throw new Error("workflow name field missing");
-    name.value = "Stable workflow";
-    for (const [index, task] of Array.from(element.querySelectorAll<HTMLTextAreaElement>("textarea[placeholder*='What should this agent produce']")).entries()) {
-      task.value = `Task ${index + 1}`;
-      task.dispatchEvent(new Event("input"));
-    }
-    element.querySelector<HTMLFormElement>(".chatobby-subagents__workflow-form")?.dispatchEvent(new Event("submit"));
-    await Promise.resolve();
-
-    const saved = callbacks.saveWorkflow.mock.calls[0]?.[0];
-    expect(saved?.nodes.map((node) => node.id)).toEqual(["step-1", "step-3", "step-4"]);
-  });
-
-  it("restores workflow drafts after navigating away from the editor", () => {
-    const store = createStore();
-    const callbacks = actions();
-    const element = mount(createView(store, callbacks));
-    const openTab = (label: string): void => {
-      Array.from(element.querySelectorAll("button")).find((button) => button.textContent === label)?.click();
-    };
-    openTab("Flows");
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
-    const name = element.querySelector<HTMLInputElement>("input[placeholder='Research and review']");
-    const task = element.querySelector<HTMLTextAreaElement>("textarea[placeholder*='What should this agent produce']");
-    if (!name || !task) throw new Error("workflow fields missing");
-    name.value = "Persistent review";
-    name.dispatchEvent(new Event("input", { bubbles: true }));
-    task.value = "Retain this task while I inspect another page.";
-    task.dispatchEvent(new Event("input", { bubbles: true }));
-
-    openTab("Runs");
-    openTab("Flows");
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
-
-    expect(element.querySelector<HTMLInputElement>("input[placeholder='Research and review']")?.value)
-      .toBe("Persistent review");
-    expect(element.querySelector<HTMLTextAreaElement>("textarea[placeholder*='What should this agent produce']")?.value)
-      .toBe("Retain this task while I inspect another page.");
-  });
-
-  it("keeps a workflow editor open and explains a failed save", async () => {
-    const store = createStore();
-    const callbacks = actions();
-    callbacks.saveWorkflow.mockRejectedValueOnce(new Error("Workflow dependencies changed; refresh and retry."));
-    const element = mount(createView(store, callbacks));
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Flows")?.click();
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
-    const name = element.querySelector<HTMLInputElement>("input[placeholder='Research and review']");
-    const task = element.querySelector<HTMLTextAreaElement>("textarea[placeholder*='What should this agent produce']");
-    if (!name || !task) throw new Error("workflow fields missing");
-    name.value = "Review workflow";
-    task.value = "Review the result.";
-    task.dispatchEvent(new Event("input"));
-
-    element.querySelector<HTMLFormElement>(".chatobby-subagents__workflow-form")?.dispatchEvent(new Event("submit"));
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(element.querySelector(".chatobby-subagents__workflow-form")).not.toBeNull();
-    expect(element.textContent).toContain("Workflow dependencies changed; refresh and retry.");
-    expect(Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Save")?.hasAttribute("disabled")).toBe(false);
   });
 
   it("opens directly into a focused child feed without management analytics", () => {
@@ -441,7 +335,6 @@ function actions() {
     definition: FrontendSubagentAgentDefinition;
     permissionProfileId: string;
   }>();
-  const workflowDrafts = new Map<string, { workflow: FrontendSubagentWorkflowDefinition }>();
   return {
     openPermissions: vi.fn(),
     getAgentEditorDraft: vi.fn((itemId: string) => structuredClone(agentDrafts.get(itemId))),
@@ -450,11 +343,6 @@ function actions() {
       permissionProfileId: string;
     }) => agentDrafts.set(itemId, structuredClone(draft))),
     clearAgentEditorDraft: vi.fn((itemId: string) => agentDrafts.delete(itemId)),
-    getWorkflowEditorDraft: vi.fn((itemId: string) => structuredClone(workflowDrafts.get(itemId))),
-    setWorkflowEditorDraft: vi.fn((itemId: string, draft: { workflow: FrontendSubagentWorkflowDefinition }) => {
-      workflowDrafts.set(itemId, structuredClone(draft));
-    }),
-    clearWorkflowEditorDraft: vi.fn((itemId: string) => workflowDrafts.delete(itemId)),
     refresh: vi.fn(async () => undefined),
     filterRuns: vi.fn(async () => undefined),
     loadMoreRuns: vi.fn(async () => undefined),
@@ -462,7 +350,6 @@ function actions() {
     selectNode: vi.fn(async () => undefined),
     loadEarlierTranscript: vi.fn(async () => undefined),
     startRun: vi.fn(async () => undefined),
-    startWorkflow: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
     control: vi.fn(async () => undefined),
     sendMessage: vi.fn(async () => undefined),
@@ -472,8 +359,6 @@ function actions() {
     promoteArtifact: vi.fn(async () => undefined),
     saveDefinition: vi.fn(async () => undefined),
     deleteDefinition: vi.fn(async () => undefined),
-    saveWorkflow: vi.fn(async () => undefined),
-    deleteWorkflow: vi.fn(async () => undefined),
     updateSettings: vi.fn(async () => undefined),
   };
 }
@@ -567,7 +452,6 @@ function screen(overrides: Partial<FrontendSubagentScreenViewModel>): FrontendSu
         revision: 1,
         updatedAt: 1,
     }],
-    workflows: [],
     settings: {
       revision: 1,
       sources: {},

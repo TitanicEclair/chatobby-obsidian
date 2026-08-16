@@ -21,17 +21,11 @@ unlock features, raise limits, or change the data Chatobby can access.
   attachments;
 - terminal-first durable file work plus version-aware Obsidian CLI discovery
   for live application, index, history, plugin, and developer semantics;
-- subagents, the legacy subagent-only Flows feature, and vault-scoped
-  communication channels; and
+- subagents and vault-scoped communication channels; and
 - local session storage with no Chatobby account requirement.
 
 Features are experimental. Contracts, storage formats, and user interfaces may
 change before a stable release.
-
-The current Flows feature is deprecated in 0.4.0 while Chatobby moves toward a
-general-purpose workflow design. Existing Flows remain temporarily usable and
-documented, but new reusable automation should not depend on their storage
-format.
 
 ## Cost and data flow
 

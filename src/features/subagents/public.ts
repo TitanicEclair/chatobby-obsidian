@@ -20,8 +20,6 @@ export type {
   FrontendSubagentRunViewModel as SubagentRunSnapshot,
   FrontendSubagentRuntimePolicy as AgentRuntimePolicy,
   FrontendSubagentSettingsViewModel as ResolvedSubagentSettings,
-  FrontendSubagentWorkflowDefinition as WorkflowDefinition,
-  FrontendSubagentWorkflowNodeDefinition as WorkflowNodeDefinition,
 } from "../../vendor/chatobby-client/frontend-contracts.js";
 
 /** Normalized, feed-independent frontend state and synchronization store. */

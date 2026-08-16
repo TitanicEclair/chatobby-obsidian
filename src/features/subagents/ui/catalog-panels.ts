@@ -5,7 +5,6 @@ import type {
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import type { SubagentScreenActions } from "../domain/screen-model";
 import type { SubagentViewState } from "../state/subagent-store";
-import { renderWorkflowEditor } from "./workflow-editor";
 
 const MILLISECONDS_PER_MINUTE = 60_000;
 export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, actions: SubagentScreenActions): void {
@@ -45,34 +44,6 @@ export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, a
     }
   }
   if (state.definitions.length === 0) grid.createDiv({ cls: "chatobby-subagents__empty", text: "No roles yet." });
-}
-
-export function renderWorkflowsPanel(host: HTMLElement, state: SubagentViewState, actions: SubagentScreenActions): void {
-	host.createDiv({
-		cls: "chatobby-subagents__deprecation-note",
-		text: "Flows will be deprecated in Chatobby 0.4.0. Existing definitions remain available while Chatobby moves to general-purpose workflows.",
-	});
-  const toolbar = host.createDiv({ cls: "chatobby-subagents__catalog-header" });
-  toolbar.createDiv({ cls: "chatobby-subagents__detail-title", text: "Flows" });
-  const add = toolbar.createEl("button", { text: "New", attr: { type: "button" } });
-  const editor = host.createDiv({ cls: "chatobby-subagents__editor is-hidden" });
-  add.addEventListener("click", () => renderWorkflowEditor(editor, null, state, actions));
-  const grid = host.createDiv({ cls: "chatobby-subagents__catalog-grid" });
-  for (const workflow of state.workflows) {
-    const card = grid.createDiv({ cls: "chatobby-subagents__catalog-card" });
-    const top = card.createDiv({ cls: "chatobby-subagents__catalog-top" });
-    top.createDiv({ cls: "chatobby-subagents__catalog-name", text: workflow.name });
-    top.createSpan({ cls: "chatobby-subagents__scope", text: `${workflow.nodes.length} step${workflow.nodes.length === 1 ? "" : "s"}` });
-    card.createDiv({ cls: "chatobby-subagents__catalog-description", text: workflow.description });
-    const controls = card.createDiv({ cls: "chatobby-subagents__catalog-actions" });
-    const run = controls.createEl("button", { cls: "mod-cta", text: "Run", attr: { type: "button" } });
-    run.addEventListener("click", () => void actions.startWorkflow(workflow));
-    const edit = controls.createEl("button", { text: "Edit", attr: { type: "button" } });
-    edit.addEventListener("click", () => renderWorkflowEditor(editor, workflow, state, actions));
-    const remove = controls.createEl("button", { cls: "mod-warning", text: "Delete", attr: { type: "button" } });
-    remove.addEventListener("click", () => void actions.deleteWorkflow(workflow));
-  }
-  if (state.workflows.length === 0) grid.createDiv({ cls: "chatobby-subagents__empty", text: "No flows yet." });
 }
 
 export function renderSettingsPanel(host: HTMLElement, state: SubagentViewState, actions: SubagentScreenActions): void {

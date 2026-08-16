@@ -9,15 +9,12 @@ import type {
   FrontendSubagentMessageViewModel as SubagentMessage,
   FrontendSubagentRunFilter,
   FrontendSubagentSettingsViewModel as ResolvedSubagentSettings,
-  FrontendSubagentWorkflowDefinition as WorkflowDefinition,
-  FrontendSubagentWorkflowNodeDefinition,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import type {
   SubagentAgentEditorDraft,
   SubagentScreenActions,
   SubagentScreenTab,
   SubagentStartDraft,
-  SubagentWorkflowEditorDraft,
 } from "../domain/screen-model";
 import { SubagentStore } from "../state/subagent-store";
 import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
@@ -44,7 +41,6 @@ export class SubagentScreenController {
   private pendingRunId: string | undefined;
   private pendingNodeId: string | undefined;
   private readonly agentEditorDrafts = new Map<string, SubagentAgentEditorDraft>();
-  private readonly workflowEditorDrafts = new Map<string, SubagentWorkflowEditorDraft>();
 
   constructor(private readonly options: SubagentScreenControllerOptions) {
     this.store = options.store;
@@ -126,15 +122,6 @@ export class SubagentScreenController {
       clearAgentEditorDraft: (itemId) => {
         this.agentEditorDrafts.delete(this.editorDraftKey("agent", itemId));
       },
-      getWorkflowEditorDraft: (itemId) => cloneDraft(
-        this.workflowEditorDrafts.get(this.editorDraftKey("workflow", itemId)),
-      ),
-      setWorkflowEditorDraft: (itemId, draft) => {
-        this.workflowEditorDrafts.set(this.editorDraftKey("workflow", itemId), structuredClone(draft));
-      },
-      clearWorkflowEditorDraft: (itemId) => {
-        this.workflowEditorDrafts.delete(this.editorDraftKey("workflow", itemId));
-      },
       refresh: () => this.dispatch({ type: "subagents.refresh", payload: {} }),
       filterRuns: (query) => this.filterRuns(query),
       loadMoreRuns: () => this.dispatch({ type: "subagents.load-more", payload: {} }),
@@ -143,7 +130,6 @@ export class SubagentScreenController {
       loadEarlierTranscript: (runId, nodeId) =>
         this.dispatch({ type: "subagents.load-earlier-transcript", payload: { runId, nodeId } }),
       startRun: (draft) => this.startRun(draft),
-      startWorkflow: (workflow) => this.dispatch({ type: "subagents.start-workflow", payload: { workflow } }),
       deleteSession: () => this.deleteSession(),
       control: (runId, nodeId, action, details) => this.control(runId, nodeId, action, details),
       sendMessage: (runId, nodeId, text, kind) =>
@@ -161,8 +147,6 @@ export class SubagentScreenController {
       saveDefinition: (definition, permissionProfileId) =>
         this.dispatch({ type: "subagents.save-definition", payload: { definition, permissionProfileId } }),
       deleteDefinition: (definition) => this.deleteDefinition(definition),
-      saveWorkflow: (workflow) => this.dispatch({ type: "subagents.save-workflow", payload: { workflow } }),
-      deleteWorkflow: (workflow) => this.deleteWorkflow(workflow),
       updateSettings: (settings) => this.updateSettings(settings),
     };
   }
@@ -179,11 +163,11 @@ export class SubagentScreenController {
     runId: string,
     nodeId: string | undefined,
     action: SubagentControlAction,
-    details?: { message?: string; priority?: number; step?: FrontendSubagentWorkflowNodeDefinition },
+    details?: { message?: string; priority?: number },
   ): Promise<void> {
     return this.dispatch({
       type: "subagents.control",
-      payload: { runId, nodeId, action, message: details?.message, priority: details?.priority, step: details?.step },
+      payload: { runId, nodeId, action, message: details?.message, priority: details?.priority },
     });
   }
 
@@ -233,19 +217,6 @@ export class SubagentScreenController {
     });
   }
 
-  private async deleteWorkflow(workflow: WorkflowDefinition): Promise<void> {
-    if (!await confirmAction(this.options.app, {
-      title: "Delete workflow?",
-      message: `Delete workflow “${workflow.name}”?`,
-      confirmLabel: "Delete",
-      destructive: true,
-    })) return;
-    await this.dispatch({
-      type: "subagents.delete-workflow",
-      payload: { workflowId: workflow.id, expectedWorkflowRevision: workflow.revision },
-    });
-  }
-
   private updateSettings(settings: ResolvedSubagentSettings): Promise<void> {
     return this.dispatch({ type: "subagents.update-settings", payload: { settings } });
   }
@@ -275,7 +246,7 @@ export class SubagentScreenController {
     return snapshot;
   }
 
-  private editorDraftKey(kind: "agent" | "workflow", itemId: string): string {
+  private editorDraftKey(kind: "agent", itemId: string): string {
     const snapshot = this.requireSnapshot();
     return `${snapshot.session?.id ?? snapshot.viewId}:${kind}:${itemId}`;
   }
@@ -288,7 +259,7 @@ function cloneDraft<T>(draft: T | undefined): T | undefined {
 function actionStatus(type: FrontendIntent["type"]): string {
   if (type === "subagents.send-message") return "Sending message…";
   if (type === "subagent.decide-permission") return "Updating permission…";
-  if (type === "subagents.start-run" || type === "subagents.start-workflow") return "Starting subagent work…";
+  if (type === "subagents.start-run") return "Starting subagent work…";
   if (type === "subagents.refresh") return "Refreshing subagents…";
   return "Updating subagent state…";
 }

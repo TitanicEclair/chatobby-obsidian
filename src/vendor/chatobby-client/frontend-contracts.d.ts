@@ -126,6 +126,9 @@ export interface FrontendFeedAttachment {
     readonly sizeBytes?: number;
     readonly data?: string;
 }
+export interface FrontendFeedSkillInvocation {
+    readonly name: string;
+}
 export type FrontendFeedBlock = {
     readonly type: "user" | "system";
     readonly id: string;
@@ -136,6 +139,7 @@ export type FrontendFeedBlock = {
         readonly mimeType: string;
     }[];
     readonly attachments?: readonly FrontendFeedAttachment[];
+    readonly skillInvocations?: readonly FrontendFeedSkillInvocation[];
     readonly timestamp?: number;
 } | {
     readonly type: "text" | "thinking";
@@ -804,7 +808,7 @@ export type FrontendSubagentResolutionLayer = "global" | "vault" | "directory" |
 export type FrontendSubagentUserDefinitionScope = "vault" | "directory";
 export type FrontendSubagentRunStatus = "created" | "queued" | "running" | "paused" | "waiting" | "completed" | "failed" | "cancelled" | "orphaned";
 export type FrontendSubagentNodeStatus = "blocked" | "queued" | "running" | "waiting" | "paused" | "completed" | "failed" | "cancelled" | "skipped" | "orphaned";
-export type FrontendSubagentControlAction = "cancel" | "pause" | "resume" | "interrupt" | "steer" | "complete" | "retry" | "reprioritize" | "append-step" | "fork" | "clone" | "decide-child-input" | "decide-tool-permission" | "adopt" | "reconcile-orphan" | "approve-permission" | "deny-permission" | "approve-acceptance" | "reject-acceptance" | "extend-budget";
+export type FrontendSubagentControlAction = "cancel" | "pause" | "resume" | "interrupt" | "steer" | "complete" | "retry" | "reprioritize" | "fork" | "clone" | "decide-child-input" | "decide-tool-permission" | "adopt" | "reconcile-orphan" | "approve-permission" | "deny-permission" | "approve-acceptance" | "reject-acceptance" | "extend-budget";
 export type FrontendSubagentControlReceiptAction = FrontendSubagentControlAction | "set-permission-profile";
 export interface FrontendSubagentRuntimePolicy {
     executionMode?: FrontendSubagentExecutionMode;
@@ -841,48 +845,6 @@ export type FrontendSubagentUserAgentDefinition = Omit<FrontendSubagentAgentDefi
     scope: FrontendSubagentUserDefinitionScope;
     builtIn?: never;
 };
-export interface FrontendSubagentAcceptancePolicy {
-    level: "none" | "attested" | "checked" | "verified" | "reviewed";
-    criteria?: string[];
-    evidence?: ("changed-files" | "tests-added" | "commands-run" | "residual-risks" | "no-staged-files" | "structured-result")[];
-    verify?: {
-        id: string;
-        command: string;
-        timeoutMs?: number;
-    }[];
-    reviewerAgentId?: string;
-}
-export interface FrontendSubagentWorkflowNodeDefinition {
-    id: string;
-    agentId: string;
-    label: string;
-    task: string;
-    dependsOn: string[];
-    priority?: number;
-    concurrencyGroup?: string;
-    executionMode?: FrontendSubagentExecutionMode;
-    contextMode?: FrontendSubagentContextMode;
-    model?: string;
-    thinking?: ThinkingLevel;
-    outputSchema?: Record<string, unknown>;
-    dynamicFanout?: {
-        fromNodeId: string;
-        jsonPointer: string;
-        itemName: string;
-        maxItems: number;
-    };
-    acceptance?: FrontendSubagentAcceptancePolicy;
-}
-export interface FrontendSubagentWorkflowDefinition {
-    id: string;
-    name: string;
-    description: string;
-    nodes: FrontendSubagentWorkflowNodeDefinition[];
-    maxConcurrency?: number;
-    failFast?: boolean;
-    revision: number;
-    updatedAt: number;
-}
 export interface FrontendSubagentRunFilter {
     parentSessionId?: string;
     status?: FrontendSubagentRunStatus[];
@@ -1196,7 +1158,6 @@ export interface FrontendSubagentCapabilitiesViewModel {
     protocolVersion: 1;
     runtimeId: string;
     executionModes: FrontendSubagentResolvedExecutionMode[];
-    supportsDynamicFanout: boolean;
     supportsSiblingCommunication: boolean;
     supportsWorkerRecovery: boolean;
     workerRecoveryMode: "none" | "reconcile" | "adopt";
@@ -1271,7 +1232,6 @@ export interface FrontendSubagentScreenViewModel {
     readonly nextRunCursor?: string;
     readonly runs: readonly FrontendSubagentRunViewModel[];
     readonly definitions: readonly FrontendSubagentAgentDefinition[];
-    readonly workflows: readonly FrontendSubagentWorkflowDefinition[];
     readonly settings?: FrontendSubagentSettingsViewModel;
     readonly models: readonly FrontendSubagentModelViewModel[];
     readonly skills: readonly FrontendSubagentSkillViewModel[];
@@ -1349,6 +1309,9 @@ export type FrontendPatchOperation = {
 } | {
     readonly type: "agent-rail.replace";
     readonly agentRail: FrontendAgentRailViewModel;
+} | {
+    readonly type: "local-commands.replace";
+    readonly localCommands: readonly FrontendLocalCommandViewModel[];
 } | {
     readonly type: "feed.document.replace";
     readonly feed: FrontendFeedDocumentViewModel;
@@ -1923,17 +1886,6 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly maxWallTimeMs?: number;
     };
 }) | (FrontendIntentBase & {
-    readonly type: "subagents.start-workflow" | "subagents.save-workflow";
-    readonly payload: {
-        readonly workflow: FrontendSubagentWorkflowDefinition;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "subagents.delete-workflow";
-    readonly payload: {
-        readonly workflowId: string;
-        readonly expectedWorkflowRevision: number;
-    };
-}) | (FrontendIntentBase & {
     readonly type: "subagents.control";
     readonly payload: {
         readonly runId: string;
@@ -1941,7 +1893,6 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly action: FrontendSubagentControlAction;
         readonly message?: string;
         readonly priority?: number;
-        readonly step?: FrontendSubagentWorkflowNodeDefinition;
     };
 }) | (FrontendIntentBase & {
     readonly type: "subagents.send-message";

@@ -26,6 +26,7 @@ export type FeedAction =
       type: "feed.user-prompt-submitted";
       text: string;
       attachments?: readonly AttachmentContent[];
+      skillInvocations?: readonly { readonly name: string }[];
       startRun: boolean;
       submissionId?: string;
     }

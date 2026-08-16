@@ -135,7 +135,6 @@ function screen(overrides: Partial<FrontendSubagentScreenViewModel> = {}): Front
       rootNodeIds: ["node-a"],
     }],
     definitions: [],
-    workflows: [],
     models: [],
     skills: [],
     selectedRunId: "run-a",

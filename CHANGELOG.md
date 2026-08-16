@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-17
+
+- Require a fresh user decision before Obsidian application reload or restart;
+  Full access, Auto classification, and prior generic CLI approvals cannot
+  silently authorize those lifecycle actions. Failed compaction now retains
+  its last maintenance stage and reports the bounded validator or submission
+  cause instead of ending with an unexplained failure.
+
+- Refresh managed-skill slash commands and open subagent role editors without
+  reopening the Chatobby view. Render invoked skills as compact message chips
+  instead of expanded instructions, and keep `@` reference lookup active
+  across spaces until the user explicitly cancels it with Escape.
+
+- Remove the retired subagent-only Flows page, editor, controls, protocol
+  intents, public documentation, and generated frontend contracts. Existing
+  backend definition files remain untouched but are no longer surfaced or
+  executable.
+
+- Fixed permission and other blocking interaction cards rendering without
+  their actions when a request arrived while its session feed was inactive.
+- Fixed composer text becoming invisible while the message input was hovered or focused by keeping ordinary prose in the native textarea and activating the syntax mirror only for highlighted slash commands.
+
+- Show an animated, unobtrusive `Working...` status while a submitted run is
+  waiting for its first provider event or its next continuation, then yield to
+  concrete reasoning, tool, interaction, or response activity. Record the
+  first-output delay in development performance telemetry.
+- Preserve the composer's accessible input label without using the hover-
+  tooltip attribute that covered model and effort controls in narrow views.
+- Follow the runtime's private continuity-maintenance lifecycle with exact
+  inventory, skill review, reconciliation, checkpoint validation, and live
+  context-rebuild stages. Private checkpoint and session-naming tools remain
+  absent from connector feeds, settings, and exported transcripts.
+
+## [0.4.1] - 2026-08-15
+
 - Ignore replayed compaction-completion events that no longer have an active
   checkpoint, show provider failures that contain no assistant text, and keep
   the next submitted prompt in its correct chronological position.

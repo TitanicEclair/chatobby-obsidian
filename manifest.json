@@ -1,7 +1,7 @@
 {
   "id": "chatobby",
   "name": "Chatobby",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "minAppVersion": "1.11.4",
   "description": "A local agent with chat and tool use, with MCP and plugin support. Bring your own API key, Chatobby supports many LLM providers.",
   "author": "Madelyn Cruz Tan",

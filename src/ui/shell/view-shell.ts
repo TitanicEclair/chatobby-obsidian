@@ -12,6 +12,7 @@
 import { setIcon } from "obsidian";
 
 const COMPACT_LAYOUT_MAX_WIDTH = 700;
+let composerInputSequence = 0;
 
 /** Callbacks wired to user interactions. The view implements these. */
 export interface ShellHandlers {
@@ -20,7 +21,6 @@ export interface ShellHandlers {
   input: () => void;
   inputKeydown: (e: KeyboardEvent) => void;
 }
-
 /** Element references returned to the view for dynamic updates. */
 export interface ViewShell {
   root: HTMLElement;
@@ -74,13 +74,20 @@ export function buildComposerShell(
   const cardEl = composerEl.createDiv({ cls: "chatobby-composer-card" });
   const slashMenuEl = cardEl.createDiv({ cls: "chatobby-slash-menu-host is-hidden" });
   const inputWrap = cardEl.createDiv({ cls: "chatobby-input-wrap" });
+  const inputId = `chatobby-composer-input-${++composerInputSequence}`;
+  const inputLabelEl = inputWrap.createEl("label", {
+    cls: "chatobby-visually-hidden",
+    text: inputLabel,
+    attr: { for: inputId },
+  });
+  inputLabelEl.id = `${inputId}-label`;
   const inputHighlightEl = inputWrap.createDiv({
     cls: "chatobby-input-highlight",
     attr: { "aria-hidden": "true" },
   });
   const inputEl = inputWrap.createEl("textarea", {
     cls: "chatobby-input",
-    attr: { rows: "2", "aria-label": inputLabel },
+    attr: { id: inputId, rows: "2", "aria-labelledby": inputLabelEl.id },
   });
   const barEl = cardEl.createDiv({ cls: "chatobby-composer-bar" });
   const controlsEl = barEl.createDiv({ cls: "chatobby-composer-controls-host" });

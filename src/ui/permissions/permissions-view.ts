@@ -540,7 +540,7 @@ function bindingSourceLabel(source: string): string {
     case "user-session": return "Assigned specifically to this chat.";
     case "installation-default": return "Inherited from the installation default.";
     case "role": return "Inherited from this agent's role.";
-    case "workflow-node": return "Assigned by the running workflow node.";
+    case "workflow-node": return "Assigned by a legacy supervised-run record.";
     case "run": return "Assigned to this active run.";
     default: return "Resolved by Chatobby's live permission binding.";
   }

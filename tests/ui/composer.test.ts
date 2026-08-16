@@ -9,6 +9,7 @@ import {
 } from "../../src/types";
 import { Composer, type ComposerHost } from "../../src/ui/composer/composer";
 import { turnOutputMarker } from "../../src/ui/composer/turn-output-marker";
+import { buildComposerShell } from "../../src/ui/shell/view-shell";
 import type { SlashArgumentOption, SlashCommandSpec, SlashParsedCommand, SlashSubmitPlan } from "../../src/ui/composer/slash-command";
 import { fixedWhitespaceArgs, noArgs } from "../../src/ui/composer/slash-parsers";
 import { submitPrompt } from "../../src/ui/controller/prompt-submission-controller";
@@ -70,6 +71,18 @@ function command(name: string, overrides: Partial<SlashCommandSpec> = {}): Slash
 }
 
 describe("Composer", () => {
+  it("keeps an accessible input name without Obsidian's hover tooltip attribute", () => {
+    const container = document.createElement("div");
+    const shell = buildComposerShell(container, "Message input");
+    const labelId = shell.inputEl.getAttribute("aria-labelledby");
+    expect(shell.inputEl.getAttribute("aria-label")).toBeNull();
+    expect(labelId).toBeTruthy();
+    expect(container.querySelector(`#${labelId}`)?.textContent).toBe("Message input");
+    expect(
+      container.querySelector<HTMLLabelElement>(`label[for="${shell.inputEl.id}"]`)?.htmlFor,
+    ).toBe(shell.inputEl.id);
+  });
+
   it("uses tool start and completed output—not partial deltas—as the retraction boundary", () => {
     const baseline = turnOutputMarker([]);
     expect(turnOutputMarker([{
@@ -840,6 +853,41 @@ describe("Composer", () => {
     expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(true);
   });
 
+  it("keeps @ reference search active through spaces and cancels only on Escape", () => {
+    const searchVaultReferences = vi.fn(() => []);
+    const { composer, input, card } = bindComposer(createHost({ searchVaultReferences }));
+
+    input.value = "@Final Updated Second Brain";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+
+    expect(searchVaultReferences).toHaveBeenLastCalledWith("Final Updated Second Brain");
+    expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(false);
+
+    composer.handleKeydown(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+    const callsAfterEscape = searchVaultReferences.mock.calls.length;
+    expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(true);
+
+    input.value = "@Final Updated Second Brain notes";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    expect(searchVaultReferences).toHaveBeenCalledTimes(callsAfterEscape);
+    expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(true);
+
+    input.value = "@Final Updated Second Brain notes @another folder";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    expect(searchVaultReferences).toHaveBeenLastCalledWith("another folder");
+    expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(false);
+
+    composer.clear();
+    input.value = "@fresh search";
+    input.setSelectionRange(input.value.length, input.value.length);
+    composer.handleInput();
+    expect(searchVaultReferences).toHaveBeenLastCalledWith("fresh search");
+    expect(card.querySelector(".chatobby-reference-menu")?.classList.contains("is-hidden")).toBe(false);
+  });
+
   it("autocompletes the selected slash command and marks it active", () => {
     const reload = command("reload");
     const { composer, input, highlight } = bindComposer(createHost({
@@ -857,6 +905,8 @@ describe("Composer", () => {
 
     expect(input.value).toBe("before /reload ");
     expect(highlight.querySelector(".chatobby-input-highlight__command")?.textContent).toBe("/reload");
+    expect(highlight.classList.contains("is-active")).toBe(true);
+    expect(input.parentElement?.classList.contains("is-syntax-highlighting")).toBe(true);
   });
 
   it("shows a compact activation chip for a selected skill", () => {

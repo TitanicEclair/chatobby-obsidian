@@ -19,6 +19,15 @@ export abstract class InteractionCard extends ChatobbyComponent {
     super();
   }
 
+  override render(parent: HTMLElement): void {
+    super.render(parent);
+    // A request can arrive while its session feed is inactive. In that case
+    // the controller records state before FeedRenderer mounts this card. Replay
+    // the stored state after every deferred mount so titles, choices, and
+    // prefilled input cannot render as an empty interaction shell.
+    if (this.state) this.setState(this.state);
+  }
+
   setState(state: InteractionState): void {
     this.state = state;
     this.container?.toggleClass("is-submitted", state.submitted);

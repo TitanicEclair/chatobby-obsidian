@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chatobbyPerformance } from "../../../src/frontend/performance-monitor";
 import { createFeedStore, feedSelectors, INITIAL_LEGACY_FEED_STATE, type LegacyFeedState } from "../../../src/features/feed/public";
 import { FeedRenderer } from "../../../src/ui/feed";
 import { createMockFeedHost } from "../helpers/mock-host";
@@ -8,6 +9,42 @@ import { mount } from "../helpers/mount";
 const flushScrollFrame = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 50));
 
 describe("FeedRenderer", () => {
+  it("shows an animated Working status until concrete run activity appears", () => {
+    const latency = vi.spyOn(chatobbyPerformance, "recordFirstOutputLatency");
+    const host = createMockFeedHost();
+    const renderer = new FeedRenderer(host);
+    const el = mount(renderer);
+    const working = el.querySelector<HTMLElement>(".chatobby-feed__working");
+    expect(working?.classList.contains("is-hidden")).toBe(true);
+
+    host.getFeedStore().dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "Test the pending provider state",
+      startRun: true,
+    });
+
+    expect(working?.classList.contains("is-hidden")).toBe(false);
+    expect(working?.textContent).toContain("Working...");
+    expect(working?.getAttribute("role")).toBe("status");
+
+    host.getFeedStore().dispatch({ type: "feed.runtime-activity-synchronized", active: false });
+    expect(working?.classList.contains("is-hidden")).toBe(true);
+
+    host.getFeedStore().dispatch({
+      type: "feed.document-projection-synchronized",
+      projection: { blocks: [{
+        type: "text",
+        id: "first-provider-output",
+        turnId: "turn-first-provider-output",
+        text: "The provider has started responding.",
+        startIndex: 0,
+        endIndex: 0,
+        status: "streaming",
+      }] },
+    });
+    expect(latency).toHaveBeenCalledOnce();
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -370,6 +407,28 @@ describe("FeedRenderer", () => {
     const el = mount(renderer);
 
     expect(el.querySelector(".chatobby-message-reference-summary")?.textContent).toBe("@Cerebrum.md");
+  });
+
+  it("renders an invoked skill as a compact chip without exposing its instructions", () => {
+    const state: LegacyFeedState = {
+      ...INITIAL_LEGACY_FEED_STATE,
+      blocks: [{
+        type: "user",
+        id: "block-user-skill",
+        messageId: "msg-user-skill",
+        message: {
+          role: "user",
+          content: "Turn this into revision notes.",
+          skillInvocations: [{ name: "study-notes" }],
+        },
+      }],
+    };
+    const renderer = new FeedRenderer(createMockFeedHost(state));
+    const el = mount(renderer);
+
+    expect(el.querySelector(".chatobby-user-block__content")?.textContent).toContain("Turn this into revision notes.");
+    expect(el.querySelector(".chatobby-message-skill-invocation")?.textContent).toBe("study-notes");
+    expect(el.querySelector(".chatobby-user-block__content")?.textContent).not.toContain("SKILL.md");
   });
 
   it("renders named file attachments and reveals the stored file on click", () => {

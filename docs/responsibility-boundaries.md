@@ -19,7 +19,7 @@ The WebSocket and Obsidian bridge are the product boundary. The backend is the a
 - Atomic, idempotent interpretation of frontend intents and ordered frontend
   patch publication.
 - Feed reduction, tool semantic labels, memory and permission policy,
-  workflow/event validation, retrieval planning, and product command behavior.
+  Event/domain validation, retrieval planning, and product command behavior.
 - Provider credential persistence and credential mutation.
 
 ## Plugin owns

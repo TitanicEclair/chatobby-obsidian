@@ -92,6 +92,26 @@ describe("frontend feed adapter", () => {
     });
   });
 
+  it("preserves structured skill invocation metadata without adding it to prose", () => {
+    const projection = toFeedDocumentProjection({
+      revision: 4,
+      blocks: [{
+        type: "user",
+        id: "user-skill",
+        text: "Turn this into revision notes.",
+        skillInvocations: [{ name: "study-notes" }],
+      }],
+    });
+
+    expect(projection.blocks[0]).toMatchObject({
+      type: "user",
+      message: {
+        content: "Turn this into revision notes.",
+        skillInvocations: [{ name: "study-notes" }],
+      },
+    });
+  });
+
   it("maps runtime agent activity to the navigable supervisor source", () => {
     const projection = toFeedDocumentProjection({
       revision: 4,

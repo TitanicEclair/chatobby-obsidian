@@ -8,6 +8,22 @@ import { createMockInteractionHost } from "../helpers/mock-host";
 import { mount } from "../helpers/mount";
 
 describe("interaction cards", () => {
+  it("replays a select request that was received before its feed became active", () => {
+    const host = createMockInteractionHost();
+    const card = new SelectCard(host);
+    card.setState(createInteractionState("ui_deferred", "select", {
+      title: "Permission Required\nAllow the subagent call?",
+      options: ["Yes", "Yes, for this session", "No", "No, provide reason"],
+    }));
+
+    const el = mount(card);
+
+    expect(el.querySelector(".chatobby-interaction-card__title")?.textContent).toBe("Permission Required");
+    expect(el.querySelector(".chatobby-select-card__message")?.textContent).toBe("Allow the subagent call?");
+    expect(Array.from(el.querySelectorAll(".chatobby-select-card__option-label"), (option) => option.textContent))
+      .toEqual(["Yes", "Yes, for this session", "No", "No, provide reason"]);
+  });
+
   it("renders select options and responds with a selection", () => {
     const host = createMockInteractionHost();
     const card = new SelectCard(host);

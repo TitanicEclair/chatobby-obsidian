@@ -4,11 +4,9 @@ import type {
   FrontendSubagentMessageViewModel as SubagentMessage,
   FrontendSubagentRunFilter,
   FrontendSubagentSettingsViewModel as ResolvedSubagentSettings,
-  FrontendSubagentWorkflowDefinition as WorkflowDefinition,
-  FrontendSubagentWorkflowNodeDefinition,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 
-export type SubagentScreenTab = "runs" | "inbox" | "agents" | "workflows" | "settings";
+export type SubagentScreenTab = "runs" | "inbox" | "agents" | "settings";
 
 export interface SubagentStartDraft {
   description: string;
@@ -28,18 +26,11 @@ export interface SubagentAgentEditorDraft {
   permissionProfileId: string;
 }
 
-export interface SubagentWorkflowEditorDraft {
-  workflow: WorkflowDefinition;
-}
-
 export interface SubagentScreenActions {
   openPermissions: () => void;
   getAgentEditorDraft: (itemId: string) => SubagentAgentEditorDraft | undefined;
   setAgentEditorDraft: (itemId: string, draft: SubagentAgentEditorDraft) => void;
   clearAgentEditorDraft: (itemId: string) => void;
-  getWorkflowEditorDraft: (itemId: string) => SubagentWorkflowEditorDraft | undefined;
-  setWorkflowEditorDraft: (itemId: string, draft: SubagentWorkflowEditorDraft) => void;
-  clearWorkflowEditorDraft: (itemId: string) => void;
   refresh: () => Promise<void>;
   filterRuns: (query: FrontendSubagentRunFilter) => Promise<void>;
   loadMoreRuns: () => Promise<void>;
@@ -47,13 +38,12 @@ export interface SubagentScreenActions {
   selectNode: (runId: string, nodeId: string) => Promise<void>;
   loadEarlierTranscript: (runId: string, nodeId: string) => Promise<void>;
   startRun: (draft: SubagentStartDraft) => Promise<void>;
-  startWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
   deleteSession: () => Promise<void>;
   control: (
     runId: string,
     nodeId: string | undefined,
     action: SubagentControlAction,
-    details?: { message?: string; priority?: number; step?: FrontendSubagentWorkflowNodeDefinition },
+    details?: { message?: string; priority?: number },
   ) => Promise<void>;
   sendMessage: (
     runId: string,
@@ -74,7 +64,5 @@ export interface SubagentScreenActions {
   promoteArtifact: (artifactId: string, expectedRevision: number, targetVaultPath: string) => Promise<void>;
   saveDefinition: (definition: UserAgentDefinition, permissionProfileId: string) => Promise<void>;
   deleteDefinition: (definition: UserAgentDefinition) => Promise<void>;
-  saveWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
-  deleteWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
   updateSettings: (settings: ResolvedSubagentSettings) => Promise<void>;
 }

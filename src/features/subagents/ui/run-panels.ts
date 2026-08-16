@@ -6,7 +6,6 @@ import type {
   FrontendSubagentRunStatus as SubagentRunStatus,
   FrontendSubagentRunSummaryViewModel as SubagentRunSummary,
   FrontendSubagentRunViewModel as SubagentRunSnapshot,
-  FrontendSubagentWorkflowNodeDefinition as WorkflowNodeDefinition,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import type { SubagentViewState } from "../state/subagent-store";
 import type { SubagentScreenActions } from "../domain/screen-model";
@@ -192,27 +191,6 @@ function renderRunManagement(
     }
   });
 
-  const stepForm = body.createEl("form", { cls: "chatobby-subagents__append-form" });
-  stepForm.createDiv({ cls: "chatobby-subagents__section-label", text: "Append workflow step" });
-  const fields = stepForm.createDiv({ cls: "chatobby-subagents__append-grid" });
-  const id = addManagementField(fields, "Node ID", "", "text", "verify-output");
-  const agent = addManagementField(fields, "Agent role", "general-purpose", "text");
-  const label = addManagementField(fields, "Label", "", "text", "Verify output");
-  const dependencies = addManagementField(fields, "Dependencies", selectedNodeId ?? "", "text", "Comma-separated node IDs");
-  const task = addManagementField(fields, "Task", "", "text", "Complete task for the appended agent");
-  for (const input of [id, agent, label, task]) input.required = true;
-  stepForm.createEl("button", { cls: "mod-cta", text: "Append step", attr: { type: "submit" } });
-  stepForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const step: WorkflowNodeDefinition = {
-      id: id.value.trim(),
-      agentId: agent.value.trim(),
-      label: label.value.trim(),
-      task: task.value.trim(),
-      dependsOn: dependencies.value.split(",").map((item) => item.trim()).filter(Boolean),
-    };
-    void actions.control(run.id, undefined, "append-step", { step });
-  });
 }
 
 function addManagementField(
@@ -276,7 +254,7 @@ function renderLatestControlReceipt(host: HTMLElement, run: SubagentRunSnapshot,
 }
 
 function renderNodeGraph(host: HTMLElement, run: SubagentRunSnapshot, selectedNodeId: string | null, actions: SubagentScreenActions): void {
-  const graph = host.createDiv({ cls: "chatobby-subagents__graph", attr: { "aria-label": "Workflow nodes" } });
+  const graph = host.createDiv({ cls: "chatobby-subagents__graph", attr: { "aria-label": "Subagent runs" } });
   for (const node of Object.values(run.nodes)) {
     const button = graph.createEl("button", {
       cls: `chatobby-subagents__node is-${node.status}${selectedNodeId === node.id ? " is-active" : ""}`,

@@ -11,12 +11,15 @@ export interface ChatobbyPerformanceSnapshot {
   readonly markdownRenderCount: number;
   readonly markdownRenderTotalMs: number;
   readonly markdownRenderMaxMs: number;
+  readonly firstOutputLatencyCount: number;
+  readonly firstOutputLatencyTotalMs: number;
+  readonly firstOutputLatencyMaxMs: number;
+  readonly lastFirstOutputLatencyMs: number | null;
   readonly retainedDomNodes: number;
   readonly maximumRetainedDomNodes: number;
   readonly longTaskCount: number;
   readonly longestTaskMs: number;
 }
-
 const enabled = typeof __CHATOBBY_BUILD_MODE__ === "undefined" || __CHATOBBY_BUILD_MODE__ === "development";
 const startedAt = performance.now();
 const state = {
@@ -28,6 +31,10 @@ const state = {
   markdownRenderCount: 0,
   markdownRenderTotalMs: 0,
   markdownRenderMaxMs: 0,
+  firstOutputLatencyCount: 0,
+  firstOutputLatencyTotalMs: 0,
+  firstOutputLatencyMaxMs: 0,
+  lastFirstOutputLatencyMs: null as number | null,
   retainedDomNodes: 0,
   maximumRetainedDomNodes: 0,
   longTaskCount: 0,
@@ -58,6 +65,14 @@ export const chatobbyPerformance = {
     state.markdownRenderTotalMs += durationMs;
     state.markdownRenderMaxMs = Math.max(state.markdownRenderMaxMs, durationMs);
   },
+  recordFirstOutputLatency(durationMs: number): void {
+    if (!enabled) return;
+    const bounded = Math.max(0, durationMs);
+    state.firstOutputLatencyCount += 1;
+    state.firstOutputLatencyTotalMs += bounded;
+    state.firstOutputLatencyMaxMs = Math.max(state.firstOutputLatencyMaxMs, bounded);
+    state.lastFirstOutputLatencyMs = bounded;
+  },
   recordRetainedDomNodes(count: number): void {
     if (!enabled) return;
     state.retainedDomNodes = count;
@@ -78,6 +93,10 @@ export function getChatobbyPerformanceSnapshot(): ChatobbyPerformanceSnapshot {
     markdownRenderCount: state.markdownRenderCount,
     markdownRenderTotalMs: state.markdownRenderTotalMs,
     markdownRenderMaxMs: state.markdownRenderMaxMs,
+    firstOutputLatencyCount: state.firstOutputLatencyCount,
+    firstOutputLatencyTotalMs: state.firstOutputLatencyTotalMs,
+    firstOutputLatencyMaxMs: state.firstOutputLatencyMaxMs,
+    lastFirstOutputLatencyMs: state.lastFirstOutputLatencyMs,
     retainedDomNodes: state.retainedDomNodes,
     maximumRetainedDomNodes: state.maximumRetainedDomNodes,
     longTaskCount: state.longTaskCount,

@@ -1,7 +1,7 @@
 import type { WorkspaceLeaf } from "obsidian";
 
 export type ChatobbyViewMode = "chat" | "projects" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp" | "settings";
-export type ChatobbySubagentTab = "runs" | "inbox" | "agents" | "workflows" | "settings";
+export type ChatobbySubagentTab = "runs" | "inbox" | "agents" | "settings";
 export type ExclusiveViewSurface = "chat" | "overlays" | "subagents" | "channels";
 
 export interface ExclusiveViewSurfaceClosers {
@@ -159,7 +159,7 @@ export function parseNavigationState(value: unknown): ChatobbyNavigationState {
     mode: record.mode === "session-picker" ? "projects" : isViewMode(record.mode) ? record.mode : "chat",
     runId: typeof record.runId === "string" ? record.runId : undefined,
     nodeId: typeof record.nodeId === "string" ? record.nodeId : undefined,
-    subagentTab: isSubagentTab(record.subagentTab) ? record.subagentTab : undefined,
+    subagentTab: record.subagentTab === "workflows" ? "runs" : isSubagentTab(record.subagentTab) ? record.subagentTab : undefined,
     feedOnly: typeof record.feedOnly === "boolean" ? record.feedOnly : undefined,
     channelId: typeof record.channelId === "string" ? record.channelId : undefined,
     messageId: typeof record.messageId === "string" ? record.messageId : undefined,
@@ -202,7 +202,7 @@ function isViewMode(value: unknown): value is ChatobbyViewMode {
 }
 
 function isSubagentTab(value: unknown): value is ChatobbySubagentTab {
-  return value === "runs" || value === "inbox" || value === "agents" || value === "workflows" || value === "settings";
+  return value === "runs" || value === "inbox" || value === "agents" || value === "settings";
 }
 
 function sameNavigationState(left: ChatobbyNavigationState, right: ChatobbyNavigationState): boolean {

@@ -236,6 +236,10 @@ export interface FrontendFeedAttachment {
 	readonly data?: string;
 }
 
+export interface FrontendFeedSkillInvocation {
+	readonly name: string;
+}
+
 export type FrontendFeedBlock =
 	| {
 			readonly type: "user" | "system";
@@ -244,6 +248,7 @@ export type FrontendFeedBlock =
 			readonly text: string;
 			readonly images?: readonly { readonly data: string; readonly mimeType: string }[];
 			readonly attachments?: readonly FrontendFeedAttachment[];
+			readonly skillInvocations?: readonly FrontendFeedSkillInvocation[];
 			readonly timestamp?: number;
 	  }
 	| {
@@ -1020,7 +1025,6 @@ export type FrontendSubagentControlAction =
 	| "complete"
 	| "retry"
 	| "reprioritize"
-	| "append-step"
 	| "fork"
 	| "clone"
 	| "decide-child-input"
@@ -1071,49 +1075,6 @@ export type FrontendSubagentUserAgentDefinition = Omit<FrontendSubagentAgentDefi
 	scope: FrontendSubagentUserDefinitionScope;
 	builtIn?: never;
 };
-
-export interface FrontendSubagentAcceptancePolicy {
-	level: "none" | "attested" | "checked" | "verified" | "reviewed";
-	criteria?: string[];
-	evidence?: (
-		| "changed-files"
-		| "tests-added"
-		| "commands-run"
-		| "residual-risks"
-		| "no-staged-files"
-		| "structured-result"
-	)[];
-	verify?: { id: string; command: string; timeoutMs?: number }[];
-	reviewerAgentId?: string;
-}
-
-export interface FrontendSubagentWorkflowNodeDefinition {
-	id: string;
-	agentId: string;
-	label: string;
-	task: string;
-	dependsOn: string[];
-	priority?: number;
-	concurrencyGroup?: string;
-	executionMode?: FrontendSubagentExecutionMode;
-	contextMode?: FrontendSubagentContextMode;
-	model?: string;
-	thinking?: ThinkingLevel;
-	outputSchema?: Record<string, unknown>;
-	dynamicFanout?: { fromNodeId: string; jsonPointer: string; itemName: string; maxItems: number };
-	acceptance?: FrontendSubagentAcceptancePolicy;
-}
-
-export interface FrontendSubagentWorkflowDefinition {
-	id: string;
-	name: string;
-	description: string;
-	nodes: FrontendSubagentWorkflowNodeDefinition[];
-	maxConcurrency?: number;
-	failFast?: boolean;
-	revision: number;
-	updatedAt: number;
-}
 
 export interface FrontendSubagentRunFilter {
 	parentSessionId?: string;
@@ -1443,7 +1404,6 @@ export interface FrontendSubagentCapabilitiesViewModel {
 	protocolVersion: 1;
 	runtimeId: string;
 	executionModes: FrontendSubagentResolvedExecutionMode[];
-	supportsDynamicFanout: boolean;
 	supportsSiblingCommunication: boolean;
 	supportsWorkerRecovery: boolean;
 	workerRecoveryMode: "none" | "reconcile" | "adopt";
@@ -1511,7 +1471,6 @@ export interface FrontendSubagentScreenViewModel {
 	readonly nextRunCursor?: string;
 	readonly runs: readonly FrontendSubagentRunViewModel[];
 	readonly definitions: readonly FrontendSubagentAgentDefinition[];
-	readonly workflows: readonly FrontendSubagentWorkflowDefinition[];
 	readonly settings?: FrontendSubagentSettingsViewModel;
 	readonly models: readonly FrontendSubagentModelViewModel[];
 	readonly skills: readonly FrontendSubagentSkillViewModel[];
@@ -1606,6 +1565,7 @@ export type FrontendPatchOperation =
 	| { readonly type: "task-plan.replace"; readonly taskPlan: FrontendTaskPlanViewModel }
 	| { readonly type: "composer.replace"; readonly composer: FrontendComposerViewModel }
 	| { readonly type: "agent-rail.replace"; readonly agentRail: FrontendAgentRailViewModel }
+	| { readonly type: "local-commands.replace"; readonly localCommands: readonly FrontendLocalCommandViewModel[] }
 	| { readonly type: "feed.document.replace"; readonly feed: FrontendFeedDocumentViewModel }
 	| { readonly type: "feed.block.upsert"; readonly index: number; readonly block: FrontendFeedBlock }
 	| { readonly type: "feed.block.remove"; readonly blockId: string }
@@ -2171,14 +2131,6 @@ export type FrontendIntent =
 			};
 	  })
 	| (FrontendIntentBase & {
-			readonly type: "subagents.start-workflow" | "subagents.save-workflow";
-			readonly payload: { readonly workflow: FrontendSubagentWorkflowDefinition };
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "subagents.delete-workflow";
-			readonly payload: { readonly workflowId: string; readonly expectedWorkflowRevision: number };
-	  })
-	| (FrontendIntentBase & {
 			readonly type: "subagents.control";
 			readonly payload: {
 				readonly runId: string;
@@ -2186,7 +2138,6 @@ export type FrontendIntent =
 				readonly action: FrontendSubagentControlAction;
 				readonly message?: string;
 				readonly priority?: number;
-				readonly step?: FrontendSubagentWorkflowNodeDefinition;
 			};
 	  })
 	| (FrontendIntentBase & {
@@ -2855,22 +2806,6 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			},
 		};
 	}
-	if (input.type === "subagents.start-workflow" || input.type === "subagents.save-workflow") {
-		return { ...base, type: input.type, payload: { workflow: parseWorkflowDefinition(payload.workflow) } };
-	}
-	if (input.type === "subagents.delete-workflow") {
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				workflowId: requireString(payload.workflowId, "payload.workflowId"),
-				expectedWorkflowRevision: requireSafeInteger(
-					payload.expectedWorkflowRevision,
-					"payload.expectedWorkflowRevision",
-				),
-			},
-		};
-	}
 	if (input.type === "subagents.control") {
 		return {
 			...base,
@@ -2881,7 +2816,6 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				action: requireSubagentControlAction(payload.action),
 				message: optionalString(payload.message, "payload.message"),
 				priority: optionalSafeInteger(payload.priority, "payload.priority"),
-				step: payload.step === undefined ? undefined : parseWorkflowNode(payload.step),
 			},
 		};
 	}
@@ -3420,7 +3354,6 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 		requireArray(input.runSummaries, "runSummaries");
 		requireArray(input.runs, "runs");
 		requireArray(input.definitions, "definitions");
-		requireArray(input.workflows, "workflows");
 		requireArray(input.messages, "messages");
 		requireRecord(input.focusedFeed, "focusedFeed");
 		return value as FrontendSubagentScreenViewModel;
@@ -3888,7 +3821,6 @@ const SUBAGENT_CONTROL_ACTIONS = new Set([
 	"complete",
 	"retry",
 	"reprioritize",
-	"append-step",
 	"fork",
 	"clone",
 	"decide-child-input",
@@ -3901,29 +3833,6 @@ const SUBAGENT_CONTROL_ACTIONS = new Set([
 	"reject-acceptance",
 	"extend-budget",
 ]);
-
-function parseWorkflowNode(value: unknown): FrontendSubagentWorkflowNodeDefinition {
-	const input = requireRecord(value, "payload.step");
-	requireString(input.id, "payload.step.id");
-	requireString(input.agentId, "payload.step.agentId");
-	requireString(input.label, "payload.step.label");
-	requireString(input.task, "payload.step.task");
-	requireStringArray(input.dependsOn, "payload.step.dependsOn");
-	return value as FrontendSubagentWorkflowNodeDefinition;
-}
-
-function parseWorkflowDefinition(value: unknown): FrontendSubagentWorkflowDefinition {
-	const input = requireRecord(value, "payload.workflow");
-	requireString(input.id, "payload.workflow.id");
-	requireString(input.name, "payload.workflow.name");
-	if (typeof input.description !== "string") throw new Error("payload.workflow.description must be a string");
-	requireArray(input.nodes, "payload.workflow.nodes").forEach((node) => {
-		parseWorkflowNode(node);
-	});
-	requireSafeInteger(input.revision, "payload.workflow.revision");
-	requireSafeInteger(input.updatedAt, "payload.workflow.updatedAt");
-	return value as FrontendSubagentWorkflowDefinition;
-}
 
 function parseAgentDefinition(value: unknown): FrontendSubagentAgentDefinition {
 	const input = requireRecord(value, "payload.definition");

@@ -131,11 +131,11 @@ export type WireSessionEvent =
 			type: "compaction_progress";
 			reason: "manual" | "threshold" | "overflow";
 			phase:
-				| "preparing"
-				| "writing-checkpoint"
-				| "validating-coverage"
-				| "rebuilding-context"
-				| "rehydrating-context";
+				| "inventorying-continuity"
+				| "reviewing-active-skills"
+				| "reconciling-work-and-evidence"
+				| "validating-checkpoint"
+				| "rebuilding-live-context";
 			completedSteps: number;
 			totalSteps: number;
 			tokensBefore?: number;

@@ -15,7 +15,6 @@ import type {
   FrontendSubagentSettingsViewModel as ResolvedSubagentSettings,
   FrontendSubagentSkillViewModel,
   FrontendSubagentSyncStatus,
-  FrontendSubagentWorkflowDefinition as WorkflowDefinition,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 
 /** Read-only rendering adapter over the private runtime's subagent screen model. */
@@ -32,7 +31,6 @@ export interface SubagentViewState {
   readonly nextRunCursor: string | null;
   readonly runs: ReadonlyMap<string, SubagentRunSnapshot>;
   readonly definitions: readonly AgentDefinition[];
-  readonly workflows: readonly WorkflowDefinition[];
   readonly settings: ResolvedSubagentSettings | null;
   readonly models: readonly FrontendSubagentModelViewModel[];
   readonly skills: readonly FrontendSubagentSkillViewModel[];
@@ -105,7 +103,6 @@ function toViewState(model: FrontendSubagentScreenViewModel): SubagentViewState 
     nextRunCursor: model.nextRunCursor ?? null,
     runs,
     definitions: model.definitions,
-    workflows: model.workflows,
     settings: model.settings ?? null,
     models: model.models,
     skills: model.skills,
@@ -134,7 +131,6 @@ function initialState(): SubagentViewState {
     nextRunCursor: null,
     runs: new Map(),
     definitions: [],
-    workflows: [],
     settings: null,
     models: [],
     skills: [],

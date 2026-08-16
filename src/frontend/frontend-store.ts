@@ -151,6 +151,8 @@ function applyOperation(
       return { ...snapshot, composer: operation.composer };
     case "agent-rail.replace":
       return { ...snapshot, agentRail: operation.agentRail };
+    case "local-commands.replace":
+      return { ...snapshot, localCommands: operation.localCommands };
     case "feed.document.replace":
       return { ...snapshot, feed: operation.feed };
     case "feed.block.upsert": {

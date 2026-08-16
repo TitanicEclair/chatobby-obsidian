@@ -13,6 +13,7 @@ export function reduceLocalFeedAction(transaction: FeedTransaction, action: Loca
       if (action.startRun) transaction.beginRun();
       const message: UserMessage = {
         role: "user",
+        skillInvocations: action.skillInvocations,
         content: [
           ...(action.text ? [{ type: "text" as const, text: action.text }] : []),
           ...(action.attachments ?? []),

@@ -449,14 +449,12 @@ Subagent orchestration uses first-class commands and a separate ordered event fr
 
 | Command | Purpose |
 |---|---|
-| `subagents_get_snapshot` | Capabilities, current sequence, run summaries, definitions, workflows, and resolved settings |
+| `subagents_get_snapshot` | Capabilities, current sequence, run summaries, role definitions, and resolved settings |
 | `subagents_list_runs` / `subagents_get_run` | Page run summaries or load one full node snapshot |
-| `subagents_start_run` | Start one role or a reusable workflow under the active main session |
-| `subagents_control` | Cancel, pause, resume, interrupt, steer, retry, reprioritize, append, fork/clone/adopt, reconcile, or decide a permission request |
+| `subagents_start_run` | Start one role under the active main session |
+| `subagents_control` | Cancel, pause, resume, interrupt, steer, retry, reprioritize, fork/clone/adopt, reconcile, or decide a permission request |
 | `subagents_subscribe` | Replay events after a sequence and continue live delivery |
 | `subagents_list/save/delete_definitions` | Revision-checked role definition management |
-| `subagents_list/save/delete_workflows` | Revision-checked workflow management |
-| `subagents_validate/preview_workflow` | Validate a DAG or preview its execution plan without running it |
 | `subagents_send_message` | Route a durable operator message to an exact supervised agent feed |
 | `subagents_list_messages` / `subagents_acknowledge_message` | Load the operator inbox and durably acknowledge or answer a blocking request |
 | `subagents_get_transcript` | Load a bounded node transcript page |

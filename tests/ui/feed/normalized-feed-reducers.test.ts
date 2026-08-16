@@ -3,6 +3,24 @@ import type { FeedBlock } from "../../../src/types";
 import { createFeedStore, feedSelectors, type FeedDocumentProjection } from "../../../src/features/feed/public";
 
 describe("normalized feed projection", () => {
+  it("keeps an optimistic skill invocation as metadata instead of prose", () => {
+    const store = createFeedStore();
+    store.dispatch({
+      type: "feed.user-prompt-submitted",
+      text: "Turn this into revision notes",
+      skillInvocations: [{ name: "study-notes" }],
+      startRun: true,
+    });
+
+    expect(blocks(store)[0]).toMatchObject({
+      type: "user",
+      message: {
+        content: [{ type: "text", text: "Turn this into revision notes" }],
+        skillInvocations: [{ name: "study-notes" }],
+      },
+    });
+  });
+
   it("appends a submitted prompt and records the server echo token", () => {
     const store = createFeedStore({ now: () => 1_000 });
     const commit = store.dispatch({ type: "feed.user-prompt-submitted", text: "hello", startRun: true });

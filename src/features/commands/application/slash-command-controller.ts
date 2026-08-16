@@ -24,7 +24,13 @@ export interface SlashCommandControllerOptions {
     text: string,
     attachments?: WsPromptAttachment[],
   ) => Promise<void>;
-  sendRawPrompt: (text: string) => Promise<void>;
+  sendRawPrompt: (
+    text: string,
+    presentation?: {
+      readonly text: string;
+      readonly skillInvocations?: readonly { readonly name: string }[];
+    },
+  ) => Promise<void>;
   renderFeedback: (input: string, guidance: string) => void;
   notify: (message: string) => void;
   isVaultDirectory: (path: string) => boolean;
@@ -178,7 +184,15 @@ export class SlashCommandController {
     }
     switch (model.action) {
       case "send-raw-prompt":
-        return this.options.sendRawPrompt(parsed.raw);
+        return this.options.sendRawPrompt(
+          parsed.raw,
+          model.source === "skill"
+            ? {
+                text: parsed.args.join(" ").trim(),
+                skillInvocations: [{ name: model.name.replace(/^skill:/u, "") }],
+              }
+            : undefined,
+        );
       case "open-screen":
         if (model.screenId === "permissions")
           return this.options.openPermissions(parsed);

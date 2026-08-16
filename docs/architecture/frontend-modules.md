@@ -29,8 +29,12 @@ Every export statement requires API documentation, enforced by `scripts/check-pu
 
 - `SessionController`: tab registry, working-directory scope, initial backend history hydration, metadata refresh, and one preserved feed store per tab.
 - `SlashCommandController`: catalogue, argument validation, surrounding-text policy, deterministic routing.
+- Runtime catalogue replacement patches refresh slash commands and open
+  subagent role editors in place after managed-skill mutations; views do not
+  need to be recreated. Skill invocation bodies remain backend context while
+  the feed receives only structured invocation metadata for compact chips.
 - `OperationCoordinator`: UI-agnostic producer lock state shared by runtime,
-  session, and workflow business controllers.
+  session, and domain business controllers.
 - `LiveStatsController`: coalesced fetches and timer lifecycle.
 - `ExtensionUiController`: extension panels/widgets and blocking interaction cards.
 - `MemoryScreenController` / `PermissionsScreenController`: screen lifecycle and transport/data routing.
