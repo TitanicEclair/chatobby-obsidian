@@ -100,15 +100,8 @@ between feeds without creating fake navigation history. Completed work remains
 in its original chronological place in the feed rather than being repeated at
 the bottom of later turns.
 
-The Subagents page is for runs, inbox messages, roles, workflows, and settings.
+The Subagents page is for runs, inbox messages, roles, and settings.
 Opening a child's feed is not the same as opening that page.
-
-## When to use a workflow instead
-
-Use a saved [workflow](workflows.md) when the same finite multi-step graph will
-be reused, when dependencies must be validated, or when fan-out, fan-in, and
-acceptance gates need durable structure. Use direct subagents for interactive,
-one-off delegation that the main agent will supervise closely.
 
 ## Troubleshooting
 

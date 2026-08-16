@@ -597,6 +597,21 @@ that directory. An empty `AGENTS.md` does not suppress compatible guidance in
 `CLAUDE.md`. Avoid duplicating contradictory rules across `chatobby.md`,
 `AGENTS.md`, and `CLAUDE.md`.
 
+## Long sessions and context compaction
+
+Chatobby automatically compacts a long conversation before its working context
+becomes too crowded. If the threshold is reached during multi-step work,
+Chatobby waits for the current tool result, writes a continuity checkpoint, and
+then resumes the same request. It does not terminate or replay the operation
+that reached the boundary.
+
+The checkpoint first aims to retain the most useful active skills,
+capabilities, and result handles. If that will not fit, it preserves the user's
+unresolved requests, active work, decisions, evidence, and next actions while
+dropping optional working context. If the model cannot produce a valid
+checkpoint after bounded corrections, the runtime constructs a conservative
+minimum from authoritative state rather than abandoning the session.
+
 ## Memory
 
 Memory is for durable knowledge that should remain useful across sessions:

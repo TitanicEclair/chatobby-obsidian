@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-17
+
+- Allow automatic context compaction to pause long tool-driven work at a safe
+  completed-tool boundary and resume the same request from an explicit
+  continuation handoff. The operation that reached the boundary is not stopped
+  or replayed.
+- Make checkpoint completion explicit at three quality levels: full fidelity,
+  continuity safe, and host-reconciled minimum. Optional skills, capabilities,
+  and retained-result handles can be dropped when necessary, while unresolved
+  user requests, work, decisions, evidence, and next actions remain protected.
+- Preserve one immutable checkpoint inventory revision across correction
+  attempts, return field-specific repair guidance, and use a deterministic
+  conservative checkpoint if the model exhausts its bounded corrections.
+
 ## [0.4.2] - 2026-08-17
 
 - Require a fresh user decision before Obsidian application reload or restart;

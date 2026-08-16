@@ -65,8 +65,10 @@ highlights the match.
 Inside a chat, type `@` to reference a file or folder. With an empty query,
 Chatobby starts with useful items from the running Project's primary and attached
 folders, including external folders. Continue typing to narrow the results, use
-the arrow keys or pointer to move through the scrollable list, and select an item
-to keep it as a compact chip. Selecting that chip opens a vault file in Obsidian,
+spaces normally when a file or folder name contains them, use the arrow keys or
+pointer to move through the scrollable list, and press Escape only when you want
+to cancel the active lookup. Select an item to keep it as a compact chip.
+Selecting that chip opens a vault file in Obsidian,
 reveals a vault folder in Obsidian's file explorer, or reveals an external item
 in the system file explorer. References communicate intent; permissions still
 decide what the agent may do with the item.
@@ -131,7 +133,8 @@ them.
 
 `AGENTS.md` is the preferred path-scoped repository instruction file.
 `CLAUDE.md` is supported for compatibility through the same mechanism. When
-both exist in the same directory, Chatobby uses `AGENTS.md` there. None of
+both exist in the same directory, Chatobby uses a non-empty `AGENTS.md` there;
+an empty `AGENTS.md` falls through to `CLAUDE.md`. None of
 these files grants permission or should contain credentials.
 
 Most users should leave all prompt switches enabled. The current configurable
