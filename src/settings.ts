@@ -1,15 +1,14 @@
+import { LocalModelProviderModal } from "./ui/modals/local-model-provider-modal";
 import {
   type App,
-  type DropdownComponent,
   Modal,
   Notice,
-  Platform,
   PluginSettingTab,
   Setting,
   type SettingDefinitionItem,
-  type TextComponent,
 } from "obsidian";
 import type ChatobbyPlugin from "./main";
+import { ProviderLoginModal } from "./ui/modals/provider-login-modal";
 import {
   DEFAULT_COMPOSER_KEYBINDINGS,
   type ComposerKeybindings,
@@ -18,9 +17,6 @@ import {
   type WsLocalModelProvider,
   type WsLocalModelProviderDocument,
   type WsLocalModelProviderProbeResult,
-  type WsManagedLocalModelServerProfile,
-  type WsManagedLocalModelServerSnapshot,
-  type WsManagedLocalModelServerStatus,
   type WsProviderInfo,
 } from "./types";
 import { formatCommandArgs, splitCommandArgs } from "./backend/command-line";
@@ -69,11 +65,10 @@ const SETTINGS_SEARCH_ALIASES = [
 export class ChatobbySettingTab extends PluginSettingTab {
   private providerCatalog: WsProviderInfo[] | null = null;
   private localProviderDocument: WsLocalModelProviderDocument | null = null;
-  private managedLocalModelSnapshot: WsManagedLocalModelServerSnapshot | null =
-    null;
   private providerCatalogLoading = false;
   private providerCatalogError: string | null = null;
   private providerCatalogAttempted = false;
+  private providerCatalogRefreshPending = false;
   private settingsHost: HTMLElement | null = null;
   private settingsSurface: "plugin" | "chatobby" = "plugin";
 
@@ -117,7 +112,26 @@ export class ChatobbySettingTab extends PluginSettingTab {
   renderChatobbySettings(containerEl: HTMLElement): void {
     this.settingsHost = containerEl;
     this.settingsSurface = "chatobby";
+    this.providerCatalog = null;
+    this.providerCatalogError = null;
+    this.providerCatalogAttempted = false;
     this.renderSettings(containerEl, "chatobby");
+  }
+
+  /** Re-read runtime-owned provider metadata after a live catalogue projection changes. */
+  refreshProviderCatalogFromRuntime(): void {
+    this.providerCatalog = null;
+    this.providerCatalogError = null;
+    if (!this.settingsHost?.isConnected || this.settingsSurface !== "chatobby") {
+      this.providerCatalogAttempted = false;
+      return;
+    }
+    this.providerCatalogAttempted = true;
+    if (this.providerCatalogLoading) {
+      this.providerCatalogRefreshPending = true;
+      return;
+    }
+    void this.refreshProviderCatalog(false, false);
   }
 
   /** Detach an embedded surface so an asynchronous provider refresh cannot repaint another page. */
@@ -161,7 +175,6 @@ export class ChatobbySettingTab extends PluginSettingTab {
         );
     }
     if (surface === "chatobby") {
-      this.renderFirstRunSection(containerEl);
       this.renderCredentialsSection(containerEl);
       this.renderWebResearchSection(containerEl);
       this.renderDisplaySection(containerEl);
@@ -170,17 +183,6 @@ export class ChatobbySettingTab extends PluginSettingTab {
     this.renderConnectionSection(containerEl);
     this.renderDocumentSection(containerEl);
     this.renderHelpSection(containerEl);
-  }
-
-  private renderFirstRunSection(containerEl: HTMLElement): void {
-    if (this.plugin.settings.onboardingVersion >= 1) return;
-    const section = containerEl.createDiv({
-      cls: "chatobby-settings-note",
-    });
-    section.createEl("strong", { text: "Start here" });
-    section.createDiv({
-      text: "Chatobby starts its signed local runtime automatically. Connect one model provider below, return to the Chatobby tab, review the active permission profile if needed, then send a message.",
-    });
   }
 
   private renderConnectionSection(containerEl: HTMLElement): void {
@@ -260,7 +262,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Start when needed")
-      .setDesc("Prepare Chatobby automatically when you open a Chatobby view.")
+      .setDesc(this.plugin.usesAutomaticRuntimeProvisioning()
+        ? "Start the already reconciled runtime when a Chatobby view needs it. Required runtime program files are verified independently after plugin load."
+        : "Prepare Chatobby automatically when you open a Chatobby view.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.plugin.settings.runtimeAutoStart)
@@ -383,7 +387,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Command shell")
       .setDesc(
-        "Shell used for terminal commands. Automatic uses Git Bash on Windows and your configured shell or a Bash/sh fallback on macOS and Linux. Changes apply after the runtime restarts.",
+        "Automatic uses Windows PowerShell on Windows and your configured shell or Bash/sh on macOS and Linux. You can select an installed shell. Restart Chatobby to apply changes.",
       )
       .addDropdown((dropdown) => {
         dropdown
@@ -738,7 +742,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Local model connections")
       .setDesc(
-        "Connect any supported server that is already running. Ollama, LM Studio, vLLM, llama.cpp, and compatible OpenAI or Anthropic endpoints use this same connection flow.",
+        "Connect Ollama, LM Studio or another model server.",
       )
       .addButton((button) =>
         button
@@ -757,11 +761,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
     ) {
       containerEl.createDiv({
         cls: "chatobby-settings-note",
-        text: "No local servers configured. Ollama, LM Studio, vLLM, llama.cpp, and compatible OpenAI or Anthropic Messages endpoints are supported.",
+        text: "Start your model server, then choose Connect server to find its models.",
       });
     }
-
-    this.renderManagedLocalModelServers(containerEl);
 
     this.requestProviderCatalog();
 
@@ -904,194 +906,6 @@ export class ChatobbySettingTab extends PluginSettingTab {
     setting.settingEl.addClass("chatobby-settings__provider", "is-connected");
   }
 
-  private renderManagedLocalModelServers(containerEl: HTMLElement): void {
-    const snapshot = this.managedLocalModelSnapshot;
-    const candidates = this.managedServerProviderCandidates();
-    const heading = new Setting(containerEl)
-      .setName("Managed llama.cpp")
-      .setDesc(
-        "Optional process management for llama.cpp only. Other local server types remain fully supported as connections above, but Chatobby does not start or stop them yet.",
-      );
-    if (candidates.length > 0) {
-      heading.addButton((button) =>
-        button
-          .setButtonText("Set up managed server")
-          .onClick(() => this.openManagedLocalModelServerModal()),
-      );
-    }
-
-    for (const profile of snapshot?.document.profiles ?? []) {
-      const status = snapshot?.statuses.find(
-        (candidate) => candidate.profileId === profile.id,
-      );
-      this.renderManagedLocalModelServerRow(containerEl, profile, status);
-    }
-
-    if (snapshot && snapshot.document.profiles.length === 0) {
-      containerEl.createDiv({
-        cls: "chatobby-settings-note",
-        text:
-          candidates.length > 0
-            ? "No managed process configured. Existing local servers keep working exactly as before."
-            : "Add a llama.cpp local model server above before configuring managed startup.",
-      });
-    }
-  }
-
-  private renderManagedLocalModelServerRow(
-    containerEl: HTMLElement,
-    profile: WsManagedLocalModelServerProfile,
-    status: WsManagedLocalModelServerStatus | undefined,
-  ): void {
-    const description = [
-      managedLocalModelStatusLabel(status),
-      launchPolicyLabel(profile.launchPolicy),
-      `${profile.settings.contextSize.toLocaleString()} context`,
-      `${profile.settings.gpuLayers} GPU layers`,
-    ].join(" · ");
-    const setting = new Setting(containerEl)
-      .setName(profile.name)
-      .setDesc(
-        status?.failure
-          ? `${description}. ${status.failure.message}`
-          : description,
-      );
-    const controllable = status?.ownership !== "other-runtime";
-    if (
-      status?.ready ||
-      status?.phase === "starting" ||
-      status?.phase === "probing"
-    ) {
-      setting.addButton((button) =>
-        button
-          .setButtonText("Stop")
-          .setDisabled(!controllable)
-          .onClick(
-            () => void this.controlManagedLocalModelServer("stop", profile.id),
-          ),
-      );
-    } else {
-      setting.addButton((button) =>
-        button
-          .setButtonText("Start")
-          .setDisabled(!controllable)
-          .onClick(
-            () => void this.controlManagedLocalModelServer("start", profile.id),
-          ),
-      );
-    }
-    setting
-      .addButton((button) =>
-        button
-          .setButtonText("Restart")
-          .setDisabled(!controllable)
-          .onClick(
-            () =>
-              void this.controlManagedLocalModelServer("restart", profile.id),
-          ),
-      )
-      .addButton((button) =>
-        button
-          .setButtonText("Edit")
-          .onClick(() => this.openManagedLocalModelServerModal(profile)),
-      )
-      .addButton((button) => {
-        button.setButtonText("Remove");
-        button.buttonEl.addClass("mod-warning");
-        button.onClick(() => void this.removeManagedLocalModelServer(profile));
-      });
-    setting.settingEl.addClass("chatobby-settings__provider");
-    setting.settingEl.addClass("is-managed");
-  }
-
-  private managedServerProviderCandidates(): WsLocalModelProvider[] {
-    const linked = new Set(
-      this.managedLocalModelSnapshot?.document.profiles.map(
-        (profile) => profile.providerId,
-      ) ?? [],
-    );
-    return (this.localProviderDocument?.providers ?? []).filter(
-      (provider) => provider.preset === "llama-cpp" && !linked.has(provider.id),
-    );
-  }
-
-  private openManagedLocalModelServerModal(
-    profile?: WsManagedLocalModelServerProfile,
-  ): void {
-    new ManagedLocalModelServerModal(
-      this.app,
-      profile,
-      profile
-        ? (this.localProviderDocument?.providers ?? []).filter(
-            (provider) => provider.id === profile.providerId,
-          )
-        : this.managedServerProviderCandidates(),
-      async (candidate) => {
-        const transport = await this.runtimeTransport();
-        this.managedLocalModelSnapshot =
-          await transport.saveManagedLocalModelServer(
-            this.managedLocalModelSnapshot?.document.revision ?? 0,
-            candidate,
-          );
-        new Notice(`${candidate.name} managed startup saved`);
-        this.refreshSettingsSurface();
-      },
-    ).open();
-  }
-
-  private async controlManagedLocalModelServer(
-    action: "start" | "stop" | "restart",
-    profileId: string,
-  ): Promise<void> {
-    try {
-      const transport = await this.runtimeTransport();
-      const status = await transport.controlManagedLocalModelServer(
-        action,
-        profileId,
-      );
-      this.managedLocalModelSnapshot =
-        await transport.getManagedLocalModelServers();
-      new Notice(
-        status.ready
-          ? "Local model server is ready"
-          : managedLocalModelStatusLabel(status),
-      );
-    } catch (error) {
-      console.error(
-        `Chatobby: failed to ${action} managed local model server`,
-        error,
-      );
-      new Notice(
-        error instanceof Error
-          ? error.message
-          : `Could not ${action} local model server`,
-      );
-    } finally {
-      this.refreshSettingsSurface();
-    }
-  }
-
-  private async removeManagedLocalModelServer(
-    profile: WsManagedLocalModelServerProfile,
-  ): Promise<void> {
-    const confirmed = await confirmAction(this.app, {
-      title: `Stop managing ${profile.name}?`,
-      message:
-        "Chatobby will stop a process it owns and remove this launch profile. The GGUF model and llama.cpp installation are not deleted.",
-      confirmLabel: "Remove managed server",
-      destructive: true,
-    });
-    if (!confirmed) return;
-    const transport = await this.runtimeTransport();
-    this.managedLocalModelSnapshot =
-      await transport.deleteManagedLocalModelServer(
-        this.managedLocalModelSnapshot?.document.revision ?? 0,
-        profile.id,
-      );
-    new Notice(`${profile.name} is no longer managed by Chatobby`);
-    this.refreshSettingsSurface();
-  }
-
   private openLocalProviderModal(provider?: WsLocalModelProvider): void {
     const revision = this.localProviderDocument?.revision ?? 0;
     new LocalModelProviderModal(
@@ -1108,6 +922,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
         new Notice(`${candidate.name} saved`);
       },
       async (candidate, apiKey) => this.testLocalProvider(candidate, apiKey),
+      async (candidate, apiKey) => (await this.runtimeTransport()).discoverLocalModels(candidate, apiKey),
     ).open();
   }
 
@@ -1152,6 +967,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
   private renderHelpSection(containerEl: HTMLElement): void {
     new Setting(containerEl).setName("Help and development").setHeading();
 
+    new Setting(containerEl).setName("What’s new")
+      .setDesc("Recent changes and the Chatobby roadmap.")
+      .addButton(button => button.setButtonText("View changes").onClick(() => this.plugin.showWhatsNew()));
+
     new Setting(containerEl)
       .setName("Documentation")
       .setDesc(
@@ -1177,7 +996,7 @@ export class ChatobbySettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Support development")
       .setDesc(
-        "Chatobby is free during alpha. Patreon support is optional and does not unlock product features.",
+        "Chatobby’s core harness is free. Patreon support is optional.",
       )
       .addButton((button) =>
         button
@@ -1202,14 +1021,38 @@ export class ChatobbySettingTab extends PluginSettingTab {
           ? provider.id
           : `${provider.name} (${provider.id})`,
       )
-      .setDesc(providerDescription(provider, configured))
-      .addButton((button) => {
+      .setDesc(providerDescription(provider, configured));
+    if (provider.authentication?.subscription) {
+      setting.addButton((button) => {
+        button.setButtonText(provider.authentication?.connectedWith === "oauth" ? "Reconnect account" : "Sign in")
+          .setCta().onClick(() => {
+            new ProviderLoginModal(this.app, provider, () => this.runtimeTransport(), async () => {
+              await this.refreshAfterProviderChange();
+              this.plugin.getActiveView()?.refreshAvailableModels();
+            }).open();
+          });
+      });
+    }
+    if (provider.authentication?.apiKey !== false) {
+      setting.addButton((button) => {
         button
-          .setButtonText(configured ? "Update key" : "Connect")
+          .setButtonText(provider.authentication?.subscription ? "Use API key" : configured ? "Update key" : "Connect")
           .onClick(() => this.openProviderModal(provider));
       });
+    }
     setting.settingEl.addClass("chatobby-settings__provider");
     setting.settingEl.toggleClass("is-connected", configured);
+    const excludedModels = provider.modelDiscovery?.unavailableModels ?? [];
+    if (configured && excludedModels.length > 0) {
+      const details = containerEl.createEl("details", { cls: "chatobby-settings__model-discovery" });
+      details.createEl("summary", { text: `${excludedModels.length} account ${excludedModels.length === 1 ? "model needs" : "models need"} attention` });
+      const list = details.createEl("ul");
+      for (const model of excludedModels) {
+        const row = list.createEl("li");
+        row.createEl("strong", { text: model.id });
+        row.createSpan({ text: ` — ${model.reason}` });
+      }
+    }
     if (removable) {
       setting.addButton((button) => {
         button.setButtonText("Disconnect");
@@ -1249,9 +1092,8 @@ export class ChatobbySettingTab extends PluginSettingTab {
   }
 
   private refreshSettingsSurface(): void {
-    const host = this.settingsHost?.isConnected
-      ? this.settingsHost
-      : this.containerEl;
+    const host = this.settingsHost;
+    if (!host?.isConnected) return;
     this.renderSettings(host, this.settingsSurface);
   }
 
@@ -1287,14 +1129,9 @@ export class ChatobbySettingTab extends PluginSettingTab {
         if (!startBackend) throw new Error("Chatobby backend is not connected");
         await transport.connect();
       }
-      [
-        this.providerCatalog,
-        this.localProviderDocument,
-        this.managedLocalModelSnapshot,
-      ] = await Promise.all([
+      [this.providerCatalog, this.localProviderDocument] = await Promise.all([
         transport.getProviders(),
         transport.getLocalModelProviders(),
-        transport.getManagedLocalModelServers(),
       ]);
     } catch (error) {
       this.providerCatalogError =
@@ -1304,6 +1141,10 @@ export class ChatobbySettingTab extends PluginSettingTab {
     } finally {
       this.providerCatalogLoading = false;
       this.refreshSettingsSurface();
+      if (this.providerCatalogRefreshPending) {
+        this.providerCatalogRefreshPending = false;
+        this.refreshProviderCatalogFromRuntime();
+      }
     }
   }
 
@@ -1508,857 +1349,6 @@ class WebSearchCredentialModal extends Modal {
   }
 }
 
-class LocalModelProviderModal extends Modal {
-  private candidate: WsLocalModelProvider;
-  private modelLines: string;
-  private apiKey = "";
-  private saving = false;
-
-  constructor(
-    app: App,
-    provider: WsLocalModelProvider | undefined,
-    private readonly saveProvider: (
-      provider: WsLocalModelProvider,
-      apiKey?: string,
-    ) => Promise<void>,
-    private readonly testProvider: (
-      provider: WsLocalModelProvider,
-      apiKey?: string,
-    ) => Promise<WsLocalModelProviderProbeResult>,
-  ) {
-    super(app);
-    this.candidate = provider
-      ? structuredClone(provider)
-      : defaultLocalModelProvider("ollama");
-    this.modelLines = this.candidate.models
-      .map((model) =>
-        model.name === model.id ? model.id : `${model.id} | ${model.name}`,
-      )
-      .join("\n");
-  }
-
-  onOpen(): void {
-    this.modalEl.addClass(
-      "chatobby-provider-modal",
-      "chatobby-local-model-modal",
-    );
-    this.render();
-  }
-
-  private render(): void {
-    this.titleEl.setText(
-      this.candidate.id
-        ? `Local model server: ${this.candidate.name}`
-        : "Add local model server",
-    );
-    this.contentEl.empty();
-    this.contentEl.createDiv({
-      cls: "chatobby-provider-modal__intro",
-      text: "Choose the software serving your model, then enter its local URL and the model ids it exposes. Presets fill common defaults, but you can edit the API format and URL for custom or remote-compatible servers. Chatobby stores this configuration locally; tokens stay in the runtime credential store.",
-    });
-
-    new Setting(this.contentEl).setName("Server type").addDropdown((dropdown) =>
-      dropdown
-        .addOption("ollama", "Ollama")
-        .addOption("lm-studio", "LM Studio")
-        .addOption("vllm", "vLLM")
-        .addOption("llama-cpp", "llama.cpp")
-        .addOption("openai-compatible", "OpenAI-compatible")
-        .addOption("anthropic-compatible", "Anthropic Messages-compatible")
-        .setValue(this.candidate.preset)
-        .onChange((value) => {
-          const preset = value as WsLocalModelProvider["preset"];
-          const defaults = defaultLocalModelProvider(preset);
-          this.candidate = {
-            ...this.candidate,
-            preset,
-            api: defaults.api,
-            baseUrl: defaults.baseUrl,
-            authentication: defaults.authentication,
-          };
-          this.render();
-        }),
-    );
-
-    new Setting(this.contentEl).setName("Name").addText((text) =>
-      text
-        .setValue(this.candidate.name)
-        .setPlaceholder("My local server")
-        .onChange((value) => {
-          this.candidate = { ...this.candidate, name: value };
-        }),
-    );
-    new Setting(this.contentEl)
-      .setName("Provider id")
-      .setDesc(
-        "Stable lowercase id used in model selectors. Changing it creates a different provider.",
-      )
-      .addText((text) =>
-        text
-          .setValue(this.candidate.id)
-          .setPlaceholder("local-models")
-          .onChange((value) => {
-            this.candidate = {
-              ...this.candidate,
-              id: value.trim().toLowerCase(),
-            };
-          }),
-      );
-    new Setting(this.contentEl)
-      .setName("Server URL")
-      .setDesc(localModelServerUrlDescription(this.candidate.preset))
-      .addText((text) =>
-        text
-          .setValue(this.candidate.baseUrl)
-          .setPlaceholder("http://127.0.0.1:11434/v1")
-          .onChange((value) => {
-            this.candidate = { ...this.candidate, baseUrl: value.trim() };
-          }),
-      );
-    new Setting(this.contentEl)
-      .setName("API format")
-      .setDesc(
-        "Select the request protocol implemented by the server. This is independent of the model family or model name.",
-      )
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("openai-completions", "OpenAI Chat Completions")
-          .addOption("openai-responses", "OpenAI Responses")
-          .addOption("anthropic-messages", "Anthropic Messages")
-          .setValue(this.candidate.api)
-          .onChange((value) => {
-            this.candidate = {
-              ...this.candidate,
-              api: value as WsLocalModelProvider["api"],
-            };
-          }),
-      );
-    new Setting(this.contentEl)
-      .setName("Authentication")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("none", "None")
-          .addOption("api-key", "Provider API key")
-          .addOption("bearer", "Bearer token")
-          .setValue(this.candidate.authentication)
-          .onChange((value) => {
-            this.candidate = {
-              ...this.candidate,
-              authentication: value as WsLocalModelProvider["authentication"],
-            };
-            this.render();
-          }),
-      );
-    if (this.candidate.authentication !== "none") {
-      new Setting(this.contentEl)
-        .setName(
-          this.candidate.authentication === "api-key"
-            ? "Provider API key"
-            : "Bearer token",
-        )
-        .setDesc(
-          "Optional when editing: leave blank to keep the existing credential.",
-        )
-        .addText((text) => {
-          text.inputEl.type = "password";
-          text.setPlaceholder("Token").onChange((value) => {
-            this.apiKey = value.trim();
-          });
-        });
-    }
-    new Setting(this.contentEl)
-      .setName("Models")
-      .setDesc(
-        "One server model id per line. Use model-id, or model-id | Friendly name. Example: qwen3.5:4b | Qwen 3.5 4B. The id must match what the server accepts in API requests.",
-      )
-      .addTextArea((text) => {
-        text.inputEl.rows = 4;
-        text
-          .setValue(this.modelLines)
-          .setPlaceholder("model-id | Friendly name")
-          .onChange((value) => {
-            this.modelLines = value;
-          });
-      });
-
-    const first =
-      this.candidate.models[0] ??
-      defaultLocalModelProvider(this.candidate.preset).models[0]!;
-    new Setting(this.contentEl)
-      .setName("Context window")
-      .setDesc(
-        "Maximum input context Chatobby may send to each listed model. Enter a whole token count, such as 32768 or 204800, and keep it within the server's configured limit.",
-      )
-      .addText((text) =>
-        text
-          .setValue(String(first.contextWindow))
-          .onChange((value) =>
-            this.updateModelDefaults({ contextWindow: Number(value) }),
-          ),
-      );
-    new Setting(this.contentEl)
-      .setName("Maximum output tokens")
-      .setDesc(
-        "Maximum tokens Chatobby may request for one response. This must not exceed the model server's output limit.",
-      )
-      .addText((text) =>
-        text
-          .setValue(String(first.maxTokens))
-          .onChange((value) =>
-            this.updateModelDefaults({ maxTokens: Number(value) }),
-          ),
-      );
-    new Setting(this.contentEl)
-      .setName("Reasoning model")
-      .setDesc(
-        "Enable when the endpoint exposes a reasoning-capable model and its response format is compatible with the selected API.",
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(first.reasoning)
-          .onChange((value) => this.updateModelDefaults({ reasoning: value })),
-      );
-    new Setting(this.contentEl)
-      .setName("Accepts images")
-      .setDesc(
-        "Enable only when this exact model and server endpoint accept image inputs. Changing models later may require updating this capability.",
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(first.imageInput)
-          .onChange((value) => this.updateModelDefaults({ imageInput: value })),
-      );
-
-    const status = this.contentEl.createDiv({
-      cls: "chatobby-local-model-modal__status",
-    });
-    const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
-    const test = actions.createEl("button", {
-      text: "Test connection",
-      attr: { type: "button" },
-    });
-    const cancel = actions.createEl("button", {
-      text: "Cancel",
-      attr: { type: "button" },
-    });
-    const save = actions.createEl("button", {
-      cls: "mod-cta",
-      text: "Save",
-      attr: { type: "button" },
-    });
-    cancel.addEventListener("click", () => this.close());
-    test.addEventListener("click", () => void this.test(test, save, status));
-    save.addEventListener("click", () => void this.save(save, test, cancel));
-  }
-
-  private updateModelDefaults(
-    patch: Partial<WsLocalModelProvider["models"][number]>,
-  ): void {
-    const current =
-      this.candidate.models[0] ??
-      defaultLocalModelProvider(this.candidate.preset).models[0]!;
-    this.candidate = { ...this.candidate, models: [{ ...current, ...patch }] };
-  }
-
-  private assembledCandidate(): WsLocalModelProvider {
-    const defaults =
-      this.candidate.models[0] ??
-      defaultLocalModelProvider(this.candidate.preset).models[0]!;
-    const models = this.modelLines
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [idPart, ...nameParts] = line.split("|");
-        const id = idPart?.trim() ?? "";
-        const name = nameParts.join("|").trim() || id;
-        return { ...defaults, id, name };
-      });
-    return { ...this.candidate, name: this.candidate.name.trim(), models };
-  }
-
-  private async test(
-    test: HTMLButtonElement,
-    save: HTMLButtonElement,
-    status: HTMLElement,
-  ): Promise<void> {
-    test.disabled = true;
-    save.disabled = true;
-    status.setText("Testing connection…");
-    try {
-      const result = await this.testProvider(
-        this.assembledCandidate(),
-        this.apiKey || undefined,
-      );
-      status.setText(`${result.message} ${result.latencyMs} ms.`);
-      status.toggleClass("is-success", result.status === "reachable");
-      status.toggleClass("is-error", result.status !== "reachable");
-    } catch (error) {
-      status.setText(
-        error instanceof Error ? error.message : "Connection test failed",
-      );
-      status.removeClass("is-success");
-      status.addClass("is-error");
-    } finally {
-      test.disabled = false;
-      save.disabled = false;
-    }
-  }
-
-  private async save(
-    save: HTMLButtonElement,
-    test: HTMLButtonElement,
-    cancel: HTMLButtonElement,
-  ): Promise<void> {
-    if (this.saving) return;
-    this.saving = true;
-    save.disabled = true;
-    test.disabled = true;
-    cancel.disabled = true;
-    try {
-      await this.saveProvider(
-        this.assembledCandidate(),
-        this.apiKey || undefined,
-      );
-      this.close();
-    } catch (error) {
-      console.error("Chatobby: failed to save local model server", error);
-      new Notice(
-        error instanceof Error
-          ? error.message
-          : "Could not save local model server",
-      );
-      save.disabled = false;
-      test.disabled = false;
-      cancel.disabled = false;
-    } finally {
-      this.saving = false;
-    }
-  }
-}
-
-class ManagedLocalModelServerModal extends Modal {
-  private candidate: WsManagedLocalModelServerProfile;
-  private saving = false;
-
-  constructor(
-    app: App,
-    profile: WsManagedLocalModelServerProfile | undefined,
-    private readonly providers: WsLocalModelProvider[],
-    private readonly saveProfile: (
-      profile: WsManagedLocalModelServerProfile,
-    ) => Promise<void>,
-  ) {
-    super(app);
-    const provider =
-      providers.find((candidate) => candidate.id === profile?.providerId) ??
-      providers[0];
-    if (!provider)
-      throw new Error(
-        "A llama.cpp local model provider is required before managed startup can be configured.",
-      );
-    this.candidate = profile
-      ? structuredClone(profile)
-      : defaultManagedLocalModelServer(provider);
-  }
-
-  onOpen(): void {
-    this.modalEl.addClass(
-      "chatobby-provider-modal",
-      "chatobby-local-model-modal",
-    );
-    this.titleEl.setText(this.candidate.name || "Managed llama.cpp server");
-    this.render();
-  }
-
-  private render(): void {
-    this.contentEl.empty();
-    this.contentEl.createDiv({
-      cls: "chatobby-provider-modal__intro",
-      text: "This optional form manages a llama.cpp server for an existing llama.cpp connection. Chatobby launches the executable directly with validated settings, never through a shell, and binds it to this computer only. Ollama, LM Studio, vLLM, and custom endpoints should be connected above and continue managing their own processes.",
-    });
-
-    new Setting(this.contentEl)
-      .setName("Local model connection")
-      .setDesc(
-        "The provider and managed process share one provider id and loopback port.",
-      )
-      .addDropdown((dropdown) => {
-        for (const provider of this.providers)
-          dropdown.addOption(provider.id, provider.name);
-        dropdown
-          .setValue(this.candidate.providerId)
-          .setDisabled(this.providers.length === 1)
-          .onChange((providerId) => {
-            const provider = this.providers.find(
-              (candidate) => candidate.id === providerId,
-            );
-            if (provider)
-              this.candidate = rebindManagedLocalModelServer(
-                this.candidate,
-                provider,
-              );
-            this.render();
-          });
-      });
-    new Setting(this.contentEl).setName("Name").addText((text) =>
-      text
-        .setValue(this.candidate.name)
-        .setPlaceholder("My llama.cpp server")
-        .onChange((value) => {
-          this.candidate = { ...this.candidate, name: value };
-        }),
-    );
-    new Setting(this.contentEl)
-      .setName("Launch behavior")
-      .setDesc(
-        "On demand starts before a chat uses this provider. Runtime start launches with Chatobby. Manual starts only from this page.",
-      )
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("on-demand", "On demand")
-          .addOption("runtime-start", "When Chatobby starts")
-          .addOption("manual", "Manual")
-          .setValue(this.candidate.launchPolicy)
-          .onChange((value) => {
-            this.candidate = {
-              ...this.candidate,
-              launchPolicy:
-                value as WsManagedLocalModelServerProfile["launchPolicy"],
-            };
-          }),
-      );
-    new Setting(this.contentEl)
-      .setName("llama.cpp executable")
-      .setDesc(
-        "Absolute path to llama-server or llama-server.exe. Keep its backend libraries beside the executable.",
-      )
-      .addText((text) =>
-        text
-          .setValue(this.candidate.executablePath)
-          .setPlaceholder(platformPathExample("llama-server"))
-          .onChange((value) => {
-            this.candidate = {
-              ...this.candidate,
-              executablePath: value.trim(),
-            };
-          }),
-      );
-    new Setting(this.contentEl)
-      .setName("GGUF model")
-      .setDesc(
-        "Absolute path to the model file. Chatobby does not download, copy, or delete it.",
-      )
-      .addText((text) =>
-        text
-          .setValue(this.candidate.modelPath)
-          .setPlaceholder(platformPathExample("model.gguf"))
-          .onChange((value) => {
-            this.candidate = { ...this.candidate, modelPath: value.trim() };
-          }),
-      );
-    new Setting(this.contentEl)
-      .setName("Server address")
-      .setDesc(
-        `127.0.0.1:${this.candidate.port}, derived from the selected local model connection.`,
-      );
-
-    new Setting(this.contentEl)
-      .setName("Context window")
-      .setDesc(
-        "Context allocated by llama.cpp for the server. Large values substantially increase KV-cache memory even for a small model.",
-      )
-      .addText((text) =>
-        numericText(text, this.candidate.settings.contextSize, (contextSize) =>
-          this.updateSettings({ contextSize }),
-        ),
-      );
-    new Setting(this.contentEl)
-      .setName("GPU layers")
-      .setDesc(
-        "Use 0 for CPU-only. Higher values prioritize model weights on the GPU when llama.cpp supports it.",
-      )
-      .addText((text) =>
-        numericText(text, this.candidate.settings.gpuLayers, (gpuLayers) =>
-          this.updateSettings({ gpuLayers }),
-        ),
-      );
-    new Setting(this.contentEl)
-      .setName("K cache")
-      .setDesc(
-        "KV-cache key precision. Lower precision reduces memory use; support and quality tradeoffs depend on the llama.cpp build and model.",
-      )
-      .addDropdown((dropdown) =>
-        cacheTypeDropdown(
-          dropdown,
-          this.candidate.settings.cacheTypeK,
-          (cacheTypeK) => this.updateSettings({ cacheTypeK }),
-        ),
-      );
-    new Setting(this.contentEl)
-      .setName("V cache")
-      .setDesc(
-        "KV-cache value precision. Quantized V cache requires flash attention and enables it automatically.",
-      )
-      .addDropdown((dropdown) =>
-        cacheTypeDropdown(
-          dropdown,
-          this.candidate.settings.cacheTypeV,
-          (cacheTypeV) =>
-            this.updateSettings({
-              cacheTypeV,
-              ...(cacheTypeV === "f16" ? {} : { flashAttention: true }),
-            }),
-        ),
-      );
-    const quantizedVCache = this.candidate.settings.cacheTypeV !== "f16";
-    new Setting(this.contentEl)
-      .setName("Flash attention")
-      .setDesc(
-        quantizedVCache
-          ? "Required by the selected quantized V cache. Choose F16 V cache to turn it off."
-          : "Uses llama.cpp flash attention when supported. This is required for quantized V cache.",
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.candidate.settings.flashAttention)
-          .setDisabled(quantizedVCache)
-          .onChange((flashAttention) =>
-            this.updateSettings({ flashAttention }),
-          ),
-      );
-    new Setting(this.contentEl)
-      .setName("CPU threads (optional)")
-      .addText((text) =>
-        optionalNumericText(text, this.candidate.settings.threads, (threads) =>
-          this.updateSettings({ threads }),
-        ),
-      );
-    new Setting(this.contentEl)
-      .setName("Batch size (optional)")
-      .addText((text) =>
-        optionalNumericText(
-          text,
-          this.candidate.settings.batchSize,
-          (batchSize) => this.updateSettings({ batchSize }),
-        ),
-      );
-    new Setting(this.contentEl)
-      .setName("Micro-batch size (optional)")
-      .addText((text) =>
-        optionalNumericText(
-          text,
-          this.candidate.settings.microBatchSize,
-          (microBatchSize) => this.updateSettings({ microBatchSize }),
-        ),
-      );
-    new Setting(this.contentEl)
-      .setName("Parallel slots (optional)")
-      .addText((text) =>
-        optionalNumericText(
-          text,
-          this.candidate.settings.parallelSlots,
-          (parallelSlots) => this.updateSettings({ parallelSlots }),
-        ),
-      );
-    new Setting(this.contentEl)
-      .setName("Startup timeout (seconds)")
-      .addText((text) =>
-        numericText(
-          text,
-          this.candidate.startupTimeoutSeconds,
-          (startupTimeoutSeconds) => {
-            this.candidate = { ...this.candidate, startupTimeoutSeconds };
-          },
-        ),
-      );
-
-    const actions = this.contentEl.createDiv({ cls: "chatobby-modal-actions" });
-    const cancel = actions.createEl("button", {
-      text: "Cancel",
-      attr: { type: "button" },
-    });
-    const save = actions.createEl("button", {
-      cls: "mod-cta",
-      text: "Save managed server",
-      attr: { type: "button" },
-    });
-    cancel.addEventListener("click", () => this.close());
-    save.addEventListener("click", () => void this.save(save, cancel));
-  }
-
-  private updateSettings(
-    patch: Partial<WsManagedLocalModelServerProfile["settings"]>,
-  ): void {
-    this.candidate = {
-      ...this.candidate,
-      settings: { ...this.candidate.settings, ...patch },
-    };
-  }
-
-  private async save(
-    save: HTMLButtonElement,
-    cancel: HTMLButtonElement,
-  ): Promise<void> {
-    if (this.saving) return;
-    this.saving = true;
-    save.disabled = true;
-    cancel.disabled = true;
-    try {
-      await this.saveProfile({
-        ...this.candidate,
-        name: this.candidate.name.trim(),
-      });
-      this.close();
-    } catch (error) {
-      console.error(
-        "Chatobby: failed to save managed local model server",
-        error,
-      );
-      new Notice(
-        error instanceof Error
-          ? error.message
-          : "Could not save managed local model server",
-      );
-      save.disabled = false;
-      cancel.disabled = false;
-    } finally {
-      this.saving = false;
-    }
-  }
-}
-
-function defaultLocalModelProvider(
-  preset: WsLocalModelProvider["preset"],
-): WsLocalModelProvider {
-  const common = {
-    id: preset,
-    name: localModelPresetLabel(preset),
-    preset,
-    models: [
-      {
-        id: "model",
-        name: "model",
-        contextWindow: 32_768,
-        maxTokens: 4_096,
-        reasoning: false,
-        imageInput: false,
-      },
-    ],
-  };
-  switch (preset) {
-    case "ollama":
-      return {
-        ...common,
-        api: "openai-completions",
-        baseUrl: "http://127.0.0.1:11434/v1",
-        authentication: "none",
-      };
-    case "lm-studio":
-      return {
-        ...common,
-        api: "openai-completions",
-        baseUrl: "http://127.0.0.1:1234/v1",
-        authentication: "none",
-      };
-    case "vllm":
-      return {
-        ...common,
-        api: "openai-completions",
-        baseUrl: "http://127.0.0.1:8000/v1",
-        authentication: "none",
-      };
-    case "llama-cpp":
-      return {
-        ...common,
-        api: "openai-completions",
-        baseUrl: "http://127.0.0.1:8080/v1",
-        authentication: "none",
-      };
-    case "openai-compatible":
-      return {
-        ...common,
-        api: "openai-completions",
-        baseUrl: "http://127.0.0.1:8000/v1",
-        authentication: "bearer",
-      };
-    case "anthropic-compatible":
-      return {
-        ...common,
-        api: "anthropic-messages",
-        baseUrl: "http://127.0.0.1:8000/v1",
-        authentication: "api-key",
-      };
-  }
-}
-
-function defaultManagedLocalModelServer(
-  provider: WsLocalModelProvider,
-): WsManagedLocalModelServerProfile {
-  return {
-    schemaVersion: 1,
-    id: `${provider.id}-server`,
-    providerId: provider.id,
-    name: `${provider.name} managed server`,
-    engine: "llama-cpp",
-    launchPolicy: "on-demand",
-    executablePath: "",
-    modelPath: "",
-    host: "127.0.0.1",
-    port: localProviderPort(provider),
-    settings: {
-      contextSize: provider.models[0]?.contextWindow ?? 204_800,
-      gpuLayers: 0,
-      cacheTypeK: "q8_0",
-      cacheTypeV: "q8_0",
-      flashAttention: true,
-      parallelSlots: 1,
-    },
-    startupTimeoutSeconds: 180,
-  };
-}
-
-function rebindManagedLocalModelServer(
-  profile: WsManagedLocalModelServerProfile,
-  provider: WsLocalModelProvider,
-): WsManagedLocalModelServerProfile {
-  return {
-    ...profile,
-    providerId: provider.id,
-    name: profile.name || `${provider.name} managed server`,
-    port: localProviderPort(provider),
-  };
-}
-
-function localProviderPort(provider: WsLocalModelProvider): number {
-  try {
-    const url = new URL(provider.baseUrl);
-    if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
-      throw new Error(
-        "Managed llama.cpp requires a loopback local model connection.",
-      );
-    }
-    if (url.port) return Number(url.port);
-    return url.protocol === "https:" ? 443 : 80;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("loopback"))
-      throw error;
-    throw new Error(
-      `Local model connection ${provider.name} has an invalid server URL.`,
-    );
-  }
-}
-
-function numericText(
-  component: TextComponent,
-  value: number,
-  update: (value: number) => void,
-): TextComponent {
-  component.inputEl.type = "number";
-  return component.setValue(String(value)).onChange((text) => {
-    const parsed = Number(text);
-    if (Number.isSafeInteger(parsed)) update(parsed);
-  });
-}
-
-function optionalNumericText(
-  component: TextComponent,
-  value: number | undefined,
-  update: (value: number | undefined) => void,
-): TextComponent {
-  component.inputEl.type = "number";
-  return component
-    .setValue(value === undefined ? "" : String(value))
-    .onChange((text) => {
-      if (!text.trim()) {
-        update(undefined);
-        return;
-      }
-      const parsed = Number(text);
-      if (Number.isSafeInteger(parsed)) update(parsed);
-    });
-}
-
-function cacheTypeDropdown(
-  dropdown: DropdownComponent,
-  value: WsManagedLocalModelServerProfile["settings"]["cacheTypeK"],
-  update: (
-    value: WsManagedLocalModelServerProfile["settings"]["cacheTypeK"],
-  ) => void,
-): DropdownComponent {
-  return dropdown
-    .addOption("f16", "F16")
-    .addOption("q8_0", "Q8_0")
-    .addOption("q4_0", "Q4_0")
-    .setValue(value)
-    .onChange((next) =>
-      update(
-        next as WsManagedLocalModelServerProfile["settings"]["cacheTypeK"],
-      ),
-    );
-}
-
-function platformPathExample(name: string): string {
-  if (!Platform.isWin) return `/opt/llama/${name}`;
-  return `C:\\Tools\\llama\\${name}${name.endsWith(".gguf") ? "" : ".exe"}`;
-}
-
-function localModelServerUrlDescription(
-  preset: WsLocalModelProvider["preset"],
-): string {
-  switch (preset) {
-    case "ollama":
-      return "Ollama commonly uses http://127.0.0.1:11434/v1 when accessed through its OpenAI-compatible API.";
-    case "lm-studio":
-      return "LM Studio commonly uses http://127.0.0.1:1234/v1 after its local server is started.";
-    case "vllm":
-      return "vLLM commonly uses http://127.0.0.1:8000/v1; use the host and port chosen when starting the server.";
-    case "llama-cpp":
-      return "llama.cpp commonly uses http://127.0.0.1:8080/v1. Configure managed startup separately after saving this connection if Chatobby should run it.";
-    case "openai-compatible":
-      return "Enter the endpoint's OpenAI-compatible base URL, normally ending in /v1. Loopback and network URLs are both supported subject to permissions.";
-    case "anthropic-compatible":
-      return "Enter the server's Anthropic Messages-compatible base URL. Do not append an OpenAI /v1 route unless the server documents it.";
-  }
-}
-
-function managedLocalModelStatusLabel(
-  status: WsManagedLocalModelServerStatus | undefined,
-): string {
-  if (!status) return "Status unavailable";
-  if (status.ownership === "other-runtime")
-    return "Running in another Chatobby runtime";
-  switch (status.phase) {
-    case "ready":
-      return "Ready";
-    case "preflighting":
-      return "Checking files";
-    case "starting":
-      return "Starting";
-    case "probing":
-      return "Waiting for health check";
-    case "stopping":
-      return "Stopping";
-    case "failed":
-      return "Needs attention";
-    case "stopped":
-      return "Stopped";
-  }
-}
-
-function launchPolicyLabel(
-  policy: WsManagedLocalModelServerProfile["launchPolicy"],
-): string {
-  switch (policy) {
-    case "manual":
-      return "Manual start";
-    case "on-demand":
-      return "Starts on demand";
-    case "runtime-start":
-      return "Starts with Chatobby";
-  }
-}
-
 function localModelPresetLabel(preset: WsLocalModelProvider["preset"]): string {
   switch (preset) {
     case "ollama":
@@ -2420,7 +1410,11 @@ function providerDescription(
     return provider.modelCount > 0
       ? `Not connected · ${provider.modelCount} supported models`
       : "Not connected";
-  return `Connected${authSourceLabel(provider)} · ${available}`;
+  const discovery = provider.modelDiscovery;
+  const warning = discovery?.error
+    ? ` ${discovery.error} ${discovery.usingCachedModels ? "Keeping the last account model list." : "Bundled model choices have not been checked for this account."}`
+    : "";
+  return `Connected${authSourceLabel(provider)} · ${available}${warning}`;
 }
 
 function authSourceLabel(provider: WsProviderInfo): string {

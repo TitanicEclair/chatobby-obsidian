@@ -1,3 +1,6 @@
+/* Compact task-progress disclosure mounted above the composer. The task store
+   remains runtime-owned; this module only presents its current projection. */
+
 .chatobby-task-progress-host {
   flex: 0 0 auto;
   width: calc(100% - (var(--chatobby-edge-padding) * 2));
@@ -48,6 +51,7 @@
   opacity: 1;
 }
 
+/* Collapsed preview keeps the active/blocked work visible at a glance. */
 .chatobby-task-progress__preview {
   display: flex;
   align-items: center;
@@ -143,6 +147,7 @@
   animation: chatobby-task-progress-spin 0.8s linear infinite;
 }
 
+/* Expanded list retains semantic order and explicit per-item state. */
 .chatobby-task-progress__list {
   display: grid;
   gap: 1px;
@@ -217,6 +222,7 @@
   to { transform: rotate(360deg); }
 }
 
+/* Spinner motion is decorative and disabled for reduced-motion users. */
 @media (prefers-reduced-motion: reduce) {
   .chatobby-task-progress__spinner,
   .chatobby-task-progress__status-icon.is-spinning {

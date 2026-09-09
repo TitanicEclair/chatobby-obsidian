@@ -47,7 +47,7 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
                   ...attachments,
                 ]
               : block.text,
-            timestamp: block.timestamp ?? Date.now(),
+            timestamp: block.timestamp,
           },
         },
       ];
@@ -57,7 +57,7 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
         {
           type: "thinking",
           id: block.id,
-          turnId: block.turnId ?? block.id,
+          turnId: block.turnId,
           text: block.text,
           startIndex: 0,
           endIndex: 0,
@@ -72,7 +72,7 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
         {
           type: "text",
           id: block.id,
-          turnId: block.turnId ?? block.id,
+          turnId: block.turnId,
           text: block.text,
           startIndex: 0,
           endIndex: 0,
@@ -86,7 +86,7 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
         {
           type: "tools",
           id: block.id,
-          turnId: block.turnId ?? block.id,
+          turnId: block.turnId,
           items: block.items.map(toToolItem),
           startIndex: 0,
           endIndex: Math.max(0, block.items.length - 1),
@@ -124,19 +124,19 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
         {
           type: "subagent",
           id: block.id,
-          agentId: block.actorId,
+          agentId: block.nodeId ?? block.actorId,
           status:
             block.phase === "completed" || block.phase === "failed"
               ? "complete"
               : "streaming",
           activity: {
-            agentId: block.actorId,
+            agentId: block.nodeId ?? block.actorId,
             name: block.title,
             type: "Agent",
             description: block.detail ?? block.title,
             source: "chatobby-supervisor",
             status: block.phase === "created" ? "created" : block.phase,
-            compactionCount: 0,
+            compactionCount: block.compactionCount,
           },
         },
       ];
@@ -188,25 +188,7 @@ function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
 function toSubagentMessage(
   block: Extract<FrontendFeedBlock, { type: "message" }>,
 ): SubagentMessage {
-  const runId = block.navigation?.runId ?? block.id;
-  const senderIsAgent = block.navigation?.nodeId !== undefined;
-  return {
-    id: block.id,
-    runId,
-    nodeId: block.navigation?.nodeId,
-    threadId: runId,
-    from: {
-      kind: senderIsAgent ? "agent" : "parent",
-      id: block.navigation?.nodeId ?? block.navigation?.mainSessionId ?? "main",
-      label: block.senderLabel,
-    },
-    to: [{ kind: "agent", id: "recipient", label: block.recipientLabel }],
-    kind: "inform",
-    text: block.text,
-    blocking: false,
-    status: "delivered",
-    createdAt: block.timestamp,
-  };
+  return block.message;
 }
 
 function toToolItem(item: FrontendToolActivityViewModel): ToolItem {

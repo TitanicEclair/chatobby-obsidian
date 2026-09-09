@@ -1,3 +1,5 @@
+/* Feed continuity dividers for activity, compaction, and error boundaries. */
+
 .chatobby-divider-block {
   display: flex;
   flex-direction: column;
@@ -33,7 +35,7 @@
   width: 100%;
 }
 
-/* The rule stretches edge-to-edge in the faintest text color. */
+/* The rule stretches edge-to-edge so the label reads as a timeline boundary. */
 .chatobby-divider-block__rule {
   flex: 1 1 0;
   height: 0;

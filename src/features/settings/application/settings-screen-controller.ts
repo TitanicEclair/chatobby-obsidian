@@ -1,4 +1,5 @@
 import { Setting, setIcon, type App } from "obsidian";
+import type { FrontendStore } from "../../../frontend/frontend-store";
 import type ChatobbyPlugin from "../../../main";
 import { ChatobbySettingTab } from "../../../settings";
 import { PageShell } from "../../../ui/shared/page-shell";
@@ -7,6 +8,7 @@ interface SettingsScreenControllerOptions {
 	readonly app: App;
 	readonly plugin: ChatobbyPlugin;
 	readonly getHost: () => HTMLElement;
+	readonly getStore: () => FrontendStore;
 	readonly prepareOpen: () => void;
 	readonly onOpened: () => void;
 	readonly onClosed: (renderChat: boolean) => void;
@@ -18,6 +20,7 @@ export class SettingsScreenController {
 	private readonly settings: ChatobbySettingTab;
 	private openState = false;
 	private settingsHost: HTMLElement | null = null;
+	private unsubscribeCatalogue: (() => void) | null = null;
 
 	constructor(private readonly options: SettingsScreenControllerOptions) {
 		this.settings = new ChatobbySettingTab(options.app, options.plugin);
@@ -25,6 +28,8 @@ export class SettingsScreenController {
 
 	open(): void {
 		this.options.prepareOpen();
+		this.unsubscribeCatalogue?.();
+		this.unsubscribeCatalogue = null;
 		const host = this.options.getHost();
 		host.empty();
 		const root = host.createDiv({ cls: "chatobby-page chatobby-settings-page" });
@@ -49,11 +54,17 @@ export class SettingsScreenController {
 		this.settingsHost = page.body.createDiv({ cls: "chatobby-settings-page__settings" });
 		this.settings.renderChatobbySettings(this.settingsHost);
 		this.openState = true;
+		this.unsubscribeCatalogue = this.options.getStore().subscribeSelector(
+			(snapshot) => snapshot.composer,
+			() => this.settings.refreshProviderCatalogFromRuntime(),
+		);
 		this.options.onOpened();
 	}
 
 	close(renderChat: boolean): void {
 		if (!this.openState) return;
+		this.unsubscribeCatalogue?.();
+		this.unsubscribeCatalogue = null;
 		this.settings.detachChatobbySettings(this.settingsHost);
 		this.settingsHost = null;
 		this.openState = false;

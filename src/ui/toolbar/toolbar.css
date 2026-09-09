@@ -1,4 +1,5 @@
-/* Toolbar: connection dot, widget host, icon buttons, stats, context meter */
+/* Conversation toolbar: connection state, extension widgets, actions, live
+   statistics, and the context meter/popover. */
 
 .chatobby-toolbar {
   display: flex;
@@ -53,6 +54,7 @@
   background: var(--chatobby-danger);
 }
 
+/* Runtime extension widgets occupy a bounded toolbar slot. */
 .chatobby-widget-host {
   min-width: 0;
   overflow: hidden;
@@ -81,7 +83,7 @@
   background: var(--chatobby-surface-hover);
   color: var(--text-normal);
 }
-/* ── Toolbar: connection dot + token/context meter ── */
+/* Context usage and compaction controls. Status remains legible without motion. */
 .chatobby-connection { transition: background 150ms ease, transform 150ms ease; }
 .chatobby-connection.is-connected.is-streaming,
 .chatobby-connection.is-connected.is-compacting {
@@ -148,7 +150,6 @@
 
 .chatobby-context-meter.is-unavailable { opacity: 0.55; }
 .chatobby-context-meter.is-running { animation: chatobby-pulse 1.4s ease-in-out infinite; }
-.chatobby-context-meter.is-complete { box-shadow: 0 0 0 3px color-mix(in srgb, var(--chatobby-success) 28%, transparent); }
 
 .chatobby-context-menu {
   position: absolute;
@@ -187,5 +188,4 @@
 .chatobby-context-menu__toggle { min-width: 44px; padding: var(--size-2-1) var(--size-4-2); }
 .chatobby-context-menu__toggle.is-enabled { color: var(--text-on-accent); background: var(--chatobby-accent); }
 .chatobby-context-menu__state.is-running { color: var(--chatobby-warning); }
-.chatobby-context-menu__state.is-complete { color: var(--chatobby-success); }
 .chatobby-context-menu__configure { width: 100%; margin-top: var(--size-4-3); }

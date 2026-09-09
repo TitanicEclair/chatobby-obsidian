@@ -69,7 +69,7 @@ export class ThinkingBlockView extends ChatobbyComponent {
         this.toggleExpanded();
       }
     };
-    this.bodyEl = container.createDiv({ cls: "chatobby-thinking-block__body" });
+    this.bodyEl = container.createDiv({ cls: "chatobby-thinking-block__body", attr: { tabindex: "0", role: "region", "aria-label": "Reasoning" } });
     if (this.block) this.setBlock(this.block);
   }
 
@@ -95,7 +95,11 @@ export class ThinkingBlockView extends ChatobbyComponent {
 
   private renderText(): void {
     if (!this.bodyEl || !this.block) return;
-    if (this.bodyEl.textContent !== this.block.text) this.bodyEl.textContent = this.block.text;
+    if (this.bodyEl.textContent !== this.block.text) {
+      const follow = this.bodyEl.scrollHeight - this.bodyEl.scrollTop - this.bodyEl.clientHeight < 32;
+      this.bodyEl.textContent = this.block.text;
+      if (follow && this.block.status === "streaming") this.bodyEl.scrollTop = this.bodyEl.scrollHeight;
+    }
   }
 
   private persistDisplayMode(mode: ThinkingDisplayMode): void {

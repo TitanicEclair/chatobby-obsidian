@@ -1,7 +1,7 @@
 // Paging helpers — ported from chaude/src/read-tools.ts:13.
 // pageTextLines: bounded line/char paging for note content.
 //
-// See docs/tooling/bridge-executor.md §8 for the note.read mapping.
+// Paging remains an adapter concern; see docs/wire-protocol.md.
 
 export interface TextPage {
   content: string;

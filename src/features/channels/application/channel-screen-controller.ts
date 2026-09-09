@@ -1,12 +1,17 @@
 import type { App } from "obsidian";
-import type { FrontendProtocolController } from "../../../frontend/frontend-protocol-controller";
+import type {
+  FrontendIntentInput,
+  FrontendProtocolController,
+} from "../../../frontend/frontend-protocol-controller";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type {
   FrontendChannelScreenViewModel,
-  FrontendIntent,
   FrontendNavigationReference,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import { ChannelsView } from "../ui/channels-view";
+
+type WorkspaceChannelType = "channel.create" | "channel.send" | "channel.set-participant";
+type WorkspaceChannelCommand = { [K in WorkspaceChannelType]: Pick<Extract<FrontendIntentInput, { type: K }>, "type" | "payload"> }[WorkspaceChannelType];
 
 export interface ChannelScreenControllerOptions {
   app: App;
@@ -45,6 +50,9 @@ export class ChannelScreenController {
       onLoadEarlier: (cursor) => this.dispatch("channel.load-earlier", { cursor }),
       onSetArchived: (id, archived) => this.dispatch("channel.set-archived", { channelId: id, archived }),
       onDeleteChannel: (id) => this.dispatch("channel.delete", { channelId: id }),
+      onCreateChannel: (name, description) => this.dispatchWorkspace({ type: "channel.create", payload: { name, description } }),
+      onSendMessage: (channelId, text, replyTo, recipientActorIds) => this.dispatchWorkspace({ type: "channel.send", payload: { channelId, text, replyTo, recipientActorIds } }),
+      onSetParticipant: (channelId, actorId, action) => this.dispatchWorkspace({ type: "channel.set-participant", payload: { channelId, actorId, action, expectedChannelRevision: this.currentModel()?.revision ?? 0 } }),
       onOpenAgent: (reference) => this.options.openAgentFeed(reference),
       focusMessageId: messageId,
     });
@@ -97,7 +105,7 @@ export class ChannelScreenController {
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session?.id,
     };
-    const intent: FrontendIntent = type === "channel.select"
+    const intent = (type === "channel.select"
       ? { ...base, type, payload: payload as { channelId: string } }
       : type === "channel.load-earlier"
         ? { ...base, type, payload: payload as { cursor: string } }
@@ -117,13 +125,21 @@ export class ChannelScreenController {
 					...(payload as { channelId: string }),
 					expectedChannelRevision: this.currentModel()?.revision ?? 0,
 				},
-			};
+			}) as FrontendIntentInput;
     const outcome = await this.options.getProtocol().dispatch(intent);
-    if (outcome.status === "rejected" || outcome.status === "conflict") {
+    if (outcome.status === "rejected" || outcome.status === "conflict" || outcome.status === "unavailable") {
       const message = outcome.notice?.message ?? "The channel action could not be applied.";
       this.view?.setLocalError(message);
       throw new Error(message);
     }
+    this.view?.setLocalError(null);
+  }
+
+  private async dispatchWorkspace(intent: WorkspaceChannelCommand): Promise<void> {
+    const snapshot = this.options.getStore().snapshot;
+    if (!snapshot) throw new Error("Chatobby is still connecting.");
+    const result = await this.options.getProtocol().dispatch({ ...intent, schemaVersion: 1, intentId: crypto.randomUUID(), viewId: snapshot.viewId });
+    if (result.status !== "applied" && result.status !== "accepted") throw new Error(result.notice?.message ?? "The channel action could not be completed.");
     this.view?.setLocalError(null);
   }
 

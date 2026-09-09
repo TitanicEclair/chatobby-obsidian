@@ -7,6 +7,9 @@ import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
 import { SubagentStore } from "../state/subagent-store";
 
 export interface ChatViewSubagentControllersOptions {
+  workspacePage?: boolean;
+  openParentSession?: (sessionId: string) => void;
+  stopParentSession?: (sessionId: string) => void;
   app: App;
   getHost: () => HTMLElement;
   getFrontendStore: () => FrontendStore;
@@ -33,6 +36,10 @@ export function createChatViewSubagentControllers(
 ): ChatViewSubagentControllers {
   const store = new SubagentStore(options.getFrontendStore());
   const screen = new SubagentScreenController({
+    workspacePage: options.workspacePage,
+    openParentSession: options.openParentSession,
+    stopParentSession: options.stopParentSession,
+    openAgentFeed: options.openAgentFeed,
     app: options.app,
     store,
     getFrontendStore: options.getFrontendStore,

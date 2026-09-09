@@ -226,8 +226,8 @@ describe("FeedRenderer", () => {
     const second = element.querySelector<HTMLElement>("[data-block-id='prompt-two']");
     if (!scroll || !first || !second) throw new Error("prompt fixtures did not render");
     scroll.getBoundingClientRect = () => ({ top: 0 } as DOMRect);
-    first.getBoundingClientRect = () => ({ top: -120 } as DOMRect);
-    second.getBoundingClientRect = () => ({ top: 120 } as DOMRect);
+    first.getBoundingClientRect = () => new DOMRect(0, -120, 320, 100);
+    second.getBoundingClientRect = () => new DOMRect(0, 120, 320, 100);
     first.scrollIntoView = vi.fn();
 
     scroll.dispatchEvent(new Event("scroll"));

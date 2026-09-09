@@ -406,12 +406,14 @@ export function reconcileKeyed<T>(
       .filter((child): child is HTMLElement => isDomNodeOfType(child, HTMLElement) && Boolean(child.dataset.pageKey))
       .map((child) => [child.dataset.pageKey ?? "", child] as const),
   );
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     const key = keyOf(item);
     const element = existing.get(key) ?? create(item);
     element.dataset.pageKey = key;
     update(element, item);
-    parent.append(element);
+    // Moving an already positioned row disrupts browser scroll anchoring and focus.
+    const position = parent.children.item(index);
+    if (position !== element) parent.insertBefore(element, position);
     existing.delete(key);
   }
   for (const element of existing.values()) element.remove();

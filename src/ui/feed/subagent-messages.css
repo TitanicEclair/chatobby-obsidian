@@ -1,4 +1,5 @@
-/* Legacy direct-agent messages, retained for existing session histories. */
+/* Legacy direct-agent messages retained only for existing session histories.
+   New subagent lifecycle presentation belongs to feed.css and subagents.css. */
 
 .chatobby-subagent-communication {
   position: relative;
@@ -15,9 +16,6 @@
   display: flex;
   align-items: center;
   gap: var(--size-2-2);
-}
-
-.chatobby-subagent-communication__header {
   cursor: default;
 }
 
@@ -77,6 +75,7 @@
   margin-left: auto;
 }
 
+/* Collapsible preview/content and acknowledgement response. */
 .chatobby-subagent-communication__content,
 .chatobby-subagent-communication__preview,
 .chatobby-subagent-communication__response {

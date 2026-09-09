@@ -1,3 +1,4 @@
+import type { ProviderLoginMethod, ProviderLoginState } from "../vendor/chatobby-client/ws-client";
 // ChatobbyTransport — thin wrapper around ChatobbyWsClient
 // Owns the connection state machine. Proxies all commands with error handling.
 // Does NOT own the session state — that's the view's job.
@@ -13,6 +14,7 @@ import type {
   WsLocalModelProvider,
   WsLocalModelProviderDocument,
   WsLocalModelProviderProbeResult,
+  WsLocalModelDiscoveryResult,
   WsManagedLocalModelServerProfile,
   WsManagedLocalModelServerSnapshot,
   WsManagedLocalModelServerStatus,
@@ -37,14 +39,16 @@ import type {
   RuntimeSessionCredentials,
 } from "../runtime/contracts";
 import type {
-  FrontendBootstrap,
-  FrontendBootstrapRequest,
   FrontendIntent,
   FrontendIntentResult,
+  FrontendLifecycleState,
+  FrontendNegotiationRequest,
+  FrontendNegotiationResult,
   FrontendPatch,
+  FrontendProtocolError,
   FrontendScreenRequest,
-  FrontendScreenViewModel,
-  FrontendSubscriptionAck,
+  FrontendScreenResponse,
+  FrontendSubscriptionResult,
   FrontendSubscriptionRequest,
 } from "../vendor/chatobby-client/frontend-contracts.js";
 import type { WsStoredSessionSelector } from "../vendor/chatobby-client/connector-types.js";
@@ -65,6 +69,8 @@ export class ChatobbyTransport {
     new Set();
   private frontendPatchListeners: Set<(patch: FrontendPatch) => void> =
     new Set();
+  private frontendProtocolErrorListeners: Set<(error: FrontendProtocolError) => void> = new Set();
+  private frontendLifecycleListeners: Set<(state: FrontendLifecycleState) => void> = new Set();
   private bridgeConfigListeners: Set<(config: WsBridgeConfig) => void> =
     new Set();
   private extensionUIHandler:
@@ -98,6 +104,16 @@ export class ChatobbyTransport {
   onFrontendPatch(listener: (patch: FrontendPatch) => void): () => void {
     this.frontendPatchListeners.add(listener);
     return () => this.frontendPatchListeners.delete(listener);
+  }
+
+  onFrontendProtocolError(listener: (error: FrontendProtocolError) => void): () => void {
+    this.frontendProtocolErrorListeners.add(listener);
+    return () => this.frontendProtocolErrorListeners.delete(listener);
+  }
+
+  onFrontendLifecycle(listener: (state: FrontendLifecycleState) => void): () => void {
+    this.frontendLifecycleListeners.add(listener);
+    return () => this.frontendLifecycleListeners.delete(listener);
   }
 
   /** Register a handler for extension UI requests. */
@@ -145,6 +161,12 @@ export class ChatobbyTransport {
     });
     this.client = client;
     client.onFrontendPatch((patch) => this.emitFrontendPatch(patch));
+    client.onFrontendProtocolError((error) => {
+      for (const listener of this.frontendProtocolErrorListeners) listener(error);
+    });
+    client.onFrontendLifecycle((state) => {
+      for (const listener of this.frontendLifecycleListeners) listener(state);
+    });
     client.onBridgeConfig((config) => this.emitBridgeConfig(config));
     if (this.extensionUIHandler) {
       client.onExtensionUI(this.extensionUIHandler);
@@ -187,22 +209,26 @@ export class ChatobbyTransport {
 
   // ── Runtime-owned frontend protocol ──────────────────────────────
 
-  async getFrontendBootstrap(
-    request: FrontendBootstrapRequest,
-  ): Promise<FrontendBootstrap> {
-    return this.requireClient().getFrontendBootstrap(request);
+  async negotiateFrontend(
+    request: FrontendNegotiationRequest,
+  ): Promise<FrontendNegotiationResult> {
+    return this.requireClient().negotiateFrontend(request);
   }
 
   async getFrontendScreen(
     request: FrontendScreenRequest,
-  ): Promise<FrontendScreenViewModel> {
+  ): Promise<FrontendScreenResponse> {
     return this.requireClient().getFrontendScreen(request);
   }
 
   async subscribeFrontend(
     request: FrontendSubscriptionRequest,
-  ): Promise<FrontendSubscriptionAck> {
+  ): Promise<FrontendSubscriptionResult> {
     return this.requireClient().subscribeFrontend(request);
+  }
+
+  activateFrontendLive(): void {
+    this.requireClient().activateFrontendLive();
   }
 
   async dispatchFrontendIntent(
@@ -339,6 +365,11 @@ export class ChatobbyTransport {
 
   // ── State & messages ───────────────────────────────────────────────
 
+  /** Read current host eligibility for passive Obsidian context on this authenticated session. */
+  async getObsidianVaultAccessContext() {
+    return this.requireClient().getObsidianVaultAccessContext();
+  }
+
   async getSessionStats(): Promise<WsSessionStats> {
     const client = this.requireClient();
     return client.getSessionStats();
@@ -360,6 +391,22 @@ export class ChatobbyTransport {
   }
 
   // ── Model & thinking ───────────────────────────────────────────────
+
+  async startProviderLogin(provider: string, method: ProviderLoginMethod): Promise<ProviderLoginState> {
+    return this.requireClient().startProviderLogin(provider, method);
+  }
+
+  async getProviderLogin(loginId: string): Promise<ProviderLoginState> {
+    return this.requireClient().getProviderLogin(loginId);
+  }
+
+  async respondToProviderLogin(loginId: string, promptId: string, value: string): Promise<ProviderLoginState> {
+    return this.requireClient().respondToProviderLogin(loginId, promptId, value);
+  }
+
+  async cancelProviderLogin(loginId: string): Promise<ProviderLoginState> {
+    return this.requireClient().cancelProviderLogin(loginId);
+  }
 
   async getProviders(): Promise<WsProviderInfo[]> {
     const client = this.requireClient();
@@ -392,6 +439,10 @@ export class ChatobbyTransport {
       providerId,
       removeCredential,
     );
+  }
+
+  async discoverLocalModels(provider: WsLocalModelProvider, apiKey?: string): Promise<WsLocalModelDiscoveryResult> {
+    return this.requireClient().discoverLocalModels(provider, apiKey);
   }
 
   async testLocalModelProvider(
@@ -438,6 +489,7 @@ export class ChatobbyTransport {
   // ── Session settings ───────────────────────────────────────────────
 
   async setAutoCompaction(settings: {
+    mode?: WsAutoCompactionSettings["mode"];
     enabled?: boolean;
     thresholdPercent?: number;
   }): Promise<WsAutoCompactionSettings> {
@@ -499,8 +551,12 @@ export class ChatobbyTransport {
     return client.getRuntimeInfo();
   }
 
+  // Compatibility-only transport retained for one product-version window.
   async getGuide(): Promise<GuideContent> {
-    return this.requireClient().getGuide();
+    const compatibilityClient = this.requireClient() as unknown as {
+      getGuide(): Promise<GuideContent>;
+    };
+    return compatibilityClient.getGuide();
   }
 
   // ── Private helpers ──────────────────────────────────────────────

@@ -12,6 +12,35 @@ import { mount } from "./helpers/mount";
 import { createMockFeedHostForStore } from "./helpers/mock-host";
 
 describe("SubagentsView", () => {
+  it("counts idle agents separately from requests that need the user", () => {
+    const initial = screen({});
+    const store = createStore({ runSummaries: initial.runSummaries.map((run) => ({ ...run, activeNodes: 0, waitingNodes: 2 })) });
+    const element = mount(createView(store));
+    const facts = [...element.querySelectorAll(".chatobby-subagents__overview-fact")].map((fact) => fact.textContent);
+    expect(facts).toContain("2Idle agents");
+    expect(facts).not.toContain("0Waiting");
+    expect(facts.some((fact) => fact?.includes("Needs you"))).toBe(false);
+  });
+  it("groups workspace activity under the real parent and addresses parent and child controls separately", () => {
+    const callbacks = actions();
+    const store = createStore({ workspaceWide: true, parentSessions: [{ sessionId: "session-a", label: "Research a better garden", workspaceLabel: "Garden studio", active: true }] });
+    const view = new SubagentsView({ store, actions: callbacks, workspacePage: true, onBack: vi.fn(), onOpenManagement: vi.fn(), createFeedHost: createMockFeedHostForStore });
+    const element = mount(view);
+    expect(element.textContent).toContain("Research a better garden");
+    expect(element.textContent).toContain("Garden studio");
+    expect(element.querySelector("button[aria-label='New run']")).toBeNull();
+    const click = (label: string): void => { Array.from(element.querySelectorAll("button")).find((button) => button.textContent === label)?.click(); };
+    click("Research a better garden"); click("Vault researcher"); click("Stop chat"); click("Stop");
+    expect(callbacks.openParentSession).toHaveBeenCalledWith("session-a");
+    expect(callbacks.openAgentFeed).toHaveBeenCalledWith("run-a", "node-a");
+    expect(callbacks.stopParentSession).toHaveBeenCalledWith("session-a");
+    expect(callbacks.control).toHaveBeenCalledWith("run-a", "node-a", "cancel");
+    click("Roles and settings");
+    expect(element.textContent).not.toContain("Agents working at once");
+    expect(element.textContent).not.toContain("Maximum tokens");
+    expect(element.textContent).toContain("Storage and runtime");
+    expect(element.textContent).toContain("Researcher");
+  });
   it("renders runtime health, runs, and dedicated catalog tabs", () => {
     const store = createStore();
     const view = createView(store);
@@ -23,10 +52,10 @@ describe("SubagentsView", () => {
     expect(element.querySelector(".chatobby-subagents__body.chatobby-page__body")).not.toBeNull();
     expect(element.querySelectorAll(".chatobby-subagents__header .chatobby-page__icon-button")).toHaveLength(4);
     expect(element.textContent).toContain("Subagents");
-    expect(element.textContent).toContain("Migration research");
+    expect(element.textContent).toContain("Vault researcher");
     expect(element.textContent).toContain("Roles");
     expect(element.querySelector(".chatobby-subagents__body")).not.toBeNull();
-    expect(element.textContent).toContain("Filter runs");
+    expect(element.textContent).toContain("Filter history");
     expect(element.textContent).not.toContain("Total tokens");
     expect(element.textContent).not.toContain("Total cost");
     expect(element.querySelector("[aria-label='Back to chat']")).toBeNull();
@@ -40,7 +69,7 @@ describe("SubagentsView", () => {
     const start = element.querySelector<HTMLButtonElement>("button[aria-label='New run']");
 
     start?.click();
-    expect(Array.from(element.querySelectorAll("label")).some((label) => label.textContent === "Total token budget")).toBe(true);
+    expect(Array.from(element.querySelectorAll("label")).some((label) => label.textContent === "Total token budget")).toBe(false);
     element.querySelector<HTMLFormElement>(".chatobby-subagents__start")?.dispatchEvent(new Event("submit"));
 
     expect(element.textContent).toContain("Name, task, and role are required.");
@@ -128,6 +157,7 @@ describe("SubagentsView", () => {
           scope: "global",
           scopeId: "default",
           policy: { permissionProfileId: "web-research-read-only" },
+          permissionReviewRequired: true,
           revision: 0,
         },
         {
@@ -148,11 +178,49 @@ describe("SubagentsView", () => {
     const cards = Array.from(element.querySelectorAll<HTMLElement>(".chatobby-subagents__catalog-card"));
 
     expect(cards[0]?.querySelector(".chatobby-subagents__provided-badge")?.textContent).toBe("Chatobby");
-    expect(cards[0]?.textContent).toContain("Researcher (web, read only)");
-    expect(cards[0]?.textContent).not.toContain("Inherits permissions");
+    expect(cards[0]?.textContent).toContain("Review required: retired permission override");
+    expect(cards[0]?.textContent).not.toContain("web-research-read-only");
     expect(Array.from(cards[0]?.querySelectorAll("button") ?? [])).toHaveLength(0);
     expect(Array.from(cards[1]?.querySelectorAll("button") ?? []).map((button) => button.textContent))
       .toEqual(["Edit", "Delete"]);
+  });
+
+  it("removes a retired role permission override through the normal save flow", async () => {
+    const retained = {
+      ...screen({}).definitions[0]!,
+      policy: {
+        ...screen({}).definitions[0]!.policy,
+        permissionProfileId: "legacy-custom-profile",
+      },
+      permissionReviewRequired: true as const,
+    };
+    const callbacks = actions();
+    const element = mount(
+      createView(createStore({ definitions: [retained] }), callbacks),
+    );
+    Array.from(element.querySelectorAll("button"))
+      .find((button) => button.textContent === "Roles")
+      ?.click();
+    Array.from(element.querySelectorAll("button"))
+      .find((button) => button.textContent === "Edit")
+      ?.click();
+
+    expect(element.textContent).toContain(
+      "Saving removes this role's retired permission-profile override",
+    );
+    expect(
+      element.querySelector("[aria-label='Role permission policy']"),
+    ).toBeNull();
+    element
+      .querySelector<HTMLFormElement>(".chatobby-subagents__editor form")
+      ?.dispatchEvent(new Event("submit"));
+
+    await vi.waitFor(() => expect(callbacks.saveDefinition).toHaveBeenCalled());
+    const [definition] = callbacks.saveDefinition.mock.calls[0] ?? [];
+    expect(definition?.policy.permissionProfileId).toBeUndefined();
+    expect(callbacks.saveDefinition).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "researcher" }),
+    );
   });
 
   it("filters a bounded skill list and supports bulk selection and clearing", () => {
@@ -189,12 +257,13 @@ describe("SubagentsView", () => {
     };
     openTab("Roles");
     Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "New")?.click();
+    expect(element.textContent).toContain("Choosing either scope does not grant file or tool access");
     const name = element.querySelector<HTMLInputElement>("input[placeholder='Research assistant']");
     if (!name) throw new Error("role name missing");
     name.value = "Careful reviewer";
     name.dispatchEvent(new Event("input", { bubbles: true }));
-    Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Manage policies")?.click();
-    expect(callbacks.openPermissions).toHaveBeenCalledOnce();
+    expect(element.textContent).toContain("Uses the initiating chat’s access.");
+    expect(Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Manage access")).toBeUndefined();
 
     openTab("Runs");
     openTab("Roles");
@@ -216,8 +285,8 @@ describe("SubagentsView", () => {
 
     expect(element.querySelector(".chatobby-subagents__run-layout.is-empty")).not.toBeNull();
     expect(element.querySelector(".chatobby-subagents__detail")).toBeNull();
-    expect(element.textContent).toContain("No runs yet");
-    expect(element.textContent).not.toContain("Filter runs");
+    expect(element.textContent).toContain("No agent history yet");
+    expect(element.textContent).not.toContain("Filter history");
     expect(element.textContent).not.toContain("Select a run");
   });
 
@@ -264,7 +333,7 @@ describe("SubagentsView", () => {
     expect(element.querySelector(".chatobby-feed__block--user")).not.toBeNull();
     expect(element.querySelector(".chatobby-feed__block--text")).not.toBeNull();
     expect(element.querySelector(".chatobby-composer-card")).not.toBeNull();
-    expect(element.textContent).not.toContain("Filter runs");
+    expect(element.textContent).not.toContain("Filter history");
     expect(element.textContent).not.toContain("Tokens");
     expect(element.textContent).not.toContain("Cost");
   });
@@ -287,7 +356,7 @@ describe("SubagentsView", () => {
     expect(onOpenManagement).toHaveBeenCalledOnce();
   });
 
-  it("shows the actual model and hides transcript promotion and duplicate message controls", () => {
+  it("keeps conversation access while retiring the run inspector and obsolete controls", () => {
     const run = runSnapshot();
     const node = run.nodes["node-a"];
     if (!node) throw new Error("fixture node missing");
@@ -312,8 +381,13 @@ describe("SubagentsView", () => {
 
     const element = mount(createView(store));
 
-    expect(element.textContent).toContain("deepseek/deepseek-v4-pro");
-    expect(element.textContent).toContain("Uses the parent or role setting");
+    expect(element.textContent).toContain("Open Vault researcher feed");
+    expect(element.querySelector(".chatobby-subagents__task")).toBeNull();
+    expect(element.querySelector(".chatobby-subagents__technical")).toBeNull();
+    for (const label of ["Retry", "Clone run", "Fork from node", "Apply priority"]) {
+      expect(element.textContent).not.toContain(label);
+      expect(element.querySelector(`[aria-label='${label}']`)).toBeNull();
+    }
     expect(element.textContent).not.toContain("Message this agent");
     expect(element.textContent).not.toContain("child.jsonl");
     expect(element.textContent).not.toContain("Cost budget");
@@ -333,14 +407,15 @@ function createView(store: SubagentStore, callbacks = actions()): SubagentsView 
 function actions() {
   const agentDrafts = new Map<string, {
     definition: FrontendSubagentAgentDefinition;
-    permissionProfileId: string;
   }>();
   return {
+    openParentSession: vi.fn(),
+    stopParentSession: vi.fn(),
+    openAgentFeed: vi.fn(),
     openPermissions: vi.fn(),
     getAgentEditorDraft: vi.fn((itemId: string) => structuredClone(agentDrafts.get(itemId))),
     setAgentEditorDraft: vi.fn((itemId: string, draft: {
       definition: FrontendSubagentAgentDefinition;
-      permissionProfileId: string;
     }) => agentDrafts.set(itemId, structuredClone(draft))),
     clearAgentEditorDraft: vi.fn((itemId: string) => agentDrafts.delete(itemId)),
     refresh: vi.fn(async () => undefined),

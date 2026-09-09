@@ -1,11 +1,17 @@
+/* In-product settings page wrapper. Field primitives remain in
+   ui/settings/settings.css and full-page structure in page-shell.css. */
+
 .chatobby-settings-page__guide {
 	flex: 0 0 auto;
-	padding: 0 var(--chatobby-page-inline-padding) var(--size-4-2);
+	padding: var(--size-4-4) var(--chatobby-page-inline-padding);
 	border-bottom: var(--border-width) solid var(--chatobby-border);
 }
 
-.chatobby-settings-page__guide .setting-item {
-	padding-top: 0;
+.chatobby-settings-page__guide .setting-item:first-child {
+	padding: var(--size-4-4);
+	border: 1px solid var(--chatobby-border);
+	border-radius: var(--radius-m);
+	background: var(--chatobby-surface-muted);
 }
 
 .chatobby-settings-page__settings {

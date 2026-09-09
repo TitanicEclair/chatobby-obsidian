@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RuntimeControlClient } from "../../src/runtime/infrastructure/runtime-control-client";
 import type {
+  RuntimeMaintenanceAdmitRequest,
   RuntimeReadyDescriptor,
   RuntimeStatusResponse,
 } from "../../src/vendor/chatobby-client/ws-client.js";
@@ -69,5 +70,75 @@ describe("RuntimeControlClient", () => {
       { authorization: "Bearer control-secret", attachmentId: "plugin-instance", method: "POST", url: "/api/runtime/detach" },
       { authorization: "Bearer control-secret", attachmentId: undefined, method: "POST", url: "/api/runtime/shutdown" },
     ]);
+  });
+
+  it("accepts only a typed maintenance deferral carried by HTTP 409", async () => {
+    const responses: unknown[] = [
+      {
+        schemaVersion: 1,
+        status: "deferred",
+        operationId: "operation-1",
+        retryAfterMs: 1_000,
+        activeWorkKinds: ["subagent"],
+      },
+      { error: "maintenance_unavailable" },
+      {
+        schemaVersion: 1,
+        status: "deferred",
+        operationId: "operation-1",
+        retryAfterMs: 1_000,
+        activeWorkKinds: ["unknown"],
+      },
+    ];
+    const server = createServer((_request, response) => {
+      response.writeHead(409, { "content-type": "application/json", connection: "close" });
+      response.end(JSON.stringify(responses.shift()));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+    const request: RuntimeMaintenanceAdmitRequest = {
+      schemaVersion: 1,
+      operationId: "operation-1",
+      purpose: "development-reconcile",
+      current: {
+        instanceId: "runtime-1",
+        runtimePackageFingerprint: null,
+        developmentBuildFingerprint: "a".repeat(64),
+      },
+      target: {
+        runtimeVersion: "0.4.3",
+        runtimePackageFingerprint: null,
+        developmentBuildFingerprint: "b".repeat(64),
+      },
+    };
+    const client = new RuntimeControlClient();
+
+    try {
+      await expect(client.admitMaintenance(
+        { host: "127.0.0.1", port: address.port },
+        "control-secret",
+        request,
+      )).resolves.toEqual({
+        schemaVersion: 1,
+        status: "deferred",
+        operationId: "operation-1",
+        retryAfterMs: 1_000,
+        activeWorkKinds: ["subagent"],
+      });
+      await expect(client.admitMaintenance(
+        { host: "127.0.0.1", port: address.port },
+        "control-secret",
+        request,
+      )).rejects.toThrow("Chatobby runtime control request failed (409)");
+      await expect(client.admitMaintenance(
+        { host: "127.0.0.1", port: address.port },
+        "control-secret",
+        request,
+      )).rejects.toThrow("Chatobby runtime control request failed (409)");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
   });
 });

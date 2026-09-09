@@ -1,15 +1,20 @@
-/* Chatobby plugin styles — bundle source.
-   This barrel is concatenated by esbuild (esbuild.config.mjs) into the root
-   styles.css that Obsidian loads. Each component owns its own .css file
-   co-located next to its source; edit there, not in the generated root file. */
+/* Chatobby plugin styles — canonical bundle source.
+   Esbuild concatenates this ordered barrel into the generated root styles.css
+   that Obsidian loads. Shared foundations come first, component and feature
+   modules follow, and structural/accessibility overrides close the bundle.
+   Edit the owning source module; never hand-edit
+   the generated root artifact. See docs/architecture/frontend-styles.md. */
 
 @import "./shared/tokens.css";
 @import "./shell/shell.css";
+
+/* Persistent conversation shell and its feed/composer surfaces. */
 @import "./session/session.css";
 @import "./toolbar/toolbar.css";
 @import "./composer/composer.css";
 @import "./settings/settings.css";
 @import "./modals/modals.css";
+@import "./modals/product-intro.css";
 @import "./feed/feed.css";
 @import "./feed/divider.css";
 @import "./feed/subagent-messages.css";
@@ -17,14 +22,20 @@
 @import "./feed/tools/tools.css";
 @import "./memory/memory-view.css";
 @import "./permissions/permissions-view.css";
+
+/* Runtime-projected feature pages. Import order is part of the cascade. */
 @import "../features/subagents/ui/subagents.css";
+@import "../features/subagents/ui/active-agents.css";
 @import "../features/runtime-status/ui/runtime-status.css";
 @import "../features/tasks/ui/tasks.css";
 @import "../features/events/ui/events.css";
-@import "../features/queries/ui/queries.css";
 @import "../features/mcp/ui/mcp.css";
 @import "../features/projects/ui/projects.css";
 @import "../features/settings/ui/settings-page.css";
 @import "../features/channels/ui/channels.css";
+
+/* Structural and user-preference overrides intentionally close the bundle. */
 @import "./shared/page-shell.css";
+@import "./workspace/workspace.css";
+@import "../features/projects/ui/project-navigator.css";
 @import "./shared/motion.css";

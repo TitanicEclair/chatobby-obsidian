@@ -2,7 +2,7 @@
 // into this one module — they were 8 near-identical "dump args/result as text" stubs.
 //
 // A tool call renders as a compact row (icon + name + primary arg + status dot) that expands
-// to a formatted result. See docs/ui-state-guide.md § Tool rendering.
+// to a formatted result. See docs/architecture/frontend-modules.md.
 
 import type { ImageContent, ToolItem } from "../../../types";
 import { TOOL_RESULT_TRUNCATE_LINES } from "../../shared/constants";

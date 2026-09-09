@@ -2,7 +2,7 @@
 // Reads: SessionState (isStreaming for send/stop toggle), SessionPreferences
 // Owns: ComposerState (text, attachments, isFocused)
 //
-// Target architecture (see docs/ui-state-guide.md):
+// Architecture (see docs/architecture/frontend-modules.md):
 //   - ComposerCard wraps ComposerInput + ComposerControls + ComposerActions
 //   - ComposerControls replaces floating SessionControls popover (inline row below textarea)
 //   - When interaction active: textarea hidden or repurposed for interaction input
@@ -944,7 +944,7 @@ export class Composer extends ChatobbyComponent {
     const session = this.host.getSessionState();
     return this.promptInFlight || this.recoverableSubmission !== null || this.retractionPending ||
       this.committedTurnPending || this.isStreaming ||
-      session?.isStreaming === true || session?.isCompacting === true;
+      session?.isStreaming === true;
   }
 
   private updateControls(): void {

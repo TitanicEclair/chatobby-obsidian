@@ -4,6 +4,20 @@ import { SettingsStore } from "../../src/state/settings-store";
 import { DEFAULT_PLUGIN_SETTINGS, type PluginSettings } from "../../src/types";
 
 describe("runtime settings migration", () => {
+  it("validates and persists the introduction version without inferring provider credentials", async () => {
+    const plugin = fakePlugin({ onboardingVersion: 1, lastSeenPluginVersion: "0.4.3" });
+    const settings = defaults();
+    const store = new SettingsStore(plugin.value, settings);
+    await store.load();
+    expect(settings.lastSeenPluginVersion).toBe("0.4.3");
+    await store.updateSettings({ lastSeenPluginVersion: "0.5.0" });
+    expect(plugin.saveData).toHaveBeenCalledWith(expect.objectContaining({ lastSeenPluginVersion: "0.5.0", onboardingVersion: 1 }));
+    for (const invalid of [null, 5, "", "not-a-version"]) {
+      const other = defaults();
+      await new SettingsStore(fakePlugin({ lastSeenPluginVersion: invalid }).value, other).load();
+      expect(other.lastSeenPluginVersion).toBe("");
+    }
+  });
   it("migrates a custom legacy command to developer mode and persists the new schema", async () => {
     const plugin = fakePlugin({
       serverUrl: "ws://localhost:9222",

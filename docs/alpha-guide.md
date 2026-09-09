@@ -3,21 +3,33 @@
 Chatobby is a free public alpha. Patreon support is optional and does not
 unlock features, raise limits, or change the data Chatobby can access.
 
-## A safe first session
+## Start a chat
 
-1. Use a backed-up vault or copied test folder.
-2. Open Chatobby's **Settings** page from its top bar and connect one model
+1. Open Chatobby's **Settings** page from its sidebar and connect one model
    provider or local model server.
-3. Keep the default permission policy for the first session.
-4. Ask Chatobby to summarize the active test note without changing it.
-5. Request one small edit and inspect the result before expanding permissions.
-6. Restart Obsidian and confirm that the session and runtime reconnect.
+2. Start a Vault chat, or create a Project with the folders you want to use.
+3. Ask Chatobby to summarize a note, compare linked ideas or make an edit.
+4. Add the **Chatobby Guide** from Settings for the full feature reference.
+
+## Access modes
+
+New chats start in **Workspace** mode with network access on. Workspace allows
+file changes in the selected Vault or Project folders; **Read-only** prevents
+file changes there. Both modes use native sandboxing on Windows, macOS and Linux.
+Chatobby's internal storage stays protected. **Full** uses your normal OS account
+access and keeps networking on. Choose the mode and network setting in the composer
+or Permissions; separate chats keep their own choices.
+
+**Obsidian app access** enables tools that operate the app itself, including its
+whole-vault access. It defaults on for Vault chats and off for Projects. Existing
+explicit choices are preserved. Manage it and individual MCP connections in
+Permissions.
 
 ## What is included
 
 - provider, model, and reasoning controls per session;
 - Obsidian-aware reading, search, navigation, and allowlisted vault operations;
-- memory, tasks, context queries, events, permissions, and document/image
+- memory, tasks, events, permissions, and document/image
   attachments;
 - terminal-first durable file work plus version-aware Obsidian CLI discovery
   for live application, index, history, plugin, and developer semantics;

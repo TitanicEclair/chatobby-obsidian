@@ -54,6 +54,8 @@ describe("RuntimeStatusController", () => {
       start: vi.fn(),
       restart,
       install: vi.fn(),
+      automaticProvisioning: () => false,
+      retryProvisioning: vi.fn(),
     });
     const container = document.body.createDiv();
     controller.bind(container);
@@ -87,6 +89,8 @@ describe("RuntimeStatusController", () => {
       start: vi.fn(),
       restart: vi.fn(),
       install,
+      automaticProvisioning: () => false,
+      retryProvisioning: vi.fn(),
     });
     const container = document.body.createDiv();
     controller.bind(container);
@@ -114,12 +118,41 @@ describe("RuntimeStatusController", () => {
       start: vi.fn(),
       restart: vi.fn(),
       install: vi.fn(),
+      automaticProvisioning: () => false,
+      retryProvisioning: vi.fn(),
     });
     const container = document.body.createDiv();
     controller.bind(container);
 
     expect(Array.from(container.querySelectorAll(".chatobby-runtime-status__action")).map((button) => button.textContent))
       .toEqual(["Retry"]);
+  });
+
+  it("keeps an exact-pair adoption failure visible without a retry bypass", () => {
+    const state: RuntimeLifecycleState = {
+      status: "error",
+      mode: "managed",
+      diagnostics: {
+        code: "development_pair_adoption_failed",
+        message: "Restage a valid exact pair, then reload Chatobby.",
+        recentLogs: [],
+        occurredAt: 1,
+      },
+    };
+    const controller = new RuntimeStatusController({
+      getState: () => state,
+      start: vi.fn(),
+      restart: vi.fn(),
+      install: vi.fn(),
+      automaticProvisioning: () => false,
+      retryProvisioning: vi.fn(),
+    });
+    const container = document.body.createDiv();
+    controller.bind(container);
+
+    expect(container.textContent).toContain("Chatobby update needs attention");
+    expect(container.textContent).toContain("Restage a valid exact pair");
+    expect(container.querySelectorAll(".chatobby-runtime-status__action")).toHaveLength(0);
   });
 
   it("offers verified repair instead of retrying an invalid managed package", () => {
@@ -139,6 +172,8 @@ describe("RuntimeStatusController", () => {
       start: vi.fn(),
       restart: vi.fn(),
       install,
+      automaticProvisioning: () => false,
+      retryProvisioning: vi.fn(),
     });
     const container = document.body.createDiv();
     controller.bind(container);
@@ -166,6 +201,8 @@ describe("RuntimeStatusController", () => {
       start: vi.fn(),
       restart: vi.fn(),
       install: vi.fn(),
+      automaticProvisioning: () => false,
+      retryProvisioning: vi.fn(),
     });
     const container = document.body.createDiv();
     controller.bind(container);
@@ -175,6 +212,37 @@ describe("RuntimeStatusController", () => {
       .toEqual(["Apple instructions"]);
     expect(container.textContent).not.toContain("xattr");
   });
+
+  it("retries automatic setup instead of opening the manual installer", () => {
+    const retryProvisioning = vi.fn(async () => {});
+    const install = vi.fn(async () => {});
+    const state: RuntimeLifecycleState = {
+      status: "error",
+      mode: "managed",
+      diagnostics: {
+        code: "runtime_not_installed",
+        message: "The Chatobby runtime is not installed",
+        recentLogs: [],
+        occurredAt: 1,
+      },
+    };
+    const controller = new RuntimeStatusController({
+      getState: () => state,
+      start: vi.fn(),
+      restart: vi.fn(),
+      install,
+      automaticProvisioning: () => true,
+      retryProvisioning,
+    });
+    const container = document.body.createDiv();
+    controller.bind(container);
+
+    const retry = Array.from(container.querySelectorAll("button"))
+      .find((candidate) => candidate.textContent === "Retry setup") as HTMLButtonElement;
+    retry.click();
+    expect(retryProvisioning).toHaveBeenCalledOnce();
+    expect(install).not.toHaveBeenCalled();
+  });
 });
 
 function controllerFor(getState: () => RuntimeLifecycleState): RuntimeStatusController {
@@ -183,6 +251,8 @@ function controllerFor(getState: () => RuntimeLifecycleState): RuntimeStatusCont
     start: vi.fn(),
     restart: vi.fn(),
     install: vi.fn(),
+    automaticProvisioning: () => false,
+    retryProvisioning: vi.fn(),
   });
 }
 

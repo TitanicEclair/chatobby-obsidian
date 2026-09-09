@@ -1,4 +1,5 @@
 // Generated from packages/chatobby/src/connector-types.ts. Do not edit.
+import type { ProviderAuthentication } from "./provider-auth-contracts.ts";
 /**
  * Public, data-only contracts required by the Obsidian connector.
  *
@@ -17,15 +18,52 @@ import type { ObsidianBridgeConnectionConfig } from "@chatobby/obsidian-protocol
 
 export type AutoNameStrategy = "truncate" | "model";
 
+/** Non-secret freshness evidence, not a capability or permission grant. */
+export interface ObsidianVaultAccessContextStamp {
+	readonly sessionId: string;
+	readonly vaultId: string;
+	readonly bindingRevision: number;
+	readonly policyRevision: number;
+}
+
+export function parseObsidianVaultAccessContextStamp(value: unknown): ObsidianVaultAccessContextStamp | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		throw new Error("Invalid Obsidian vault access context stamp");
+	const record = value as Record<string, unknown>;
+	if (
+		typeof record.sessionId !== "string" ||
+		!record.sessionId.trim() ||
+		typeof record.vaultId !== "string" ||
+		!record.vaultId.trim() ||
+		typeof record.bindingRevision !== "number" ||
+		!Number.isSafeInteger(record.bindingRevision) ||
+		record.bindingRevision < 1 ||
+		typeof record.policyRevision !== "number" ||
+		!Number.isSafeInteger(record.policyRevision) ||
+		record.policyRevision < 1
+	)
+		throw new Error("Invalid Obsidian vault access context stamp");
+	return Object.freeze({
+		sessionId: record.sessionId,
+		vaultId: record.vaultId,
+		bindingRevision: record.bindingRevision,
+		policyRevision: record.policyRevision,
+	});
+}
+
 /** Stable ID is preferred; path selection remains for active-session compatibility. */
 export type WsStoredSessionSelector =
 	| { readonly sessionId: string; readonly sessionPath?: never }
 	| { readonly sessionPath: string; readonly sessionId?: never };
 
 export interface WsAutoCompactionSettings {
+	/** Older runtimes omit the mode and retain background behavior. */
+	mode?: "queued" | "background";
 	enabled: boolean;
 	thresholdPercent: number;
 	effectiveThresholdPercent: number;
+	customInstructions?: string;
 }
 
 export type WsPromptAttachment =
@@ -45,6 +83,7 @@ export type WsPromptAttachment =
 	  };
 
 export interface WsPromptContextPacket {
+	obsidianVaultAccess?: ObsidianVaultAccessContextStamp;
 	schemaVersion: 1 | 2;
 	source: "obsidian";
 	vault: string;
@@ -197,6 +236,14 @@ export interface WsRuntimeInfo {
 }
 
 export interface WsProviderInfo {
+	authentication?: ProviderAuthentication;
+	/** Authored, credential-free account discovery diagnostics; absent on older runtimes. */
+	modelDiscovery?: {
+		checkedAt: number;
+		error?: string;
+		usingCachedModels: boolean;
+		unavailableModels: { id: string; reason: string }[];
+	};
 	id: string;
 	name: string;
 	configured: boolean;
@@ -213,9 +260,28 @@ export interface WsLocalModelDefinition {
 	maxTokens: number;
 	reasoning: boolean;
 	imageInput: boolean;
+	contextSource?: "server" | "manual";
+	outputLimit?: "server" | "custom";
+}
+
+export interface WsDiscoveredLocalModel {
+	id: string;
+	name: string;
+	contextWindow?: number;
+	loaded?: boolean;
+	reasoning?: boolean;
+	imageInput?: boolean;
+}
+
+export interface WsLocalModelDiscoveryResult {
+	status: "reachable" | "unreachable" | "invalid-response";
+	models: WsDiscoveredLocalModel[];
+	message: string;
 }
 
 export interface WsLocalModelProvider {
+	/** User-declared scheduling policy, not detected hardware location. */
+	compactionSchedulingClass?: "local" | "hosted";
 	id: string;
 	name: string;
 	preset: "ollama" | "lm-studio" | "vllm" | "llama-cpp" | "openai-compatible" | "anthropic-compatible";

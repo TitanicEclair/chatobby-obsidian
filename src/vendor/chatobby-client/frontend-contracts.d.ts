@@ -1,10 +1,79 @@
+import { type FrontendSandboxRevokePayload, type FrontendSandboxSetupPayload, type FrontendSandboxSetupViewModel, type FrontendSandboxVerifyPayload } from "./frontend-sandbox-contracts.js";
 import type { ThinkingLevel } from "./wire-types.js";
 /** Public, data-only protocol consumed by reviewable Chatobby frontends. */
-export declare const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 1;
+export declare const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 2;
+export declare const CHATOBBY_FRONTEND_SCHEMA_VERSION = 1;
+export declare const CHATOBBY_FRONTEND_REPLAY_LIMIT = 256;
+declare const frontendIdBrand: unique symbol;
+/** Opaque wire identity. IDs from different entity families must not be interchanged. */
+export type FrontendId<Kind extends string> = string & {
+    readonly [frontendIdBrand]: Kind;
+};
+export type FrontendRuntimeInstanceId = FrontendId<"runtime-instance">;
+export type FrontendVaultInstanceId = FrontendId<"vault-instance">;
+export type FrontendViewId = FrontendId<"view">;
+export type FrontendRequestId = FrontendId<"request">;
+export type FrontendIntentId = FrontendId<"intent">;
+export type FrontendScreenRequestId = FrontendRequestId;
+export type FrontendSessionId = FrontendId<"session">;
+export type FrontendProjectId = FrontendId<"project">;
+export type FrontendMessageId = FrontendId<"message">;
+export type FrontendBlockId = FrontendId<"block">;
+export type FrontendTurnId = FrontendId<"turn">;
+export type FrontendRunId = FrontendId<"run">;
+export type FrontendNodeId = FrontendId<"node">;
+export type FrontendActorId = FrontendId<"actor">;
+export type FrontendChannelId = FrontendId<"channel">;
+export declare function frontendId(value: string, label: "runtimeInstanceId"): FrontendRuntimeInstanceId;
+export declare function frontendId(value: string, label: "vaultInstanceId"): FrontendVaultInstanceId;
+export declare function frontendId(value: string, label: "viewId" | "scope.viewId"): FrontendViewId;
+export declare function frontendId(value: string, label: "requestId"): FrontendRequestId;
+export declare function frontendId(value: string, label: "intentId"): FrontendIntentId;
+export declare function frontendId<Kind extends string>(value: string, label: string): FrontendId<Kind>;
+export type FrontendLifecycleState = "disconnected" | "connecting" | "negotiating" | "bootstrapping" | "replaying" | "live" | "resynchronizing" | "degraded" | "closed";
+/** Legal state edges for one connector view. `closed` is terminal. */
+export declare const FRONTEND_LIFECYCLE_TRANSITIONS: {
+    readonly disconnected: readonly ["connecting", "closed"];
+    readonly connecting: readonly ["negotiating", "disconnected", "degraded", "closed"];
+    readonly negotiating: readonly ["bootstrapping", "replaying", "degraded", "disconnected", "closed"];
+    readonly bootstrapping: readonly ["live", "resynchronizing", "degraded", "disconnected", "closed"];
+    readonly replaying: readonly ["live", "resynchronizing", "degraded", "disconnected", "closed"];
+    readonly live: readonly ["connecting", "resynchronizing", "degraded", "disconnected", "closed"];
+    readonly resynchronizing: readonly ["negotiating", "bootstrapping", "replaying", "degraded", "disconnected", "closed"];
+    readonly degraded: readonly ["connecting", "negotiating", "resynchronizing", "disconnected", "closed"];
+    readonly closed: readonly [];
+};
+export declare function isFrontendLifecycleTransition(from: FrontendLifecycleState, to: FrontendLifecycleState): boolean;
+export type FrontendCapability = "workspace-pages" | "native-sandbox-setup" | "obsidian-vault-access" | "atomic-bootstrap-cutover" | "bounded-replay" | "typed-protocol-errors" | "revisioned-screen-cache" | "complete-feed-entities" | "session-clear" | "pagination-v2" | "intent-outcomes-v2";
+/** Baseline protocol-v2 compatibility; additive features must not become required implicitly. */
+export declare const CHATOBBY_FRONTEND_REQUIRED_CAPABILITIES: readonly ["atomic-bootstrap-cutover", "bounded-replay", "typed-protocol-errors", "revisioned-screen-cache", "complete-feed-entities", "session-clear", "pagination-v2", "intent-outcomes-v2"];
+/** Request these features, then use only the runtime's current negotiated selection. */
+export declare const CHATOBBY_FRONTEND_OPTIONAL_CAPABILITIES: readonly ["workspace-pages", "native-sandbox-setup", "obsidian-vault-access"];
+export interface FrontendUnavailableCapability {
+    readonly capability: FrontendCapability;
+    readonly reason: "not-requested" | "runtime-unavailable" | "connector-unsupported" | "requires-newer-protocol";
+    readonly detail?: string;
+}
+export type FrontendProtocolErrorCode = "malformed-envelope" | "malformed-entity" | "unsupported-protocol-version" | "unsupported-capability" | "sequence-gap" | "replay-too-old" | "future-sequence" | "runtime-replaced" | "revision-conflict" | "stale-screen-response" | "unauthorized-view" | "internal-failure";
+export interface FrontendProtocolError {
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly code: FrontendProtocolErrorCode;
+    readonly message: string;
+    readonly diagnosticId?: string;
+    readonly retryable: boolean;
+    readonly resync: "none" | "retry" | "full-bootstrap" | "close";
+    readonly runtimeInstanceId?: FrontendRuntimeInstanceId;
+    readonly viewId?: FrontendViewId;
+    readonly requestId?: FrontendRequestId;
+    readonly sequence?: number;
+    readonly revision?: number;
+}
 export type FrontendScreenId = "projects" | "memory" | "permissions" | "events" | "queries" | "channels" | "subagents" | "mcp";
 export type FrontendIconToken = "activity" | "agent" | "alert" | "archive" | "arrow-left-right" | "audio-lines" | "badge-alert" | "blocks" | "book-open" | "book-plus" | "book-up" | "brain" | "bot" | "calendar" | "calendar-clock" | "calendar-plus" | "calendar-x" | "captions" | "channel" | "check" | "clock" | "command" | "external-link" | "file" | "file-plus" | "file-text" | "folder" | "folder-kanban" | "folder-sync" | "git-branch" | "git-graph" | "globe" | "history" | "image" | "info" | "layout-panel-top" | "link" | "list" | "list-checks" | "memory" | "messages-square" | "paperclip" | "pencil" | "play" | "plug" | "search" | "square-terminal" | "send" | "shield" | "shield-check" | "shield-x" | "terminal" | "terminal-square" | "toggle-right" | "tool" | "trash-2" | "triangle-alert" | "unplug" | "users" | "user-round" | "video" | "workflow" | "wrench" | "x";
 export interface FrontendCapabilityReport {
     readonly featureFamilies: readonly string[];
+    readonly protocolCapabilities: readonly FrontendCapability[];
     readonly integrations: readonly {
         readonly id: string;
         readonly name: string;
@@ -12,14 +81,29 @@ export interface FrontendCapabilityReport {
         readonly enabled: boolean;
     }[];
 }
-export interface FrontendBootstrapRequest {
-    readonly schemaVersion: 1;
+export interface FrontendNegotiationRequest {
+    /** Presentation purpose, valid only with workspace-pages negotiation. */
+    readonly surface?: "conversation" | "workspace";
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly requestId: FrontendRequestId;
     readonly connectorVersion: string;
     readonly obsidianVersion: string;
-    readonly vaultInstanceId: string;
-    readonly viewId: string;
+    readonly vaultInstanceId: FrontendVaultInstanceId;
+    readonly viewId: FrontendViewId;
     readonly supportedProtocolVersions: readonly number[];
     readonly capabilities: FrontendCapabilityReport;
+}
+/** @deprecated Protocol v2 negotiates before the atomic subscription cutover. */
+export type FrontendBootstrapRequest = FrontendNegotiationRequest;
+export interface FrontendNegotiationResult {
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly requestId: FrontendRequestId;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly viewId: FrontendViewId;
+    readonly selectedCapabilities: readonly FrontendCapability[];
+    readonly unavailableCapabilities: readonly FrontendUnavailableCapability[];
+    readonly replayLimit: number;
 }
 export interface FrontendChoiceOption {
     readonly value: string;
@@ -28,8 +112,9 @@ export interface FrontendChoiceOption {
     readonly disabledReason?: string;
 }
 export interface FrontendChoiceControl {
-    readonly id: "provider" | "model" | "effort" | "permission";
+    readonly id: "provider" | "model" | "effort" | "permission" | "network";
     readonly label: string;
+    /** Empty permission values are retained only for decoding retired clients. */
     readonly value: string;
     readonly options: readonly FrontendChoiceOption[];
 }
@@ -40,6 +125,7 @@ export interface FrontendComposerViewModel {
 }
 /** Runtime-authoritative automatic-compaction settings for the selected model. */
 export interface FrontendAutoCompactionViewModel {
+    readonly mode?: "queued" | "background";
     readonly enabled: boolean;
     readonly thresholdPercent: number;
     readonly effectiveThresholdPercent: number;
@@ -144,7 +230,7 @@ export type FrontendFeedBlock = {
 } | {
     readonly type: "text" | "thinking";
     readonly id: string;
-    readonly turnId?: string;
+    readonly turnId: string;
     readonly text: string;
     readonly phase: "streaming" | "complete" | "compacted";
     readonly startedAt?: number;
@@ -152,7 +238,7 @@ export type FrontendFeedBlock = {
 } | {
     readonly type: "tools";
     readonly id: string;
-    readonly turnId?: string;
+    readonly turnId: string;
     readonly phase: "streaming" | "complete" | "compacted";
     readonly items: readonly FrontendToolActivityViewModel[];
 } | {
@@ -187,16 +273,18 @@ export type FrontendFeedBlock = {
     readonly type: "agent-activity";
     readonly id: string;
     readonly actorId: string;
+    readonly runId: string;
+    readonly nodeId?: string;
     readonly title: string;
     readonly detail?: string;
     readonly phase: "created" | "running" | "waiting" | "completed" | "failed";
+    /** Absent means the runtime has no authoritative count. It must never be fabricated. */
+    readonly compactionCount?: number;
 } | {
     readonly type: "message";
     readonly id: string;
-    readonly senderLabel: string;
-    readonly recipientLabel: string;
-    readonly text: string;
-    readonly timestamp: number;
+    /** Complete canonical communication entity; adapters must not fill missing semantics. */
+    readonly message: FrontendSubagentMessageViewModel;
     readonly navigation?: FrontendNavigationReference;
 } | {
     readonly type: "notice";
@@ -278,10 +366,13 @@ export interface FrontendProjectSessionViewModel {
         readonly projectId: string;
     };
     readonly name: string;
-    readonly createdAt: string;
-    readonly updatedAt: string;
+    /** Absent while a live first turn has not materialized its transcript. */
+    readonly createdAt?: string;
+    readonly updatedAt?: string;
     readonly messageCount: number;
     readonly running: boolean;
+    /** Actual live turn activity, independent of which conversation a page is viewing. */
+    readonly active?: boolean;
     readonly activeRootId?: string;
     /** Bounded excerpt emitted only when message-content search matched this chat. */
     readonly matchSnippet?: string;
@@ -374,6 +465,8 @@ export interface FrontendProjectScreenViewModel {
     readonly sessionMoveProjects: readonly FrontendProjectSessionDestinationViewModel[];
     readonly vaultSessionCount: number;
     readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
+    /** Workspace navigation across all Projects; browsing does not select a session. */
+    readonly navigatorSessions?: readonly FrontendProjectSessionViewModel[];
     readonly detail?: FrontendProjectDetailViewModel;
     /** Available roots for the chat that is actually running, independent of the Project being viewed. */
     readonly runningRoots: readonly FrontendProjectRootViewModel[];
@@ -395,7 +488,18 @@ export interface FrontendChannelMessageViewModel {
     readonly text: string;
     readonly createdAt: number;
     readonly contextLabel?: string;
-    readonly senderNavigation: FrontendNavigationReference;
+    readonly senderNavigation?: FrontendNavigationReference;
+    readonly operatorAuthored?: boolean;
+    readonly deliveryLabel?: string;
+    readonly replyTo?: string;
+}
+export interface FrontendChannelParticipantViewModel {
+    readonly actorId: string;
+    readonly label: string;
+    readonly kind: "main" | "subagent" | "user";
+    readonly state: "invited" | "approval_pending" | "connected" | "disconnected";
+    readonly live: boolean;
+    readonly navigation?: FrontendNavigationReference;
 }
 export interface FrontendChannelScreenViewModel {
     readonly screenId: "channels";
@@ -408,8 +512,12 @@ export interface FrontendChannelScreenViewModel {
     readonly subheading?: string;
     readonly messages: readonly FrontendChannelMessageViewModel[];
     readonly nextCursor?: string;
+    readonly workspaceWide?: boolean;
+    readonly canCompose?: boolean;
+    readonly participants?: readonly FrontendChannelParticipantViewModel[];
+    readonly availableAgents?: readonly FrontendChannelParticipantViewModel[];
 }
-export type FrontendMemoryCollectionFilter = "all" | "profile" | "vault" | "project" | "lessons";
+export type FrontendMemoryCollectionFilter = "all" | "profile" | "knowledge" | "vault" | "project" | "lessons";
 export type FrontendMemoryScopeFilter = "available" | "vault" | "current-project";
 export type FrontendMemoryStatusFilter = "active" | "archived" | "all";
 export type FrontendMemoryCategoryFilter = "all" | "uncategorized" | "failure" | "correction" | "insight" | "preference" | "convention" | "tool-quirk";
@@ -452,6 +560,9 @@ export interface FrontendMemoryScreenViewModel {
     readonly loading: boolean;
     readonly error?: string;
     readonly statusMessage?: string;
+    /** Operator browsing target; does not change the conversation's workspace. */
+    readonly browseProjectId?: string | null;
+    readonly browseOptions?: readonly FrontendChoiceOption[];
     readonly scope: {
         readonly label: string;
         readonly path?: string;
@@ -525,18 +636,30 @@ export interface FrontendMcpServerViewModel {
     readonly writable: boolean;
     readonly transport: "local" | "remote";
     readonly lifecycle: "keep-alive" | "lazy" | "eager";
+    readonly localExecution?: {
+        readonly status: "available";
+        readonly mode: "unsandboxed";
+    } | {
+        readonly status: "unavailable";
+        readonly reason: string;
+    };
     readonly toolCount: number;
+    readonly enabledToolCount: number;
+    readonly toolReviewRequired: boolean;
     readonly resourceCount: number;
     readonly tools: readonly {
         readonly name: string;
         readonly title?: string;
         readonly description?: string;
+        readonly enabled: boolean;
     }[];
     readonly resources: readonly {
         readonly uri: string;
         readonly name: string;
         readonly description?: string;
         readonly mimeType?: string;
+        readonly toolName: string;
+        readonly enabled: boolean;
     }[];
     readonly requiresAuthentication: boolean;
     readonly sourcePath: string;
@@ -688,38 +811,69 @@ export interface FrontendPermissionAdvancedGroupViewModel {
         readonly decision: FrontendPermissionDecision;
     }[];
 }
+export declare const OBSIDIAN_VAULT_ACCESS_WARNING = "Uses Obsidian\u2019s app authority outside the sandbox.";
+export type FrontendObsidianVaultAccessViewModel = {
+    readonly status: "available";
+    readonly revision: number;
+    readonly sessionId: string;
+    readonly bindingRevision: number;
+    readonly enabled: boolean;
+    readonly source: "default" | "user";
+    readonly warning: typeof OBSIDIAN_VAULT_ACCESS_WARNING;
+} | {
+    readonly status: "unavailable";
+    readonly enabled: false;
+    readonly warning: typeof OBSIDIAN_VAULT_ACCESS_WARNING;
+    readonly reason: string;
+};
 export interface FrontendPermissionScreenViewModel {
     readonly screenId: "permissions";
     readonly revision: number;
-    readonly profileRevision: number;
+    /** Durable policy owner; delegated sessions display this inherited authority read-only. */
+    readonly accessPolicySessionId: string;
+    readonly accessPolicy: {
+        readonly schemaVersion: 1;
+        readonly revision: number;
+        readonly accessMode: "read-only" | "workspace" | "full";
+        readonly agentNetworkAccess: boolean;
+    };
+    readonly scope: {
+        readonly bindingRevision: number;
+        readonly kind: "project" | "vault";
+        readonly selectedRootCount: number;
+        readonly filesystemBound: boolean;
+    };
+    readonly nativeSupport: {
+        readonly status: "ready" | "setup-required" | "unverified" | "unsupported";
+        readonly backendId?: "windows-appcontainer" | "linux-bubblewrap" | "macos-seatbelt" | "landstrip";
+        readonly reason?: string;
+        readonly userAction?: string;
+    };
+    /** Absent only for additive compatibility with older runtimes; never infer a grant. */
+    readonly obsidianVaultAccess?: FrontendObsidianVaultAccessViewModel;
+    /** Explicit operator choices across this Vault; independent of session policy. */
+    readonly workspaceVaultAccess?: readonly {
+        readonly projectId: string | null;
+        readonly projectRevision?: number;
+        readonly label: string;
+        readonly revision: number;
+        readonly enabled: boolean;
+        readonly source: "default" | "user";
+    }[];
+    /** Explicit setup/recovery, never a substitute for nativeSupport proof. Omitted without negotiation. */
+    readonly nativeSetup?: FrontendSandboxSetupViewModel;
+    readonly effective: {
+        readonly fileRead: boolean;
+        readonly fileWrite: boolean;
+        readonly localProcess: "native-contained" | "unavailable" | "unsandboxed";
+        readonly obsidian: "typed-read" | "typed-workspace" | "unavailable" | "unsandboxed" | "app-authority";
+        readonly agentNetworkAccess: boolean;
+        readonly warning?: string;
+    };
+    readonly migrationNotice?: string;
     readonly loading: boolean;
     readonly error?: string;
     readonly statusMessage?: string;
-    readonly selectedProfileId: string;
-    readonly profiles: readonly FrontendPermissionProfileViewModel[];
-    readonly selectedProfile: FrontendPermissionProfileViewModel;
-    readonly currentChatPolicy: {
-        readonly profileId: string;
-        readonly name: string;
-        readonly bindingSource: string;
-        readonly bindingRevision: number;
-    };
-    readonly installationDefaultPolicy: {
-        readonly profileId: string;
-        readonly name: string;
-    };
-    readonly liveAgents: readonly FrontendPermissionLiveAgentViewModel[];
-    readonly temporaryApprovalDescription: string;
-    readonly temporaryApprovals: readonly FrontendPermissionSessionApprovalViewModel[];
-    readonly capabilityDescription: string;
-    readonly inventoryWarning?: string;
-    readonly capabilities: readonly FrontendPermissionCapabilityGroupViewModel[];
-    readonly channelDescription: string;
-    readonly channels: readonly FrontendPermissionChannelGrantViewModel[];
-    readonly availableChannels: readonly FrontendChoiceOption[];
-    readonly advancedDescription: string;
-    readonly advancedGroups: readonly FrontendPermissionAdvancedGroupViewModel[];
-    readonly storageLines: readonly string[];
 }
 export interface FrontendEventDefinitionViewModel {
     readonly id: string;
@@ -837,6 +991,8 @@ export interface FrontendSubagentAgentDefinition {
     systemPrompt: string;
     enabled: boolean;
     policy: FrontendSubagentRuntimePolicy;
+    /** Retained role policy is inert until saved without its legacy permission-profile override. */
+    permissionReviewRequired?: true;
     builtIn?: true;
     revision: number;
     updatedAt: number;
@@ -1167,9 +1323,12 @@ export interface FrontendSubagentCapabilitiesViewModel {
 }
 export interface FrontendSubagentSettingsViewModel {
     settings: {
-        maxConcurrency: number;
+        schemaVersion?: 2;
+        maxConcurrency?: number;
+        unlimitedConcurrency?: boolean;
         defaultExecutionMode: FrontendSubagentExecutionMode;
-        defaultMaxDepth: number;
+        defaultMaxDepth?: number;
+        unlimitedDepth?: boolean;
         defaultMaxTurnsPerNode?: number;
         defaultMaxTokens?: number;
         defaultMaxCostUsd?: number;
@@ -1226,6 +1385,10 @@ export interface FrontendSubagentScreenViewModel {
     readonly runtimeId?: string;
     readonly sequence: number;
     readonly capabilities?: FrontendSubagentCapabilitiesViewModel;
+    readonly workspaceWide?: boolean;
+    readonly roleScopeId?: string;
+    readonly roleScopeOptions?: readonly FrontendChoiceOption[];
+    readonly parentSessions?: readonly FrontendSubagentParentSessionViewModel[];
     readonly runIds: readonly string[];
     readonly runSummaries: readonly FrontendSubagentRunSummaryViewModel[];
     readonly runQuery: FrontendSubagentRunFilter;
@@ -1244,12 +1407,36 @@ export interface FrontendSubagentScreenViewModel {
     readonly controlReceipts: readonly FrontendSubagentControlReceiptViewModel[];
     readonly focusedFeed: FrontendFeedDocumentViewModel;
 }
+export interface FrontendSubagentParentSessionViewModel {
+    readonly sessionId: string;
+    readonly label: string;
+    readonly workspaceLabel: string;
+    readonly active: boolean;
+}
 export type FrontendScreenViewModel = FrontendProjectScreenViewModel | FrontendChannelScreenViewModel | FrontendMemoryScreenViewModel | FrontendContextQueryScreenViewModel | FrontendPermissionScreenViewModel | FrontendEventScreenViewModel | FrontendSubagentScreenViewModel | FrontendMcpScreenViewModel;
 export interface FrontendScreenRequest {
-    readonly schemaVersion: 1;
-    readonly viewId: string;
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly viewId: FrontendViewId;
+    readonly requestId: FrontendScreenRequestId;
+    /** Monotonic per screen and view. A lower epoch response is always stale. */
+    readonly requestEpoch: number;
+    /** Global sequence observed before the query; protects patch-versus-load races. */
+    readonly baseSequence: number;
     readonly screenId: FrontendScreenId;
     readonly preferredEntityId?: string;
+}
+export interface FrontendScreenResponse {
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly viewId: FrontendViewId;
+    readonly requestId: FrontendScreenRequestId;
+    readonly requestEpoch: number;
+    readonly baseSequence: number;
+    readonly screenRevision: number;
+    readonly screen: FrontendScreenViewModel;
 }
 export interface FrontendLocalCommandViewModel {
     readonly name: string;
@@ -1271,35 +1458,32 @@ export interface FrontendLocalCommandViewModel {
     readonly retiredReplacement?: string;
 }
 export interface FrontendBootstrap {
-    readonly schemaVersion: 1;
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
     readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
-    readonly runtimeInstanceId: string;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
     readonly revision: number;
     readonly sequence: number;
-    readonly viewId: string;
+    readonly viewId: FrontendViewId;
     readonly session: FrontendSessionViewModel | null;
     readonly taskPlan: FrontendTaskPlanViewModel;
     readonly composer: FrontendComposerViewModel;
     readonly agentRail: FrontendAgentRailViewModel;
     readonly feed: FrontendFeedDocumentViewModel;
     readonly screens: readonly FrontendScreenDirectoryEntry[];
+    /** Detailed screens are loaded into the independently ordered screen cache. */
     readonly screenModels: readonly FrontendScreenViewModel[];
     readonly localCommands: readonly FrontendLocalCommandViewModel[];
 }
+/** V2 implements view-scoped state only. New scope variants require negotiation. */
 export type FrontendScope = {
     readonly kind: "view";
-    readonly viewId: string;
-} | {
-    readonly kind: "session";
-    readonly mainSessionId: string;
-} | {
-    readonly kind: "screen";
-    readonly viewId: string;
-    readonly screenId: FrontendScreenId;
+    readonly viewId: FrontendViewId;
 };
 export type FrontendPatchOperation = {
     readonly type: "session.replace";
     readonly session: FrontendSessionViewModel;
+} | {
+    readonly type: "session.clear";
 } | {
     readonly type: "task-plan.replace";
     readonly taskPlan: FrontendTaskPlanViewModel;
@@ -1335,8 +1519,10 @@ export type FrontendPatchOperation = {
     readonly screen: FrontendScreenViewModel;
 };
 export interface FrontendPatch {
-    readonly schemaVersion: 1;
-    readonly runtimeInstanceId: string;
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly viewId: FrontendViewId;
     readonly scope: FrontendScope;
     readonly sequence: number;
     readonly baseRevision: number;
@@ -1344,22 +1530,47 @@ export interface FrontendPatch {
     readonly operations: readonly FrontendPatchOperation[];
 }
 export interface FrontendSubscriptionRequest {
-    readonly schemaVersion: 1;
-    readonly viewId: string;
-    readonly afterSequence?: number;
-    /** Capable clients request authoritative frontend patches without duplicate legacy session frames. */
-    readonly deliveryMode?: "patch-only";
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly requestId: FrontendRequestId;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly viewId: FrontendViewId;
+    readonly resume?: {
+        readonly afterSequence: number;
+        readonly revision: number;
+    };
 }
-export interface FrontendSubscriptionAck {
-    readonly runtimeInstanceId: string;
+interface FrontendSubscriptionBase {
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly requestId: FrontendRequestId;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly viewId: FrontendViewId;
     readonly sequence: number;
     readonly revision: number;
-    readonly deliveryMode: "patch-and-legacy" | "patch-only";
+    readonly oldestReplayableSequence: number;
 }
+export type FrontendSubscriptionResult = (FrontendSubscriptionBase & {
+    readonly status: "bootstrapped";
+    readonly bootstrap: FrontendBootstrap;
+    readonly replay: readonly [];
+}) | (FrontendSubscriptionBase & {
+    readonly status: "replayed";
+    readonly baseSequence: number;
+    readonly baseRevision: number;
+    readonly replay: readonly FrontendPatch[];
+}) | (FrontendSubscriptionBase & {
+    readonly status: "resync-required";
+    readonly error: FrontendProtocolError;
+});
+/** @deprecated The v2 subscribe result is discriminated and carries bootstrap/replay. */
+export type FrontendSubscriptionAck = FrontendSubscriptionResult;
 interface FrontendIntentBase {
-    readonly schemaVersion: 1;
-    readonly intentId: string;
-    readonly viewId: string;
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly intentId: FrontendIntentId;
+    readonly viewId: FrontendViewId;
     readonly mainSessionId?: string;
     readonly expectedRevision?: number;
 }
@@ -1556,6 +1767,28 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly channelId: string;
     };
 }) | (FrontendIntentBase & {
+    readonly type: "channel.create";
+    readonly payload: {
+        readonly name: string;
+        readonly description: string;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "channel.send";
+    readonly payload: {
+        readonly channelId: string;
+        readonly text: string;
+        readonly replyTo?: string;
+        readonly recipientActorIds?: readonly string[];
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "channel.set-participant";
+    readonly payload: {
+        readonly channelId: string;
+        readonly actorId: string;
+        readonly action: "invite" | "disconnect";
+        readonly expectedChannelRevision: number;
+    };
+}) | (FrontendIntentBase & {
     readonly type: "channel.load-earlier";
     readonly payload: {
         readonly cursor: string;
@@ -1592,6 +1825,7 @@ export type FrontendIntent = (FrontendIntentBase & {
 }) | (FrontendIntentBase & {
     readonly type: "memory.set-view";
     readonly payload: {
+        readonly browseProjectId?: string | null;
         readonly scopeFilter: FrontendMemoryScopeFilter;
         readonly collection: FrontendMemoryCollectionFilter;
         readonly status: FrontendMemoryStatusFilter;
@@ -1702,6 +1936,15 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly scope?: "user" | "project";
     };
 }) | (FrontendIntentBase & {
+    readonly type: "mcp.set-tool-enabled";
+    readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly toolName: string;
+        readonly enabled: boolean;
+        readonly scope?: "user" | "project";
+    };
+}) | (FrontendIntentBase & {
     readonly type: "mcp.discover" | "mcp.connect" | "mcp.disconnect" | "mcp.auth-start" | "mcp.diagnostics";
     readonly payload: {
         readonly serverId: string;
@@ -1718,6 +1961,39 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly expectedConfigRevision: string;
         readonly serverId: string;
         readonly scope?: "user" | "project";
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "permissions.set-obsidian-vault-access";
+    readonly payload: {
+        readonly expectedRevision: number;
+        readonly expectedSessionId: string;
+        readonly expectedBindingRevision: number;
+        readonly enabled: boolean;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "permissions.set-workspace-vault-access";
+    readonly payload: {
+        readonly expectedRevision: number;
+        readonly projectId: string | null;
+        readonly expectedProjectRevision?: number;
+        readonly enabled: boolean;
+    };
+}) | (FrontendIntentBase & {
+    readonly type: "permissions.setup-native-sandbox";
+    readonly payload: FrontendSandboxSetupPayload;
+}) | (FrontendIntentBase & {
+    readonly type: "permissions.verify-native-sandbox";
+    readonly payload: FrontendSandboxVerifyPayload;
+}) | (FrontendIntentBase & {
+    readonly type: "permissions.revoke-native-sandbox";
+    readonly payload: FrontendSandboxRevokePayload;
+}) | (FrontendIntentBase & {
+    readonly type: "permissions.set-access-policy";
+    readonly mainSessionId: string;
+    readonly payload: {
+        readonly expectedRevision: number;
+        readonly accessMode: "read-only" | "workspace" | "full";
+        readonly agentNetworkAccess: boolean;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.select-profile";
@@ -1852,6 +2128,11 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly occurrenceId: string;
     };
 }) | (FrontendIntentBase & {
+    readonly type: "subagents.set-role-scope";
+    readonly payload: {
+        readonly scopeId: string;
+    };
+}) | (FrontendIntentBase & {
     readonly type: "subagents.refresh" | "subagents.load-more" | "subagents.delete-session";
     readonly payload: Record<string, never>;
 }) | (FrontendIntentBase & {
@@ -1943,22 +2224,52 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly settings: FrontendSubagentSettingsViewModel;
     };
 });
-export interface FrontendIntentResult {
-    readonly intentId: string;
-    readonly status: "accepted" | "completed" | "rejected" | "conflict";
-    readonly revision?: number;
-    readonly errorCode?: string;
-    readonly fieldErrors?: Readonly<Record<string, string>>;
-    readonly notice?: {
-        readonly level: "info" | "warning" | "error";
-        readonly message: string;
-    };
+interface FrontendIntentOutcomeBase {
+    readonly schemaVersion: typeof CHATOBBY_FRONTEND_SCHEMA_VERSION;
+    readonly protocolVersion: typeof CHATOBBY_FRONTEND_PROTOCOL_VERSION;
+    readonly runtimeInstanceId: FrontendRuntimeInstanceId;
+    readonly viewId: FrontendViewId;
+    readonly intentId: FrontendIntentId;
 }
-export declare function parseFrontendBootstrapRequest(value: unknown): FrontendBootstrapRequest;
+export type FrontendIntentResult = (FrontendIntentOutcomeBase & {
+    readonly status: "applied";
+    readonly revision: number;
+    readonly notice?: FrontendNotice;
+}) | (FrontendIntentOutcomeBase & {
+    readonly status: "accepted";
+    readonly acceptedAtSequence: number;
+    readonly notice?: FrontendNotice;
+}) | (FrontendIntentOutcomeBase & {
+    readonly status: "rejected";
+    readonly errorCode: string;
+    readonly fieldErrors?: Readonly<Record<string, string>>;
+    readonly notice: FrontendNotice;
+}) | (FrontendIntentOutcomeBase & {
+    readonly status: "conflict";
+    readonly expectedRevision?: number;
+    readonly actualRevision: number;
+    readonly notice: FrontendNotice;
+}) | (FrontendIntentOutcomeBase & {
+    readonly status: "unavailable";
+    readonly capability: FrontendCapability;
+    readonly notice: FrontendNotice;
+});
+export interface FrontendNotice {
+    readonly level: "info" | "warning" | "error";
+    readonly message: string;
+}
+export declare function parseFrontendNegotiationRequest(value: unknown): FrontendNegotiationRequest;
+/** @deprecated Use parseFrontendNegotiationRequest. */
+export declare const parseFrontendBootstrapRequest: typeof parseFrontendNegotiationRequest;
 export declare function parseFrontendSubscriptionRequest(value: unknown): FrontendSubscriptionRequest;
 export declare function parseFrontendIntent(value: unknown): FrontendIntent;
 export declare function parseFrontendScreenRequest(value: unknown): FrontendScreenRequest;
+export declare function parseFrontendScreenResponse(value: unknown): FrontendScreenResponse;
 export declare function parseFrontendScreen(value: unknown): FrontendScreenViewModel;
 export declare function parseFrontendBootstrap(value: unknown): FrontendBootstrap;
 export declare function parseFrontendPatch(value: unknown): FrontendPatch;
+export declare function parseFrontendNegotiationResult(value: unknown): FrontendNegotiationResult;
+export declare function parseFrontendSubscriptionResult(value: unknown): FrontendSubscriptionResult;
+export declare function parseFrontendProtocolError(value: unknown): FrontendProtocolError;
+export declare function parseFrontendIntentResult(value: unknown): FrontendIntentResult;
 export {};

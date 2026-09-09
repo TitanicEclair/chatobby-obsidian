@@ -20,6 +20,12 @@ describe("ChatobbySettingTab", () => {
         authSource: "stored",
         modelCount: 2,
         availableModelCount: 2,
+        modelDiscovery: {
+          checkedAt: 1,
+          error: "Model discovery returned HTTP 503.",
+          usingCachedModels: true,
+          unavailableModels: [{ id: "restricted-model", reason: "Disabled by account policy." }],
+        },
       },
     ];
     const transport = {
@@ -51,57 +57,6 @@ describe("ChatobbySettingTab", () => {
         updatedAt: "2026-08-08T00:00:00.000Z",
         containsSecretValues: false as const,
       })),
-      getManagedLocalModelServers: vi.fn(async () => ({
-        schemaVersion: 1 as const,
-        document: {
-          schemaVersion: 1 as const,
-          revision: 1,
-          profiles: [
-            {
-              schemaVersion: 1 as const,
-              id: "local-qwen-server",
-              providerId: "local-qwen",
-              name: "Qwen managed server",
-              engine: "llama-cpp" as const,
-              launchPolicy: "on-demand" as const,
-              executablePath: "C:\\Tools\\llama\\llama-server.exe",
-              modelPath: "C:\\Tools\\llama\\qwen.gguf",
-              host: "127.0.0.1" as const,
-              port: 8080,
-              settings: {
-                contextSize: 204_800,
-                gpuLayers: 24,
-                cacheTypeK: "q8_0" as const,
-                cacheTypeV: "q8_0" as const,
-                flashAttention: true,
-              },
-              startupTimeoutSeconds: 180,
-            },
-          ],
-          updatedAt: "2026-08-15T00:00:00.000Z",
-          containsSecretValues: false as const,
-        },
-        statuses: [
-          {
-            schemaVersion: 1 as const,
-            profileId: "local-qwen-server",
-            providerId: "local-qwen",
-            phase: "stopped" as const,
-            ownership: "none" as const,
-            ready: false,
-            checkedAt: "2026-08-15T00:00:00.000Z",
-          },
-        ],
-      })),
-      controlManagedLocalModelServer: vi.fn(async () => ({
-        schemaVersion: 1 as const,
-        profileId: "local-qwen-server",
-        providerId: "local-qwen",
-        phase: "ready" as const,
-        ownership: "this-runtime" as const,
-        ready: true,
-        checkedAt: "2026-08-15T00:00:01.000Z",
-      })),
     };
     const plugin = {
       settings: {
@@ -121,7 +76,7 @@ describe("ChatobbySettingTab", () => {
         developerCommand: "chatobby",
         developerArgs: [],
         providerKeys: { deepseek: true },
-        onboardingVersion: 1,
+        onboardingVersion: 0,
       },
       transport,
       getRuntimeMode: () => "managed",
@@ -133,6 +88,7 @@ describe("ChatobbySettingTab", () => {
         },
       }),
       isReleaseBuild: () => true,
+      usesAutomaticRuntimeProvisioning: () => false,
       startBackend: vi.fn(async () => {}),
       restartRuntime: vi.fn(async () => {}),
       createTransport: () => transport,
@@ -177,9 +133,14 @@ describe("ChatobbySettingTab", () => {
     expect(tab.containerEl.textContent).not.toContain("Get runtime");
     expect(tab.containerEl.textContent).toContain("Support development");
     expect(tab.containerEl.textContent).toContain("Patreon");
+    expect(tab.containerEl.textContent).toContain("Automatic uses Windows PowerShell on Windows");
+    expect(tab.containerEl.textContent).not.toContain("Automatic uses Git Bash");
 
     const embedded = document.body.createDiv();
     tab.renderChatobbySettings(embedded);
+    expect(embedded.textContent).not.toContain("review the Project access mode");
+    expect(embedded.textContent).toContain("What’s new");
+    expect(embedded.textContent).not.toContain("active permission profile");
     expect(embedded.textContent).toContain("Finding available providers");
     await vi.waitFor(() =>
       expect(transport.getProviders).toHaveBeenCalledOnce(),
@@ -187,17 +148,19 @@ describe("ChatobbySettingTab", () => {
     await vi.waitFor(() =>
       expect(transport.getLocalModelProviders).toHaveBeenCalledOnce(),
     );
-    await vi.waitFor(() =>
-      expect(transport.getManagedLocalModelServers).toHaveBeenCalledOnce(),
-    );
     await vi.waitFor(() => expect(embedded.textContent).toContain("OpenAI"));
     expect(embedded.textContent).toContain("llama.cpp on this computer");
-    expect(embedded.textContent).toContain("Qwen managed server");
-    expect(embedded.textContent).toContain("Starts on demand");
+    expect(embedded.textContent).toContain("HTTP 503");
+    expect(embedded.textContent).toContain("Keeping the last account model list");
+    const modelDetails = embedded.querySelector<HTMLDetailsElement>(".chatobby-settings__model-discovery");
+    expect(modelDetails?.open).toBe(false);
+    expect(modelDetails?.textContent).toContain("restricted-model");
+    expect(modelDetails?.textContent).toContain("Disabled by account policy.");
     expect(embedded.textContent).toContain("Local model connections");
     expect(embedded.textContent).toContain(
-      "Other local server types remain fully supported as connections",
+      "Connect Ollama, LM Studio or another model server",
     );
+    expect(embedded.textContent).not.toContain("Managed llama.cpp");
     expect(embedded.textContent).toContain("Web research");
     expect(embedded.textContent).toContain("Enhanced Brave Search");
     expect(embedded.textContent).toContain("Basic public-web search");
@@ -212,11 +175,55 @@ describe("ChatobbySettingTab", () => {
     ).map((element) => element.textContent);
     expect(names).toEqual([
       "llama.cpp on this computer",
-      "Qwen managed server",
       "DeepSeek (deepseek)",
       "OpenAI (openai)",
       "Enhanced Brave Search",
     ]);
+
+    transport.getProviders.mockResolvedValueOnce([
+      ...providers,
+      {
+        id: "mistral",
+        name: "Mistral",
+        configured: false,
+        modelCount: 1,
+        availableModelCount: 0,
+      },
+    ]);
+    tab.refreshProviderCatalogFromRuntime();
+    await vi.waitFor(() => expect(transport.getProviders).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(embedded.textContent).toContain("Mistral"));
+
+    (
+      tab as unknown as { openLocalProviderModal: () => void }
+    ).openLocalProviderModal();
+    const modelServerModal = document.querySelector<HTMLElement>(
+      ".chatobby-local-model-modal",
+    );
+    expect(modelServerModal?.textContent).toContain("Connect a model server");
+    expect(modelServerModal?.querySelector<HTMLSelectElement>('[aria-label="Model connection kind"]')?.value).toBe("local");
+    expect(modelServerModal?.querySelector<HTMLDetailsElement>(".chatobby-local-model-modal__advanced")?.open).toBe(false);
+
+    tab.refreshProviderCatalogFromRuntime();
+    await vi.waitFor(() => expect(transport.getProviders).toHaveBeenCalledTimes(3));
+    expect(modelServerModal?.isConnected).toBe(true);
+    modelServerModal?.remove();
+
+    const legacy = (await transport.getLocalModelProviders()).providers[0];
+    (tab as unknown as { openLocalProviderModal: (provider: typeof legacy) => void }).openLocalProviderModal(legacy);
+    const legacyModal = document.querySelector<HTMLElement>(".chatobby-local-model-modal");
+    const kind = legacyModal?.querySelector<HTMLSelectElement>('[aria-label="Model connection kind"]');
+    expect(kind?.value).toBe("");
+    expect(Array.from(kind?.options ?? []).map((option) => option.value)).toEqual(["", "local", "hosted"]);
+    legacyModal?.remove();
+
+    transport.getLocalModelProviders.mockResolvedValueOnce({
+      ...(await transport.getLocalModelProviders()), providers: [],
+    });
+    tab.refreshProviderCatalogFromRuntime();
+    await vi.waitFor(() => expect(embedded.textContent).toContain("Connect server to find its models"));
+    expect(embedded.textContent).not.toContain("exact model ID here");
+
     tab.detachChatobbySettings(embedded);
     embedded.remove();
   });

@@ -113,9 +113,50 @@ describe("Toolbar", () => {
     (statsEl.querySelector(".chatobby-context-meter") as HTMLButtonElement | null)?.click();
 
     const menuText = statsEl.querySelector(".chatobby-context-menu")?.textContent ?? "";
-    expect(menuText).toContain("Usage is loading");
-    expect(menuText).toContain("Calculating current usage for a 1.0M token window");
+    expect(menuText).toContain("Waiting for provider token usage");
+    expect(menuText).toContain("1.0M token context window");
+    expect(menuText).not.toContain("loading");
+    expect(menuText).not.toContain("Calculating");
     expect(menuText).not.toContain("2.1M");
+  });
+
+  it("does not infer successful compaction from an activity falling edge", () => {
+    let isCompacting = true;
+    const host: ToolbarHost = {
+      getConnectionState: () => ({ ...INITIAL_CONNECTION_STATE, status: "connected" }),
+      getSessionState: () => ({ ...EMPTY_SESSION_STATE, sessionId: "s", isCompacting }),
+      getRuntimeState: readyRuntimeState,
+      getStats: () => ({
+        sessionFile: "s.jsonl",
+        sessionId: "s",
+        userMessages: 1,
+        assistantMessages: 1,
+        toolCalls: 0,
+        toolResults: 0,
+        totalMessages: 2,
+        tokens: { input: 80, output: 10, cacheRead: 0, cacheWrite: 0, total: 90 },
+        cost: 0,
+        contextUsage: { tokens: 80, contextWindow: 100, percent: 80 },
+      }),
+      getFeedStore: () => createFeedStore(),
+      getAutoCompactionSettings: () => ({ enabled: true, thresholdPercent: 85, effectiveThresholdPercent: 85 }),
+      toggleAutoCompaction: vi.fn(async () => {}),
+      openAutoCompaction: vi.fn(),
+    };
+    const toolbar = new Toolbar(host);
+    const connectionEl = document.body.createDiv();
+    const statsEl = document.body.createDiv();
+
+    toolbar.bind(connectionEl, statsEl);
+    (statsEl.querySelector(".chatobby-context-meter") as HTMLButtonElement | null)?.click();
+    expect(statsEl.querySelector(".chatobby-context-menu")?.textContent).toContain("Compacting context now");
+
+    isCompacting = false;
+    toolbar.renderStatus();
+
+    const menuText = statsEl.querySelector(".chatobby-context-menu")?.textContent ?? "";
+    expect(menuText).toContain("Compaction ended");
+    expect(menuText).not.toContain("Compaction complete");
   });
 
   it("refreshes an open compaction popover when the active model settings arrive", () => {

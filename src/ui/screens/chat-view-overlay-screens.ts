@@ -5,20 +5,18 @@ import type ChatobbyPlugin from "../../main";
 import type { SessionAdvancedAction } from "../session/session-maintenance";
 import type { FrontendProjectMessageSearchHitViewModel } from "../../vendor/chatobby-client/frontend-contracts.js";
 import { EventsScreenController } from "../../features/events/public";
-import { ContextQueryScreenController } from "../../features/queries/public";
 import { McpScreenController } from "../../features/mcp/public";
 import { ProjectsScreenController } from "../../features/projects/public";
 import { SettingsScreenController } from "../../features/settings/public";
 import { MemoryScreenController } from "./memory-screen-controller";
 import { PermissionsScreenController } from "./permissions-screen-controller";
 
-export type OverlayViewMode = "projects" | "permissions" | "memory" | "events" | "queries" | "mcp" | "settings";
+export type OverlayViewMode = "projects" | "permissions" | "memory" | "events" | "mcp" | "settings";
 
 export interface ChatViewOverlayScreens {
   memory: MemoryScreenController;
   permissions: PermissionsScreenController;
   events: EventsScreenController;
-  queries: ContextQueryScreenController;
   mcp: McpScreenController;
   projects: ProjectsScreenController;
 	settings: SettingsScreenController;
@@ -48,7 +46,6 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
   let memory: MemoryScreenController;
   let permissions: PermissionsScreenController;
   let events: EventsScreenController;
-  let queries: ContextQueryScreenController;
   let mcp: McpScreenController;
   let projects: ProjectsScreenController;
 	let settings: SettingsScreenController;
@@ -57,7 +54,6 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     if (mode !== "memory") memory.close(false);
     if (mode !== "permissions") permissions.close(false);
     if (mode !== "events") events.close(false);
-    if (mode !== "queries") queries.close(false);
     if (mode !== "mcp") mcp.close(false);
     if (mode !== "projects") projects.close(false);
 		if (mode !== "settings") settings.close(false);
@@ -87,14 +83,6 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     onClosed: (renderChat) => options.onClosed("events", renderChat),
     openSession: (projectPath, sessionPath) => options.openSession(projectPath, sessionPath),
   });
-  queries = new ContextQueryScreenController({
-    getHost: () => options.getHost(),
-    getStore: () => options.getFrontendStore(),
-    getProtocol: () => options.getFrontendProtocol(),
-    prepareOpen: () => prepare("queries"),
-    onOpened: () => options.onOpened("queries"),
-    onClosed: (renderChat) => options.onClosed("queries", renderChat),
-  });
   mcp = new McpScreenController({
     app: options.app,
     getHost: () => options.getHost(),
@@ -121,6 +109,7 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
 		app: options.app,
 		plugin: options.plugin,
 		getHost: () => options.getHost(),
+		getStore: () => options.getFrontendStore(),
 		prepareOpen: () => prepare("settings"),
 		onOpened: () => options.onOpened("settings"),
 		onClosed: (renderChat) => options.onClosed("settings", renderChat),
@@ -130,7 +119,6 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
     memory,
     permissions,
     events,
-    queries,
     mcp,
     projects,
 		settings,
@@ -138,7 +126,6 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
       memory.close(renderChat);
       permissions.close(renderChat);
       events.close(renderChat);
-      queries.close(renderChat);
       mcp.close(renderChat);
       projects.close(renderChat);
 		settings.close(renderChat);
@@ -147,7 +134,6 @@ export function createChatViewOverlayScreens(options: ChatViewOverlayScreenOptio
       memory.destroy();
       permissions.destroy();
       events.destroy();
-      queries.destroy();
       mcp.destroy();
       projects.destroy();
 		settings.destroy();

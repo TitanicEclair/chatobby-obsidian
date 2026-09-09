@@ -3,11 +3,13 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { RuntimeUpdateManager } from "../../src/runtime/public";
 import {
   connectorRuntimeMode,
   ManagedRuntimeResolver,
   PENDING_RUNTIME_INSTALLATION_FILE,
+  RUNTIME_INSTALLATION_LOCK_DIRECTORY,
   RUNTIME_PACKAGE_MANIFEST_FILE,
   RuntimePackageInstaller,
   type RuntimePackageFile,
@@ -135,6 +137,71 @@ describe("runtime installation", () => {
     expect(first).toContain(join("versions", "1.0.0"));
     expect(second).toContain(join("versions", "1.1.0"));
     expect(rolledBack).toContain(join("versions", "1.0.0"));
+  });
+
+  it("verifies the complete active package before reporting its installed version", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const installer = new RuntimePackageInstaller(installRoot, publicKeyPem(keys.publicKey));
+    const manifest = await writeRuntimePackage(source, "1.0.0", "runtime", keys.privateKey);
+    await installer.install(source, manifest, "0.1.0");
+
+    await expect(installer.readVerifiedInstalledVersion("0.1.0")).resolves.toBe("1.0.0");
+    await writeFile(join(installRoot, "versions", "1.0.0", executableName()), "tampered");
+    await expect(installer.readVerifiedInstalledVersion("0.1.0")).rejects.toThrow(/size mismatch|checksum mismatch/u);
+  });
+
+  it("serializes account-local installation mutations with an exclusive lock", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const installer = new RuntimePackageInstaller(installRoot, publicKeyPem(keys.publicKey));
+    const manifest = await writeRuntimePackage(source, "1.0.0", "runtime", keys.privateKey);
+    await mkdir(join(installRoot, RUNTIME_INSTALLATION_LOCK_DIRECTORY));
+
+    await expect(installer.prepareInstall(source, manifest, "0.1.0")).rejects.toThrow(
+      "Another Chatobby vault is currently changing",
+    );
+  });
+
+  it("reclaims a lock whose recorded installation process has exited", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const installer = new RuntimePackageInstaller(installRoot, publicKeyPem(keys.publicKey));
+    const manifest = await writeRuntimePackage(source, "1.0.0", "runtime", keys.privateKey);
+    const lockDirectory = join(installRoot, RUNTIME_INSTALLATION_LOCK_DIRECTORY);
+    await mkdir(lockDirectory);
+    await writeFile(join(lockDirectory, "owner.json"), JSON.stringify({
+      schemaVersion: 1,
+      pid: 999_999,
+      operationId: "stale",
+      acquiredAt: "2000-01-01T00:00:00.000Z",
+      containsSecretValues: false,
+    }));
+
+    const pending = await installer.prepareInstall(source, manifest, "0.1.0");
+    await pending.rollback();
+
+    expect(existsSync(lockDirectory)).toBe(false);
+  });
+
+  it("removes only connector-owned runtime program state", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const installer = new RuntimePackageInstaller(installRoot, publicKeyPem(keys.publicKey));
+    const manifest = await writeRuntimePackage(source, "1.0.0", "runtime", keys.privateKey);
+    await installer.install(source, manifest, "0.1.0");
+    await writeFile(join(installRoot, "operator-note.txt"), "preserve");
+
+    await expect(installer.removeInstalledRuntime()).rejects.toThrow("unowned entries");
+    await rm(join(installRoot, "operator-note.txt"));
+    await installer.removeInstalledRuntime();
+
+    expect(existsSync(join(installRoot, "current.json"))).toBe(false);
+    expect(existsSync(join(installRoot, "versions"))).toBe(false);
   });
 
   it("reclaims only exact orphaned operation directories before staging a retry", async () => {
@@ -285,6 +352,139 @@ describe("runtime installation", () => {
     expect(existsSync(join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE))).toBe(false);
     expect((await readdir(join(installRoot, "versions"))).some((entry) => entry.endsWith(".backup"))).toBe(false);
   });
+
+  it("joins concurrent restored tabs when finalizing a signed recovered repair", async () => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const publicKey = publicKeyPem(keys.publicKey);
+    const installer = new RuntimePackageInstaller(installRoot, publicKey);
+    const original = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+    await installer.install(source, original, "0.1.0");
+    const repaired = await writeRuntimePackage(source, "1.0.0", "runtime-repaired", keys.privateKey);
+    const pending = await installer.prepareInstall(source, repaired, "0.1.0");
+    await pending.activate();
+    const recovered = await new RuntimePackageInstaller(installRoot, publicKey).resumePendingInstall("0.1.0");
+    if (!recovered) throw new Error("Expected recovered repair");
+    const finalize = vi.spyOn(recovered, "finalize");
+    const stopRuntime = vi.fn(async () => {});
+    const manager = new RuntimeUpdateManager({
+      pluginVersion: "0.1.0", enabled: true,
+      client: {
+        fetchExact: async () => { throw new Error("Recovery must not fetch a package"); },
+        stage: async () => { throw new Error("Recovery must not stage a package"); },
+      },
+      installer: {
+        prepareInstall: installer.prepareInstall.bind(installer),
+        readVerifiedInstalledVersion: installer.readVerifiedInstalledVersion.bind(installer),
+        resumePendingInstall: async () => recovered,
+      },
+      getInstalledVersion: () => "1.0.0",
+      admitMaintenance: async () => null,
+      cancelMaintenance: async () => {}, commitMaintenance: async () => {},
+      stopRuntime, startRuntime: async () => {},
+    });
+    await manager.recoverInterruptedInstallation();
+    const identity = {
+      instanceId: "restored-runtime", vaultId: "fixture", pid: 1, startedAt: 1,
+      runtimeVersion: "1.0.0", protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+      runtimePackageFingerprint: packageFingerprint(repaired),
+    };
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => manager.finalizeRecoveredRuntime(identity)));
+    expect(results).toEqual(Array.from({ length: 8 }, () => ({ status: "fulfilled", value: undefined })));
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(stopRuntime).not.toHaveBeenCalled();
+    expect(await readFile(pending.executable, "utf8")).toBe("runtime-repaired");
+    expect(existsSync(join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE))).toBe(false);
+    expect((await readdir(join(installRoot, "versions"))).some((entry) => entry.endsWith(".backup"))).toBe(false);
+  });
+
+  it.each(["intact", "partial", "removed"] as const)(
+    "resumes accepted cleanup after interruption leaves the backup %s",
+    async (remaining) => {
+      const installRoot = await temporaryDirectory();
+      const source = await temporaryDirectory();
+      const keys = generateKeyPairSync("ed25519");
+      const publicKey = publicKeyPem(keys.publicKey);
+      const journalPath = join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE);
+      const installer = new RuntimePackageInstaller(installRoot, publicKey, async (path, options) => {
+        if (path.endsWith(".backup") && existsSync(path)) {
+          if (remaining === "partial") await rm(join(path, RUNTIME_PACKAGE_MANIFEST_FILE));
+          if (remaining === "removed") await rm(path, options);
+          throw new Error("interrupted cleanup");
+        }
+        await rm(path, options);
+      });
+      const original = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+      await installer.install(source, original, "0.1.0");
+      const replacement = await writeRuntimePackage(source, "1.0.0", "runtime-replacement", keys.privateKey);
+      const pending = await installer.prepareInstall(source, replacement, "0.1.0");
+      await pending.activate();
+      await pending.finalize();
+
+      const recovered = await new RuntimePackageInstaller(installRoot, publicKey).resumePendingInstall("0.1.0");
+      expect(recovered?.activationState).toBe("activated");
+      expect(JSON.parse(await readFile(journalPath, "utf8"))).toMatchObject({ schemaVersion: 2, state: "finalizing" });
+      await expect(recovered?.rollback()).rejects.toThrow("cleanup has already started");
+      await recovered?.activate();
+      await recovered?.finalize();
+      expect(existsSync(journalPath)).toBe(false);
+      expect(await readFile(pending.executable, "utf8")).toBe("runtime-replacement");
+      expect((await readdir(join(installRoot, "versions"))).some((name) => name.endsWith(".backup"))).toBe(false);
+    },
+  );
+
+  it.each(["prepared", "activated"] as const)("recovers a legacy schema-1 %s journal", async (state) => {
+    const installRoot = await temporaryDirectory();
+    const source = await temporaryDirectory();
+    const keys = generateKeyPairSync("ed25519");
+    const publicKey = publicKeyPem(keys.publicKey);
+    const installer = new RuntimePackageInstaller(installRoot, publicKey);
+    const original = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+    await installer.install(source, original, "0.1.0");
+    const replacement = await writeRuntimePackage(source, "1.0.0", "runtime-replacement", keys.privateKey);
+    const pending = await installer.prepareInstall(source, replacement, "0.1.0");
+    if (state === "activated") await pending.activate();
+    const journalPath = join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE);
+    const journal: Record<string, unknown> = JSON.parse(await readFile(journalPath, "utf8"));
+    await writeFile(journalPath, JSON.stringify({ ...journal, schemaVersion: 1 }));
+
+    const recovered = await new RuntimePackageInstaller(installRoot, publicKey).resumePendingInstall("0.1.0");
+    expect(recovered?.activationState).toBe(state);
+    if (state === "prepared") await recovered?.rollback();
+    else await recovered?.finalize();
+    expect(await readFile(pending.executable, "utf8")).toBe(state === "prepared" ? "runtime-original" : "runtime-replacement");
+    expect(existsSync(journalPath)).toBe(false);
+  });
+
+  it.each(["package", "pointer", "legacy-phase"] as const)(
+    "rejects changed %s state when resuming accepted cleanup",
+    async (changed) => {
+      const installRoot = await temporaryDirectory();
+      const source = await temporaryDirectory();
+      const keys = generateKeyPairSync("ed25519");
+      const publicKey = publicKeyPem(keys.publicKey);
+      const installer = new RuntimePackageInstaller(installRoot, publicKey, async (path, options) => {
+        if (path.endsWith(".backup") && existsSync(path)) throw new Error("locked backup");
+        await rm(path, options);
+      });
+      const original = await writeRuntimePackage(source, "1.0.0", "runtime-original", keys.privateKey);
+      await installer.install(source, original, "0.1.0");
+      const replacement = await writeRuntimePackage(source, "1.0.0", "runtime-replacement", keys.privateKey);
+      const pending = await installer.prepareInstall(source, replacement, "0.1.0");
+      await pending.activate();
+      await pending.finalize();
+      if (changed === "package") await writeFile(pending.executable, "tampered");
+      if (changed === "pointer") await writeFile(join(installRoot, "current.json"), JSON.stringify({ version: "9.0.0" }));
+      if (changed === "legacy-phase") {
+        const path = join(installRoot, PENDING_RUNTIME_INSTALLATION_FILE);
+        const journal: Record<string, unknown> = JSON.parse(await readFile(path, "utf8"));
+        await writeFile(path, JSON.stringify({ ...journal, schemaVersion: 1, state: "finalizing" }));
+      }
+      await expect(new RuntimePackageInstaller(installRoot, publicKey).resumePendingInstall("0.1.0"))
+        .rejects.toThrow(/size mismatch|checksum mismatch|pointer has changed|journal shape is invalid/u);
+    },
+  );
 
   it("rejects a package whose signature is not trusted", async () => {
     const installRoot = await temporaryDirectory();

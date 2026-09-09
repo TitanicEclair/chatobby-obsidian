@@ -11,7 +11,8 @@ import { FeedRenderer, type FeedHost } from "./feed";
 import { createChatViewFeedHost } from "./feed/chat-view-feed-host";
 import { Composer, type PromptSubmissionOutcome } from "./composer/composer";
 import { createComposerContextHost } from "./composer/composer-context-host";
-import { ComposerControls } from "./composer/composer-controls";
+import { ComposerControls, refreshComposerModelCatalogue } from "./composer/composer-controls";
+import { applyComposerAccessPolicy } from "./composer/composer-access-policy";
 import { searchWorkspaceReferences, type ComposerVaultReference } from "./composer/vault-reference-search";
 import { promptText } from "./modals/modals";
 import { openAutoCompactionSettings, toggleAutoCompaction, type AutoCompactionActionOptions } from "./controller/auto-compaction-controller";
@@ -28,7 +29,7 @@ import { gatherVaultContext, toPromptContextPacket } from "../prompt";
 import { errorMessage } from "../utils";
 import type { ChatobbyTransport } from "../transport/ws-client";
 import { LiveStatsController } from "./controller/live-stats-controller";
-import { isThinkingLevel } from "./controller/view-utils";
+import { isThinkingLevel, requireThinkingLevel } from "./controller/view-utils";
 import { SlashCommandController } from "../features/commands/public";
 import { createChatViewOverlayScreens, type ChatViewOverlayScreens, type OverlayViewMode } from "./screens/chat-view-overlay-screens";
 import { ExtensionUiController } from "./controller/extension-ui-controller";
@@ -42,7 +43,7 @@ import { ChannelScreenController, routeAgentReference } from "../features/channe
 import { downloadChatobbyGuide } from "../features/guide/public";
 import { RuntimeStatusController, RuntimeStatusMenu, RuntimeUpdateController } from "../features/runtime-status/public";
 import { ViewRuntimeController } from "../runtime/application/view-runtime-controller";
-import { closeInactiveViewSurfaces, parseLeafSessionState, parseNavigationState, ribbonModeForNavigation, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode, type ExclusiveViewSurface } from "./controller/view-navigation-controller";
+import { channelNavigationState, closeInactiveViewSurfaces, parseLeafSessionState, parseNavigationState, ribbonModeForNavigation, shouldActivateLeafSession, ViewNavigationController, type ChatobbyNavigationState, type ChatobbyViewMode, type ExclusiveViewSurface } from "./controller/view-navigation-controller";
 import { openSystemPathExternally, revealSystemPathExternally } from "./controller/system-path-opener";
 import { ConnectionStatusController } from "./controller/connection-status-controller";
 import { SessionPreferenceController } from "./controller/session-preference-controller";
@@ -52,19 +53,20 @@ import { TaskProgress } from "../features/tasks/public";
 import { routeExtensionPanelAction } from "./controller/extension-panel-action-router";
 import { renderViewMode as renderShellViewMode } from "./controller/view-mode-renderer";
 import { routePermissionSlash } from "./controller/permission-slash-router";
-import { resolveSubagentPermissionAction } from "./controller/subagent-permission-action";
+import { dispatchNoticeAction, isNoticeAction } from "./controller/notice-intent-controller";
 import { TurnAbortController } from "./controller/turn-abort-controller";
 import { FrontendProtocolController } from "../frontend/frontend-protocol-controller";
 import { FrontendStore } from "../frontend/frontend-store";
-import { FrontendSnapshotBatcher, sessionDirectoryProjectionChanged } from "../frontend/frontend-snapshot-batcher";
-import { createFrontendBootstrapRequest } from "./controller/frontend-bootstrap-request";
+import { FrontendSnapshotBatcher, sessionDirectoryProjectionChanged, sessionModelProjectionChanged } from "../frontend/frontend-snapshot-batcher";
+import { createFrontendNegotiationRequest } from "./controller/frontend-bootstrap-request";
 import { synchronizeFrontendFeed as syncFrontendFeedProjection } from "./controller/frontend-feed-sync";
-import type { FrontendBootstrap, FrontendChoiceControl, FrontendIntent, FrontendNavigationReference } from "../vendor/chatobby-client/frontend-contracts.js";
+import type { FrontendBootstrap, FrontendChoiceControl, FrontendNavigationReference } from "../vendor/chatobby-client/frontend-contracts.js";
 import { FRONTEND_RENDER_BATCH_MS, FRONTEND_SCHEMA_VERSION } from "./shared/constants";
 import { ConnectedViewRestorationController } from "./controller/connected-view-restoration";
-import { retractAcceptedPrompt, submitPrompt } from "./controller/prompt-submission-controller";
+import { recordPromptFailure, retractAcceptedPrompt, submitAuthorizedPrompt } from "./controller/prompt-submission-controller";
 import { deliverQueuedMessage, deliverSteer } from "./controller/queued-message-delivery";
 import { focusPageNavigation, movePageNavigation } from "./shared/page-shell";
+import type { WorkspacePageState } from "./workspace/workspace-pages";
 const VIEW_TYPE = "chatobby-view";
 export class ChatobbyView extends ItemView {
   readonly runtimeChannelId = window.crypto.randomUUID();
@@ -75,6 +77,8 @@ export class ChatobbyView extends ItemView {
   private readonly directoryRouter: LeafDirectoryRouter<ChatobbyView>;
   private readonly activeSessionActions: ActiveSessionActions;
   private shell!: ViewShell;
+  private nativeTabTitle = "Chatobby";
+  private pendingWorkspaceState: unknown;
   private tabBar!: TabBar;
   private toolbar!: Toolbar;
   private feed: FeedRenderer | null = null;
@@ -122,7 +126,6 @@ export class ChatobbyView extends ItemView {
     else if (this.viewMode === "permissions") handled = this.overlayScreens.permissions.handleKeydown(event);
     else if (this.viewMode === "memory") handled = this.overlayScreens.memory.handleKeydown(event);
     else if (this.viewMode === "events") handled = this.overlayScreens.events.handleKeydown(event);
-    else if (this.viewMode === "queries") handled = this.overlayScreens.queries.handleKeydown(event);
     else if (this.viewMode === "mcp") handled = this.overlayScreens.mcp.handleKeydown(event);
 		else if (this.viewMode === "settings") handled = this.overlayScreens.settings.handleKeydown(event);
     else if (this.viewMode === "subagents") handled = this.subagentScreen.handleKeydown(event);
@@ -150,7 +153,6 @@ export class ChatobbyView extends ItemView {
 		openSettings: () => this.overlayScreens.settings.open(),
       openMemory: () => this.overlayScreens.memory.open(),
       openEvents: () => this.overlayScreens.events.open(),
-      openQueries: () => this.overlayScreens.queries.open(),
       openMcp: (state) => this.overlayScreens.mcp.open(state.pluginId),
       openSubagents: (state) => {
         this.subagentScreen.open(state.runId, state.subagentTab ?? "runs", state.nodeId, state.feedOnly ?? false);
@@ -175,7 +177,7 @@ export class ChatobbyView extends ItemView {
     });
     this.frontendProtocol = new FrontendProtocolController({
       store: this.frontendStore,
-	  createBootstrapRequest: () => createFrontendBootstrapRequest(this.app, this.plugin, this.runtimeChannelId, this.gatherContext()),
+	  createNegotiationRequest: () => createFrontendNegotiationRequest(this.app, this.plugin, this.runtimeChannelId),
       onError: (error) => {
         console.error("Chatobby: frontend protocol synchronization failed", error);
         new Notice(`Chatobby could not synchronize this view: ${errorMessage(error)}`);
@@ -258,7 +260,6 @@ export class ChatobbyView extends ItemView {
       openMemory: () => this.openMemoryScreen(),
       openSubagents: () => this.openSubagentSessionsScreen(),
       openEvents: () => this.openEventsScreen(),
-      openQueries: () => this.openQueriesScreen(),
       compact: (parsed) => this.executeCompactSlash(parsed),
       createSession: (parsed) => this.executeNewSlash(parsed),
       setWorkingDirectory: (parsed) => this.executeCwdSlash(parsed),
@@ -373,7 +374,7 @@ export class ChatobbyView extends ItemView {
   private getTransport(): ChatobbyTransport | null { return this.plugin.getViewTransport(this); }
   private runOperation<T>(descriptor: OperationDescriptor, operation: () => Promise<T>): Promise<T> { return this.operations.run(descriptor, operation); }
   getViewType(): string { return VIEW_TYPE; }
-  getDisplayText(): string { return "Chatobby"; }
+  getDisplayText(): string { return this.nativeTabTitle; }
   getIcon(): string { return "message-circle"; }
   getWorkingDirectoryPath(): string { return this.sessions.workingDirectoryPath(); }
   hasSessionPath(sessionPath: string): boolean { return this.sessions.allTabs().some((tab) => tab.sessionFile === sessionPath); }
@@ -394,10 +395,16 @@ export class ChatobbyView extends ItemView {
     return {
       ...this.viewNavigation.state(),
       vaultDirectoryPath: this.sessions.workingDirectoryPath(),
-      sessionPath: this.activeTab()?.sessionFile,
+      sessionPath: this.pendingSessionPath ?? this.activeTab()?.sessionFile,
+      sessionTitle: this.nativeTabTitle,
+      workspace: this.pendingWorkspaceState ?? { schemaVersion: 2 },
     };
   }
   override async setState(state: unknown, result: ViewStateResult): Promise<void> {
+    if (state && typeof state === "object" && "sessionTitle" in state && typeof state.sessionTitle === "string") {
+      this.nativeTabTitle = state.sessionTitle.startsWith("Chatobby") ? state.sessionTitle.slice(0, 300) : "Chatobby";
+    }
+    if (state && typeof state === "object" && "workspace" in state) this.pendingWorkspaceState = state.workspace;
     const leafState = parseLeafSessionState(state);
     const activateSession = shouldActivateLeafSession(
       this.stateHydrated,
@@ -414,7 +421,7 @@ export class ChatobbyView extends ItemView {
       this.pendingSessionPath = leafState.sessionPath;
     }
     const navigation = parseNavigationState(state);
-    result.history = this.viewNavigation.shouldRecordHistory(navigation);
+    result.history = false;
     this.pendingNavigation = navigation;
     this.stateHydrated = true;
     if (!this.componentsReady) return;
@@ -422,7 +429,10 @@ export class ChatobbyView extends ItemView {
     // their controllers issue a screen request, or the request can race a
     // concurrent bootstrap and remain pending until the user refreshes again.
     if (activateSession) await this.activateSessionContext();
-    await this.viewNavigation.apply(navigation);
+    this.plugin.workspacePages.restoreLegacy(this.pendingWorkspaceState);
+    this.pendingWorkspaceState = undefined;
+    if (navigation.mode !== "chat") this.openWorkspacePage(navigation as WorkspacePageState);
+    else await this.viewNavigation.apply(navigation);
   }
   onPaneMenu(menu: Menu, source: string): void {
     super.onPaneMenu(menu, source);
@@ -438,7 +448,10 @@ export class ChatobbyView extends ItemView {
     this.unsubscribeFrontendStore = this.frontendStore.subscribe((snapshot) => this.frontendSnapshots.schedule(snapshot));
     await this.plugin.registerChatView(this);
     await this.activateSessionContext();
-    await this.viewNavigation.apply(this.pendingNavigation);
+    this.plugin.workspacePages.restoreLegacy(this.pendingWorkspaceState);
+    this.pendingWorkspaceState = undefined;
+    if (this.pendingNavigation.mode !== "chat") this.openWorkspacePage(this.pendingNavigation as WorkspacePageState);
+    else await this.viewNavigation.apply(this.pendingNavigation);
     this.plugin.setChatViewVisible(this, true);
     this.contentEl.addEventListener("keydown", this.handleViewKeydown, true);
     this.contentEl.addEventListener("chatobby:open-subagents", this.handleOpenSubagents);
@@ -621,10 +634,12 @@ export class ChatobbyView extends ItemView {
       input: () => this.composer.handleInput(),
       inputKeydown: (e) => this.composer.handleKeydown(e),
     };
+    this.contentEl.addClass("chatobby-workspace");
     this.shell = buildViewShell(this.contentEl, handlers);
 
     // 2. Create components
     this.tabBar = new TabBar({
+			subagentHost: () => this.shell.subagentRailHostEl,
 			sessionTitle: () => this.sessions.sessionTitle(),
 			workspaceLabel: () => this.sessions.workspaceLabel(),
 			activeMode: () => ribbonModeForNavigation(this.viewMode, this.viewNavigation.state()),
@@ -689,12 +704,15 @@ export class ChatobbyView extends ItemView {
       getViewModel: () => this.frontendStore.snapshot?.composer ?? null,
       applyControl: (id, value) => this.applyFrontendControl(id, value),
       isBackendAvailable: () => this.isBackendAvailable(),
+      refreshModelCatalogue: () => refreshComposerModelCatalogue(() => this.getTransport(), (transport) => this.frontendProtocol.synchronize(transport)),
     });
     this.runtimeStatus = new RuntimeStatusController({
       getState: () => this.plugin.getRuntimeState(),
       start: () => this.plugin.startBackend(),
       restart: () => this.plugin.restartRuntime(),
       install: async (repair) => this.plugin.openRuntimeInstaller(repair),
+      automaticProvisioning: () => this.plugin.usesAutomaticRuntimeProvisioning(),
+      retryProvisioning: () => this.plugin.retryRuntimeProvisioning(),
     });
     this.runtimeStatusMenu = new RuntimeStatusMenu({
       app: this.app,
@@ -703,12 +721,17 @@ export class ChatobbyView extends ItemView {
       restart: () => this.plugin.restartRuntime(),
       stop: () => this.plugin.stopBackend(),
       supportsRuntimeUpdates: () => this.plugin.isReleaseBuild(),
+      automaticProvisioning: () => this.plugin.usesAutomaticRuntimeProvisioning(),
+      retryProvisioning: () => this.plugin.retryRuntimeProvisioning(),
       manageRuntime: (repair) => this.plugin.openRuntimeInstaller(repair),
+      removeRuntime: () => this.plugin.removeLocalRuntime(),
     });
     this.runtimeUpdate = new RuntimeUpdateController({
       getState: () => this.plugin.getRuntimeUpdateState(),
       onStateChange: (listener) => this.plugin.onRuntimeUpdateStateChange(listener),
       openInstaller: () => this.plugin.openRuntimeInstaller(),
+      automaticProvisioning: () => this.plugin.usesAutomaticRuntimeProvisioning(),
+      retryProvisioning: () => this.plugin.retryRuntimeProvisioning(),
     });
 
     this.tabBar.render(this.shell.tabBarHostEl);
@@ -769,8 +792,10 @@ export class ChatobbyView extends ItemView {
       if (state.status === "connected") {
         this.synchronizeConnectedTransport(transport);
       } else {
+        this.frontendProtocol.clearNegotiatedCapabilities();
         this.connectionRestoration.invalidate();
         this.liveStats.stop();
+        if (this.viewMode === "permissions") this.overlayScreens.permissions.synchronize();
         if (state.status === "disconnected" || state.status === "error") {
           const interruption = this.sessions.markTransportDisconnected();
           this.connectionStatus.markInterrupted(interruption);
@@ -797,7 +822,6 @@ export class ChatobbyView extends ItemView {
     else if (this.viewMode === "memory") this.overlayScreens.memory.synchronize();
     else if (this.viewMode === "permissions") this.overlayScreens.permissions.synchronize();
     else if (this.viewMode === "events") this.overlayScreens.events.synchronize();
-    else if (this.viewMode === "queries") this.overlayScreens.queries.synchronize();
     else if (this.viewMode === "mcp") this.overlayScreens.mcp.synchronize();
     else if (this.viewMode === "subagents") this.subagentScreen.synchronize();
   }
@@ -860,15 +884,20 @@ export class ChatobbyView extends ItemView {
       sessionName: this.activeTab()?.name,
     };
     try {
-      const outcome = await submitPrompt({
+      const outcome = await submitAuthorizedPrompt({
+        readTarget: () => this.componentsReady && this.getTransport() === transport && transport.isConnected
+          ? { sessionId: this.frontendStore.snapshot?.session?.id, runtimeInstanceId: this.frontendStore.snapshot?.runtimeInstanceId } : undefined,
+        canCollect: () => this.frontendProtocol.supportsCapability("obsidian-vault-access"),
+        readStamp: () => transport.getObsidianVaultAccessContext(),
+        gather: () => toPromptContextPacket(this.gatherContext(), workspaceContext),
         transport,
         feedStore: this.getFeedStore(),
         message,
         attachments,
-        context: toPromptContextPacket(this.gatherContext(), workspaceContext),
         signal,
         submissionId,
       });
+      if (signal?.aborted && !outcome) return;
       if (outcome) return outcome;
       void this.plugin.completeOnboarding()
         .then(() => removeOnboardingPanel(this.getFeedStore()))
@@ -931,11 +960,10 @@ export class ChatobbyView extends ItemView {
   private renderPromptFailure(input: string, error: unknown): void {
     const message = errorMessage(error);
     console.error("Chatobby: prompt failed:", error);
-    this.getFeedStore().dispatch({
-      type: "feed.local-feedback-appended",
-      input: input.trim(),
-      guidance: `Prompt failed: ${message}`,
-    });
+    recordPromptFailure(this.getFeedStore(), input.trim(),
+      `Prompt failed: ${message}`,
+      this.sessionState.isStreaming || this.sessionState.isCompacting,
+    );
     new Notice(`Chatobby prompt failed: ${message}`);
   }
 
@@ -945,11 +973,13 @@ export class ChatobbyView extends ItemView {
   ): Promise<void> {
     const snapshot = this.frontendStore.snapshot;
     if (!snapshot?.session) throw new Error("No active Chatobby session");
+    if (id === "permission" || id === "network") {
+      await applyComposerAccessPolicy(value, this.frontendStore, this.frontendProtocol, id);
+      return;
+    }
     const payload = id === "model"
       ? { model: value }
-      : id === "effort"
-        ? { thinkingLevel: requireThinkingLevel(value) }
-        : { permissionProfileId: value || null };
+      : { thinkingLevel: requireThinkingLevel(value) };
     const result = await this.frontendProtocol.dispatch({
       schemaVersion: FRONTEND_SCHEMA_VERSION,
       intentId: window.crypto.randomUUID(),
@@ -959,7 +989,7 @@ export class ChatobbyView extends ItemView {
       type: "session.update-preferences",
       payload,
     });
-    if (result.status !== "completed" && result.status !== "accepted") {
+    if (result.status !== "applied" && result.status !== "accepted") {
       throw new Error(result.notice?.message ?? "Chatobby rejected the session preference change");
     }
     if (id === "model") await this.plugin.rememberSessionPreferences({ model: value });
@@ -980,10 +1010,10 @@ export class ChatobbyView extends ItemView {
       expectedRevision: snapshot.revision,
       ...request,
     });
-    if (result.status === "completed" || result.status === "accepted") return true;
+    if (result.status === "applied" || result.status === "accepted") return true;
     if (result.status === "rejected" && result.notice?.level === "info") return false;
     throw new SessionIntentRejectedError(
-      result.errorCode,
+      result.status === "rejected" ? result.errorCode : undefined,
       result.notice?.message ?? "Chatobby rejected the session change",
     );
   }
@@ -993,6 +1023,7 @@ export class ChatobbyView extends ItemView {
     const previous = this.sessionState;
     const sessionChanged = applied?.session !== session;
     const sessionDirectoryChanged = sessionChanged && sessionDirectoryProjectionChanged(applied?.session, session);
+    const sessionModelChanged = sessionChanged && sessionModelProjectionChanged(applied?.session, session);
     const feedChanged = applied?.feed.revision !== snapshot.feed.revision;
     const composerChanged = applied?.composer !== snapshot.composer;
     const agentRailChanged = applied?.agentRail !== snapshot.agentRail;
@@ -1001,15 +1032,12 @@ export class ChatobbyView extends ItemView {
     if (session && sessionChanged) this.sessions.applyRuntimeSession(session);
     if (sessionChanged) {
       this.getFeedStore().dispatch({ type: "feed.runtime-activity-synchronized", active: Boolean(session?.streaming || session?.compacting) });
+      this.composer?.setStreaming(session?.streaming ?? false);
+      this.turnAbort.setActivity(Boolean(session?.streaming || session?.compacting));
     }
     if (agentRailChanged) this.sessionAgentRail.setModel(snapshot.agentRail);
     if (commandsChanged) this.slashCommands.setRuntimeCommands(snapshot.localCommands);
-    if (taskPlanChanged) this.taskProgress.setModel(snapshot.taskPlan);
     if (composerChanged) this.composerControls?.refresh();
-	if (sessionChanged) {
-		this.composer?.setStreaming(session?.streaming ?? false);
-		this.turnAbort.setActivity(Boolean(session?.streaming || session?.compacting));
-	}
     if (session && sessionChanged) {
       if (previous.thinkingLevel !== session.thinkingLevel) {
         void this.plugin.rememberSessionPreferences({ thinkingLevel: session.thinkingLevel });
@@ -1025,6 +1053,7 @@ export class ChatobbyView extends ItemView {
     }
     if (sessionChanged) {
       this.toolbar?.renderFlags();
+      if (sessionModelChanged) this.liveStats.refreshAfterModelChange();
       this.liveStats.sync();
     }
 	if (feedChanged) {
@@ -1037,6 +1066,8 @@ export class ChatobbyView extends ItemView {
 		}
 	}
     if (sessionDirectoryChanged) this.plugin.notifySessionDirectoryChanged();
+    // A task-widget failure must not leave Stop or completed tool rows active.
+    if (taskPlanChanged) this.taskProgress.setModel(snapshot.taskPlan);
   }
 
   /** Public entry point — refresh models and controls after a provider key change. */
@@ -1064,14 +1095,10 @@ export class ChatobbyView extends ItemView {
   }
 
   handleExtensionPanelAction(action: ExtensionPanelAction): void {
-		if (action.id.startsWith("subagent-permission:")) {
-			void this.decideSubagentPermission(action.id);
-			return;
-		}
-		if (action.id.startsWith("memory-candidate:")) {
-			void this.decideMemorySuggestion(action.id);
-			return;
-		}
+    if (isNoticeAction(action.id)) {
+      void dispatchNoticeAction(action.id, this.app, this.frontendStore, this.frontendProtocol);
+      return;
+    }
     routeExtensionPanelAction(action, {
       openPermissions: () => this.openPermissionPolicyScreen(),
       openMemory: (actionId) => this.overlayScreens.memory.openFromExtensionAction(actionId),
@@ -1080,52 +1107,12 @@ export class ChatobbyView extends ItemView {
     });
   }
 
-	private async decideMemorySuggestion(actionId: string): Promise<void> {
-		const match = /^memory-candidate:(approve|reject):(.+)$/u.exec(actionId);
-		if (!match?.[1] || !match[2]) return;
-		await this.dispatchNoticeIntent({
-			type: "memory.decide-candidate",
-			payload: { candidateId: match[2], decision: match[1] === "approve" ? "approve" : "reject" },
-		});
-	}
-
-	private async decideSubagentPermission(actionId: string): Promise<void> {
-		const payload = await resolveSubagentPermissionAction(this.app, actionId);
-		if (!payload) return;
-		await this.dispatchNoticeIntent({
-			type: "subagent.decide-permission",
-			payload,
-		});
-	}
-
-	private async dispatchNoticeIntent(
-		input: Pick<Extract<FrontendIntent, { type: "memory.decide-candidate" | "subagent.decide-permission" }>, "type" | "payload">,
-	): Promise<void> {
-		const snapshot = this.frontendStore.snapshot;
-		if (!snapshot) return void new Notice("Chatobby frontend is not initialized.");
-		const result = await this.frontendProtocol.dispatch({
-			schemaVersion: 1,
-			intentId: crypto.randomUUID(),
-			viewId: snapshot.viewId,
-			mainSessionId: snapshot.session?.id,
-			expectedRevision: snapshot.revision,
-			...input,
-		} as FrontendIntent);
-		if (result.status === "rejected" || result.status === "conflict") {
-			new Notice(result.notice?.message ?? "The request could not be updated.");
-		}
-	}
-
   private openMemoryScreen(): void {
     this.navigateTo({ mode: "memory" });
   }
 
   private openEventsScreen(): void {
     this.navigateTo({ mode: "events" });
-  }
-
-  private openQueriesScreen(): void {
-    this.navigateTo({ mode: "queries" });
   }
 
   private openSubagentSessionsScreen(runId?: string, tab: SubagentScreenTab = "runs", nodeId?: string, feedOnly = false): void {
@@ -1301,7 +1288,7 @@ export class ChatobbyView extends ItemView {
   onDownloadGuide(): void {
     void downloadChatobbyGuide({
       app: this.app,
-      getTransport: () => this.getTransport(),
+      fetchGuide: () => this.plugin.fetchGuide(),
       onError: (message) => new Notice(message),
     });
   }
@@ -1353,7 +1340,7 @@ export class ChatobbyView extends ItemView {
     this.sessionAgentRail.refresh();
   }
 	private synchronizeFrontendFeed(snapshot: FrontendBootstrap): void {
-		syncFrontendFeedProjection(this.getFeedStore(), snapshot, this.plugin.settings.onboardingVersion, this.plugin.configuredProviders().length > 0);
+		syncFrontendFeedProjection(this.getFeedStore(), snapshot);
 		this.pendingFeedCatchup = false;
 	}
 
@@ -1364,7 +1351,29 @@ export class ChatobbyView extends ItemView {
   }
 
   private navigateTo(state: ChatobbyNavigationState): void {
-    this.viewNavigation.navigate(state);
+    if (state.mode === "chat") {
+      this.viewNavigation.navigate(state);
+    } else void this.plugin.openWorkspacePage(state as WorkspacePageState);
+  }
+
+  async revealMessage(targetBlockId: string): Promise<void> {
+    this.viewNavigation.navigate({ mode: "chat" });
+    await this.waitForFeedTarget(targetBlockId);
+  }
+
+  openWorkspacePage(state: WorkspacePageState): void { void this.plugin.openWorkspacePage(state); }
+  async resumeSessionById(sessionId: string): Promise<void> {
+    const transport = await this.ensureConnectedTransport("opening a saved chat");
+    if (!transport) throw new Error("Chatobby runtime is unavailable.");
+    await this.frontendProtocol.synchronize(transport);
+    const result = await this.frontendProtocol.dispatch({ intentId: crypto.randomUUID(), type: "session.resume-by-id", payload: { sessionId } });
+    if (result.status === "rejected" || result.status === "conflict") throw new Error(result.notice?.message ?? "The chat could not be opened.");
+  }
+
+  requestStopForSession(sessionId: string): boolean {
+    if (this.frontendStore.snapshot?.session?.id !== sessionId || !this.getTransport()?.isConnected || (!this.sessionState.isStreaming && !this.sessionState.isCompacting)) return false;
+    this.turnAbort.request();
+    return true;
   }
 
   private isVaultDirectoryPath(directoryPath: string): boolean {
@@ -1426,15 +1435,15 @@ export class ChatobbyView extends ItemView {
 
   private refreshTabBar(): void {
     this.tabBar?.refresh();
+    // Obsidian supplies saved leaf state after onOpen. Never replace that state
+    // with a provisional empty chat while its session is still being restored.
+    if (!this.componentsReady || !this.stateHydrated || this.pendingSessionPath) return;
+    const title = this.sessions.sessionTitle();
+    const nativeTitle = title ? `Chatobby – ${title}` : "Chatobby";
+    if (this.nativeTabTitle !== nativeTitle) {
+      this.nativeTabTitle = nativeTitle;
+      // Public leaf lifecycle refreshes Obsidian's title without replacing the view.
+      void this.leaf.setViewState({ type: VIEW_TYPE, state: this.getState() });
+    }
   }
-}
-
-function channelNavigationState(event: Event): ChatobbyNavigationState {
-  const detail = (event as CustomEvent<{ channelId?: string; messageId?: string }>).detail;
-  return { mode: "channels", channelId: detail?.channelId, messageId: detail?.messageId };
-}
-
-function requireThinkingLevel(value: string): SessionState["thinkingLevel"] {
-  if (!isThinkingLevel(value)) throw new Error(`Invalid thinking level: ${value}`);
-  return value;
 }

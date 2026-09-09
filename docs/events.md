@@ -10,7 +10,7 @@ Decide:
 
 - which project directory the work belongs to;
 - whether the main agent or a reusable role should run it;
-- the exact permission policy;
+- the current access policy for that Project or Vault workspace;
 - the prompt and expected output;
 - one-off or repeating timing, local time zone, and end condition;
 - maximum runtime and daily run limit;
@@ -20,7 +20,7 @@ Example:
 
 > Create a disabled Event for this project that runs every weekday at 6 PM in
 > my local time. It should summarize notes changed today into the daily note,
-> use the review policy, stop after 15 minutes, and run no more than once per
+> inherit this Project's access policy, stop after 15 minutes, and run no more than once per
 > day. Show me the full definition before enabling it.
 
 ## Scheduling
@@ -40,9 +40,16 @@ Common patterns include:
 
 ## Permission and background execution
 
-An Event uses its assigned policy. Its prompt cannot grant additional authority
-or bypass a denied action. Choose a narrow policy that permits the intended
-output without turning future automation into an unrestricted session.
+An Event inherits the current access policy for its selected Project or Vault
+workspace. Project work remains bounded to that Project; it does not silently
+fall back to Vault scope. Its prompt cannot grant additional authority or
+bypass a denied action. Change the
+Project's policy deliberately when future automated work needs different
+access; the Event cannot select its own profile.
+
+An older Event that retained a separate permission-profile override stays
+disabled and marked for review. Saving it explicitly removes that retired
+override and adopts the current access policy.
 
 New Events require approval by default. Running while the Chatobby view is
 closed also requires the product's explicit background-execution consent. Text
@@ -53,7 +60,8 @@ inside an Event cannot supply either confirmation.
 1. List existing Events and avoid creating a duplicate schedule.
 2. Inspect a complete existing definition before editing it.
 3. Create the Event disabled when its behavior has not been tested.
-4. Review project, agent, policy, schedule, limits, and prompt together.
+4. Review workspace, agent, current access, schedule, limits, and prompt
+   together.
 5. Trigger a controlled occurrence when appropriate and inspect its durable
    result.
 6. Enable the schedule only after the test behaves as expected.
@@ -68,7 +76,7 @@ single generic error.
 
 - **Nothing ran:** check enabled state, the calculated next occurrence, local
   time zone, background consent, project availability, and daily run limit.
-- **The Event asked for permission:** its assigned policy does not authorize a
+- **The Event asked for permission:** the current workspace policy does not authorize a
   required operation. Review the exact check rather than broadening the entire
   project policy.
 - **The Event timed out:** inspect the occurrence history and either reduce the

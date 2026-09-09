@@ -39,7 +39,6 @@ export interface SlashCommandControllerOptions {
   openMemory: () => void;
   openSubagents: () => void;
   openEvents: () => void;
-  openQueries: () => void;
   compact: (parsed: SlashParsedCommand) => Promise<void>;
   createSession: (parsed: SlashParsedCommand) => Promise<void>;
   setWorkingDirectory: (parsed: SlashParsedCommand) => Promise<void>;
@@ -68,6 +67,7 @@ export class SlashCommandController {
   setRuntimeCommands(commands: readonly FrontendLocalCommandViewModel[]): void {
     const seen = new Set<string>();
     this.runtimeCommands = commands.filter((command) => {
+      if (command.action === "open-screen" && command.screenId === "queries") return false;
       if (seen.has(command.name)) return false;
       seen.add(command.name);
       return true;
@@ -200,8 +200,6 @@ export class SlashCommandController {
         if (model.screenId === "subagents")
           return void this.options.openSubagents();
         if (model.screenId === "events") return void this.options.openEvents();
-        if (model.screenId === "queries")
-          return void this.options.openQueries();
         return;
       case "compact":
         return this.options.compact(parsed);

@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join, posix, win32 } from "node:path";
+import { resolveConnectorPlatformPath } from "../../vendor/@chatobby/platform-paths/index.js";
 
 export interface RuntimePlatformEnvironment {
   platform: NodeJS.Platform;
@@ -62,6 +63,25 @@ export function resolveChatobbyPlatformPaths(
 
 export function runtimeInstallRoot(): string {
   return resolveChatobbyPlatformPaths().runtimeInstallRoot;
+}
+
+/** New immutable developer bundles share the canonical external runtime owner. */
+export function runtimeDevelopmentPairsRoot(
+  environment: RuntimePlatformEnvironment = currentRuntimePlatformEnvironment(),
+): string {
+  const platform = environment.platform;
+  if (platform !== "win32" && platform !== "darwin" && platform !== "linux") {
+    throw new Error("Development runtime cache platform is unsupported");
+  }
+  return resolveConnectorPlatformPath({
+    platform,
+    homeDirectory: environment.home,
+    variables: {
+      LOCALAPPDATA: environment.localAppData,
+      XDG_DATA_HOME: environment.xdgDataHome,
+      XDG_STATE_HOME: environment.xdgStateHome,
+    },
+  }, { role: "runtime-development-pairs-root" });
 }
 
 export function runtimeInstancePaths(vaultId: string): {

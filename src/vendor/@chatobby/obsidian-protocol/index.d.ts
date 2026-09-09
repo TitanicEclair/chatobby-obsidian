@@ -10,6 +10,7 @@ export type { ObsidianBridgeCancel, ObsidianBridgeCapabilitiesChanged, ObsidianB
 export { parsePluginToServerMessage, parseServerToPluginMessage, } from "./bridge-protocol.js";
 export type { ObsidianVaultSelector } from "./bridge-selectors.js";
 export { parseVaultSelector } from "./bridge-selectors.js";
+export { OBSIDIAN_INVOCATION_METADATA_KEY, readObsidianInvocationCapability } from "./invocation-metadata.js";
 export type { ObsidianDirectToolName, ObsidianMcpPolicyOptions, ObsidianMcpServerPolicy, } from "./mcp-policy.js";
 export { createObsidianMcpServerPolicy, OBSIDIAN_DEFAULT_DIRECT_TOOLS, } from "./mcp-policy.js";
 export type { ObsidianBrowserToolName, ObsidianNonDirectToolName, ObsidianPluginNativeToolName, ObsidianToolName, ObsidianUiToolName, } from "./mcp-tool-catalog.js";

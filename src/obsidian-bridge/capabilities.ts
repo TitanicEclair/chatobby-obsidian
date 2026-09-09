@@ -4,7 +4,7 @@
 // families whose operations are actually implemented; the Chatobby bridge / MCP
 // layer uses these to gate which obsidian_* tools are exposed to the agent.
 //
-// See docs/tooling/bridge-executor.md (hello.capabilities) and the protocol's
+// See docs/wire-protocol.md (Obsidian bridge) and the protocol's
 // bridge-capabilities.ts. Drift between this list and the implemented operation
 // handlers is guarded by tests/obsidian-bridge/capability-coverage.test.ts.
 

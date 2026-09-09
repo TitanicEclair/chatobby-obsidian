@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 const backendRoot = process.env.CHATOBBY_BACKEND_ROOT;
 if (!backendRoot) {
@@ -10,64 +12,120 @@ if (!backendRoot) {
 }
 
 const backendCli = resolve(backendRoot, "packages/chatobby/dist/cli.js");
-const vendorPairs = [
+const generator = resolve(backendRoot, "scripts/build-vendor-artifacts.mjs");
+const connectorVersion = readConnectorVersion();
+const backendRevision = readBackendRevision();
+const vendorPairs = (backendVendorRoot) => [
   {
     name: "managed local model contracts",
-    backend: resolve(backendRoot, "vendor/local-models"),
+    backend: resolve(backendVendorRoot, "local-models"),
     connector: resolve("src/vendor/@chatobby/local-models"),
   },
   {
     name: "browser client",
-    backend: resolve(backendRoot, "vendor/chatobby-client"),
+    backend: resolve(backendVendorRoot, "chatobby-client"),
     connector: resolve("src/vendor/chatobby-client"),
   },
   {
     name: "Project contracts",
-    backend: resolve(backendRoot, "vendor/project-contracts"),
+    backend: resolve(backendVendorRoot, "project-contracts"),
     connector: resolve("src/vendor/@chatobby/project-contracts"),
   },
   {
     name: "platform paths",
-    backend: resolve(backendRoot, "vendor/platform-paths"),
+    backend: resolve(backendVendorRoot, "platform-paths"),
     connector: resolve("src/vendor/@chatobby/platform-paths"),
   },
 ];
-const obsidianProtocolProjection = {
+const obsidianProtocolProjection = (backendVendorRoot) => ({
   name: "Obsidian protocol",
   artifact: "obsidian-protocol",
-  backend: resolve(backendRoot, "vendor/obsidian-protocol"),
+  backend: resolve(backendVendorRoot, "obsidian-protocol"),
   connector: resolve("src/vendor/@chatobby/obsidian-protocol"),
-};
+});
 
 if (!existsSync(backendCli)) {
   throw new Error(`Compiled backend entry point not found: ${backendCli}`);
 }
-
-for (const pair of vendorPairs) {
-  const backendFiles = listFiles(pair.backend);
-  const connectorFiles = listFiles(pair.connector);
-  if (JSON.stringify(backendFiles) !== JSON.stringify(connectorFiles)) {
-    throw new Error(
-      `${pair.name} file lists differ; run npm run build:vendor in pi-mono and sync the connector copy`,
-    );
-  }
-  for (const relativePath of backendFiles) {
-    const backendHash = hashFile(resolve(pair.backend, relativePath));
-    const connectorHash = hashFile(resolve(pair.connector, relativePath));
-    if (backendHash !== connectorHash) {
-      throw new Error(
-        `${pair.name} differs from the current backend: ${relativePath}`,
-      );
-    }
-  }
-  console.log(
-    `Verified ${backendFiles.length} ${pair.name} files against ${pair.backend}`,
-  );
+if (!existsSync(generator)) {
+  throw new Error(`Backend vendor generator not found: ${generator}`);
 }
 
-verifyDeclaredProjection(obsidianProtocolProjection);
+const generatedRoot = mkdtempSync(join(tmpdir(), "chatobby-backend-projection-"));
+try {
+  generateBackendProjection(generatedRoot);
+  for (const pair of vendorPairs(generatedRoot)) {
+    const backendFiles = listFiles(pair.backend);
+    const connectorFiles = listFiles(pair.connector);
+    if (JSON.stringify(backendFiles) !== JSON.stringify(connectorFiles)) {
+      throw new Error(
+        `${pair.name} file lists differ; regenerate the exact backend projection and sync the connector copy`,
+      );
+    }
+    for (const relativePath of backendFiles) {
+      const backendHash = hashFile(resolve(pair.backend, relativePath));
+      const connectorHash = hashFile(resolve(pair.connector, relativePath));
+      if (backendHash !== connectorHash) {
+        throw new Error(
+          `${pair.name} differs from the current backend: ${relativePath}`,
+        );
+      }
+    }
+    console.log(
+      `Verified ${backendFiles.length} ${pair.name} files against the fresh backend projection`,
+    );
+  }
 
-console.log(`Backend CLI: ${backendCli}`);
+  verifyDeclaredProjection(obsidianProtocolProjection(generatedRoot));
+
+  console.log(`Backend CLI: ${backendCli}`);
+  console.log(`Backend revision: ${backendRevision}`);
+} finally {
+  rmSync(generatedRoot, { recursive: true, force: true });
+}
+
+function generateBackendProjection(outputRoot) {
+  const result = spawnSync(process.execPath, [
+    generator,
+    "--output-root",
+    outputRoot,
+    "--product-version",
+    connectorVersion,
+    "--expected-source-revision",
+    backendRevision,
+  ], {
+    cwd: resolve(backendRoot),
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Could not generate the exact backend projection:\n${[result.stdout, result.stderr].filter(Boolean).join("\n")}`,
+    );
+  }
+}
+
+function readBackendRevision() {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: resolve(backendRoot),
+    encoding: "utf8",
+    shell: false,
+  });
+  const revision = result.stdout.trim();
+  if (result.status !== 0 || !/^[a-f0-9]{40}$/u.test(revision)) {
+    throw new Error(`Could not resolve the exact backend revision: ${result.stderr.trim()}`);
+  }
+  return revision;
+}
+
+function readConnectorVersion() {
+  const packagePath = resolve("package.json");
+  const packageJson = JSON.parse(readFileRequired(packagePath).toString("utf8"));
+  if (typeof packageJson.version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(packageJson.version)) {
+    throw new Error(`Connector package version is invalid: ${packagePath}`);
+  }
+  return packageJson.version;
+}
 
 function verifyDeclaredProjection(projection) {
   const backendManifestPath = resolve(projection.backend, "projection.json");
@@ -113,7 +171,7 @@ function verifyDeclaredProjection(projection) {
   }
 
   console.log(
-    `Verified ${manifest.files.length} generated ${projection.name} files against ${projection.backend}`,
+    `Verified ${manifest.files.length} generated ${projection.name} files against the fresh backend projection`,
   );
 }
 

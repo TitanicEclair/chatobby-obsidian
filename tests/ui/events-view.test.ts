@@ -62,17 +62,18 @@ describe("EventsView", () => {
     expect(root.textContent).toContain("No events yet");
     buttonWithText(root, "New event").click();
     await vi.waitFor(() => expect(root.textContent).toContain("Create event"));
-    expect(root.textContent).toContain("Standard safeguards");
+    expect(root.textContent).toContain("uses the current access policy");
+    expect(root.textContent).not.toContain("Permission policy");
     expect(root.textContent).toContain("Researcher");
     expect(buttonWithText(root, "Save event").disabled).toBe(false);
   });
 
-  it("requires explicit background consent and dispatches project, policy, agent, and run policy", async () => {
+  it("requires explicit background consent and dispatches Project, inherited access, agent, and run policy", async () => {
     const saved: Extract<EventViewIntent, { type: "events.save" }>[] = [];
     const harness = createHarness(async (intent) => { saved.push(intent); });
     const root = mount(harness.view);
     buttonWithText(root, "New event").click();
-    await vi.waitFor(() => expect(root.textContent).toContain("Standard safeguards"));
+    await vi.waitFor(() => expect(root.textContent).toContain("current access policy"));
 
     const inputs = [...root.querySelectorAll<HTMLInputElement>('input[type="text"]')];
     inputs[0]!.value = "Morning review";
@@ -86,10 +87,8 @@ describe("EventsView", () => {
     selects[0]!.dispatchEvent(new Event("change"));
     await vi.waitFor(() => expect(root.querySelectorAll("select")[1]?.disabled).toBe(false));
     const refreshedSelects = [...root.querySelectorAll<HTMLSelectElement>("select")];
-    refreshedSelects[1]!.value = "read-only";
+    refreshedSelects[1]!.value = "researcher";
     refreshedSelects[1]!.dispatchEvent(new Event("change"));
-    refreshedSelects[2]!.value = "researcher";
-    refreshedSelects[2]!.dispatchEvent(new Event("change"));
 
     const background = [...root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')][1]!;
     background.click();
@@ -103,7 +102,7 @@ describe("EventsView", () => {
     expect(saved[0]?.payload).toMatchObject({
       name: "Morning review",
       projectPath: "Projects/Current",
-      permissionProfileId: "read-only",
+      permissionProfileId: "access-policy",
       agentId: "researcher",
       requireApproval: true,
       allowWhenViewClosed: true,
@@ -269,7 +268,7 @@ function editorModel(): NonNullable<FrontendEventScreenViewModel["editor"]> {
     name: "",
     description: "",
     projectPath: "",
-    permissionProfileId: "standard-safeguards",
+    permissionProfileId: "access-policy",
     agentId: "main",
     enabled: true,
     triggerKind: "schedule",
@@ -290,7 +289,7 @@ function editorModel(): NonNullable<FrontendEventScreenViewModel["editor"]> {
     maxRunsPerDay: 24,
     maxRuntimeMinutes: 10,
     projectChoices: [{ value: "", label: "Vault (vault root)" }, { value: "Projects/Current", label: "Projects/Current" }],
-    permissionChoices: [{ value: "standard-safeguards", label: "Standard safeguards" }, { value: "read-only", label: "Read only" }],
+    permissionChoices: [{ value: "access-policy", label: "Current access policy" }],
     agentChoices: [{ value: "main", label: "Main agent" }, { value: "researcher", label: "Researcher" }],
     saveEnabled: true,
   };

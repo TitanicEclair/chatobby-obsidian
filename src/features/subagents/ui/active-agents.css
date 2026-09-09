@@ -1,0 +1,24 @@
+.chatobby-active-agents { display: grid; gap: var(--size-4-4); }
+.chatobby-active-agents__group { overflow: hidden; border: var(--border-width) solid var(--chatobby-border); border-radius: var(--radius-l); background: var(--chatobby-canvas); }
+.chatobby-active-agents__parent, .chatobby-active-agents__agent { display: flex; align-items: center; gap: var(--size-4-3); padding: var(--size-4-4); }
+.chatobby-active-agents__parent { background: var(--chatobby-surface-muted); }
+.chatobby-active-agents__identity { flex: 1; min-width: 0; }
+.chatobby-active-agents__icon { display: inline-flex; color: var(--text-muted); }
+.chatobby-active-agents__icon.is-working { color: var(--chatobby-accent); }
+button.chatobby-active-agents__name { display: block; height: auto; max-width: 100%; padding: 0; border: 0; color: var(--text-normal); background: transparent; box-shadow: none; font-weight: var(--font-semibold); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.chatobby-active-agents__name:hover { color: var(--chatobby-accent); }
+.chatobby-active-agents__task { margin-top: var(--size-2-1); color: var(--text-muted); font-size: var(--font-ui-small); }
+.chatobby-active-agents__detail { margin-top: var(--size-2-1); color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.chatobby-active-agents__children { padding-inline-start: var(--size-4-4); }
+.chatobby-active-agents__children > .chatobby-active-agents__detail { padding: var(--size-4-3); }
+.chatobby-active-agents__agent + .chatobby-active-agents__agent { border-top: var(--border-width) solid var(--chatobby-border); }
+.chatobby-active-agents__stop { flex-shrink: 0; }
+.chatobby-subagents__history { margin-top: var(--size-4-6); }
+.chatobby-subagents__history > summary { padding-block: var(--size-4-3); color: var(--text-muted); cursor: pointer; }
+.chatobby-subagents__history-agent { padding: 16px; border: 1px solid var(--chatobby-border); border-radius: 10px; }
+.chatobby-subagents__history-agent + .chatobby-subagents__history-agent { margin-top: 12px; }
+.chatobby-subagents__history-agent-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.chatobby-subagents__history-agent-copy { flex: 1; min-width: 0; }
+.chatobby-subagents__history-agent .chatobby-subagents__detail-title { overflow-wrap: anywhere; }
+.chatobby-subagents__history-agent .chatobby-subagents__failure { margin-block: 12px; }
+.chatobby-subagents__history-agent .chatobby-subagents__open-feed { margin-top: 8px; }

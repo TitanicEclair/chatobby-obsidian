@@ -1,3 +1,6 @@
+/* Projects browser. Browsing affects only the viewed projection; these styles
+   must not imply or hide changes to the active session or working directory. */
+
 .chatobby-projects__workspace {
   display: grid;
   grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
@@ -9,6 +12,7 @@
 	padding: 0;
 }
 
+/* Project rail owns filtering and selection, while page-shell owns outer chrome. */
 .chatobby-projects__rail {
   display: flex;
   width: auto;
@@ -86,6 +90,7 @@
   gap: var(--size-2-2);
 }
 
+/* Detail pane: project identity, folders, chats, and scoped search results. */
 .chatobby-projects__detail {
   min-width: 0;
   min-height: 0;
@@ -286,6 +291,7 @@
 .chatobby-projects__chat-open:hover .chatobby-projects__chat-heading > :first-child { color: var(--text-accent); }
 .chatobby-projects__current-note { margin-top: var(--size-4-5); color: var(--text-muted); font-size: var(--font-ui-small); }
 
+/* Shared create/edit form and folder-picker controls. */
 .chatobby-projects__form { display: flex; max-width: 38rem; flex-direction: column; gap: var(--size-4-3); }
 .chatobby-projects__field { display: flex; min-width: 0; flex-direction: column; gap: var(--size-2-1); }
 .chatobby-projects__field-label { color: var(--text-muted); font-size: var(--font-ui-small); font-weight: var(--font-medium); }
@@ -455,6 +461,7 @@ button.chatobby-projects__move-destination:disabled {
 }
 .chatobby-projects__move-empty { padding: var(--size-4-3); }
 
+/* Pane-relative breakpoints preserve usable rails in split Obsidian layouts. */
 @container chatobby-page (max-width: 760px) {
   .chatobby-projects__workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
 	.chatobby-projects__rail { max-height: 11rem; border-right: 0; border-bottom: var(--border-width) solid var(--chatobby-border); }

@@ -1,7 +1,7 @@
 // Bridge router — parses inbound frames, dispatches to operation registry,
 // serializes outbound result/error frames.
 //
-// See docs/tooling/bridge-executor.md §7.3 for the roundtrip diagram.
+// See docs/wire-protocol.md for the request/response boundary.
 
 import type { App } from "obsidian";
 import type {

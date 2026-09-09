@@ -44,6 +44,15 @@ export const PLATFORM_PATH_ROLE_CATALOGUE = [
 		description: "Device-local Project root bindings beneath the dedicated machine-local data root.",
 	},
 	{
+		role: "native-sandbox-root",
+		owner: "source-runtime",
+		authority: "device-local",
+		kind: "directory",
+		linkPolicy: "realpath-before-admission",
+		description:
+			"Protected device-local native grant ownership and local verification records; never portable Vault state.",
+	},
+	{
 		role: "projects-device-identity",
 		owner: "source-runtime",
 		authority: "device-local",
@@ -58,6 +67,14 @@ export const PLATFORM_PATH_ROLE_CATALOGUE = [
 		kind: "directory",
 		linkPolicy: "realpath-before-admission",
 		description: "Directory-binding authority root keyed by stable vault and device identity.",
+	},
+	{
+		role: "projects-rootless-workspaces-root",
+		owner: "source-runtime",
+		authority: "device-local",
+		kind: "directory",
+		linkPolicy: "realpath-before-admission",
+		description: "Device-local inert working directories for rootless Project conversations without Vault fallback.",
 	},
 	{
 		role: "projects-marker-index",
@@ -314,6 +331,15 @@ export const PLATFORM_PATH_ROLE_CATALOGUE = [
 		kind: "directory",
 		linkPolicy: "realpath-before-admission",
 		description: "Connector-owned installed runtime versions.",
+	},
+	{
+		role: "runtime-development-pairs-root",
+		owner: "connector",
+		authority: "device-local",
+		kind: "directory",
+		linkPolicy: "realpath-before-admission",
+		description:
+			"External connector-owned immutable development runtime bundles; historical in-vault caches are not moved.",
 	},
 	{
 		role: "runtime-version",

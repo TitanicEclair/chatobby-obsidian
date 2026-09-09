@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title desc">
+  <title id="title">Using Project memory in a later chat</title>
+  <desc id="desc">A writing preference becomes a local Project memory record. A later conversation uses the saved language and folder conventions when drafting a report.</desc>
+  <rect width="1200" height="440" rx="20" fill="#f5f3ed"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="48" y="65" font-size="30" font-weight="650" fill="#242b35">Project memory across chats</text>
+    <text x="48" y="99" font-size="18" fill="#57616d">Example of memory shared across chats in one Project</text>
+    <path d="M373 258h36m-8-6 8 6-8 6m388 0h34m-8-6 8 6-8 6" fill="none" stroke="#938ba1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="48" y="151" width="322" height="230" rx="12" fill="#fff" stroke="#cfcbc3"/>
+    <path d="M73 177h22v16h-8l-6 6v-6h-8z" fill="none" stroke="#6d567f" stroke-width="1.8" stroke-linejoin="round"/>
+    <text x="108" y="193" font-size="20" font-weight="600" fill="#242b35">First chat</text>
+    <text x="73" y="242" font-size="20" fill="#313944">Use British English.</text>
+    <text x="73" y="274" font-size="20" fill="#313944">Save reports in Research.</text>
+    <text x="73" y="306" font-size="20" fill="#313944">Link to the Project Index.</text>
+    <text x="73" y="350" font-size="17" fill="#725499">Agent saves the preference</text>
+    <rect x="421" y="145" width="362" height="244" rx="12" fill="#e8e1f1"/>
+    <rect x="417" y="139" width="362" height="244" rx="12" fill="#f0ebf7" stroke="#bdadcd"/>
+    <path d="M443 168h18v23h-18zM447 174h10m-10 5h10m-10 5h6" fill="none" stroke="#725499" stroke-width="1.7" stroke-linejoin="round"/>
+    <text x="475" y="187" font-size="20" font-weight="600" fill="#382d48">Project memory</text>
+    <path d="M441 211h315" stroke="#d7cae2"/>
+    <text x="441" y="246" font-size="19" font-weight="600" fill="#382d48">Report conventions</text>
+    <text x="441" y="278" font-size="18" fill="#574765">British English · Research/</text>
+    <text x="441" y="310" font-size="18" fill="#574765">Link to [[Project Index]]</text>
+    <text x="441" y="354" font-size="17" fill="#725499">Stored locally · editable</text>
+    <rect x="833" y="151" width="319" height="230" rx="12" fill="#fff" stroke="#b9cec7"/>
+    <path d="M859 177h22v16h-8l-6 6v-6h-8z" fill="none" stroke="#3b7663" stroke-width="1.8" stroke-linejoin="round"/>
+    <text x="894" y="193" font-size="20" font-weight="600" fill="#264f44">Later chat</text>
+    <text x="858" y="242" font-size="20" fill="#313944">Draft this week's report.</text>
+    <path d="m859 285 5 5 10-12" fill="none" stroke="#3b7663" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="885" y="291" font-size="18" fill="#3b7663">Saved conventions applied</text>
+    <text x="858" y="350" font-size="17" fill="#3b7663">Research/Weekly report.md</text>
+  </g>
+</svg>

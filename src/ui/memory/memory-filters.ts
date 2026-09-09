@@ -3,7 +3,6 @@ import type {
   FrontendIntent,
   FrontendMemoryCategoryFilter,
   FrontendMemoryCollectionFilter,
-  FrontendMemoryScopeFilter,
   FrontendMemoryScreenViewModel,
   FrontendMemorySort,
   FrontendMemoryStatusFilter,
@@ -16,7 +15,8 @@ export function memoryViewPayload(
   overrides: Partial<MemorySetViewPayload>,
 ): MemorySetViewPayload {
   return {
-    scopeFilter: model.scopeFilter,
+    browseProjectId: model.browseProjectId,
+    scopeFilter: "available",
     collection: model.collection,
     status: model.status,
     query: model.query,
@@ -32,9 +32,6 @@ export function renderMemoryFilterControls(
   busy: boolean,
   onChange: (overrides: Partial<MemorySetViewPayload>) => void,
 ): void {
-  createSelect(toolbar, "Memory scope", model.scopeFilter, model.scopeOptions, busy, "chatobby-memory__scope-select", (value) => {
-    if (isScope(value)) onChange({ scopeFilter: value });
-  });
   createSelect(toolbar, "Memory type", model.collection, model.collectionOptions, busy, "chatobby-memory__collection-select", (value) => {
     if (isCollection(value)) onChange({ collection: value });
   });
@@ -76,11 +73,7 @@ function isCategory(value: string): value is FrontendMemoryCategoryFilter {
 }
 
 function isCollection(value: string): value is FrontendMemoryCollectionFilter {
-  return ["all", "profile", "vault", "project", "lessons"].includes(value);
-}
-
-function isScope(value: string): value is FrontendMemoryScopeFilter {
-  return ["available", "vault", "current-project"].includes(value);
+  return ["all", "profile", "knowledge", "lessons"].includes(value);
 }
 
 function isStatus(value: string): value is FrontendMemoryStatusFilter {

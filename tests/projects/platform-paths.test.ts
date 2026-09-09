@@ -30,7 +30,7 @@ describe("generated platform-path contract boundary", () => {
     expect(evidence).toMatchObject({
       schemaVersion: 1,
       sourceRepository: "TitanicEclair/pi-mono",
-      sourceCommit: "7e31722a59f554bcca3fac49fb13c620c8638328",
+      sourceCommit: "c7aa300c2e79617f64afe18b945fb1f3176adbe6",
       generator: "scripts/build-vendor-artifacts.mjs",
       sourceArtifact: "vendor/platform-paths",
       connectorArtifact: "src/vendor/@chatobby/platform-paths",
@@ -43,7 +43,7 @@ describe("generated platform-path contract boundary", () => {
     }
   });
 
-  it("keeps the generated runtime module limited to declared dependencies and no consumers", () => {
+  it("keeps the generated module limited to declared dependencies and its one runtime path adapter", () => {
     for (const file of readdirSync(vendorRoot)) {
       const source = readFileSync(join(vendorRoot, file), "utf8");
       const imports = [...source.matchAll(/(?:from\s+|import\s*\()["']([^"']+)["']/gu)].map(
@@ -65,10 +65,10 @@ describe("generated platform-path contract boundary", () => {
         return source.includes("@chatobby/platform-paths")
           || source.includes("vendor/@chatobby/platform-paths");
       });
-    expect(consumers).toEqual([]);
+    expect(consumers).toEqual(["src/runtime/infrastructure/platform-paths.ts"]);
   });
 
-  it("executes deterministic connector path resolution without activating it in product behavior", () => {
+  it("executes deterministic connector path resolution without filesystem effects", () => {
     expect(DIRECTORY_MARKER_FILENAME).toBe(".chatobby-root.json");
     expect(getPlatformPathRole("projects-device-identity")).toMatchObject({
       owner: "source-runtime",

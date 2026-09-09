@@ -1,17 +1,35 @@
-import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
+import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertSupportedLinuxRuntime,
   extractRuntimeBundle,
+  RuntimeUpdateClient,
   verifyRuntimeUpdateDescriptor,
   type RuntimeUpdateDescriptor,
   type RuntimeReleaseIndex,
 } from "../../src/runtime/infrastructure/runtime-update-client";
-import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../src/vendor/chatobby-client/ws-client.js";
+import {
+  CHATOBBY_GUIDE_ASSET_FORMAT,
+  CHATOBBY_GUIDE_CHANNEL_ASSET_SCHEMA_VERSION,
+  CHATOBBY_GUIDE_CHANNEL_CONSUMER_SCHEMA_VERSION,
+  CHATOBBY_GUIDE_CHANNEL_NAME,
+  CHATOBBY_GUIDE_CHANNEL_PRODUCT,
+  CHATOBBY_GUIDE_CHANNEL_SCHEMA_VERSION,
+  CHATOBBY_GUIDE_PRODUCT,
+  CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+  chatobbyGuideChannelSigningPayload,
+  type ChatobbyGuideChannel,
+  type ChatobbyGuideChannelAsset,
+} from "../../src/vendor/chatobby-client/ws-client.js";
+import {
+  CHATOBBY_GUIDE_CHANNEL_URL,
+  chatobbyGuideChannelAssetUrl,
+  chatobbyRuntimeIndexUrl,
+} from "../../src/publication";
 
 const directories: string[] = [];
 
@@ -20,6 +38,21 @@ afterEach(async () => {
 });
 
 describe("runtime update client", () => {
+  it("resolves only the immutable runtime index paired with the connector version", () => {
+    expect(chatobbyRuntimeIndexUrl("0.4.3")).toBe(
+      "https://github.com/TitanicEclair/chatobby-runtime/releases/download/0.4.3/runtime-index.json",
+    );
+    expect(chatobbyRuntimeIndexUrl("0.4.3")).not.toContain("/latest/");
+  });
+  it("resolves the stable guide channel and only its immutable asset namespace", () => {
+    expect(CHATOBBY_GUIDE_CHANNEL_URL).toBe(
+      "https://raw.githubusercontent.com/TitanicEclair/chatobby-runtime/main/guide-channel.json",
+    );
+    expect(chatobbyGuideChannelAssetUrl("guides/chatobby-guide-2026-09-05.1.json")).toBe(
+      "https://raw.githubusercontent.com/TitanicEclair/chatobby-runtime/main/guides/chatobby-guide-2026-09-05.1.json",
+    );
+    expect(() => chatobbyGuideChannelAssetUrl("../guide.json")).toThrow("path is invalid");
+  });
   it("fails fast on unsupported Linux libc environments", () => {
     expect(() => assertSupportedLinuxRuntime(undefined)).toThrow(/glibc-based distribution/u);
     expect(() => assertSupportedLinuxRuntime("2.27")).toThrow(/requires glibc 2\.28 or later/u);
@@ -36,6 +69,17 @@ describe("runtime update client", () => {
       "0.1.2",
       publicKeyPem(keys.publicKey),
     )).toThrow("signature is invalid");
+
+    const futureUnsigned = { ...descriptor, version: "0.1.3", signature: "" };
+    const future = {
+      ...futureUnsigned,
+      signature: sign(null, Buffer.from(signingPayload(futureUnsigned), "utf8"), keys.privateKey).toString("base64"),
+    };
+    expect(() => verifyRuntimeUpdateDescriptor(
+      future,
+      "0.1.2",
+      publicKeyPem(keys.publicKey),
+    )).toThrow("not the immutable runtime paired with Chatobby 0.1.2");
   });
 
   it("selects only the exact signed target from a multi-platform index", () => {
@@ -48,7 +92,7 @@ describe("runtime update client", () => {
       publicKeyPem(keys.publicKey),
       { platform: "darwin", arch: "arm64" },
     )).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       platform: "darwin",
       arch: "arm64",
       bundle: { file: "chatobby-runtime-0.1.16-darwin-arm64.cbr.gz" },
@@ -66,6 +110,68 @@ describe("runtime update client", () => {
       publicKeyPem(keys.publicKey),
       { platform: "linux", arch: "x64" },
     )).toMatchObject({ platform: "linux", arch: "x64" });
+  });
+
+  it("fetches a compatible guide revision only through the signed stable channel", async () => {
+    const keys = generateKeyPairSync("ed25519");
+    const asset = guideChannelAsset();
+    const assetBytes = Buffer.from(`${JSON.stringify(asset)}\n`, "utf8");
+    const channel = signedGuideChannel(keys.privateKey, assetBytes);
+    const read = vi.fn(async (url: string) => {
+      if (url === CHATOBBY_GUIDE_CHANNEL_URL) return Buffer.from(JSON.stringify(channel), "utf8");
+      if (url === chatobbyGuideChannelAssetUrl(channel.guide.file)) return assetBytes;
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const client = new RuntimeUpdateClient("unused", publicKeyPem(keys.publicKey), {
+      read,
+      download: async () => undefined,
+    });
+
+    await expect(client.fetchGuide("0.4.4")).resolves.toEqual(asset);
+    expect(read).toHaveBeenNthCalledWith(1, CHATOBBY_GUIDE_CHANNEL_URL, expect.any(Number), undefined);
+    expect(read).toHaveBeenNthCalledWith(
+      2,
+      chatobbyGuideChannelAssetUrl(channel.guide.file),
+      assetBytes.length,
+      undefined,
+    );
+  });
+
+  it("rejects an incompatible or invalid Guide channel before requesting its asset", async () => {
+    const keys = generateKeyPairSync("ed25519");
+    const assetBytes = Buffer.from(JSON.stringify(guideChannelAsset()), "utf8");
+    const incompatible = signedGuideChannel(keys.privateKey, assetBytes, {
+      minimumConnectorVersion: "0.5.0",
+      maximumConnectorVersion: "0.5.x",
+    });
+    const read = vi.fn(async () => Buffer.from(JSON.stringify(incompatible), "utf8"));
+    const client = new RuntimeUpdateClient("unused", publicKeyPem(keys.publicKey), {
+      read,
+      download: async () => undefined,
+    });
+
+    await expect(client.fetchGuide("0.4.4")).rejects.toThrow("not compatible with connector 0.4.4");
+    expect(read).toHaveBeenCalledOnce();
+
+    const invalidSignature = { ...incompatible, signature: Buffer.alloc(64).toString("base64") };
+    const invalidClient = new RuntimeUpdateClient("unused", publicKeyPem(keys.publicKey), {
+      read: async () => Buffer.from(JSON.stringify(invalidSignature), "utf8"),
+      download: async () => undefined,
+    });
+    await expect(invalidClient.fetchGuide("0.5.0")).rejects.toThrow("signature is invalid");
+  });
+
+  it("rejects Guide bytes that do not match the signed channel hash", async () => {
+    const keys = generateKeyPairSync("ed25519");
+    const assetBytes = Buffer.from(JSON.stringify(guideChannelAsset()), "utf8");
+    const channel = signedGuideChannel(keys.privateKey, assetBytes);
+    const reads = [Buffer.from(JSON.stringify(channel), "utf8"), Buffer.from("tampered", "utf8")];
+    const client = new RuntimeUpdateClient("unused", publicKeyPem(keys.publicKey), {
+      read: async () => reads.shift() ?? Buffer.alloc(0),
+      download: async () => undefined,
+    });
+
+    await expect(client.fetchGuide("0.4.4")).rejects.toThrow("failed signed size or hash verification");
   });
 
   it("extracts a complete sorted bundle and rejects traversal before writing outside staging", async () => {
@@ -129,7 +235,7 @@ function signedDescriptor(privateKey: KeyObject): RuntimeUpdateDescriptor {
   };
 }
 
-function signedIndex(privateKey: KeyObject): RuntimeReleaseIndex {
+function signedIndex(privateKey: KeyObject, guideBytes?: Buffer): RuntimeReleaseIndex {
   const target = (platform: "win32" | "darwin" | "linux", arch: "x64" | "arm64") => ({
     platform,
     arch,
@@ -143,12 +249,23 @@ function signedIndex(privateKey: KeyObject): RuntimeReleaseIndex {
     },
   });
   const unsigned = {
-    schemaVersion: 2 as const,
+    schemaVersion: 3 as const,
     product: "Chatobby Runtime" as const,
     version: "0.1.16",
     protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
     minimumPluginVersion: "0.1.0",
     maximumPluginVersion: "0.1.x",
+    guide: {
+      schemaVersion: 1 as const,
+      product: "Chatobby Guide" as const,
+      productVersion: "0.1.16",
+      guideRevision: "2026-08-21.1",
+      format: "chatobby-guide-file-set-v1" as const,
+      file: "chatobby-guide-0.1.16.json",
+      size: guideBytes?.length ?? 100,
+      sha256: guideBytes ? createHash("sha256").update(guideBytes).digest("hex") : "b".repeat(64),
+      fileCount: guideBytes ? 1 : 10,
+    },
     targets: [
       target("darwin", "arm64"),
       target("darwin", "x64"),
@@ -230,4 +347,56 @@ async function temporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "chatobby-runtime-update-"));
   directories.push(directory);
   return directory;
+}
+
+function guideChannelAsset(): ChatobbyGuideChannelAsset {
+  return {
+    schemaVersion: CHATOBBY_GUIDE_CHANNEL_ASSET_SCHEMA_VERSION,
+    product: CHATOBBY_GUIDE_PRODUCT,
+    guideRevision: "2026-09-05.1",
+    format: CHATOBBY_GUIDE_ASSET_FORMAT,
+    indexPath: "Chatobby Guide/00 - Start Here.md",
+    title: "Chatobby Guide",
+    earlyAccess: true,
+    confirmationNotice: "Write the compatible guide?",
+    files: [{ path: "Chatobby Guide/00 - Start Here.md", title: "Start Here", content: "# Start Here\n" }],
+  };
+}
+
+function signedGuideChannel(
+  privateKey: KeyObject,
+  assetBytes: Buffer,
+  compatibility: {
+    minimumConnectorVersion: string;
+    maximumConnectorVersion: string;
+  } = { minimumConnectorVersion: "0.4.4", maximumConnectorVersion: "0.4.x" },
+): ChatobbyGuideChannel {
+  const asset = guideChannelAsset();
+  const unsigned: Omit<ChatobbyGuideChannel, "signatureAlgorithm" | "signature"> = {
+    schemaVersion: CHATOBBY_GUIDE_CHANNEL_SCHEMA_VERSION,
+    product: CHATOBBY_GUIDE_CHANNEL_PRODUCT,
+    channel: CHATOBBY_GUIDE_CHANNEL_NAME,
+    ...compatibility,
+    minimumConsumerSchemaVersion: CHATOBBY_GUIDE_CHANNEL_CONSUMER_SCHEMA_VERSION,
+    maximumConsumerSchemaVersion: CHATOBBY_GUIDE_CHANNEL_CONSUMER_SCHEMA_VERSION,
+    guide: {
+      schemaVersion: asset.schemaVersion,
+      product: asset.product,
+      guideRevision: asset.guideRevision,
+      format: asset.format,
+      file: `guides/chatobby-guide-${asset.guideRevision}.json`,
+      size: assetBytes.length,
+      sha256: createHash("sha256").update(assetBytes).digest("hex"),
+      fileCount: asset.files.length,
+    },
+  };
+  return {
+    ...unsigned,
+    signatureAlgorithm: "ed25519",
+    signature: sign(
+      null,
+      Buffer.from(chatobbyGuideChannelSigningPayload(unsigned), "utf8"),
+      privateKey,
+    ).toString("base64"),
+  };
 }

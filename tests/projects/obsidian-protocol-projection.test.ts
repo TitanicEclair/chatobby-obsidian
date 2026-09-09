@@ -32,7 +32,7 @@ describe("generated Obsidian protocol boundary", () => {
     expect(evidence).toMatchObject({
       schemaVersion: 1,
       sourceRepository: "TitanicEclair/pi-mono",
-      sourceCommit: "fa3d765ca39f777184cf243366c49d707e5e8b6f",
+      sourceCommit: "c7aa300c2e79617f64afe18b945fb1f3176adbe6",
       generator: "scripts/build-vendor-artifacts.mjs",
       sourceArtifact: "vendor/obsidian-protocol",
       connectorArtifact: "src/vendor/@chatobby/obsidian-protocol",
@@ -45,7 +45,7 @@ describe("generated Obsidian protocol boundary", () => {
 
     const manifest = JSON.parse(manifestBytes.toString("utf8")) as ProjectionManifest;
     expect(manifest).toMatchObject({ schemaVersion: 1, artifact: "obsidian-protocol", protocolVersion: 2 });
-    expect(manifest.files).toHaveLength(24);
+    expect(manifest.files).toHaveLength(26);
     expect(readdirSync(vendorRoot).sort()).toEqual(
       [...manifest.files.map((file) => file.path), evidence.projectionManifest].sort(),
     );

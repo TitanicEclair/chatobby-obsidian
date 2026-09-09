@@ -19,6 +19,10 @@ import type {
 
 /** Read-only rendering adapter over the private runtime's subagent screen model. */
 export interface SubagentViewState {
+  readonly workspaceWide?: boolean;
+  readonly parentSessions?: FrontendSubagentScreenViewModel["parentSessions"];
+  readonly roleScopeId?: FrontendSubagentScreenViewModel["roleScopeId"];
+  readonly roleScopeOptions?: FrontendSubagentScreenViewModel["roleScopeOptions"];
   readonly syncStatus: FrontendSubagentSyncStatus;
   readonly error: string | null;
   readonly statusMessage: string | null;
@@ -91,6 +95,10 @@ function toViewState(model: FrontendSubagentScreenViewModel): SubagentViewState 
     receipt,
   ]));
   return {
+    workspaceWide: model.workspaceWide,
+    parentSessions: model.parentSessions,
+    roleScopeId: model.roleScopeId,
+    roleScopeOptions: model.roleScopeOptions,
     syncStatus: model.syncStatus,
     error: model.error ?? null,
     statusMessage: model.statusMessage ?? null,

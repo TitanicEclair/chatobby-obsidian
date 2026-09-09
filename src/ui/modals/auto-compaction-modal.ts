@@ -9,19 +9,21 @@ import {
 export interface AutoCompactionModalOptions {
   model: string;
   settings: WsAutoCompactionSettings;
-  save: (settings: { enabled: boolean; thresholdPercent: number }) => Promise<WsAutoCompactionSettings>;
+  save: (settings: { enabled: boolean; thresholdPercent: number; mode: NonNullable<WsAutoCompactionSettings["mode"]> }) => Promise<WsAutoCompactionSettings>;
 }
 
 /** Edits the automatic-compaction policy associated with one backend model. */
 export class AutoCompactionModal extends Modal {
   private enabled: boolean;
   private thresholdPercent: number;
+  private mode: NonNullable<WsAutoCompactionSettings["mode"]>;
   private saving = false;
 
   constructor(app: App, private readonly options: AutoCompactionModalOptions) {
     super(app);
     this.enabled = options.settings.enabled;
     this.thresholdPercent = options.settings.thresholdPercent;
+    this.mode = options.settings.mode ?? "background";
   }
 
   onOpen(): void {
@@ -44,13 +46,28 @@ export class AutoCompactionModal extends Modal {
         .setValue(this.enabled)
         .onChange((enabled) => { this.enabled = enabled; }));
 
+    new Setting(this.contentEl)
+      .setName("Automatic mode")
+      .setDesc("Queued finishes the current inference and tools, then compacts before this session's next inference. Background allows this session to continue during compaction. Other sessions and apps can still compete for the same server.")
+      .addDropdown((dropdown) => {
+        dropdown.selectEl.setAttribute("aria-label", "Automatic compaction mode");
+        dropdown.addOption("queued", "Queued — one inference at a time")
+          .addOption("background", "Background — continue while compacting")
+          .setValue(this.mode)
+          .onChange((value) => { if (value === "queued" || value === "background") this.mode = value; });
+      });
+    this.contentEl.createDiv({
+      cls: "chatobby-auto-compaction-modal__safety",
+      text: "This overrides the connection's default for this model. Compact now remains available; it stops and settles current work before manual compaction.",
+    });
+
     const threshold = this.contentEl.createDiv({ cls: "chatobby-auto-compaction-modal__threshold" });
     const thresholdHeading = threshold.createDiv({ cls: "chatobby-auto-compaction-modal__threshold-heading" });
     const thresholdCopy = thresholdHeading.createDiv();
     thresholdCopy.createDiv({ cls: "setting-item-name", text: "Context threshold" });
     const thresholdDescription = thresholdCopy.createDiv({
       cls: "setting-item-description",
-      text: "Start compaction when estimated context reaches this percentage.",
+      text: "Start compaction when provider-reported context usage reaches this percentage.",
     });
     const thresholdValueEl = thresholdHeading.createEl("output", {
       cls: "chatobby-auto-compaction-modal__threshold-value",
@@ -117,7 +134,7 @@ export class AutoCompactionModal extends Modal {
     saveButton.disabled = true;
     cancelButton.disabled = true;
     try {
-      await this.options.save({ enabled: this.enabled, thresholdPercent: this.thresholdPercent });
+      await this.options.save({ enabled: this.enabled, thresholdPercent: this.thresholdPercent, mode: this.mode });
       this.close();
     } catch (error) {
       console.error("Chatobby: could not save auto-compaction settings", error);

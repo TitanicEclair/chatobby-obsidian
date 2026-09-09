@@ -1,0 +1,36 @@
+.modal.chatobby-intro {
+  width: 620px;
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--chatobby-border);
+}
+.chatobby-intro .modal-content { margin-top: 12px; }
+.chatobby-intro__hero { display: flex; align-items: center; gap: 16px; margin: 6px 0 22px; }
+.chatobby-intro__emblem {
+  display: grid; place-items: center; flex: 0 0 52px; height: 52px;
+  border-radius: 16px; color: var(--text-accent);
+  background: color-mix(in srgb, var(--chatobby-accent) 12%, var(--chatobby-surface-muted));
+  border: 1px solid color-mix(in srgb, var(--chatobby-accent) 24%, var(--chatobby-border));
+}
+.chatobby-intro__emblem svg { width: 26px; height: 26px; }
+.chatobby-intro__lead { margin: 0; color: var(--text-muted); font-size: var(--font-ui-medium); line-height: 1.55; }
+.chatobby-intro__cards { display: grid; gap: 10px; }
+.chatobby-intro__card {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px;
+  padding: 15px 17px; border: 1px solid var(--chatobby-border);
+  border-radius: 12px; background: var(--chatobby-surface-muted);
+}
+.chatobby-intro__icon { color: var(--text-accent); padding-top: 2px; }
+.chatobby-intro__icon svg { width: 19px; height: 19px; }
+.chatobby-intro__card h3 { margin: 0 0 5px; font-size: var(--font-ui-small); font-weight: 600; }
+.chatobby-intro__card p { margin: 0; font-size: var(--font-ui-small); line-height: 1.55; color: var(--text-muted); }
+.chatobby-intro__roadmap { margin-top: 21px; padding-top: 16px; border-top: 1px solid var(--chatobby-border); }
+.chatobby-intro__roadmap-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.chatobby-intro__roadmap h3 { margin: 0; font-size: var(--font-ui-small); }
+.chatobby-intro__roadmap-heading span { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.chatobby-intro__roadmap ul { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin: 12px 0 0; padding-left: 18px; font-size: var(--font-ui-small); line-height: 1.4; }
+.chatobby-intro__footnote, .chatobby-intro__feedback { margin: 18px 0 0; color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.6; }
+.chatobby-intro__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+@media (max-width: 480px) {
+  .chatobby-intro__roadmap ul { grid-template-columns: 1fr; }
+  .chatobby-intro__card { padding: 13px; }
+}

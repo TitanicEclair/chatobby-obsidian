@@ -1,3 +1,4 @@
+import type { ProviderAuthentication } from "./provider-auth-contracts.js";
 /**
  * Public, data-only contracts required by the Obsidian connector.
  *
@@ -9,6 +10,14 @@
 import type { ManagedLocalModelServerProfileV1, ManagedLocalModelServerSnapshotV1, ManagedLocalModelServerStatusV1 } from "@chatobby/local-models";
 import type { ObsidianBridgeConnectionConfig } from "@chatobby/obsidian-protocol";
 export type AutoNameStrategy = "truncate" | "model";
+/** Non-secret freshness evidence, not a capability or permission grant. */
+export interface ObsidianVaultAccessContextStamp {
+    readonly sessionId: string;
+    readonly vaultId: string;
+    readonly bindingRevision: number;
+    readonly policyRevision: number;
+}
+export declare function parseObsidianVaultAccessContextStamp(value: unknown): ObsidianVaultAccessContextStamp | undefined;
 /** Stable ID is preferred; path selection remains for active-session compatibility. */
 export type WsStoredSessionSelector = {
     readonly sessionId: string;
@@ -18,9 +27,12 @@ export type WsStoredSessionSelector = {
     readonly sessionId?: never;
 };
 export interface WsAutoCompactionSettings {
+    /** Older runtimes omit the mode and retain background behavior. */
+    mode?: "queued" | "background";
     enabled: boolean;
     thresholdPercent: number;
     effectiveThresholdPercent: number;
+    customInstructions?: string;
 }
 export type WsPromptAttachment = {
     type: "image";
@@ -36,6 +48,7 @@ export type WsPromptAttachment = {
     sizeBytes?: number;
 };
 export interface WsPromptContextPacket {
+    obsidianVaultAccess?: ObsidianVaultAccessContextStamp;
     schemaVersion: 1 | 2;
     source: "obsidian";
     vault: string;
@@ -223,6 +236,17 @@ export interface WsRuntimeInfo {
     vaultRoot?: string;
 }
 export interface WsProviderInfo {
+    authentication?: ProviderAuthentication;
+    /** Authored, credential-free account discovery diagnostics; absent on older runtimes. */
+    modelDiscovery?: {
+        checkedAt: number;
+        error?: string;
+        usingCachedModels: boolean;
+        unavailableModels: {
+            id: string;
+            reason: string;
+        }[];
+    };
     id: string;
     name: string;
     configured: boolean;
@@ -238,8 +262,25 @@ export interface WsLocalModelDefinition {
     maxTokens: number;
     reasoning: boolean;
     imageInput: boolean;
+    contextSource?: "server" | "manual";
+    outputLimit?: "server" | "custom";
+}
+export interface WsDiscoveredLocalModel {
+    id: string;
+    name: string;
+    contextWindow?: number;
+    loaded?: boolean;
+    reasoning?: boolean;
+    imageInput?: boolean;
+}
+export interface WsLocalModelDiscoveryResult {
+    status: "reachable" | "unreachable" | "invalid-response";
+    models: WsDiscoveredLocalModel[];
+    message: string;
 }
 export interface WsLocalModelProvider {
+    /** User-declared scheduling policy, not detected hardware location. */
+    compactionSchedulingClass?: "local" | "hosted";
     id: string;
     name: string;
     preset: "ollama" | "lm-studio" | "vllm" | "llama-cpp" | "openai-compatible" | "anthropic-compatible";

@@ -1,13 +1,27 @@
 import esbuild from "esbuild";
+import { createPrivateKey, createPublicKey } from "node:crypto";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const isRelease = process.argv.includes("--release");
+const validateGuideFeedOnly = process.argv.includes("--validate-guide-feed-only");
 const outputDirectory = isRelease ? "release" : ".";
 const runtimePublicKey = process.env.CHATOBBY_RUNTIME_PUBLIC_KEY?.trim() ?? "";
+const developmentGuideFeedBaseUrl = validateDevelopmentGuideFeedBaseUrl(
+  process.env.CHATOBBY_DEV_GUIDE_FEED_BASE_URL,
+  runtimePublicKey,
+  isRelease,
+);
+const automaticRuntimeProvisioning =
+  process.env.CHATOBBY_OBSIDIAN_APPROVED_AUTOMATIC_RUNTIME_PROVISIONING === "1";
 
 if (isRelease && !runtimePublicKey) {
   throw new Error("CHATOBBY_RUNTIME_PUBLIC_KEY is required for a release build");
+}
+
+if (validateGuideFeedOnly) {
+  process.stdout.write(`${JSON.stringify({ developmentGuideFeedBaseUrl })}\n`);
+  process.exit(0);
 }
 
 if (isRelease) {
@@ -46,12 +60,19 @@ await Promise.all([
     platform: "node",
     target: "es2022",
     outfile: join(outputDirectory, "main.js"),
+    banner: {
+      js: developmentGuideFeedBaseUrl ? "/* CHATOBBY_DEV_GUIDE_FEED_OVERRIDE_V1 */" : "",
+    },
     sourcemap: isRelease ? false : "inline",
     minify: isRelease,
     legalComments: "eof",
     define: {
       __CHATOBBY_BUILD_MODE__: JSON.stringify(isRelease ? "release" : "development"),
       __CHATOBBY_RUNTIME_PUBLIC_KEY__: JSON.stringify(runtimePublicKey),
+      __CHATOBBY_AUTOMATIC_RUNTIME_PROVISIONING__: JSON.stringify(
+        isRelease && automaticRuntimeProvisioning,
+      ),
+      __CHATOBBY_DEV_GUIDE_FEED_BASE_URL__: JSON.stringify(developmentGuideFeedBaseUrl),
     },
     drop: isRelease ? ["debugger"] : [],
     logLevel: "info",
@@ -69,4 +90,55 @@ await Promise.all([
 
 if (isRelease) {
   await copyFile("manifest.json", join(outputDirectory, "manifest.json"));
+}
+
+function validateDevelopmentGuideFeedBaseUrl(value, trustedPublicKey, releaseBuild) {
+  const candidate = value?.trim() ?? "";
+  if (!candidate) return "";
+  if (releaseBuild) {
+    throw new Error("CHATOBBY_DEV_GUIDE_FEED_BASE_URL is forbidden in a release build");
+  }
+  if (!trustedPublicKey) {
+    throw new Error("CHATOBBY_RUNTIME_PUBLIC_KEY is required for a development Guide feed");
+  }
+  let containsPrivateKey = false;
+  try {
+    createPrivateKey(trustedPublicKey);
+    containsPrivateKey = true;
+  } catch {
+    // Expected for a public-only SPKI value.
+  }
+  if (containsPrivateKey) {
+    throw new Error("CHATOBBY_RUNTIME_PUBLIC_KEY must not contain private key material");
+  }
+  let key;
+  try {
+    key = createPublicKey(trustedPublicKey);
+  } catch {
+    throw new Error("CHATOBBY_RUNTIME_PUBLIC_KEY must contain a valid Ed25519 public key");
+  }
+  if (key.asymmetricKeyType !== "ed25519") {
+    throw new Error("CHATOBBY_RUNTIME_PUBLIC_KEY must contain a valid Ed25519 public key");
+  }
+
+  let url;
+  try {
+    url = new URL(candidate);
+  } catch {
+    throw new Error("CHATOBBY_DEV_GUIDE_FEED_BASE_URL must be an absolute loopback HTTPS URL");
+  }
+  if (
+    url.protocol !== "https:" ||
+    (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !url.pathname.endsWith("/")
+  ) {
+    throw new Error(
+      "CHATOBBY_DEV_GUIDE_FEED_BASE_URL must be a credential-free localhost or 127.0.0.1 HTTPS directory URL ending in /",
+    );
+  }
+  return url.toString();
 }

@@ -141,6 +141,24 @@ export class RuntimeInstallModal extends Modal {
       }
       return;
     }
+    if (state.status === "deferred") {
+      this.setTitle("Chatobby update is waiting");
+      this.statusIcon("clock");
+      this.contentEl.createDiv({
+        cls: "chatobby-runtime-install__lead",
+        text: "The signed runtime is ready. Chatobby will continue after current work finishes.",
+      });
+      this.actions([
+        { label: "Close", run: () => this.close() },
+        {
+          label: "Try again",
+          primary: true,
+          disabled: this.host.hasActiveWork(),
+          run: () => void this.install(),
+        },
+      ]);
+      return;
+    }
 
     this.setTitle("Chatobby could not update");
     this.statusIcon("circle-alert");

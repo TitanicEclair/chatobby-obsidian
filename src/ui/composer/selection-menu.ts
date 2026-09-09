@@ -28,15 +28,22 @@ export class SelectionMenu extends ChatobbyComponent {
   private items: SelectionMenuItem[];
   private selectedValue: string;
   private statusText: string | null;
+  private noticeText: string | null = null;
   private query = "";
   private activeIndex = 0;
   private searchInput: HTMLInputElement | null = null;
   private listEl: HTMLElement | null = null;
   private errorText: string | null = null;
   private busy = false;
+  private readonly ownerDocument: Document;
+  private readonly ownerWindow: Window;
+  private resizeObserver: ResizeObserver | null = null;
+  private focusFrame: number | null = null;
 
   constructor(private readonly options: SelectionMenuOptions) {
     super();
+    this.ownerDocument = options.anchor.ownerDocument;
+    this.ownerWindow = this.ownerDocument.defaultView ?? window;
     this.items = [...options.items];
     this.selectedValue = options.selectedValue;
     this.statusText = options.statusText ?? null;
@@ -45,6 +52,11 @@ export class SelectionMenu extends ChatobbyComponent {
 
   get id(): string {
     return this.menuId;
+  }
+
+  /** Keep the existing picker outside clipped/container-query composer ancestors. */
+  override render(parent: HTMLElement): void {
+    super.render(this.ownerDocument.body ?? parent);
   }
 
   setItems(items: readonly SelectionMenuItem[], selectedValue: string): void {
@@ -60,6 +72,12 @@ export class SelectionMenu extends ChatobbyComponent {
     this.statusText = statusText;
     this.errorText = null;
     this.activeIndex = 0;
+    this.renderList();
+  }
+
+  /** Non-blocking refresh feedback keeps existing choices and the search query usable. */
+  setNotice(text: string): void {
+    this.noticeText = text || null;
     this.renderList();
   }
 
@@ -97,24 +115,85 @@ export class SelectionMenu extends ChatobbyComponent {
       this.renderList();
     });
     container.addEventListener("keydown", this.handleKeydown);
-    document.addEventListener("pointerdown", this.handleDocumentPointerDown, true);
+    this.ownerDocument.addEventListener("pointerdown", this.handleDocumentPointerDown, true);
+    this.ownerDocument.addEventListener("scroll", this.handleScroll, true);
+    this.ownerWindow.addEventListener("resize", this.positionMenu);
+    this.ownerWindow.visualViewport?.addEventListener("resize", this.positionMenu);
+    this.ownerWindow.visualViewport?.addEventListener("scroll", this.positionMenu);
+    this.resizeObserver = new ResizeObserver((entries) => {
+      // A blocking interaction or hidden leaf must not leave a body portal open.
+      if (entries.some((entry) => entry.target === this.options.anchor && entry.contentRect.width === 0 && entry.contentRect.height === 0)) {
+        this.options.onClose(false);
+        return;
+      }
+      this.positionMenu();
+    });
+    this.resizeObserver.observe(this.options.anchor);
+    if (this.options.anchor.parentElement) this.resizeObserver.observe(this.options.anchor.parentElement);
     this.renderList();
-    window.requestAnimationFrame(() => this.searchInput?.focus());
+    this.focusFrame = this.ownerWindow.requestAnimationFrame(() => {
+      this.focusFrame = null;
+      this.searchInput?.focus({ preventScroll: true });
+      this.updateActiveOption();
+    });
   }
 
   override destroy(): void {
-    document.removeEventListener("pointerdown", this.handleDocumentPointerDown, true);
+    this.ownerDocument.removeEventListener("pointerdown", this.handleDocumentPointerDown, true);
+    this.ownerDocument.removeEventListener("scroll", this.handleScroll, true);
+    this.ownerWindow.removeEventListener("resize", this.positionMenu);
+    this.ownerWindow.visualViewport?.removeEventListener("resize", this.positionMenu);
+    this.ownerWindow.visualViewport?.removeEventListener("scroll", this.positionMenu);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    if (this.focusFrame !== null) this.ownerWindow.cancelAnimationFrame(this.focusFrame);
+    this.focusFrame = null;
+    this.searchInput = null;
+    this.listEl = null;
     super.destroy();
   }
+
+  private readonly positionMenu = (): void => {
+    const menu = this.container;
+    if (!menu) return;
+    if (!this.options.anchor.isConnected) {
+      this.options.onClose(false);
+      return;
+    }
+    const viewport = this.ownerWindow.visualViewport;
+    const leftEdge = (viewport?.offsetLeft ?? 0) + 8;
+    const topEdge = (viewport?.offsetTop ?? 0) + 8;
+    const width = Math.max(0, (viewport?.width ?? this.ownerWindow.innerWidth) - 16);
+    const bottomEdge = topEdge + Math.max(0, (viewport?.height ?? this.ownerWindow.innerHeight) - 16);
+    const anchor = this.options.anchor.getBoundingClientRect();
+    const above = Math.max(0, anchor.top - topEdge - 6);
+    const below = Math.max(0, bottomEdge - anchor.bottom - 6);
+    const opensAbove = above >= below;
+    const menuWidth = Math.min(380, width);
+    const maxHeight = Math.min(360, opensAbove ? above : below);
+    menu.style.width = `${menuWidth}px`;
+    menu.style.maxHeight = `${maxHeight}px`;
+    menu.style.left = `${Math.max(leftEdge, Math.min(anchor.left, leftEdge + width - menuWidth))}px`;
+    const height = Math.min(maxHeight, menu.getBoundingClientRect().height);
+    const top = opensAbove ? anchor.top - height - 6 : anchor.bottom + 6;
+    menu.style.top = `${Math.max(topEdge, Math.min(top, bottomEdge - height))}px`;
+  };
+
+  private readonly handleScroll = (event: Event): void => {
+    if (event.composedPath().includes(this.container!)) return;
+    this.positionMenu();
+  };
 
   private renderList(): void {
     const list = this.listEl;
     if (!list) return;
     list.empty();
+    if (this.noticeText) list.createDiv({ cls: "chatobby-selection-menu__status", text: this.noticeText, attr: { role: "status" } });
 
     if (this.statusText) {
       this.searchInput?.removeAttribute("aria-activedescendant");
       list.createDiv({ cls: "chatobby-selection-menu__status", text: this.statusText, attr: { role: "status" } });
+      this.positionMenu();
       return;
     }
 
@@ -122,6 +201,7 @@ export class SelectionMenu extends ChatobbyComponent {
     if (items.length === 0) {
       this.searchInput?.removeAttribute("aria-activedescendant");
       list.createDiv({ cls: "chatobby-selection-menu__status", text: "No matching options", attr: { role: "status" } });
+      this.positionMenu();
       return;
     }
     if (this.activeIndex >= items.length) this.activeIndex = items.length - 1;
@@ -155,11 +235,12 @@ export class SelectionMenu extends ChatobbyComponent {
       option.addEventListener("click", () => void this.choose(item));
       if (index === this.activeIndex) {
         this.searchInput?.setAttr("aria-activedescendant", optionId);
-        window.requestAnimationFrame(() => option.scrollIntoView({ block: "nearest" }));
       }
     });
 
     if (this.errorText) list.createDiv({ cls: "chatobby-selection-menu__error", text: this.errorText, attr: { role: "alert" } });
+    this.positionMenu();
+    this.updateActiveOption();
   }
 
   private updateActiveOption(): void {
@@ -168,7 +249,14 @@ export class SelectionMenu extends ChatobbyComponent {
     const active = options[this.activeIndex];
     if (active) {
       this.searchInput?.setAttr("aria-activedescendant", active.id);
-      active.scrollIntoView({ block: "nearest" });
+      // Scroll only the option list, never its pane or the owning document.
+      const list = this.listEl!;
+      const listBounds = list.getBoundingClientRect();
+      const activeBounds = active.getBoundingClientRect();
+      if (activeBounds.top < listBounds.top) list.scrollTop += activeBounds.top - listBounds.top;
+      else if (activeBounds.bottom > listBounds.bottom) {
+        list.scrollTop += activeBounds.bottom - listBounds.bottom;
+      }
     }
   }
 
@@ -208,6 +296,11 @@ export class SelectionMenu extends ChatobbyComponent {
       this.options.onClose(true);
       return;
     }
+    if (event.key === "Tab") {
+      // Restore the trigger, then let native Tab/Shift+Tab follow composer order.
+      this.options.onClose(true);
+      return;
+    }
     if (!["ArrowDown", "ArrowUp", "Home", "End", "Enter"].includes(event.key)) return;
     const items = this.filteredItems();
     if (items.length === 0) return;
@@ -226,9 +319,8 @@ export class SelectionMenu extends ChatobbyComponent {
   };
 
   private readonly handleDocumentPointerDown = (event: PointerEvent): void => {
-    const target = event.target;
-    if (!(target instanceof Node)) return;
-    if (this.container?.contains(target) || this.options.anchor.contains(target)) return;
+    const path = event.composedPath();
+    if (path.includes(this.container!) || path.includes(this.options.anchor)) return;
     this.options.onClose(false);
   };
 }

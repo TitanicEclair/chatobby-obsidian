@@ -36,10 +36,22 @@ function createHarness(overrides: {
       model = next;
       for (const listener of listeners) listener(next);
     },
+    replaceModelWithoutNotification(next: FrontendMemoryScreenViewModel): void {
+      model = next;
+    },
   };
 }
 
 describe("MemoryView", () => {
+  it("selects another memory workspace through an explicit browsing intent", async () => {
+    const harness = createHarness({ model: { ...memoryModel(), browseProjectId: null, browseOptions: [{ value: "", label: "Vault" }, { value: "project-one", label: "Research" }] } });
+    const el = mount(harness.view);
+    const select = el.querySelector<HTMLSelectElement>("select[aria-label='Viewing memory for']")!;
+    select.value = "project-one";
+    select.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith(expect.objectContaining({ type: "memory.set-view", payload: expect.objectContaining({ browseProjectId: "project-one", scopeFilter: "available" }) })));
+    expect(el.textContent).toContain("without changing your conversation");
+  });
   it("renders a loading state without starting backend work itself", () => {
     const harness = createHarness({ model: null });
     const el = mount(harness.view);
@@ -75,14 +87,7 @@ describe("MemoryView", () => {
   it("dispatches runtime filtering and search intents instead of filtering records locally", async () => {
     const harness = createHarness();
     const el = mount(harness.view);
-    const scope = el.querySelector<HTMLSelectElement>('select[aria-label="Memory scope"]');
-    if (!scope) throw new Error("scope filter missing");
-    scope.value = "vault";
-    scope.dispatchEvent(new Event("change"));
-    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
-      type: "memory.set-view",
-      payload: { scopeFilter: "vault", collection: "all", status: "active", query: "", lessonCategory: "all", sort: "updated-desc" },
-    }));
+    expect(el.querySelector('select[aria-label="Memory scope"]')).toBeNull();
 
     const input = el.querySelector<HTMLInputElement>(".chatobby-memory__search-input");
     if (!input) throw new Error("search input missing");
@@ -130,6 +135,100 @@ describe("MemoryView", () => {
       type: "memory.set-view",
       payload: { scopeFilter: "available", collection: "lessons", status: "active", query: "", lessonCategory: "tool-quirk", sort: "updated-desc" },
     }));
+  });
+
+  it("defaults a Project-scoped Add form to the enabled current-Project target", async () => {
+    const harness = createHarness({ model: memoryModel({ createTargets: projectCreateTargets() }) });
+    const el = mount(harness.view);
+    buttonWithText(el, "Add").click();
+
+    const target = el.querySelector<HTMLSelectElement>('select[aria-label="Memory location"]');
+    const content = el.querySelector<HTMLTextAreaElement>('textarea[aria-label="Memory content"]');
+    if (!target || !content) throw new Error("memory create form missing");
+    expect(target.value).toBe("project");
+    expect(target.querySelector<HTMLOptionElement>('option[value="user"]')?.disabled).toBe(true);
+
+    content.value = "Keep this in the active Project.";
+    buttonWithText(el, "Save memory").click();
+    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
+      type: "memory.create",
+      payload: { target: "project", content: "Keep this in the active Project." },
+    }));
+  });
+
+  it("does not restore a Vault target after the enabled target set becomes Project-scoped", async () => {
+    const harness = createHarness();
+    const el = mount(harness.view);
+    buttonWithText(el, "Add").click();
+    const initialTarget = el.querySelector<HTMLSelectElement>('select[aria-label="Memory location"]');
+    const initialContent = el.querySelector<HTMLTextAreaElement>('textarea[aria-label="Memory content"]');
+    if (!initialTarget || !initialContent) throw new Error("memory create form missing");
+    initialTarget.value = "user";
+    initialContent.value = "Preserve the draft while scope changes.";
+
+    harness.setModel(memoryModel({
+      revision: 2,
+      createTargets: projectCreateTargets(),
+    }));
+
+    const refreshedTarget = el.querySelector<HTMLSelectElement>('select[aria-label="Memory location"]');
+    const refreshedContent = el.querySelector<HTMLTextAreaElement>('textarea[aria-label="Memory content"]');
+    expect(refreshedTarget?.value).toBe("project");
+    expect(refreshedContent?.value).toBe("Preserve the draft while scope changes.");
+    buttonWithText(el, "Save memory").click();
+    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
+      type: "memory.create",
+      payload: { target: "project", content: "Preserve the draft while scope changes." },
+    }));
+  });
+
+  it("does not derive write scope from the memory area being browsed", async () => {
+    const harness = createHarness({
+      model: memoryModel({
+        scope: {
+          label: "Browsed Project Beta",
+          path: "Projects/Beta",
+          description: "Records currently being browsed",
+        },
+        createTargets: [
+          { value: "user", label: "Vault profile" },
+          { value: "memory", label: "Vault memory" },
+          { value: "project", label: "Browsed project", disabledReason: "Browsing does not move the active chat." },
+          { value: "failure", label: "Lesson or correction" },
+        ],
+      }),
+    });
+    const el = mount(harness.view);
+    buttonWithText(el, "Add").click();
+    const target = el.querySelector<HTMLSelectElement>('select[aria-label="Memory location"]');
+    const content = el.querySelector<HTMLTextAreaElement>('textarea[aria-label="Memory content"]');
+    if (!target || !content) throw new Error("memory create form missing");
+    expect(target.value).toBe("user");
+    content.value = "Keep the active session authority.";
+    buttonWithText(el, "Save memory").click();
+    await vi.waitFor(() => expect(harness.onIntent).toHaveBeenCalledWith({
+      type: "memory.create",
+      payload: { target: "user", content: "Keep the active session authority." },
+    }));
+  });
+
+  it("rechecks the current projected target set immediately before dispatch", () => {
+    const harness = createHarness();
+    const el = mount(harness.view);
+    buttonWithText(el, "Add").click();
+    const content = el.querySelector<HTMLTextAreaElement>('textarea[aria-label="Memory content"]');
+    if (!content) throw new Error("memory create form missing");
+    content.value = "Reject a stale Vault target.";
+
+    harness.replaceModelWithoutNotification(memoryModel({
+      revision: 2,
+      createTargets: projectCreateTargets(),
+    }));
+    buttonWithText(el, "Save memory").click();
+
+    expect(harness.onIntent).not.toHaveBeenCalled();
+    expect(el.textContent).toContain("The selected memory location is no longer available.");
+    expect(el.querySelector<HTMLSelectElement>('select[aria-label="Memory location"]')?.value).toBe("project");
   });
 
   it("supports compact expand-retract records and progressive technical details", () => {
@@ -311,4 +410,13 @@ function memoryModel(overrides: Partial<FrontendMemoryScreenViewModel> = {}): Fr
     helpItems: ["Project memory never flows from a child into its parent."],
     ...overrides,
   };
+}
+
+function projectCreateTargets(): FrontendMemoryScreenViewModel["createTargets"] {
+  return [
+    { value: "user", label: "Vault profile", disabledReason: "Vault-wide memory writes require a Vault-scoped session." },
+    { value: "memory", label: "Vault memory", disabledReason: "Vault-wide memory writes require a Vault-scoped session." },
+    { value: "project", label: "Current project" },
+    { value: "failure", label: "Lesson or correction" },
+  ];
 }

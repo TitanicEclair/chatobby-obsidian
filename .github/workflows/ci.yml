@@ -1,16 +1,26 @@
 name: Chatobby connector CI
 
 on:
-  push:
-    branches:
-      - dev
-      - main
-      - "release/**"
-  pull_request:
-    branches:
-      - dev
-      - main
   workflow_dispatch:
+    inputs:
+      local_acceptance_complete:
+        description: Local checks, paired runtime tests and affected disposable-vault UI tests passed
+        required: true
+        type: boolean
+        default: false
+      base_sha:
+        description: Optional comparison SHA for the documentation lane; empty runs the full code gate
+        type: string
+        default: ""
+      target_branch:
+        description: Intended private integration target
+        type: choice
+        options: [main, dev]
+        default: main
+      installed_acceptance:
+        description: Run final artifact acceptance on the configured dedicated Obsidian runner
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -19,8 +29,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  classify:
+    if: inputs.local_acceptance_complete
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      lane: ${{ steps.lane.outputs.lane }}
+    steps:
+      - name: Check out connector with comparison history
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+      - name: Classify documentation release lane
+        id: lane
+        shell: bash
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          set -euo pipefail
+          paths=()
+          if [[ -n "${BASE_SHA}" && "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            while IFS= read -r path; do
+              [[ -n "${path}" ]] && paths+=("${path}")
+            done < <(git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}")
+          else
+            paths+=(".github/workflows/ci.yml")
+          fi
+          result="$(node scripts/classify-documentation-lane.mjs "${paths[@]}")"
+          lane="$(node -e 'const fs=require("node:fs");process.stdout.write(JSON.parse(fs.readFileSync(0,"utf8")).lane)' <<<"${result}")"
+          echo "lane=${lane}" >> "${GITHUB_OUTPUT}"
+          printf '%s\n' "${result}"
+
   branch-policy:
-    if: github.event_name == 'pull_request'
+    if: inputs.local_acceptance_complete
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -28,8 +71,8 @@ jobs:
     steps:
       - name: Validate pull request branch route
         env:
-          BASE_BRANCH: ${{ github.base_ref }}
-          HEAD_BRANCH: ${{ github.head_ref }}
+          BASE_BRANCH: ${{ inputs.target_branch }}
+          HEAD_BRANCH: ${{ github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
@@ -49,6 +92,8 @@ jobs:
           fi
 
   verify:
+    needs: classify
+    if: needs.classify.outputs.lane == 'full-code'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -67,3 +112,129 @@ jobs:
         run: npm run check
       - name: Run connector tests
         run: npm test
+
+  documentation-only:
+    needs: classify
+    if: needs.classify.outputs.lane == 'documentation-only'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out connector with comparison history
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+      - name: Validate README-only change
+        shell: bash
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git diff --check "${BASE_SHA}" "${GITHUB_SHA}"
+          node -e 'const fs=require("node:fs");const value=fs.readFileSync("README.md","utf8");if(!value.startsWith("# "))throw new Error("README must begin with an H1");'
+
+  build-connector-artifact:
+    needs: [classify, verify]
+    if: >-
+      always() &&
+      inputs.local_acceptance_complete &&
+      needs.classify.outputs.lane != 'documentation-only' &&
+      (needs.verify.result == 'success' || needs.classify.outputs.lane == 'documentation-version-release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Build exact development connector
+        shell: bash
+        run: |
+          if [[ "${{ needs.classify.outputs.lane }}" == "documentation-version-release" ]]; then
+            npm run build:documentation-version
+          else
+            npm run build
+          fi
+      - name: Record hashes and exercise temporary-vault installation
+        run: npm run ci:connector-artifact
+      - name: Upload exact connector artifact and receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chatobby-connector-${{ github.sha }}
+          path: ci-artifacts/connector
+          if-no-files-found: error
+          retention-days: 7
+
+  live-obsidian-smoke:
+    needs: build-connector-artifact
+    if: >-
+      inputs.local_acceptance_complete && inputs.installed_acceptance &&
+      github.repository == 'TitanicEclair/chatobby' &&
+      (github.ref == 'refs/heads/dev' ||
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/heads/release/'))
+    runs-on: [self-hosted, Windows, X64, chatobby-disposable-obsidian]
+    timeout-minutes: 20
+    environment: chatobby-disposable-obsidian
+    permissions:
+      contents: read
+    env:
+      CHATOBBY_CI_VAULT_ROOT: ${{ vars.CHATOBBY_CI_VAULT_ROOT }}
+      CHATOBBY_CI_VAULT_NAME: ${{ vars.CHATOBBY_CI_VAULT_NAME }}
+      CHATOBBY_CI_OBSIDIAN_CLI: ${{ vars.CHATOBBY_CI_OBSIDIAN_CLI }}
+      CHATOBBY_CI_RESET_SCRIPT: ${{ vars.CHATOBBY_CI_RESET_SCRIPT }}
+    steps:
+      - name: Check out trusted connector source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Download this run's exact connector artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: chatobby-connector-${{ github.sha }}
+          path: downloaded-connector
+      - name: Reset dedicated Obsidian profile and golden vault
+        shell: pwsh
+        run: >-
+          & $env:CHATOBBY_CI_RESET_SCRIPT
+          -Phase Before
+          -VaultRoot $env:CHATOBBY_CI_VAULT_ROOT
+      - name: Install and smoke the exact connector in Obsidian
+        shell: pwsh
+        run: >-
+          node scripts/ci-obsidian-smoke.mjs
+          --artifact-root "${{ github.workspace }}\downloaded-connector"
+          --vault-root "$env:CHATOBBY_CI_VAULT_ROOT"
+          --vault-name "$env:CHATOBBY_CI_VAULT_NAME"
+          --diagnostics-root "${{ runner.temp }}\chatobby-obsidian-smoke"
+          --obsidian-cli "$env:CHATOBBY_CI_OBSIDIAN_CLI"
+      - name: Upload Obsidian diagnostics and screenshot
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chatobby-obsidian-smoke-${{ github.sha }}
+          path: ${{ runner.temp }}/chatobby-obsidian-smoke
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Restore dedicated Obsidian profile and golden vault
+        if: always()
+        shell: pwsh
+        run: >-
+          & $env:CHATOBBY_CI_RESET_SCRIPT
+          -Phase After
+          -VaultRoot $env:CHATOBBY_CI_VAULT_ROOT

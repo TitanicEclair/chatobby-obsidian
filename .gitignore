@@ -2,6 +2,8 @@ node_modules/
 main.js
 styles.css
 /release/
+/.actions-storage/
+/ci-artifacts/
 data.json
 .DS_Store
 *.js.map

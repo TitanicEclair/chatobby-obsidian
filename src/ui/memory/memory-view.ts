@@ -19,10 +19,11 @@ import { memoryViewPayload, renderMemoryFilterControls, type MemorySetViewPayloa
 /** Compatibility action emitted by older extension panels. */
 export type MemoryActionId = "memory:insights";
 export type MemoryTab = "memories" | "suggestions" | "settings";
+type MemoryCreateTarget = "user" | "memory" | "project" | "failure";
 
 export type MemoryViewIntent =
   | { readonly type: "memory.set-view"; readonly payload: MemorySetViewPayload }
-  | { readonly type: "memory.create"; readonly payload: { readonly target: "user" | "memory" | "project" | "failure"; readonly content: string } }
+  | { readonly type: "memory.create"; readonly payload: { readonly target: MemoryCreateTarget; readonly content: string } }
   | { readonly type: "memory.update"; readonly payload: { readonly recordId: string; readonly expectedRecordRevision: number; readonly content: string } }
   | { readonly type: "memory.set-status"; readonly payload: { readonly recordId: string; readonly expectedRecordRevision: number; readonly status: "active" | "archived" } }
   | { readonly type: "memory.delete"; readonly payload: { readonly recordId: string; readonly expectedRecordRevision: number } }
@@ -163,7 +164,7 @@ export class MemoryView extends ChatobbyComponent {
       },
       { id: "settings", label: "Settings", active: this.tab === "settings", onSelect: () => this.selectTab("settings") },
     ]);
-    shell.updateBody(`memory:${this.tab}`, (body) => {
+    shell.updateBody(`memory:${model?.browseProjectId ?? "vault"}:${this.tab}`, (body) => {
       if (!model) {
         createPageState(body, {
           kind: error ? "error" : "loading",
@@ -173,6 +174,7 @@ export class MemoryView extends ChatobbyComponent {
         return;
       }
       this.ensureSelection(model.records);
+      this.renderWorkspaceSelector(body, model);
       if (this.tab === "memories") this.renderMemories(body, model);
       else if (this.tab === "suggestions") this.renderSuggestions(body, model);
       else this.renderSettings(body, model);
@@ -216,10 +218,15 @@ export class MemoryView extends ChatobbyComponent {
       this.renderState(this.props.getModel());
     });
     if (this.creating) this.renderCreate(parent, model);
-    const scopeContext = parent.createDiv({ cls: "chatobby-memory__scope-context" });
-    scopeContext.createDiv({ cls: "chatobby-memory__scope-label", text: model.scope.label });
-    scopeContext.createDiv({ cls: "chatobby-memory__scope-description", text: model.scope.description });
-    if (model.scope.path) scopeContext.createDiv({ cls: "chatobby-memory__scope-path", text: model.scope.path });
+    if (!model.browseOptions) {
+      const scopeContext = parent.createDiv({ cls: "chatobby-memory__scope-context" });
+      scopeContext.createDiv({ cls: "chatobby-memory__scope-label", text: model.scope.label });
+      scopeContext.createDiv({ cls: "chatobby-memory__scope-description", text: model.scope.description });
+      if (model.scope.path) {
+        const details = createPageDisclosure(scopeContext, "memory:scope-details", "Memory location details");
+        details.createDiv({ cls: "chatobby-memory__scope-path", text: model.scope.path });
+      }
+    }
     if (model.searchResultCount !== undefined) {
       parent.createDiv({ cls: "chatobby-memory__result-summary", text: `Search results · ${model.searchResultCount}` });
     }
@@ -231,19 +238,48 @@ export class MemoryView extends ChatobbyComponent {
     this.renderRecords(section.content, model);
   }
 
+  private renderWorkspaceSelector(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
+    if (!model.browseOptions) return;
+    const row = parent.createDiv({ cls: "chatobby-memory__workspace" });
+    const label = row.createEl("label", { text: "Viewing" });
+    const select = label.createEl("select", { attr: { "aria-label": "Viewing memory for" } });
+    for (const option of model.browseOptions) select.createEl("option", { value: option.value, text: option.label });
+    select.value = model.browseProjectId ?? "";
+    select.disabled = this.busy;
+    row.createSpan({ text: "Browse and edit memory without changing your conversation." });
+    select.addEventListener("change", () => {
+      this.selectedRecordId = null;
+      this.creating = false;
+      this.editing = false;
+      this.deleteConfirmId = null;
+      void this.runIntent({ type: "memory.set-view", payload: memoryViewPayload(model, { browseProjectId: select.value || null, scopeFilter: "available" }) });
+    });
+  }
+
   private renderCreate(parent: HTMLElement, model: FrontendMemoryScreenViewModel): void {
+    const enabledTargets = enabledMemoryTargets(model.createTargets);
+    const targetStateKey = enabledTargets.slice().sort().join(",") || "none";
     const section = createPageSection(parent, {
       title: "Add something worth remembering",
       description: "Save a durable preference, fact, convention, or lesson.",
       surface: "inset",
     });
     const form = section.content.createDiv({ cls: "chatobby-memory__create" });
-    const target = form.createEl("select", { attr: { "aria-label": "Memory location", "data-page-state-key": "memory:create:target" } });
+    const target = form.createEl("select", {
+      attr: {
+        "aria-label": "Memory location",
+        "data-page-state-key": `memory:create:target:${targetStateKey}`,
+      },
+    });
     for (const option of model.createTargets) {
       const element = target.createEl("option", { value: option.value, text: option.label });
-      element.disabled = Boolean(option.disabledReason);
+      element.disabled = Boolean(option.disabledReason) || !isMemoryTarget(option.value);
       if (option.disabledReason) element.title = option.disabledReason;
     }
+    const defaultTarget = enabledTargets[0];
+    if (defaultTarget) target.value = defaultTarget;
+    else target.selectedIndex = -1;
+    target.disabled = enabledTargets.length === 0 || this.busy;
     const content = form.createEl("textarea", {
       attr: {
         placeholder: "A durable preference, fact, convention, or lesson…",
@@ -257,10 +293,13 @@ export class MemoryView extends ChatobbyComponent {
       this.renderState(this.props.getModel());
     });
     const save = actions.createEl("button", { cls: "mod-cta", text: "Save memory", attr: { type: "button" } });
-    save.disabled = this.busy;
+    save.disabled = enabledTargets.length === 0 || this.busy;
     save.addEventListener("click", () => {
       const value = target.value;
-      if (!isMemoryTarget(value)) return;
+      const currentModel = this.props.getModel();
+      if (!currentModel || !isMemoryTarget(value) || !enabledMemoryTargets(currentModel.createTargets).includes(value)) {
+        return this.setLocalError("The selected memory location is no longer available.");
+      }
       if (!content.value.trim()) return this.setLocalError("Memory content cannot be empty.");
       void this.runIntent({ type: "memory.create", payload: { target: value, content: content.value } }, () => { this.creating = false; });
     });
@@ -542,7 +581,11 @@ export class MemoryView extends ChatobbyComponent {
   }
 }
 
-function isMemoryTarget(value: string): value is "user" | "memory" | "project" | "failure" {
+function enabledMemoryTargets(options: FrontendMemoryScreenViewModel["createTargets"]): MemoryCreateTarget[] {
+  return options.flatMap((option) => !option.disabledReason && isMemoryTarget(option.value) ? [option.value] : []);
+}
+
+function isMemoryTarget(value: string): value is MemoryCreateTarget {
   return value === "user" || value === "memory" || value === "project" || value === "failure";
 }
 

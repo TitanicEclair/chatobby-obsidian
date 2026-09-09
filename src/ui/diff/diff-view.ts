@@ -1,8 +1,7 @@
 /**
- * DiffView — separate Obsidian ItemView for multi-file diff.
+ * Reserved source boundary for a future multi-file diff view.
  *
- * Opens as a dedicated tab showing unified diffs across multiple files.
- * Supports navigation between files and hunks.
- *
- * Target architecture — see docs/ui-state-guide.md
+ * No production UI is exported from this placeholder. A future implementation
+ * must follow the feature and presentation boundaries in
+ * docs/architecture/frontend-modules.md.
  */

@@ -11,6 +11,8 @@ export default defineConfig({
     },
   },
   test: {
+    // Bound process-heavy fixtures so parallel repository work cannot exhaust their deadlines.
+    maxWorkers: 2,
     environment: "happy-dom",
     exclude: [...configDefaults.exclude, "**/.claude/**"],
     setupFiles: ["tests/ui/helpers/dom-shim.ts"],

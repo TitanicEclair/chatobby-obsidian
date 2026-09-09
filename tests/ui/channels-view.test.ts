@@ -5,6 +5,69 @@ import { ChannelsView } from "../../src/features/channels/ui/channels-view";
 import type { FrontendChannelScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 
 describe("ChannelsView", () => {
+  it("keeps participant names in an ellipsized text box under Obsidian button styles", () => {
+    const hostStyle = document.createElement("style");
+    hostStyle.textContent = "button { display: flex; justify-content: center; }";
+    const channelStyle = document.createElement("style");
+    channelStyle.textContent = readFileSync("src/features/channels/ui/channels.css", "utf8");
+    document.head.append(hostStyle, channelStyle);
+    const host = document.body.createDiv();
+    const label = "Researcher: compare the findings and prepare the shared project review";
+    const model: FrontendChannelScreenViewModel = { ...channelModel(), workspaceWide: true, participants: [{ actorId: "agent-a", label, kind: "subagent", state: "joined", live: true, navigation: { mainSessionId: "session-1", actorId: "agent-a", channelId: "session-channel" } }] };
+    const view = new ChannelsView({ app: {} as App, getModel: () => model, subscribe: () => () => {}, onBack: vi.fn(), onRefresh: vi.fn(), onSelectChannel: vi.fn(), onLoadEarlier: vi.fn(), onSetArchived: vi.fn(), onDeleteChannel: vi.fn(), onOpenAgent: vi.fn() });
+    try {
+      view.render(host);
+      const name = host.querySelector<HTMLButtonElement>("button.chatobby-channels__participant-name");
+      expect(name?.textContent).toBe(label);
+      const style = getComputedStyle(name!);
+      expect(style.display).toBe("block");
+      expect(style.textOverflow).toBe("ellipsis");
+      expect(style.overflow).toBe("hidden");
+      expect(style.textAlign).toBe("left");
+    } finally {
+      view.destroy(); host.remove(); hostStyle.remove(); channelStyle.remove();
+    }
+  });
+  it("retains a separate channel draft through live patches and failed sends, then clears only a successful submission", async () => {
+    let model: FrontendChannelScreenViewModel = { ...channelModel(), workspaceWide: true, canCompose: true, participants: [] };
+    let changed: ((value: FrontendChannelScreenViewModel) => void) | undefined;
+    const send = vi.fn().mockRejectedValueOnce(new Error("Agent is offline")).mockResolvedValue(undefined);
+    const view = new ChannelsView({ app: {} as App, getModel: () => model, subscribe: (listener) => { changed = listener; return () => {}; }, onBack: vi.fn(), onRefresh: vi.fn(), onSelectChannel: vi.fn(), onLoadEarlier: vi.fn(), onSetArchived: vi.fn(), onDeleteChannel: vi.fn(), onOpenAgent: vi.fn(), onSendMessage: send });
+    const host = document.body.createDiv(); view.render(host);
+    const input = (): HTMLTextAreaElement => host.querySelector<HTMLTextAreaElement>("[aria-label='Channel message']")!;
+    input().value = "Compare these findings."; input().dispatchEvent(new Event("input", { bubbles: true }));
+    model = { ...model, revision: 2 }; changed?.(model);
+    expect(input().value).toBe("Compare these findings.");
+    model = { ...model, selectedChannelId: "research", revision: 3 }; changed?.(model);
+    expect(input().value).toBe("");
+    input().value = "Research draft"; input().dispatchEvent(new Event("input", { bubbles: true }));
+    model = { ...model, selectedChannelId: "session-channel", revision: 4 }; changed?.(model);
+    expect(input().value).toBe("Compare these findings.");
+    input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.waitFor(() => expect(host.textContent).toContain("Agent is offline"));
+    expect(input().value).toBe("Compare these findings.");
+    input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.waitFor(() => expect(input().value).toBe(""));
+    expect(send).toHaveBeenCalledWith("session-channel", "Compare these findings.", undefined, undefined);
+    model = { ...model, selectedChannelId: "research", revision: 5 }; changed?.(model);
+    expect(input().value).toBe("Research draft");
+    view.destroy();
+  });
+
+  it("renders operator messages, real participant states, and reply addressing without inventing an agent feed", () => {
+    const model: FrontendChannelScreenViewModel = { ...channelModel(), workspaceWide: true, canCompose: true, participants: [{ actorId: "agent-a", label: "Evidence researcher", kind: "subagent", state: "invited", live: true }], messages: [{ ...channelModel().messages[0]!, senderLabel: "You", operatorAuthored: true, senderNavigation: undefined, deliveryLabel: "Posted to channel" }] };
+    const update = vi.fn(async () => {});
+    const view = new ChannelsView({ app: {} as App, getModel: () => model, subscribe: () => () => {}, onBack: vi.fn(), onRefresh: vi.fn(), onSelectChannel: vi.fn(), onLoadEarlier: vi.fn(), onSetArchived: vi.fn(), onDeleteChannel: vi.fn(), onOpenAgent: vi.fn(), onSendMessage: vi.fn(), onSetParticipant: update });
+    const host = document.body.createDiv(); view.render(host);
+    expect(host.textContent).toContain("invited");
+    expect(host.textContent).toContain("Posted to channel");
+    expect(host.textContent).not.toContain("Go to agent feed");
+    Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "Reply")?.click();
+    expect(host.textContent).toContain("Replying to You:");
+    Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "Cancel invite")?.click();
+    expect(update).toHaveBeenCalledWith("session-channel", "agent-a", "disconnect");
+    view.destroy();
+  });
   it("renders runtime-projected directory, routing metadata, and live replacement", async () => {
     let model = channelModel();
     const listeners = new Set<(value: FrontendChannelScreenViewModel | null) => void>();

@@ -139,6 +139,30 @@ describe("Composer", () => {
     expect(sendBtn.disabled).toBe(false);
   });
 
+  it("keeps send available while background compaction is running", () => {
+    const send = vi.fn();
+    const compacting: SessionState = { ...EMPTY_SESSION_STATE, isCompacting: true };
+    const { composer, input, sendBtn, stopBtn } = bindComposer(createHost({
+      send,
+      getSessionState: () => compacting,
+    }));
+
+    input.value = "continue during compaction";
+    composer.handleInput();
+
+    expect(sendBtn.classList.contains("is-hidden")).toBe(false);
+    expect(sendBtn.disabled).toBe(false);
+    expect(stopBtn.classList.contains("is-hidden")).toBe(true);
+
+    composer.send();
+    expect(send).toHaveBeenCalledWith(
+      "continue during compaction",
+      undefined,
+      expect.any(AbortSignal),
+      expect.any(String),
+    );
+  });
+
   it("renders a permission reason in the composer and submits it instead of a prompt", () => {
     let interaction: InteractionState | null = createInteractionState("reason-1", "input", {
       title: "Deny with reason",

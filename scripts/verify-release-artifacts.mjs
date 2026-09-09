@@ -30,6 +30,7 @@ const forbiddenPatterns = [
   { label: "inline or linked source map", pattern: /sourceMappingURL|sourcesContent/ },
   { label: "private key material", pattern: /-----BEGIN (?:EC |OPENSSH |RSA )?PRIVATE KEY-----/ },
   { label: "runtime signing key configuration", pattern: /CHATOBBY_RUNTIME_SIGNING_KEY/ },
+  { label: "development Guide feed override", pattern: /CHATOBBY_DEV_GUIDE_FEED_OVERRIDE_V1/ },
   { label: "Chatobby development checkout path", pattern: /C:[\\/]chatobby(?:[\\/]|$)/i },
   { label: "live vault checkout path", pattern: /C:[\\/]Final_Updated_Second_Brain(?:[\\/]|$)/i },
   { label: "Windows user profile path", pattern: /[A-Za-z]:[\\/]Users[\\/][^\\/"'\s]+/ },

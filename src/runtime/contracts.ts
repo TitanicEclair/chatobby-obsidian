@@ -27,7 +27,8 @@ export type RuntimeFailureCode =
   | "startup_timeout"
   | "runtime_exited"
   | "connection_failed"
-  | "shutdown_failed";
+  | "shutdown_failed"
+  | "development_pair_adoption_failed";
 
 export interface RuntimeDiagnostics {
   code: RuntimeFailureCode;

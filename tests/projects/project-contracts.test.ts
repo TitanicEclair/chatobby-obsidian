@@ -30,7 +30,7 @@ describe("generated Project contract boundary", () => {
     expect(evidence).toMatchObject({
       schemaVersion: 1,
       sourceRepository: "TitanicEclair/pi-mono",
-      sourceCommit: "2f060768ed475315f2e8d161432cd85ffac23470",
+      sourceCommit: "df9aec0c0c9c351c4b66713a92ed102926fa814f",
       generator: "scripts/build-vendor-artifacts.mjs",
       sourceArtifact: "vendor/project-contracts",
       connectorArtifact: "src/vendor/@chatobby/project-contracts",

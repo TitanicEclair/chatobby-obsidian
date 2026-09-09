@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="title desc">
+  <title id="title">A reading group with two agents</title>
+  <desc id="desc">An illustrated Channel conversation. The user sets a question, a researcher shares a linked source, and a reviewer asks the researcher to check the evidence.</desc>
+  <defs>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#dedbd3"/></pattern>
+  </defs>
+  <rect width="1200" height="620" rx="20" fill="#f5f3ed"/>
+  <rect x="20" y="20" width="1160" height="580" rx="14" fill="url(#dots)"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="54" y="74" font-size="30" font-weight="650" fill="#242b35">Reading group</text>
+    <text x="54" y="106" font-size="18" fill="#57616d">Custom roles, one shared Channel</text>
+    <path d="M368 255h35v136h-35m35-68h49" fill="none" stroke="#938ba1" stroke-width="2"/>
+    <path d="m444 317 8 6-8 6" fill="none" stroke="#938ba1" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="54" y="172" width="312" height="156" rx="12" fill="#fff" stroke="#d4cedf"/>
+    <circle cx="91" cy="210" r="18" fill="#e8e1f6"/>
+    <path d="M85 200h10v17H83v-15h12m-9 5h6m-6 4h6" stroke="#725499" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
+    <text x="120" y="217" font-size="22" font-weight="600" fill="#382d48">Researcher</text>
+    <text x="78" y="257" font-size="18" fill="#57616d">Compare the source notes.</text>
+    <text x="78" y="285" font-size="18" fill="#57616d">Link each finding to evidence.</text>
+    <rect x="54" y="352" width="312" height="156" rx="12" fill="#fff" stroke="#b9cec7"/>
+    <circle cx="91" cy="390" r="18" fill="#deece5"/>
+    <path d="m83 390 5 5 11-12" stroke="#3b7663" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="120" y="397" font-size="22" font-weight="600" fill="#264f44">Reviewer</text>
+    <text x="78" y="437" font-size="18" fill="#57616d">Check the reasoning.</text>
+    <text x="78" y="465" font-size="18" fill="#57616d">Ask about missing evidence.</text>
+    <rect x="456" y="48" width="690" height="524" rx="16" fill="#fff" stroke="#cfcbc3"/>
+    <path d="M456 113h690" stroke="#e4e0da"/>
+    <path d="M484 74h24v17h-9l-6 6v-6h-9z" stroke="#6d567f" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+    <text x="523" y="88" font-size="22" font-weight="600" fill="#242b35">reading-group</text>
+    <text x="1116" y="87" text-anchor="end" font-size="16" fill="#68717a">You + 2 agents</text>
+    <circle cx="494" cy="155" r="14" fill="#e6e8eb"/>
+    <path d="M489 162v-3a5 5 0 0 1 10 0v3m-5-8a3 3 0 1 0 0-6 3 3 0 0 0 0 6" stroke="#59636e" stroke-width="1.5" fill="none"/>
+    <text x="522" y="161" font-size="18" font-weight="600" fill="#242b35">You</text>
+    <text x="522" y="194" font-size="20" fill="#313944">Where do these three notes disagree?</text>
+    <text x="522" y="223" font-size="20" fill="#313944">Discuss it here before drafting the summary.</text>
+    <path d="M483 249h635" stroke="#eeebe6"/>
+    <circle cx="494" cy="285" r="14" fill="#e8e1f6"/>
+    <text x="494" y="291" text-anchor="middle" font-size="16" font-weight="600" fill="#725499">R</text>
+    <text x="522" y="291" font-size="18" font-weight="600" fill="#725499">Researcher</text>
+    <text x="522" y="324" font-size="20" fill="#313944">Note 2 assumes the effect lasts longer.</text>
+    <rect x="520" y="340" width="236" height="34" rx="6" fill="#f0ebf7"/>
+    <text x="534" y="363" font-size="17" fill="#725499">[[Note 2#Follow-up study]]</text>
+    <path d="M483 397h635" stroke="#eeebe6"/>
+    <circle cx="494" cy="433" r="14" fill="#deece5"/>
+    <text x="494" y="439" text-anchor="middle" font-size="16" font-weight="600" fill="#3b7663">V</text>
+    <text x="522" y="439" font-size="18" font-weight="600" fill="#3b7663">Reviewer</text>
+    <text x="522" y="472" font-size="20" fill="#313944">Researcher, does that study measure duration?</text>
+    <text x="522" y="502" font-size="20" fill="#313944">Let's check before using it in the summary.</text>
+    <text x="54" y="564" font-size="16" fill="#68717a">Example conversation</text>
+  </g>
+</svg>

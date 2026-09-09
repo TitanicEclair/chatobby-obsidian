@@ -30,6 +30,8 @@ export interface RuntimeIdentity {
 	runtimeVersion: string;
 	protocolVersion: number;
 	runtimePackageFingerprint: string | null;
+	/** Exact private-source development build; never substitutes for a verified release package fingerprint. */
+	developmentBuildFingerprint: string | null;
 }
 
 export interface RuntimeReadyDescriptor extends RuntimeIdentity {
@@ -43,6 +45,71 @@ export interface RuntimeReadyDescriptor extends RuntimeIdentity {
 export interface RuntimeStatusResponse {
 	ready: boolean;
 	identity: RuntimeIdentity;
+	maintenance: RuntimeMaintenanceSnapshot;
+}
+
+export type RuntimeMaintenancePurpose = "runtime-update" | "development-reconcile";
+
+export type RuntimeMaintenanceActiveWorkKind =
+	| "maintenance"
+	| "response"
+	| "compaction"
+	| "queued-prompt"
+	| "subagent"
+	| "event";
+
+export interface RuntimeMaintenanceSnapshot {
+	acceptingWork: boolean;
+	activeWorkKinds: RuntimeMaintenanceActiveWorkKind[];
+}
+
+export interface RuntimeMaintenanceCurrentIdentity {
+	instanceId: string;
+	runtimePackageFingerprint: string | null;
+	developmentBuildFingerprint: string | null;
+}
+
+export interface RuntimeMaintenanceTargetIdentity {
+	runtimeVersion: string;
+	runtimePackageFingerprint: string | null;
+	developmentBuildFingerprint: string | null;
+}
+
+export interface RuntimeMaintenanceAdmitRequest {
+	schemaVersion: 1;
+	operationId: string;
+	purpose: RuntimeMaintenancePurpose;
+	current: RuntimeMaintenanceCurrentIdentity;
+	target: RuntimeMaintenanceTargetIdentity;
+}
+
+export type RuntimeMaintenanceAdmission =
+	| {
+			schemaVersion: 1;
+			status: "admitted";
+			operationId: string;
+			leaseId: string;
+			expiresAt: number;
+	  }
+	| {
+			schemaVersion: 1;
+			status: "deferred";
+			operationId: string;
+			retryAfterMs: number;
+			activeWorkKinds: RuntimeMaintenanceActiveWorkKind[];
+	  };
+
+export interface RuntimeMaintenanceLeaseRequest {
+	schemaVersion: 1;
+	operationId: string;
+	leaseId: string;
+}
+
+export interface RuntimeMaintenanceLeaseResult {
+	schemaVersion: 1;
+	status: "committed" | "cancelled";
+	operationId: string;
+	leaseId: string;
 }
 
 export interface RuntimeClientHello {
@@ -190,6 +257,8 @@ export function parseRuntimeReadyDescriptor(value: unknown): RuntimeReadyDescrip
 	if (!isPositiveInteger(value.pid) || !isPositiveInteger(value.startedAt)) return null;
 	if (!isNonEmptyString(value.runtimeVersion) || !isPositiveInteger(value.protocolVersion)) return null;
 	if (value.runtimePackageFingerprint !== null && !isSha256Fingerprint(value.runtimePackageFingerprint)) return null;
+	const developmentBuildFingerprint = value.developmentBuildFingerprint ?? null;
+	if (developmentBuildFingerprint !== null && !isSha256Fingerprint(developmentBuildFingerprint)) return null;
 	if (value.host !== "127.0.0.1" || !isPort(value.port)) return null;
 	if (!isSha256Fingerprint(value.controlTokenFingerprint)) return null;
 	if (!isSha256Fingerprint(value.sessionTokenFingerprint)) return null;
@@ -202,10 +271,55 @@ export function parseRuntimeReadyDescriptor(value: unknown): RuntimeReadyDescrip
 		runtimeVersion: value.runtimeVersion,
 		protocolVersion: value.protocolVersion,
 		runtimePackageFingerprint: value.runtimePackageFingerprint,
+		developmentBuildFingerprint,
 		host: "127.0.0.1",
 		port: value.port,
 		controlTokenFingerprint: value.controlTokenFingerprint,
 		sessionTokenFingerprint: value.sessionTokenFingerprint,
+	};
+}
+
+export function parseRuntimeMaintenanceAdmitRequest(value: unknown): RuntimeMaintenanceAdmitRequest | null {
+	if (!isRecord(value) || value.schemaVersion !== 1 || !isOperationId(value.operationId)) return null;
+	if (value.purpose !== "runtime-update" && value.purpose !== "development-reconcile") return null;
+	const current = parseMaintenanceCurrentIdentity(value.current);
+	const target = parseMaintenanceTargetIdentity(value.target);
+	if (!current || !target) return null;
+	if ((target.runtimePackageFingerprint === null) === (target.developmentBuildFingerprint === null)) return null;
+	return { schemaVersion: 1, operationId: value.operationId, purpose: value.purpose, current, target };
+}
+
+export function parseRuntimeMaintenanceLeaseRequest(value: unknown): RuntimeMaintenanceLeaseRequest | null {
+	if (
+		!isRecord(value) ||
+		value.schemaVersion !== 1 ||
+		!isOperationId(value.operationId) ||
+		!isOperationId(value.leaseId)
+	) {
+		return null;
+	}
+	return { schemaVersion: 1, operationId: value.operationId, leaseId: value.leaseId };
+}
+
+function parseMaintenanceCurrentIdentity(value: unknown): RuntimeMaintenanceCurrentIdentity | null {
+	if (!isRecord(value) || !isOperationId(value.instanceId)) return null;
+	if (!isNullableFingerprint(value.runtimePackageFingerprint)) return null;
+	if (!isNullableFingerprint(value.developmentBuildFingerprint)) return null;
+	return {
+		instanceId: value.instanceId,
+		runtimePackageFingerprint: value.runtimePackageFingerprint,
+		developmentBuildFingerprint: value.developmentBuildFingerprint,
+	};
+}
+
+function parseMaintenanceTargetIdentity(value: unknown): RuntimeMaintenanceTargetIdentity | null {
+	if (!isRecord(value) || !isNonEmptyString(value.runtimeVersion)) return null;
+	if (!isNullableFingerprint(value.runtimePackageFingerprint)) return null;
+	if (!isNullableFingerprint(value.developmentBuildFingerprint)) return null;
+	return {
+		runtimeVersion: value.runtimeVersion,
+		runtimePackageFingerprint: value.runtimePackageFingerprint,
+		developmentBuildFingerprint: value.developmentBuildFingerprint,
 	};
 }
 
@@ -227,4 +341,12 @@ function isPort(value: unknown): value is number {
 
 function isSha256Fingerprint(value: unknown): value is string {
 	return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+function isNullableFingerprint(value: unknown): value is string | null {
+	return value === null || isSha256Fingerprint(value);
+}
+
+function isOperationId(value: unknown): value is string {
+	return typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/u.test(value);
 }

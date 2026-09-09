@@ -103,15 +103,16 @@ describe("ObsidianSemanticContextService", () => {
     await vi.advanceTimersByTimeAsync(75);
 
     expect(events).toEqual([
-      expect.objectContaining({
+      {
         type: "context_changed",
         sequence: 2,
+        capturedAt: "2026-07-27T00:00:00.000Z",
         changed: ["focus", "workspace", "editor"],
         revisions: { workspace: 2, editor: 2, page: 2, capabilities: 1 },
-      }),
+      },
     ]);
     expect(service.diagnostics()).toMatchObject({
-      captures: 1,
+      captures: 0,
       emittedEvents: 1,
       invalidations: 2,
       coalescedInvalidations: 1,
@@ -136,7 +137,7 @@ describe("ObsidianSemanticContextService", () => {
     service.dispose();
   });
 
-  it("reuses the coalesced capture for a synchronous snapshot and preserves boolean layout state", () => {
+  it("captures on demand after coalesced invalidation and preserves boolean layout state", () => {
     vi.useFakeTimers();
     const app = createMockApp(
       new Map([["Active.md", "content"]]),

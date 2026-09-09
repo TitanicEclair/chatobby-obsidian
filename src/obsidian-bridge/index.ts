@@ -1,5 +1,5 @@
 // Bridge executor — public API.
-// See docs/tooling/bridge-executor.md for architecture.
+// See docs/wire-protocol.md for architecture and ownership.
 
 export { ObsidianBridgeClient } from "./bridge-client";
 export { BridgeConnectionCoordinator } from "./bridge-connection-coordinator";

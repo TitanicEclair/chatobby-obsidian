@@ -30,7 +30,18 @@ describe("SubagentStore", () => {
     const listener = vi.fn();
     store.subscribe(listener);
 
-    frontend.replaceScreen(screen({ statusMessage: "Run paused.", nextTranscriptCursor: "older" }));
+    const model = screen({ statusMessage: "Run paused.", nextTranscriptCursor: "older" });
+    frontend.replaceScreen({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      runtimeInstanceId: "runtime-instance",
+      viewId: "view-a",
+      requestId: "screen-subagents-1",
+      requestEpoch: 1,
+      baseSequence: 0,
+      screenRevision: model.revision,
+      screen: model,
+    });
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(store.getSnapshot()).toMatchObject({ statusMessage: "Run paused.", nextTranscriptCursor: "older" });
@@ -40,7 +51,7 @@ describe("SubagentStore", () => {
 function bootstrap(model: FrontendSubagentScreenViewModel): FrontendBootstrap {
   return {
     schemaVersion: 1,
-    protocolVersion: 1,
+    protocolVersion: 2,
     runtimeInstanceId: "runtime-instance",
     revision: 0,
     sequence: 0,

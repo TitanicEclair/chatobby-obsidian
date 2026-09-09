@@ -1,44 +1,84 @@
 # MCP connections
 
-MCP connections add optional tools from another service or a program on your
-computer. Examples include repository hosting, calendars, communication apps,
-cloud storage, and specialist local utilities.
-
-Saving, authenticating, connecting, and granting permission are separate
-steps. A connection can be configured successfully while its tools remain
-unavailable to agents until a permission policy allows them.
+MCP connections add optional tools from an online service or a program already
+installed on your computer. A connection, its authentication, its exposed tool
+set, and Chatobby's sandbox and network access are separate decisions.
 
 ## Add a connection
 
-1. Open **Plugins** from Chatobby's top bar.
-2. Prefer a Chatobby-verified connection when it meets your need. For another
-   service, choose **Add a connection**.
+1. Open **Plugins** from Chatobby's sidebar.
+2. Prefer a Chatobby-verified definition when it meets your need. Otherwise
+   choose **Add a connection**.
 3. Choose **Online service** for a remote URL or **Program on this computer**
-   for a local command.
-4. Enter the connection name and the basic fields shown for that type. Open
-   **Advanced details** only when the server's official instructions require
-   arguments, a working folder, headers, or environment mappings.
-5. Select **Test connection**. Resolve any authentication or startup error
-   before saving.
-6. Save the connection. New custom connections remain disabled until you have
-   reviewed them.
-7. Enable and connect it, refresh its capabilities, then open **Permissions**
-   and allow only the tools the intended agent needs.
+   for a trusted local command.
+4. Enter the basic connection details. Open **Advanced options** only when the
+   server's official instructions require arguments, a working folder, headers,
+   environment mappings, or a different lifecycle.
+5. Select **Check details** to validate the form. This check does not contact,
+   start, authenticate with, or discover tools from the server.
+6. Save the connection. A new custom connection is stored in your Chatobby
+   settings, remains off, and exposes no
+   tools to the agent.
+7. For an online service, select **Test & discover** to make one contained
+   connection attempt and read its current tool list. This deliberate test can
+   affect the remote service, but it does not enable the connection or any
+   tool. Select **Stop test** to cancel an in-progress attempt.
+8. Review the discovered tools and explicitly turn on only the ones the agent
+   may use. Link its saved secret or complete browser sign-in when required,
+   then enable the connection.
+
+A repository `.mcp.json`, `.chatobby/mcp.json`, or project instruction is an
+untrusted connection suggestion, not registration or consent. Chatobby may show
+it for review, but it cannot contact or authenticate with the server, start the
+command, enable the server, widen an existing tool selection, or replace a
+user-approved definition. **Review & add** copies only the visible address or
+command details into a separate, disabled Chatobby setting. The project file
+remains unchanged, credentials are not copied, and every discovered tool
+remains off until you select it.
+
+**Check details** remains available for validating a local command without
+starting it. A real local **Test & discover**, connection, or tool call follows
+the runtime-reported process boundary: **Full access** may start it unsandboxed
+as your operating-system account, while Read-only and Workspace keep it
+unavailable until Chatobby reports verified native containment. The local
+connection's page states which case applies before it can be started.
+
+Chatobby's built-in web and Obsidian MCP adapters currently use local processes,
+so they have the same limitation in constrained modes. Their names do not
+bypass process admission. Remote MCP connections remain available when agent
+network access is On; a user-started remote test is a separate, isolated setup
+action and does not create agent access.
 
 Chatobby's verified list is curated, but verification is not a promise that a
 third-party service will always be available or suitable. Review the publisher,
-source, requested access, account requirements, and privacy terms.
+source, requested account access, and privacy terms.
+
+## Tool exposure and sandbox access
+
+The Plugins page shows capabilities reported by a connection. They do not grant
+filesystem, process, or network authority. Those limits belong to Chatobby's
+separate sandbox and network settings.
+
+Every discovered tool starts off. Turning on a server does not turn on its
+tools, and newly discovered tools remain off until selected. Removing a tool
+selection revokes both direct and proxied access after the connection reloads.
+
+Older definitions that named individual direct tools retain those exact names.
+Older definitions that implicitly exposed every tool require review and expose
+none until the user selects them. A selected tool can affect its remote service,
+but it does not change Chatobby's access mode or grant project, vault,
+filesystem, shell, or network authority.
 
 ## Credentials
 
-Never paste a token or password into a chat or ordinary note. Use the secure
-credential or secret control shown by Chatobby. A secret name is a safe local
-reference; the secret value is the private credential. Creating a secret does
-not automatically link it to a connection.
+Never paste a token or password into a chat or ordinary note. Use the secret
+control shown by Chatobby. A secret name is a safe local reference; the secret
+value is the private credential. Creating a secret does not automatically link
+it to a connection.
 
 Local programs run with your operating-system account. Remote connections send
-requests to another service. Keep environment mappings narrow and avoid
-putting secret values directly in connection arguments.
+requests to another service. Keep environment mappings narrow and do not put
+secret values directly in connection arguments.
 
 ## Ask Chatobby for help
 
@@ -47,11 +87,18 @@ putting secret values directly in connection arguments.
 > to create or paste a credential.
 
 > I have a local MCP command from this publisher's documentation. Walk me
-> through the Plugins form, test it, and show me which discovered tools are
-> still denied by my current policy.
+> through saving it disabled and checking its details. Explain whether the live
+> Permissions and connection status allow a contained launch or require
+> explicit unsandboxed Full access, and explain the separate tool-selection and
+> network limits before I decide whether to test it.
 
 Chatobby should use the public guide and the live Plugins page. It does not need
 to inspect private product source or reveal private tool descriptions.
+If no supported MCP mutation tool is available, it should tell you to use
+**Plugins -> Add a connection** or **Review & add** rather than claiming it
+registered, authenticated, or enabled the server itself. A Project instruction
+can suggest a server, but only your reviewed Chatobby setting and explicit tool
+switches create agent access.
 
-For connection failures, see [troubleshooting](troubleshooting.md). For
-permission behavior, see [responsibility boundaries](responsibility-boundaries.md).
+For connection failures, see [troubleshooting](troubleshooting.md). For trust
+boundaries, see [responsibility boundaries](responsibility-boundaries.md).

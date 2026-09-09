@@ -4,8 +4,8 @@
 // The connector implements only operations that require the live Obsidian
 // process. CLI and generic process execution are runtime-owned.
 //
-// See docs/tooling/bridge-executor.md §7.3 for the dispatch flow and
-// docs/tooling/operation-catalog.md for the full catalog.
+// See docs/wire-protocol.md for dispatch ownership. Operation registration is
+// the executable catalogue; do not duplicate it in documentation.
 
 import type { App } from "obsidian";
 import type { ObsidianOperationName } from "../vendor/@chatobby/obsidian-protocol/index.js";

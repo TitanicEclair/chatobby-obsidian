@@ -90,6 +90,22 @@ describe("frontend feature boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("uses complete Obsidian font stacks instead of bare theme families", () => {
+    const violations: string[] = [];
+    for (const path of filesWithExtension(sourceRoot, ".css")) {
+      const source = readFileSync(path, "utf8");
+      for (const match of source.matchAll(/font-family:\s*var\(--font-(?:interface|monospace)-theme\)/gu)) {
+        violations.push(`${relative(repositoryRoot, path)}: ${match[0]}`);
+      }
+    }
+    expect(violations).toEqual([]);
+
+    const shell = readFileSync(join(sourceRoot, "ui", "shell", "shell.css"), "utf8");
+    expect(shell).toContain("font-family: var(--font-interface, system-ui, sans-serif);");
+    const tools = readFileSync(join(sourceRoot, "ui", "feed", "tools", "tools.css"), "utf8");
+    expect(tools).toContain("font-family: var(--font-monospace, ui-monospace, monospace);");
+  });
+
   it("keeps the memory screen on one vertical scroll owner with responsive tabs", () => {
     const css = readFileSync(join(sourceRoot, "ui", "memory", "memory-view.css"), "utf8");
     const shellCss = readFileSync(join(sourceRoot, "ui", "shared", "page-shell.css"), "utf8");
@@ -114,7 +130,6 @@ describe("frontend feature boundaries", () => {
 
   it("keeps full-screen feature pages on the shared stable page shell", () => {
     const pages = [
-      ["features", "queries", "ui", "context-queries-view.ts"],
       ["ui", "memory", "memory-view.ts"],
       ["ui", "permissions", "permissions-view.ts"],
       ["features", "events", "ui", "events-view.ts"],

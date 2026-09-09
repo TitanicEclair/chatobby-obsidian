@@ -5,19 +5,20 @@ Vault chat is best for general vault work. A Project chat is best when the work
 has a stable purpose, a set of relevant folders, or several conversations that
 should stay easy to find together.
 
-Opening the Projects page does not change the conversation currently running.
-The page distinguishes the Project you are viewing from the Vault or Project
-shown in the active chat header.
+Opening Chatobby reveals Projects in the native left sidebar. Search, collapse
+and reorder Projects and their chats there. Browsing a Project or opening a
+workspace page does not move or replace the conversation currently running.
 
 ## Start or resume work
 
-1. Open **Projects** from Chatobby's top bar.
-2. Choose **Vault** for general work, or select an existing Project.
+1. Open Chatobby and use the **Projects** section in its left sidebar.
+2. Choose **New chat** for general Vault work, or open a Project group.
 3. Select an existing chat to resume it, or choose **New chat in Project**.
 4. Confirm the Vault or Project name in the active chat header before sending
    consequential instructions.
 
-You can create a Project from the Projects page or from a folder in Obsidian.
+Choose **Create Project** beside the Projects heading, or create one from a
+folder in Obsidian. The native modal keeps name, description and folders together.
 During creation, **Add folders** can select several vault or external folders.
 Selections accumulate instead of replacing one another; choose **Make primary**
 when a folder other than the first should be the working directory. If you
@@ -34,6 +35,10 @@ external-directory allowlist. This does not enable a denied capability: the
 active permission policy still decides whether the agent may read, edit, use a
 shell, or perform another operation.
 
+A Project with no linked folder stays rootless and does not inherit Vault
+access. Its chats retain their Project identity, but add a Project folder before
+relying on Project-scoped file access.
+
 ## Folder identity and external access
 
 Chatobby normally offers to place a small identity marker in each selected
@@ -46,15 +51,18 @@ Project.
 
 Project membership identifies the workspace; it does not grant a capability.
 Paths inside any available Project folder are evaluated as Project-root paths.
-A safely resolved path outside the Project is evaluated under the policy's
-separate external-directory rule. A linked path that escapes a Project folder
-is external as well. **Full access** allows safely resolved external paths,
-while more restrictive policies may ask or deny.
+**Read-only** and **Workspace** remain bounded to those selected roots. A linked
+path that escapes a Project folder stays outside that boundary. **Full access**
+is the explicit unsandboxed mode: it runs with the user's ordinary filesystem
+and network authority, including paths outside the Project. It is not a wider
+Project sandbox.
 
 To reorganize an existing chat, right-click it and choose **Move chat…**. Vault
 is always the first destination, followed by searchable active Projects. Moving
-a chat changes its workspace and future Project context; it does not rewrite or
-remove any messages.
+a chat changes its workspace and the authority used by future file, tool, and
+memory work; it does not rewrite or remove existing conversation context. Start
+a new Project chat when you need a separate context rather than moving the
+current conversation.
 
 Use the chat search above a Project's conversation list to search titles. Turn
 on **Search messages** to search inside conversations instead. Message results
@@ -79,10 +87,12 @@ the Project's folder set changes, Chatobby replaces those facts for the next
 model call. Missing or conflicting folders remain identified by state without
 a guessed local path.
 
-The Permissions page distinguishes **Current chat** from **Default for new
-chats**. The current binding is authoritative for the open conversation; the
-installation default applies only when a chat has no explicit binding. Every
-operation is still admitted independently against that effective policy.
+Choose **Read-only**, **Workspace** or **Full access** and agent network in the
+chat composer. These choices belong to the saved conversation. The independent
+**Permissions** page manages Obsidian app access per Vault/Project and reports
+installed native verification. Selecting a constrained mode alone does not
+prove local restrictions are ready. A rootless Project never falls back to the
+whole Vault. Archiving a Project preserves notes and saved conversations.
 
 ## Repair a Project that points at the wrong folder
 
@@ -143,7 +153,7 @@ artifacts, memory, personal workflow, subagents, automation, and Obsidian
 Markdown output. The five directory properties choose vault-relative
 conventions for artifacts, sandbox files, task lists, reports, and inbox work;
 they do not create folders. The complete property table and example are in the
-[README project-guidance section](../README.md#project-guidance-chatobbymd-agentsmd-and-claudemd).
+[project-guidance reference](project-guidance.md).
 
 For model setup, see [providers and models](providers-and-models.md). For
 authority boundaries, see [responsibility boundaries](responsibility-boundaries.md).

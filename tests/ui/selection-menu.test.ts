@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SelectionMenu } from "../../src/ui/composer/selection-menu";
+
+afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 describe("SelectionMenu", () => {
   it("keeps long option collections inside a bounded scroll region", () => {
@@ -30,13 +32,13 @@ describe("SelectionMenu", () => {
         onClose,
       });
       menu.render(host);
-      const search = host.querySelector<HTMLInputElement>(".chatobby-selection-menu__search");
+      const search = document.querySelector<HTMLInputElement>(".chatobby-selection-menu__search");
       if (!search) throw new Error("Search input was not rendered");
 
       search.value = "Policy 29";
       search.dispatchEvent(new Event("input"));
-      expect(host.querySelectorAll(".chatobby-selection-menu__option")).toHaveLength(1);
-      expect(host.textContent).toContain("Policy 29");
+      expect(document.querySelectorAll(".chatobby-selection-menu__option")).toHaveLength(1);
+      expect(document.body.textContent).toContain("Policy 29");
 
       search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
       await vi.waitFor(() => expect(onChoose).toHaveBeenCalledWith({ value: "28", label: "Policy 29" }));
@@ -67,6 +69,35 @@ describe("SelectionMenu", () => {
     outside.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 
     expect(onClose).toHaveBeenCalledWith(false);
+    menu.destroy();
+  });
+
+  it("scrolls initial, refreshed and keyboard selections within the list despite a nonzero header offset", () => {
+    const bounds = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches(".chatobby-selection-menu__list")) return new DOMRect(20, 140, 240, 80);
+      if (this.matches(".chatobby-selection-menu__option")) {
+        const list = this.parentElement!;
+        const index = [...list.children].indexOf(this);
+        return new DOMRect(20, 140 + index * 40 - list.scrollTop, 240, 32);
+      }
+      return bounds.call(this);
+    });
+    const anchor = document.body.createEl("button");
+    const items = ["A", "B", "C", "D"].map((value) => ({ value, label: value }));
+    const menu = new SelectionMenu({ anchor, title: "Model", searchPlaceholder: "Search", items,
+      selectedValue: "D", onChoose: vi.fn(), onClose: vi.fn() });
+    menu.render(document.body);
+    const list = document.querySelector<HTMLElement>(".chatobby-selection-menu__list")!;
+    const scrollDocument = vi.spyOn(window, "scrollTo");
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
+    expect(list.scrollTop).toBe(72);
+    menu.setItems(items, "A");
+    expect(list.scrollTop).toBe(0);
+    document.getElementById(menu.id)?.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+    expect(list.scrollTop).toBe(72);
+    expect(scrollDocument).not.toHaveBeenCalled();
+    expect(scrollIntoView).not.toHaveBeenCalled();
     menu.destroy();
   });
 });

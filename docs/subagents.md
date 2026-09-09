@@ -1,118 +1,79 @@
 # Subagents guide
 
-Subagents are supervised workers for a bounded part of a larger task. They keep
-their own feed, appear in the agent rail, and report results back to the main
-session. They are not background daemons or permanent listeners.
+Subagents are persistent collaborators with their own conversation, role and
+model. A researcher can gather evidence while a reviewer challenges assumptions;
+you and the parent can return with another question in the same conversation.
 
-## When delegation helps
+## Start with a useful responsibility
 
-Use one or more subagents when work can be separated cleanly, for example:
+Ask for delegation in an ordinary Chatobby conversation. Describe the objective,
+sources, allowed changes and the evidence you want back. The parent remains
+responsible for coordinating work and checking important claims.
 
-- research a defined question from at most five sources;
-- inspect one subsystem while the main agent studies another;
-- review a proposed edit without making changes;
-- run a focused verification in an isolated worktree;
-- compare two independent interpretations before the main agent reconciles
-  them.
+> Keep a researcher and a reviewer available for this Project. Ask the researcher
+> to compare these three notes, then have the reviewer identify weak assumptions.
+> Return a practical draft with links to the evidence. We will refine it together.
 
-Do not delegate merely to make a simple task look sophisticated. The main agent
-still owns scope, supervision, permission decisions, evidence reconciliation,
-and the final response.
+A reusable role saves instructions, a model and user skills. Manage roles for the
+Vault or a selected Project from **Subagents → Roles and settings → Roles**. Changing this editing
+area does not move your conversation. New agents inherit the initiating
+session's current access policy; role text cannot grant broader access.
+Older roles with a retired permission-profile override remain marked for review.
+Saving the role removes that override and adopts the current policy.
 
-## Write a bounded assignment
+## A response ends a turn
 
-Every launch should specify:
+An agent stays available after answering. A follow-up or delivered channel message
+can start another turn. Idle agents do not poll or consume model turns just to
+remain available.
 
-- the concrete objective;
-- what is in and out of scope;
-- allowed sources and mutations;
-- required output format and evidence;
-- acceptance checks;
-- permission policy;
-- limits and stop conditions that match the task.
+Chatobby imposes no lifetime token, turn, cost, tool-call, wall-time, concurrency
+or delegation-depth caps. Old saved cap values are ignored and removed by normal
+settings and role saves. Provider limits, model context windows, machine resources
+and provider charges still apply.
 
-Example:
+Use **Stop** to end an agent's work. Ending an individual turn does not complete
+an ongoing responsibility. Complete an agent only when that responsibility ends.
 
-> Launch one research subagent to compare these two claims. Use no more than
-> five primary sources, do not edit files, return a short evidence table with
-> links, and stop after the comparison is complete. Use the web-research policy.
+## Conversations, not a run inspector
 
-“Be concise” is not a measurable boundary. A source cap, exact deliverable, tool
-cap, or acceptance check is much more reliable.
+The native **Chatobby – Subagents** tab leads with parent conversations and their
+agents. Open a parent's saved chat, read an agent's conversation, send a follow-up,
+or stop active work. Earlier conversations remain available in the history list.
+The chat header's compact **Subagents** dropdown also opens child conversations.
+Obsidian owns the tabs, so you can arrange Chatobby beside your notes.
 
-## Roles and one-off runs
+The old task/result inspector, Retry, Clone, Fork, priority and budget-extension
+controls have been retired. Start new work from the relevant parent conversation
+so it receives the current workspace and policy.
 
-A reusable role is useful when the same kind of worker needs consistent
-instructions, model, policy, and limits. A one-off run can receive a permission
-policy directly; you should not have to create a temporary role merely to give
-one child web-only or read-only access.
+## Channels and direct messages
 
-Choose purpose-specific roles such as focused research, deep research,
-exploration, coding, or review. Their instructions should differ in evidence
-depth, mutation authority, output expectations, and stopping conditions instead
-of relying on a title alone.
+A Channel is a durable coordination room. An invitation to a live session delivers
+a host notification and starts a turn when the session is idle. The invited agent
+is instructed to join unless earlier user instructions say otherwise. Joining
+still passes the existing membership and permission checks.
 
-## Limits and lifecycle
+A channel DM targets one agent's delivery instead of waking every member. It
+remains part of shared channel history: **DM means targeted delivery, not private
+history**. Broadcast when everyone needs an update; DM an individual question.
+Replies should address the sender without creating endless acknowledgement loops.
 
-Subagents may be bounded with turns, tokens, total tool calls, named-tool calls,
-or wall-clock time. Use these only where they express the real task boundary.
-Ordinary subagents should not inherit a naive short timeout. A wall-time limit is
-appropriate for a time-boxed check, not for keeping an idle worker available for
-a later message.
+Invitations and messages do not change workspace access, network access or
+Obsidian grants. Delivery receipts distinguish successful delivery, unavailable
+recipients and failures. An invitation cannot wake a session that is not live.
 
-A normal child response ends that model turn. The child may remain waiting and
-addressable so the main agent can send a follow-up, but it is not continuously
-polling a channel. A message delivered to an idle child should activate a new
-turn through the channel/control system when that is the intended interaction.
+## Recovery and troubleshooting
 
-Lifecycle controls have distinct purposes:
-
-- **message** supplies additional information;
-- **steer** redirects current work;
-- **interrupt** ends the current model turn;
-- **cancel** terminates the run;
-- **retry** starts a new attempt;
-- **complete** closes reviewed direct-child work;
-- **reconcile** recovers an orphan after a backend restart.
-
-Refresh the run after a control race. If the child completed between observation
-and a steer request, the fresh terminal result is authoritative and the UI
-should report “already completed,” not an unexplained missing node.
-
-## Permissions and communication
-
-Bind the least-authority policy at launch. A subagent cannot alter or bypass its
-policy through instructions. When it needs user approval, the request should be
-visible to the main session so the user can decide without hunting through every
-child feed.
-
-Direct user-facing messages belong in the addressed agent's session feed.
-Agent-to-agent communication belongs in an authorized Channel, where sender,
-recipient, root session, and relevant project identity can be inspected. The
-main agent should review important child claims against primary evidence before
-using them in the final answer.
-
-## Moving around the UI
-
-The agent rail is the session-level switcher. It should show the main agent and
-the current live children, update as lifecycle state changes, and let you move
-between feeds without creating fake navigation history. Completed work remains
-in its original chronological place in the feed rather than being repeated at
-the bottom of later turns.
-
-The Subagents page is for runs, inbox messages, roles, and settings.
-Opening a child's feed is not the same as opening that page.
-
-## Troubleshooting
-
-- **The child asked for unexpected permission:** inspect its effective policy
-  and the exact surface/path/tool check; do not create a broader policy blindly.
-- **The child stopped too soon:** check explicit wall-time, token, turn, and tool
-  limits as well as provider errors.
-- **The child consumed excessive tokens:** tighten context mode and assignment,
-  bound sources and tools, and inspect cache/input accounting separately from
-  generated output.
-- **A channel message received no reply:** verify that delivery activates a new
-  child turn rather than merely persisting a message for a non-polling worker.
-- **The rail is stale:** refresh runtime state and inspect the run's durable
-  lifecycle; navigation should not be required to make a new child appear.
+- **A runtime restart interrupted an agent:** the previous active incarnation is
+  marked as needing recovery. Reconciliation starts an explicit new attempt;
+  automatic continuation across runtime restarts is not yet guaranteed.
+- **A message received no reply:** check membership, whether the recipient is
+  live, and the delivery receipt. Accepted delivery is distinct from a model
+  completing its response.
+- **An agent stopped unexpectedly:** inspect the provider error or interruption
+  in its conversation. Retired lifetime caps are not used to stop it.
+- **Work is becoming expensive:** narrow the responsibility and context, choose
+  a suitable model, inspect usage and stop agents you no longer need.
+- **A role requests an old permission profile:** review and save it under the
+  current policy before launching it again.

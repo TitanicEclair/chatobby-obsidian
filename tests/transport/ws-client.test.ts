@@ -287,12 +287,24 @@ describe("ChatobbyTransport", () => {
       id: frame.id,
       type: "response",
       result: {
-        outcome: { intentId: "intent-1", status: "completed", revision: 2 },
+        outcome: {
+          schemaVersion: 1,
+          protocolVersion: 2,
+          runtimeInstanceId: "runtime-1",
+          viewId: "view-1",
+          intentId: "intent-1",
+          status: "applied",
+          revision: 2,
+        },
       },
     });
     await expect(pending).resolves.toEqual({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      runtimeInstanceId: "runtime-1",
+      viewId: "view-1",
       intentId: "intent-1",
-      status: "completed",
+      status: "applied",
       revision: 2,
     });
     await transport.disconnect();

@@ -1,6 +1,5 @@
-/* Command modals: prompt input + actions (rename / bash / export / import / fork) */
-
-/* ── Command modals (rename / bash / export / import / fork) ── */
+/* Connector modal primitives. Command prompts share the first input/action
+   rules; auto-compaction owns the threshold model below. */
 .chatobby-prompt-input {
   width: 100%;
   margin-top: var(--size-4-2);
@@ -9,16 +8,17 @@
   border-radius: var(--radius-s);
   background: var(--chatobby-canvas);
   color: var(--text-normal);
-  font-family: var(--font-interface-theme);
+  font-family: var(--font-interface, system-ui, sans-serif);
   font-size: var(--font-ui-small);
   resize: vertical;
 }
 .chatobby-modal-actions { display: flex; justify-content: flex-end; gap: var(--size-4-2); margin-top: var(--size-4-3); }
 
+/* Auto-compaction explanation, threshold control, and safety guidance. */
 .chatobby-auto-compaction-modal__model {
   margin-bottom: var(--size-2-2);
   color: var(--text-normal);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
   overflow-wrap: anywhere;
@@ -61,7 +61,7 @@
   border-radius: var(--radius-s);
   background: var(--chatobby-surface-hover);
   color: var(--chatobby-accent);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
   text-align: right;

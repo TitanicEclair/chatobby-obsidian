@@ -10,10 +10,10 @@ import { renderAgentsPanel, renderSettingsPanel } from "./catalog-panels";
 import { AgentConversationView, type SubagentFeedHostFactory } from "./agent-conversation-view";
 import { renderRunWorkspace } from "./run-panels";
 import { renderInboxPanel } from "./inbox-panel";
-
-const MILLISECONDS_PER_MINUTE = 60_000;
+import { renderActiveAgents } from "./active-agents-panel";
 
 export interface SubagentsViewProps {
+  workspacePage?: boolean;
   store: SubagentStore;
   actions: SubagentScreenActions;
   onBack: () => void;
@@ -35,7 +35,7 @@ export class SubagentsView extends ChatobbyComponent {
 
   constructor(private readonly props: SubagentsViewProps) {
     super();
-    this.tab = props.initialTab ?? "runs";
+    this.tab = props.workspacePage && props.initialTab === "settings" ? "agents" : props.initialTab ?? "runs";
     this.feedOnly = props.initialFeedOnly ?? false;
   }
 
@@ -99,6 +99,7 @@ export class SubagentsView extends ChatobbyComponent {
       });
       return;
     }
+    if (!this.props.workspacePage) {
     const start = createPageIconButton(actions, "plus", "New run", {
       className: "chatobby-subagents__icon-button",
     });
@@ -109,14 +110,17 @@ export class SubagentsView extends ChatobbyComponent {
       this.startButton?.setAttr("aria-pressed", String(this.startExpanded));
       this.renderBody();
     });
+    }
     const refresh = createPageIconButton(actions, "refresh-cw", "Refresh subagents", {
       className: "chatobby-subagents__icon-button",
     });
     refresh.addEventListener("click", () => void this.props.actions.refresh());
+    if (!this.props.workspacePage) {
     const clear = createPageIconButton(actions, "trash-2", "Delete this session's subagent data", {
       className: "chatobby-subagents__icon-button is-danger",
     });
     clear.addEventListener("click", () => void this.props.actions.deleteSession());
+    }
     createPageIconButton(actions, "x", "Close subagents", {
       className: "chatobby-subagents__icon-button",
     }).addEventListener("click", this.props.onBack);
@@ -129,11 +133,11 @@ export class SubagentsView extends ChatobbyComponent {
       shell.setTabs([]);
       return;
     }
-    const labels: ReadonlyArray<[SubagentScreenTab, string]> = [
-      ["runs", "Runs"],
-      ["inbox", "Inbox"],
-      ["agents", "Roles"],
-      ["settings", "Settings"],
+    const labels: ReadonlyArray<readonly [SubagentScreenTab, string]> = [
+      ["runs", this.props.workspacePage ? "Activity" : "Runs"],
+      ["inbox", this.props.workspacePage ? "Requests" : "Inbox"],
+      ["agents", this.props.workspacePage ? "Roles and settings" : "Roles"],
+      ...(!this.props.workspacePage ? [["settings", "Settings"] as const] : []),
     ];
     shell.setTabs(labels.map(([tab, label]) => ({
       id: tab,
@@ -167,7 +171,7 @@ export class SubagentsView extends ChatobbyComponent {
     }
     this.conversation?.destroy();
     this.conversation = null;
-    shell.updateBody(`subagents:${this.tab}`, (body) => {
+    shell.updateBody(`subagents:${this.tab}:${this.tab === "agents" ? state.roleScopeId ?? "session" : ""}`, (body) => {
       if (this.startExpanded) this.renderStartForm(body, state);
       if (state.syncStatus === "loading" && state.runtimeId === null) {
         createPageState(body, {
@@ -187,10 +191,18 @@ export class SubagentsView extends ChatobbyComponent {
       }
       if (this.tab === "runs") {
         this.renderOverview(body, state);
-        renderRunWorkspace(body, state, this.props.actions);
+        if (this.props.workspacePage) {
+          renderActiveAgents(body, state, this.props.actions);
+          const history = body.createEl("details", { cls: "chatobby-subagents__history", attr: { "data-page-state-key": "subagents:history" } });
+          history.createEl("summary", { text: "Earlier agents and conversations" });
+          renderRunWorkspace(history.createDiv(), state, this.props.actions);
+        } else renderRunWorkspace(body, state, this.props.actions);
       }
       else if (this.tab === "inbox") renderInboxPanel(body, state, this.props.actions);
-      else if (this.tab === "agents") renderAgentsPanel(body, state, this.props.actions);
+      else if (this.tab === "agents") {
+        renderAgentsPanel(body, state, this.props.actions);
+        if (this.props.workspacePage) renderSettingsPanel(body, state, this.props.actions);
+      }
       else renderSettingsPanel(body, state, this.props.actions);
     });
   }
@@ -213,8 +225,9 @@ export class SubagentsView extends ChatobbyComponent {
     const working = summaries.reduce((total, run) => total + run.activeNodes + run.queuedNodes, 0);
     const problems = summaries.reduce((total, run) => total + run.failedNodes, 0);
     const facts: ReadonlyArray<readonly [string, string]> = [
-      ["Active", String(working)],
-      ["Waiting", String(pendingUserMessages.length + pendingDecisions)],
+      ["Working agents", String(working)],
+      ["Idle agents", String(summaries.reduce((total, run) => total + run.waitingNodes, 0))],
+      ...(pendingUserMessages.length + pendingDecisions > 0 ? [["Needs you", String(pendingUserMessages.length + pendingDecisions)] as const] : []),
       ["Done", String(summaries.filter((run) => run.status === "completed").length)],
       ...(problems > 0 ? [["Issues", String(problems)] as const] : []),
     ];
@@ -257,9 +270,6 @@ export class SubagentsView extends ChatobbyComponent {
     const priority = addInput(advancedGrid, "Priority", "0", "subagent:start:priority");
     priority.type = "number";
     priority.value = "0";
-    const maxTurns = numberInput(advancedGrid, "Turn limit", "Uses role default", "subagent:start:max-turns");
-    const maxTokens = numberInput(advancedGrid, "Total token budget", "Uses role default", "subagent:start:max-tokens");
-    const maxWallTime = numberInput(advancedGrid, "Time budget (minutes)", "Uses role default", "subagent:start:max-time");
     const controls = form.createDiv({ cls: "chatobby-subagents__start-actions" });
     const cancel = controls.createEl("button", { text: "Cancel", attr: { type: "button" } });
     cancel.addEventListener("click", () => {
@@ -278,9 +288,6 @@ export class SubagentsView extends ChatobbyComponent {
         contextMode: context.value as SubagentStartDraft["contextMode"],
         workspaceMode: workspace.value as SubagentStartDraft["workspaceMode"],
         priority: Number(priority.value) || 0,
-        maxTurns: positiveNumber(maxTurns.value),
-        maxTokens: positiveNumber(maxTokens.value),
-        maxWallTimeMs: minutesToMilliseconds(maxWallTime.value),
       };
       if (!draft.description || !draft.task || !draft.agentId) {
         this.setActionStatus("Name, task, and role are required.");
@@ -290,23 +297,6 @@ export class SubagentsView extends ChatobbyComponent {
       void this.props.actions.startRun(draft);
     });
   }
-}
-
-function numberInput(host: HTMLElement, label: string, placeholder: string, stateKey: string): HTMLInputElement {
-  const input = addInput(host, label, placeholder, stateKey);
-  input.type = "number";
-  input.min = "0";
-  return input;
-}
-
-function positiveNumber(value: string): number | undefined {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function minutesToMilliseconds(value: string): number | undefined {
-  const minutes = positiveNumber(value);
-  return minutes === undefined ? undefined : minutes * MILLISECONDS_PER_MINUTE;
 }
 
 function addInput(host: HTMLElement, label: string, placeholder: string, stateKey: string): HTMLInputElement {

@@ -1,0 +1,117 @@
+name: Chatobby connector Actions storage governance
+
+on:
+  schedule:
+    - cron: "53 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: Delete only the exact eligible IDs supplied below
+        required: true
+        default: false
+        type: boolean
+      artifact_ids:
+        description: Comma-separated exact artifact IDs
+        required: false
+        default: ""
+        type: string
+      cache_ids:
+        description: Comma-separated exact cache IDs
+        required: false
+        default: ""
+        type: string
+      protected_run_ids:
+        description: Comma-separated active-candidate or forensic run IDs to retain
+        required: false
+        default: ""
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: chatobby-connector-actions-storage-governance
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    name: Inventory and plan only
+    if: github.event_name == 'schedule' || inputs.execute != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out current policy
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Use locked Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+
+      - name: Write bounded dry-run receipt
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROTECTED_RUN_IDS: ${{ inputs.protected_run_ids }}
+        run: |
+          set -euo pipefail
+          args=(--repository "${GITHUB_REPOSITORY}" --receipt .actions-storage/dry-run.json)
+          IFS=',' read -ra protected <<< "${PROTECTED_RUN_IDS:-}"
+          for id in "${protected[@]}"; do
+            test -z "${id}" && continue
+            [[ "${id}" =~ ^[1-9][0-9]*$ ]]
+            args+=(--protect-run-id "${id}")
+          done
+          node scripts/actions-storage.mjs "${args[@]}"
+          node -e "const r=require('./.actions-storage/dry-run.json');process.stdout.write('Eligible: '+r.selected.length+' items / '+r.before.eligibleBytes+' bytes; total: '+r.before.bytes+' bytes\n')" >> "${GITHUB_STEP_SUMMARY}"
+
+  execute:
+    name: Owner-approved bounded cleanup
+    if: github.event_name == 'workflow_dispatch' && inputs.execute == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: chatobby-actions-storage-cleanup
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Check out current policy
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Use locked Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+
+      - name: Delete only current eligible exact IDs
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_IDS: ${{ inputs.artifact_ids }}
+          CACHE_IDS: ${{ inputs.cache_ids }}
+          PROTECTED_RUN_IDS: ${{ inputs.protected_run_ids }}
+        run: |
+          set -euo pipefail
+          args=(--repository "${GITHUB_REPOSITORY}" --execute --receipt .actions-storage/execute.json)
+          IFS=',' read -ra artifacts <<< "${ARTIFACT_IDS}"
+          for id in "${artifacts[@]}"; do
+            test -z "${id}" && continue
+            [[ "${id}" =~ ^[1-9][0-9]*$ ]]
+            args+=(--artifact-id "${id}")
+          done
+          IFS=',' read -ra caches <<< "${CACHE_IDS}"
+          for id in "${caches[@]}"; do
+            test -z "${id}" && continue
+            [[ "${id}" =~ ^[1-9][0-9]*$ ]]
+            args+=(--cache-id "${id}")
+          done
+          IFS=',' read -ra protected <<< "${PROTECTED_RUN_IDS}"
+          for id in "${protected[@]}"; do
+            test -z "${id}" && continue
+            [[ "${id}" =~ ^[1-9][0-9]*$ ]]
+            args+=(--protect-run-id "${id}")
+          done
+          node scripts/actions-storage.mjs "${args[@]}"
+          node -e "const r=require('./.actions-storage/execute.json');process.stdout.write('Deleted: '+r.deleted.length+' items; before: '+r.before.bytes+' bytes; after: '+r.after.bytes+' bytes\n')" >> "${GITHUB_STEP_SUMMARY}"

@@ -484,6 +484,7 @@ export class FeedRenderer extends ChatobbyComponent {
         this.scrollEl.scrollTop = this.scrollEl.scrollHeight;
         this.commitScroll(true, this.scrollEl.scrollTop);
       }
+      this.stickyPrompt.update(this.viewMode === "reading");
     });
   }
 
@@ -539,7 +540,7 @@ export class FeedRenderer extends ChatobbyComponent {
       const explicitUserScroll = Date.now() <= this.userScrollIntentUntil;
       const explicitlyScrolledUp = explicitUserScroll && scrollTop < this.lastObservedScrollTop - 1;
       this.lastObservedScrollTop = scrollTop;
-			this.stickyPrompt.update(true);
+			this.stickyPrompt.update(this.viewMode === "reading");
       if (this.bottomPinned && !explicitUserScroll) {
         if (this.autoScroll && distanceFromBottom >= SCROLL_BOTTOM_THRESHOLD_PX) this.onContentResized();
         this.commitScroll(true, scrollTop);

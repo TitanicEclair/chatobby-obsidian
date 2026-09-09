@@ -4,7 +4,7 @@
  * Uses Obsidian's FuzzySuggestModal to list all vault folders
  * (excluding the configured settings folder, .chatobby, and .git) with fuzzy search.
  *
- * Target architecture — see docs/vault-session-prefs.md for full design.
+ * Presentation and session ownership follow docs/architecture/frontend-modules.md.
  */
 
 import { App, FuzzySuggestModal, TFolder } from "obsidian";

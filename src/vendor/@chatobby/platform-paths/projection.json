@@ -4,10 +4,12 @@
   "sourceRoot": "packages/chatobby-platform-paths/src",
   "entry": "packages/chatobby-platform-paths/src/index.ts",
   "contractSurface": "complete-package-entry-closure",
+  "sourceRevision": "c7aa300c2e79617f64afe18b945fb1f3176adbe6",
+  "sourceContentSha256": "3b8522f62c59478613398238f710741ecd252e8eb5115d128953e1e56fdd92ef",
   "sourceFiles": [
     {
       "path": "catalogue.ts",
-      "sha256": "fbf9224ab2e1da3307b1e033839cea9caa8cd04bc6919fcdf6010b40755363e3"
+      "sha256": "147bb2611cec3403f406dc033a834ef2c58b8c776b2328563381ded20bd28592"
     },
     {
       "path": "index.ts",
@@ -15,14 +17,14 @@
     },
     {
       "path": "resolver.ts",
-      "sha256": "a61ebadc590af5e1efefe1e690cd8a2ae8ca5865737180ed0f4c0ccbdb26470c"
+      "sha256": "246b4a24eeb525ac5e5160aee69619e47b032acf0a244a2c26398df737d78450"
     }
   ],
   "files": [
     {
       "path": "catalogue.ts",
-      "size": 11632,
-      "sha256": "fbf9224ab2e1da3307b1e033839cea9caa8cd04bc6919fcdf6010b40755363e3"
+      "size": 12496,
+      "sha256": "147bb2611cec3403f406dc033a834ef2c58b8c776b2328563381ded20bd28592"
     },
     {
       "path": "index.ts",
@@ -31,8 +33,8 @@
     },
     {
       "path": "resolver.ts",
-      "size": 17904,
-      "sha256": "a61ebadc590af5e1efefe1e690cd8a2ae8ca5865737180ed0f4c0ccbdb26470c"
+      "size": 18353,
+      "sha256": "246b4a24eeb525ac5e5160aee69619e47b032acf0a244a2c26398df737d78450"
     }
   ]
 }

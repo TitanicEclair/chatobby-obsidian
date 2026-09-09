@@ -21,55 +21,92 @@ import {
 import { renderPluginBrandIcon } from "./plugin-brand-icon";
 
 export type McpViewIntent =
-  | { readonly type: "mcp.set-view"; readonly payload: {
-      readonly tab: "installed" | "discover";
-      readonly query: string;
-      readonly cursor?: string;
-    } }
-  | { readonly type: "mcp.preview"; readonly payload: { readonly draft: FrontendMcpServerDraft } }
-  | { readonly type: "mcp.save"; readonly payload: {
-      readonly expectedConfigRevision: string;
-      readonly draft: FrontendMcpServerDraft;
-    } }
-  | { readonly type: "mcp.configure-verified"; readonly payload: {
-      readonly expectedConfigRevision: string;
-      readonly pluginId: string;
-      readonly scope: "user" | "project";
-    } }
-  | { readonly type: "mcp.set-enabled"; readonly payload: {
-      readonly expectedConfigRevision: string;
-      readonly serverId: string;
-      readonly enabled: boolean;
-      readonly scope?: "user" | "project";
-    } }
-  | { readonly type: "mcp.set-credential-reference"; readonly payload: {
-      readonly expectedConfigRevision: string;
-      readonly serverId: string;
-      readonly reference: string;
-      readonly scope?: "user" | "project";
-    } }
-  | { readonly type:
-      | "mcp.discover"
-      | "mcp.connect"
-      | "mcp.disconnect"
-      | "mcp.auth-start"
-      | "mcp.diagnostics";
+  | {
+      readonly type: "mcp.set-view";
+      readonly payload: {
+        readonly tab: "installed" | "discover";
+        readonly query: string;
+        readonly cursor?: string;
+      };
+    }
+  | {
+      readonly type: "mcp.preview";
+      readonly payload: { readonly draft: FrontendMcpServerDraft };
+    }
+  | {
+      readonly type: "mcp.save";
+      readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly draft: FrontendMcpServerDraft;
+      };
+    }
+  | {
+      readonly type: "mcp.configure-verified";
+      readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly pluginId: string;
+        readonly scope: "user" | "project";
+      };
+    }
+  | {
+      readonly type: "mcp.set-enabled";
+      readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly enabled: boolean;
+        readonly scope?: "user" | "project";
+      };
+    }
+  | {
+      readonly type: "mcp.set-credential-reference";
+      readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly reference: string;
+        readonly scope?: "user" | "project";
+      };
+    }
+  | {
+      readonly type: "mcp.set-tool-enabled";
+      readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly toolName: string;
+        readonly enabled: boolean;
+        readonly scope?: "user" | "project";
+      };
+    }
+  | {
+      readonly type:
+        | "mcp.discover"
+        | "mcp.connect"
+        | "mcp.disconnect"
+        | "mcp.auth-start"
+        | "mcp.diagnostics";
       readonly payload: { readonly serverId: string };
     }
-  | { readonly type: "mcp.auth-complete"; readonly payload: {
-      readonly serverId: string;
-      readonly input: string;
-    } }
-  | { readonly type: "mcp.remove"; readonly payload: {
-      readonly expectedConfigRevision: string;
-      readonly serverId: string;
-      readonly scope?: "user" | "project";
-    } };
+  | {
+      readonly type: "mcp.auth-complete";
+      readonly payload: {
+        readonly serverId: string;
+        readonly input: string;
+      };
+    }
+  | {
+      readonly type: "mcp.remove";
+      readonly payload: {
+        readonly expectedConfigRevision: string;
+        readonly serverId: string;
+        readonly scope?: "user" | "project";
+      };
+    };
 
 interface McpViewProps {
   app: App;
   getModel(): FrontendPluginMcpScreenViewModel | null;
-  subscribe(listener: (model: FrontendPluginMcpScreenViewModel | null) => void): () => void;
+  subscribe(
+    listener: (model: FrontendPluginMcpScreenViewModel | null) => void,
+  ): () => void;
   onBack(): void;
   onRefresh(): Promise<void>;
   onNavigatePlugin(pluginId?: string): void;
@@ -91,6 +128,7 @@ export class McpView extends ChatobbyComponent {
   private refreshButton: HTMLButtonElement | null = null;
   private pluginId: string | undefined;
   private creating = false;
+  private editorSeed: FrontendMcpServerViewModel | null = null;
   private removeConfirmId: string | null = null;
   private localError: string | null = null;
   private busy = false;
@@ -115,18 +153,37 @@ export class McpView extends ChatobbyComponent {
   protected onRender(container: HTMLElement): void {
     container.tabIndex = -1;
     this.shell = new PageShell(container, { title: "Plugins", width: "wide" });
-    this.backButton = createPageIconButton(this.shell.actions, "arrow-left", "Back to plugins");
+    this.backButton = createPageIconButton(
+      this.shell.actions,
+      "arrow-left",
+      "Back to plugins",
+    );
     this.backButton.addClass("is-hidden");
-    this.backButton.addEventListener("click", () => this.props.onNavigatePlugin());
-    this.addButton = createPageIconButton(this.shell.actions, "plus", "Add MCP connection");
+    this.backButton.addEventListener("click", () =>
+      this.props.onNavigatePlugin(),
+    );
+    this.addButton = this.shell.actions.createEl("button", {
+      cls: "chatobby-mcp__connect",
+      attr: { type: "button", "aria-label": "Add MCP connection" },
+    });
+    setIcon(this.addButton.createSpan({ attr: { "aria-hidden": "true" } }), "plug-zap");
+    this.addButton.createSpan({ text: "Connect MCP" });
     this.addButton.addEventListener("click", () => {
+      this.editorSeed = null;
       this.creating = true;
       this.renderState(this.props.getModel());
     });
-    this.refreshButton = createPageIconButton(this.shell.actions, "refresh-cw", "Refresh plugins");
+    this.refreshButton = createPageIconButton(
+      this.shell.actions,
+      "refresh-cw",
+      "Refresh plugins",
+    );
     this.refreshButton.addEventListener("click", () => void this.refresh());
-    createPageIconButton(this.shell.actions, "x", "Close plugins")
-      .addEventListener("click", () => this.props.onBack());
+    createPageIconButton(
+      this.shell.actions,
+      "x",
+      "Close plugins",
+    ).addEventListener("click", () => this.props.onBack());
     this.unsubscribe = this.props.subscribe((model) => this.renderState(model));
     this.renderState(this.props.getModel());
   }
@@ -157,6 +214,7 @@ export class McpView extends ChatobbyComponent {
     this.restoreListScroll = Boolean(this.pluginId && !pluginId);
     this.pluginId = pluginId;
     this.creating = false;
+    this.editorSeed = null;
     this.removeConfirmId = null;
     this.renderState(model);
   }
@@ -173,6 +231,7 @@ export class McpView extends ChatobbyComponent {
       this.renderState(this.props.getModel());
     } else if (this.creating) {
       this.creating = false;
+      this.editorSeed = null;
       this.renderState(this.props.getModel());
     } else if (this.pluginId) {
       this.props.onNavigatePlugin();
@@ -188,16 +247,26 @@ export class McpView extends ChatobbyComponent {
     if (!shell) return;
     const error = this.localError ?? model?.error;
     const detail = this.pluginId ? model?.selectedPlugin : undefined;
-    const awaitingDetail = Boolean(this.pluginId && model?.selectedPluginId !== this.pluginId);
+    const awaitingDetail = Boolean(
+      this.pluginId && model?.selectedPluginId !== this.pluginId,
+    );
     shell.setBusy(this.busy || awaitingDetail);
     this.refreshButton?.toggleClass("is-loading", model?.loading ?? false);
     this.refreshButton?.setAttr("aria-busy", String(model?.loading ?? false));
     this.backButton?.toggleClass("is-hidden", !this.pluginId);
     this.addButton?.toggleClass("is-hidden", Boolean(this.pluginId));
-    shell.setTitle(detail?.title ?? (this.pluginId ? "Plugin" : "Plugins"), detail ? pluginSubtitle(detail) : undefined);
+    shell.setTitle(
+      detail?.title ?? (this.pluginId ? "Plugin" : "Plugins"),
+      detail ? pluginSubtitle(detail) : undefined,
+    );
     shell.setStatus(
       error
-        ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.refresh() }
+        ? {
+            tone: "error",
+            message: error,
+            actionLabel: "Try again",
+            onAction: () => void this.refresh(),
+          }
         : model?.statusMessage
           ? { tone: "success", message: model.statusMessage }
           : null,
@@ -216,13 +285,17 @@ export class McpView extends ChatobbyComponent {
           createPageState(body, {
             kind: "error",
             title: "Plugin unavailable",
-            description: "It may have been removed or the catalogue may have changed.",
+            description:
+              "It may have been removed or the catalogue may have changed.",
             actionLabel: "Back to plugins",
             onAction: () => this.props.onNavigatePlugin(),
           });
         } else {
-          if (model.pendingAuthentication) this.renderAuthentication(body, model);
-          this.renderPluginDetail(body, model, detail);
+          if (model.pendingAuthentication)
+            this.renderAuthentication(body, model);
+          if (this.creating && this.editorSeed)
+            this.renderEditor(body, model, this.editorSeed);
+          else this.renderPluginDetail(body, model, detail);
         }
       });
       return;
@@ -248,7 +321,9 @@ export class McpView extends ChatobbyComponent {
         createPageState(body, {
           kind: error ? "error" : "loading",
           title: error ? "Plugins are unavailable" : "Loading plugins",
-          description: error ? "Check the Chatobby runtime and try again." : "Reading installed capabilities.",
+          description: error
+            ? "Check the Chatobby runtime and try again."
+            : "Reading installed capabilities.",
         });
         return;
       }
@@ -262,9 +337,15 @@ export class McpView extends ChatobbyComponent {
     }
   }
 
-  private renderInstalled(parent: HTMLElement, model: FrontendPluginMcpScreenViewModel): void {
+  private renderInstalled(
+    parent: HTMLElement,
+    model: FrontendPluginMcpScreenViewModel,
+  ): void {
     if (this.creating) this.renderEditor(parent, model);
-    const plugins = this.filteredPlugins(model.installedPlugins, this.installedQuery);
+    const plugins = this.filteredPlugins(
+      model.installedPlugins,
+      this.installedQuery,
+    );
     this.renderFilterBar(
       parent,
       model,
@@ -276,19 +357,27 @@ export class McpView extends ChatobbyComponent {
     if (plugins.length === 0) {
       createPageState(parent, {
         kind: model.installedPlugins.length === 0 ? "empty" : "no-results",
-        title: model.installedPlugins.length === 0 ? "No connections added" : "No matching connections",
-        description: model.installedPlugins.length === 0
-          ? "Add a connection or choose one verified by Chatobby."
-          : "Change the search or filters.",
+        title:
+          model.installedPlugins.length === 0
+            ? "No connections added"
+            : "No matching connections",
+        description:
+          model.installedPlugins.length === 0
+            ? "Add a connection or choose one verified by Chatobby."
+            : "Change the search or filters.",
       });
       return;
     }
-    const chatobby = plugins.filter((plugin) =>
-      plugin.source === "built-in" || plugin.id === "chatobby:local-skills",
+    const chatobby = plugins.filter(
+      (plugin) =>
+        plugin.source === "built-in" || plugin.id === "chatobby:local-skills",
     );
-    const verified = plugins.filter((plugin) => plugin.source === "first-party");
-    const manual = plugins.filter((plugin) =>
-      plugin.source === "custom" && plugin.id !== "chatobby:local-skills",
+    const verified = plugins.filter(
+      (plugin) => plugin.source === "first-party",
+    );
+    const manual = plugins.filter(
+      (plugin) =>
+        plugin.source === "custom" && plugin.id !== "chatobby:local-skills",
     );
     this.renderPluginGroup(
       parent,
@@ -299,7 +388,7 @@ export class McpView extends ChatobbyComponent {
     this.renderPluginGroup(
       parent,
       "Verified connections",
-      "Definitions reviewed and shipped by Chatobby. Tool access still depends on the active permission policy.",
+      "Definitions reviewed and shipped by Chatobby. Connection state is separate from the active sandbox and network limits.",
       verified,
     );
     this.renderPluginGroup(
@@ -317,12 +406,21 @@ export class McpView extends ChatobbyComponent {
     plugins: readonly FrontendChatobbyPluginSummary[],
   ): void {
     if (plugins.length === 0) return;
-    const section = createPageSection(parent, { title, description, surface: "divided" });
-    const list = section.content.createDiv({ cls: "chatobby-mcp__plugin-list" });
+    const section = createPageSection(parent, {
+      title,
+      description,
+      surface: "divided",
+    });
+    const list = section.content.createDiv({
+      cls: "chatobby-mcp__plugin-list",
+    });
     for (const plugin of plugins) this.renderPluginRow(list, plugin);
   }
 
-  private renderDiscover(parent: HTMLElement, model: FrontendPluginMcpScreenViewModel): void {
+  private renderDiscover(
+    parent: HTMLElement,
+    model: FrontendPluginMcpScreenViewModel,
+  ): void {
     const plugins = this.filteredPlugins(model.catalogPlugins, model.query);
     this.renderFilterBar(
       parent,
@@ -333,19 +431,28 @@ export class McpView extends ChatobbyComponent {
       model.catalogPlugins.length,
     );
     const section = createPageSection(parent, {
-      title: model.query ? `Results for “${model.query}”` : "Verified by Chatobby",
-      description: "A small catalogue of connection definitions that Chatobby reviews, tests, and ships with each release.",
+      title: model.query
+        ? `Results for “${model.query}”`
+        : "Verified by Chatobby",
+      description:
+        "A small catalogue of connection definitions that Chatobby reviews, tests, and ships with each release.",
       surface: "divided",
     });
-    const list = section.content.createDiv({ cls: "chatobby-mcp__plugin-list" });
+    const list = section.content.createDiv({
+      cls: "chatobby-mcp__plugin-list",
+    });
     if (plugins.length === 0) {
       const filteredOut = model.catalogPlugins.length > 0;
       createPageState(list, {
         kind: model.query || filteredOut ? "no-results" : "empty",
-        title: model.query || filteredOut ? "No matching verified plugins" : "No verified plugins in this release",
-        description: model.query || filteredOut
-          ? "Try a shorter name, another capability, or a different connection filter."
-          : "You can still add a manual MCP connection.",
+        title:
+          model.query || filteredOut
+            ? "No matching verified plugins"
+            : "No verified plugins in this release",
+        description:
+          model.query || filteredOut
+            ? "Try a shorter name, another capability, or a different connection filter."
+            : "You can still add a manual MCP connection.",
       });
     } else {
       for (const plugin of plugins) this.renderPluginRow(list, plugin);
@@ -368,14 +475,18 @@ export class McpView extends ChatobbyComponent {
     const search = toolbar.createEl("input", {
       attr: {
         type: "search",
-        placeholder: tab === "discover" ? "Search plugins" : "Filter installed plugins",
-        "aria-label": tab === "discover" ? "Search plugins" : "Filter installed plugins",
+        placeholder:
+          tab === "discover" ? "Search plugins" : "Filter installed plugins",
+        "aria-label":
+          tab === "discover" ? "Search plugins" : "Filter installed plugins",
         "data-page-state-key": `plugins:${tab}:query`,
       },
     });
     search.value = tab === "discover" ? model.query : this.installedQuery;
     if (tab === "discover") {
-      search.addEventListener("input", () => this.scheduleSearch(search.value.trim(), model.query));
+      search.addEventListener("input", () =>
+        this.scheduleSearch(search.value.trim(), model.query),
+      );
       search.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
@@ -388,9 +499,14 @@ export class McpView extends ChatobbyComponent {
         this.renderState(this.props.getModel());
       });
     }
-    const controls = toolbar.createDiv({ cls: "chatobby-mcp__filter-controls" });
+    const controls = toolbar.createDiv({
+      cls: "chatobby-mcp__filter-controls",
+    });
     const connection = controls.createEl("select", {
-      attr: { "aria-label": "Filter by connection", "data-page-state-key": "plugins:connection" },
+      attr: {
+        "aria-label": "Filter by connection",
+        "data-page-state-key": "plugins:connection",
+      },
     });
     selectOptions(connection, [
       ["all", "Any connection"],
@@ -399,14 +515,22 @@ export class McpView extends ChatobbyComponent {
     ]);
     connection.value = this.connectionFilter;
     connection.addEventListener("change", () => {
-      this.connectionFilter = isConnectionFilter(connection.value) ? connection.value : "all";
+      this.connectionFilter = isConnectionFilter(connection.value)
+        ? connection.value
+        : "all";
       this.renderState(this.props.getModel());
     });
     const sort = controls.createEl("select", {
-      attr: { "aria-label": "Sort plugins", "data-page-state-key": "plugins:sort" },
+      attr: {
+        "aria-label": "Sort plugins",
+        "data-page-state-key": "plugins:sort",
+      },
     });
     selectOptions(sort, [
-      ["relevance", tab === "discover" ? "Recommended order" : "Connection order"],
+      [
+        "relevance",
+        tab === "discover" ? "Recommended order" : "Connection order",
+      ],
       ["name", "Name"],
     ]);
     sort.value = this.sort;
@@ -416,16 +540,20 @@ export class McpView extends ChatobbyComponent {
     });
     toolbar.createDiv({
       cls: "chatobby-mcp__result-count",
-      text: shown < matches
-        ? `${shown} of ${matches} shown`
-        : matches < indexed
-          ? `${matches} ${matches === 1 ? "match" : "matches"}`
-          : `${matches} shown`,
+      text:
+        shown < matches
+          ? `${shown} of ${matches} shown`
+          : matches < indexed
+            ? `${matches} ${matches === 1 ? "match" : "matches"}`
+            : `${matches} shown`,
       attr: { "aria-live": "polite" },
     });
   }
 
-  private renderPluginRow(parent: HTMLElement, plugin: FrontendChatobbyPluginSummary): void {
+  private renderPluginRow(
+    parent: HTMLElement,
+    plugin: FrontendChatobbyPluginSummary,
+  ): void {
     const row = parent.createEl("button", {
       cls: "chatobby-mcp__plugin-row",
       attr: {
@@ -434,7 +562,10 @@ export class McpView extends ChatobbyComponent {
         "data-page-focus-key": `plugin:${plugin.id}`,
       },
     });
-    const icon = row.createSpan({ cls: "chatobby-mcp__plugin-icon", attr: { "aria-hidden": "true" } });
+    const icon = row.createSpan({
+      cls: "chatobby-mcp__plugin-icon",
+      attr: { "aria-hidden": "true" },
+    });
     if (plugin.verifiedPublisher && plugin.brandIcon) {
       renderPluginBrandIcon(icon, plugin.brandIcon);
     } else {
@@ -442,19 +573,37 @@ export class McpView extends ChatobbyComponent {
     }
     const copy = row.createSpan({ cls: "chatobby-mcp__plugin-copy" });
     const heading = copy.createSpan({ cls: "chatobby-mcp__plugin-heading" });
-    heading.createSpan({ cls: "chatobby-mcp__plugin-title", text: plugin.title });
+    heading.createSpan({
+      cls: "chatobby-mcp__plugin-title",
+      text: plugin.title,
+    });
     if (plugin.verifiedPublisher) {
       const verified = heading.createSpan({
         cls: "chatobby-mcp__plugin-verified",
-        attr: { "aria-label": "Verified by Chatobby", title: "Verified by Chatobby" },
+        attr: {
+          "aria-label": "Verified by Chatobby",
+          title: "Verified by Chatobby",
+        },
       });
       setIcon(verified, "badge-check");
     }
-    if (plugin.installed) heading.createSpan({ cls: "chatobby-mcp__plugin-installed", text: "Installed" });
-    copy.createSpan({ cls: "chatobby-mcp__plugin-description", text: plugin.description });
+    if (plugin.installed)
+      heading.createSpan({
+        cls: "chatobby-mcp__plugin-installed",
+        text: "Installed",
+      });
+    copy.createSpan({
+      cls: "chatobby-mcp__plugin-description",
+      text: plugin.description,
+    });
     copy.createSpan({
       cls: "chatobby-mcp__plugin-meta",
-      text: [plugin.publisher, plugin.sourceLabel, plugin.transportLabel, plugin.version]
+      text: [
+        plugin.publisher,
+        plugin.sourceLabel,
+        plugin.transportLabel,
+        plugin.version,
+      ]
         .filter(Boolean)
         .join(" · "),
     });
@@ -463,7 +612,10 @@ export class McpView extends ChatobbyComponent {
       text: capabilityCountLabel(plugin),
     });
     summary.setAttr("title", capabilityCountTitle(plugin));
-    const chevron = row.createSpan({ cls: "chatobby-mcp__plugin-chevron", attr: { "aria-hidden": "true" } });
+    const chevron = row.createSpan({
+      cls: "chatobby-mcp__plugin-chevron",
+      attr: { "aria-hidden": "true" },
+    });
     setIcon(chevron, "chevron-right");
     row.addEventListener("click", () => this.props.onNavigatePlugin(plugin.id));
   }
@@ -487,13 +639,25 @@ export class McpView extends ChatobbyComponent {
         attr: { "aria-hidden": "true" },
       });
       renderPluginBrandIcon(mark, plugin.brandIcon);
-      identity.createSpan({ text: `Verified by Chatobby · ${plugin.publisher}` });
+      identity.createSpan({
+        text: `Verified by Chatobby · ${plugin.publisher}`,
+      });
     }
-    const metadata = overview.content.createDiv({ cls: "chatobby-mcp__detail-meta" });
-    for (const value of [plugin.publisher, plugin.sourceLabel, plugin.transportLabel, plugin.version]) {
+    const metadata = overview.content.createDiv({
+      cls: "chatobby-mcp__detail-meta",
+    });
+    for (const value of [
+      plugin.publisher,
+      plugin.sourceLabel,
+      plugin.transportLabel,
+      plugin.version,
+    ]) {
       if (value) metadata.createSpan({ text: value });
     }
-    const actions = createPageActionRow(overview.content, "chatobby-mcp__detail-actions");
+    const actions = createPageActionRow(
+      overview.content,
+      "chatobby-mcp__detail-actions",
+    );
     const repositoryUrl = safeExternalUrl(plugin.repositoryUrl);
     if (repositoryUrl) {
       actions.createEl("a", {
@@ -510,36 +674,48 @@ export class McpView extends ChatobbyComponent {
         attr: { type: "button" },
       });
       install.disabled = this.busy;
-      install.addEventListener("click", () => void this.runIntent({
-        type: "mcp.configure-verified",
-        payload: {
-          expectedConfigRevision: model.configRevision,
-          pluginId: catalog.name,
-          scope: "project",
-        },
-      }));
+      install.addEventListener(
+        "click",
+        () =>
+          void this.runIntent({
+            type: "mcp.configure-verified",
+            payload: {
+              expectedConfigRevision: model.configRevision,
+              pluginId: catalog.name,
+              scope: "user",
+            },
+          }),
+      );
     }
     if (plugin.server) {
       this.renderServerActions(overview.content, model, plugin.server);
       if (plugin.server.authentication === "bearer") {
         this.renderCredentialSelector(parent, model, plugin.server);
       }
+      this.renderToolExposure(parent, model, plugin.server);
     }
 
-    this.renderCapabilities(parent, plugin.capabilities);
-    if (plugin.setup.length > 0) this.renderDefinitionSection(parent, "Setup", plugin.setup);
+    const otherCapabilities = plugin.capabilities.filter(
+      (capability) =>
+        capability.kind !== "mcp-tool" && capability.kind !== "mcp-resource",
+    );
+    if (otherCapabilities.length > 0)
+      this.renderCapabilities(parent, otherCapabilities);
+    if (plugin.setup.length > 0)
+      this.renderDefinitionSection(parent, "Setup", plugin.setup);
     if (plugin.permissions.length > 0) {
       this.renderTextList(
         parent,
-        "Permissions",
-        "Installing a plugin does not grant these capabilities automatically.",
+        "Access notes",
+        "Review the service's own access separately from Chatobby's sandbox and network limits.",
         plugin.permissions,
       );
     }
     if (plugin.metrics.length > 0) {
       const section = createPageSection(parent, {
         title: "Activity",
-        description: "Activity is informational and does not establish safety or quality.",
+        description:
+          "Activity is informational and does not establish safety or quality.",
         surface: "divided",
       });
       for (const metric of plugin.metrics) {
@@ -556,11 +732,20 @@ export class McpView extends ChatobbyComponent {
         } else {
           value.textContent = metric.value.toLocaleString();
         }
-        row.createSpan({ cls: "chatobby-mcp__metric-period", text: metric.period });
+        row.createSpan({
+          cls: "chatobby-mcp__metric-period",
+          text: metric.period,
+        });
       }
     }
     if (plugin.cautions.length > 0) {
-      this.renderTextList(parent, "Before enabling", undefined, plugin.cautions, "warning");
+      this.renderTextList(
+        parent,
+        "Before enabling",
+        undefined,
+        plugin.cautions,
+        "warning",
+      );
     }
   }
 
@@ -570,17 +755,33 @@ export class McpView extends ChatobbyComponent {
   ): void {
     const section = createPageSection(parent, {
       title: "Capabilities",
-      description: "Only enabled capabilities that pass the active policy are available to agents.",
+      description:
+        "These are reported by the connection. Chatobby's sandbox and network limits remain separate.",
       surface: "divided",
     });
     for (const capability of capabilities) {
-      const row = section.content.createDiv({ cls: "chatobby-mcp__capability" });
-      const icon = row.createSpan({ cls: "chatobby-mcp__capability-icon", attr: { "aria-hidden": "true" } });
+      const row = section.content.createDiv({
+        cls: "chatobby-mcp__capability",
+      });
+      const icon = row.createSpan({
+        cls: "chatobby-mcp__capability-icon",
+        attr: { "aria-hidden": "true" },
+      });
       setIcon(icon, capabilityIcon(capability.kind));
       const copy = row.createDiv({ cls: "chatobby-mcp__capability-copy" });
-      copy.createDiv({ cls: "chatobby-mcp__capability-title", text: capability.title });
-      copy.createDiv({ cls: "chatobby-mcp__capability-description", text: capability.description });
-      if (capability.detail) row.createDiv({ cls: "chatobby-mcp__capability-detail", text: capability.detail });
+      copy.createDiv({
+        cls: "chatobby-mcp__capability-title",
+        text: capability.title,
+      });
+      copy.createDiv({
+        cls: "chatobby-mcp__capability-description",
+        text: capability.description,
+      });
+      if (capability.detail)
+        row.createDiv({
+          cls: "chatobby-mcp__capability-detail",
+          text: capability.detail,
+        });
     }
   }
 
@@ -590,7 +791,9 @@ export class McpView extends ChatobbyComponent {
     values: readonly { readonly label: string; readonly value: string }[],
   ): void {
     const section = createPageSection(parent, { title, surface: "divided" });
-    const definition = section.content.createEl("dl", { cls: "chatobby-mcp__definition" });
+    const definition = section.content.createEl("dl", {
+      cls: "chatobby-mcp__definition",
+    });
     for (const value of values) detail(definition, value.label, value.value);
   }
 
@@ -604,10 +807,13 @@ export class McpView extends ChatobbyComponent {
     const section = createPageSection(parent, {
       title,
       description,
-      className: tone === "warning" ? "chatobby-mcp__warning-section" : undefined,
+      className:
+        tone === "warning" ? "chatobby-mcp__warning-section" : undefined,
       surface: "divided",
     });
-    const list = section.content.createEl("ul", { cls: "chatobby-mcp__text-list" });
+    const list = section.content.createEl("ul", {
+      cls: "chatobby-mcp__text-list",
+    });
     for (const value of values) list.createEl("li", { text: value });
   }
 
@@ -620,49 +826,114 @@ export class McpView extends ChatobbyComponent {
     if (server.state === "connecting" || server.state === "discovering") {
       actions.createSpan({
         cls: "chatobby-mcp__operation-status",
-        text: server.state === "connecting" ? "Connecting…" : "Refreshing capabilities…",
+        text:
+          server.state === "connecting" ? "Connecting…" : "Testing connection…",
         attr: { role: "status", "aria-live": "polite" },
       });
       action(
         actions,
-        server.state === "connecting" ? "Cancel connection" : "Stop refresh",
+        server.state === "connecting" ? "Cancel connection" : "Stop test",
         () => void this.cancelServerOperation(server.id),
       );
       return;
+    }
+    if (
+      server.sourceScope === "project" &&
+      !server.writable &&
+      !server.builtIn
+    ) {
+      const review = actions.createEl("button", {
+        cls: "mod-cta",
+        text: "Review & add",
+        attr: { type: "button" },
+      });
+      review.disabled = this.busy;
+      review.addEventListener("click", () => {
+        this.editorSeed = server;
+        this.creating = true;
+        this.renderState(this.props.getModel());
+      });
     }
     const toggle = actions.createEl("button", {
       text: server.enabled ? "Disable" : "Enable",
       attr: { type: "button" },
     });
     toggle.disabled = this.busy || server.builtIn || !server.writable;
-    toggle.addEventListener("click", () => void this.runIntent({
-      type: "mcp.set-enabled",
-      payload: {
-        expectedConfigRevision: model.configRevision,
-        serverId: server.id,
-        enabled: !server.enabled,
-        scope: server.writable ? writableScope(server.sourceScope) : undefined,
-      },
-    }));
+    toggle.addEventListener(
+      "click",
+      () =>
+        void this.runIntent({
+          type: "mcp.set-enabled",
+          payload: {
+            expectedConfigRevision: model.configRevision,
+            serverId: server.id,
+            enabled: !server.enabled,
+            scope: server.writable ? "user" : undefined,
+          },
+        }),
+    );
     if (
-      server.authentication === "oauth"
-      && (server.requiresAuthentication || server.state === "needs-sign-in")
+      server.writable &&
+      server.authentication === "oauth" &&
+      (server.requiresAuthentication || server.state === "needs-sign-in")
     ) {
-      action(actions, "Sign in", () => this.simpleIntent("mcp.auth-start", server.id));
+      action(actions, "Sign in", () =>
+        this.simpleIntent("mcp.auth-start", server.id),
+      );
     }
     if (server.enabled && server.state !== "connected") {
-      const connect = action(actions, "Connect", () => this.simpleIntent("mcp.connect", server.id));
-      if (server.authentication === "bearer" && !server.credentialReference) {
+      const connect = action(actions, "Connect", () =>
+        this.simpleIntent("mcp.connect", server.id),
+      );
+      if (
+        server.transport === "local" &&
+        server.localExecution?.status !== "available"
+      ) {
         connect.disabled = true;
-        connect.setAttr("title", "Link an access token in Authentication before connecting.");
+        connect.setAttr(
+          "title",
+          localExecutionReason(server),
+        );
+      } else if (
+        server.authentication === "bearer" &&
+        !server.credentialReference
+      ) {
+        connect.disabled = true;
+        connect.setAttr(
+          "title",
+          "Link an access token in Authentication before connecting.",
+        );
         connect.setAttr("aria-describedby", `mcp-auth-status-${server.id}`);
       }
     }
     if (server.state === "connected") {
-      action(actions, "Disconnect", () => this.simpleIntent("mcp.disconnect", server.id));
+      action(actions, "Disconnect", () =>
+        this.simpleIntent("mcp.disconnect", server.id),
+      );
     }
-    if (server.enabled) action(actions, "Refresh tools", () => this.simpleIntent("mcp.discover", server.id));
-    action(actions, "Diagnostics", () => this.simpleIntent("mcp.diagnostics", server.id));
+    const discover = action(actions, "Test & discover", () =>
+      this.simpleIntent("mcp.discover", server.id),
+    );
+    discover.disabled =
+      this.busy ||
+      !server.writable ||
+      (server.transport === "local" &&
+        server.localExecution?.status !== "available");
+    discover.setAttr(
+      "title",
+      requiresRegistrationReview(server)
+        ? "Review and add this suggestion to your Chatobby settings before contacting it."
+        : server.transport === "local"
+        ? server.localExecution?.status === "available"
+          ? "Starts this local executable temporarily and unsandboxed as your user account. It does not enable agent access."
+          : localExecutionReason(server)
+        : !server.writable
+          ? "This built-in connection is managed by Chatobby."
+        : "Contacts this server temporarily. It does not enable agent access.",
+    );
+    action(actions, "Diagnostics", () =>
+      this.simpleIntent("mcp.diagnostics", server.id),
+    );
     if (server.writable && !server.builtIn) {
       const remove = actions.createEl("button", {
         cls: "is-danger",
@@ -677,7 +948,7 @@ export class McpView extends ChatobbyComponent {
     if (this.removeConfirmId !== server.id) return;
     const confirm = parent.createDiv({ cls: "chatobby-mcp__confirm" });
     confirm.createDiv({
-      text: `Remove ${server.id} from ${server.sourceScope === "project" ? "this project" : "your Chatobby settings"}?`,
+      text: `Remove ${server.id} from your Chatobby settings?`,
     });
     const confirmActions = createPageActionRow(confirm);
     action(confirmActions, "Cancel", () => {
@@ -689,17 +960,141 @@ export class McpView extends ChatobbyComponent {
       text: "Remove plugin",
       attr: { type: "button" },
     });
-    remove.addEventListener("click", () => void this.runIntent({
-      type: "mcp.remove",
-      payload: {
-        serverId: server.id,
-        expectedConfigRevision: model.configRevision,
-        scope: writableScope(server.sourceScope),
-      },
-    }, () => {
-      this.removeConfirmId = null;
-      this.props.onNavigatePlugin();
-    }));
+    remove.addEventListener(
+      "click",
+      () =>
+        void this.runIntent(
+          {
+            type: "mcp.remove",
+            payload: {
+              serverId: server.id,
+              expectedConfigRevision: model.configRevision,
+              scope: "user",
+            },
+          },
+          () => {
+            this.removeConfirmId = null;
+            this.props.onNavigatePlugin();
+          },
+        ),
+    );
+  }
+
+  private renderToolExposure(
+    parent: HTMLElement,
+    model: FrontendPluginMcpScreenViewModel,
+    server: FrontendMcpServerViewModel,
+  ): void {
+    const section = createPageSection(parent, {
+      title: "Agent tool access",
+      description:
+        "Choose the exact capabilities this registered server may expose to the agent. Selecting tools does not change the agent's access mode or grant project, vault, filesystem, shell, or network access.",
+      surface: "divided",
+    });
+    section.content.createDiv({
+      cls: "chatobby-mcp__tool-test-note",
+      text:
+        requiresRegistrationReview(server)
+          ? "Review and add this suggestion before Chatobby contacts it. Nothing is exposed automatically."
+          : server.transport === "remote"
+          ? "Test & discover contacts this server and can affect the remote service. It never turns on agent access."
+          : server.localExecution?.status === "available"
+            ? "Test & discover starts this local executable temporarily and unsandboxed as your user account. It never turns on agent access."
+            : `${localExecutionReason(server)} Nothing is exposed automatically.`,
+    });
+    const summary = section.content.createDiv({
+      cls: "chatobby-mcp__tool-access-summary",
+      text: `${server.enabledToolCount} exposed · ${server.toolCount} ${server.toolCount === 1 ? "tool" : "tools"} · ${server.resourceCount} ${server.resourceCount === 1 ? "resource" : "resources"}`,
+    });
+    summary.setAttr("aria-live", "polite");
+
+    if (server.toolReviewRequired) {
+      section.content.createDiv({
+        cls: "chatobby-mcp__tool-review",
+        text: "Review required. This older connection used implicit access, so no tools are exposed until you choose them.",
+        attr: { role: "status" },
+      });
+    }
+
+    const capabilities = [
+      ...server.tools.map((tool) => ({
+        kind: "Tool",
+        name: tool.name,
+        title: tool.title ?? tool.name,
+        description: tool.description,
+        enabled: tool.enabled,
+      })),
+      ...server.resources.map((resource) => ({
+        kind: "Resource",
+        name: resource.toolName,
+        title: resource.name,
+        description: resource.description ?? resource.uri,
+        enabled: resource.enabled,
+      })),
+    ];
+    if (capabilities.length === 0) {
+      section.content.createDiv({
+        cls: "chatobby-mcp__tool-empty",
+        text:
+          requiresRegistrationReview(server)
+            ? "Review and add this suggestion to your Chatobby settings before testing it. Nothing is exposed automatically."
+            : server.transport === "remote"
+            ? "Use Test & discover to contact this server and review its reported capabilities. Nothing is exposed automatically."
+            : server.localExecution?.status === "available"
+              ? "Use Test & discover to start this local executable temporarily and review its reported capabilities. It runs unsandboxed, and nothing is exposed automatically."
+              : `${localExecutionReason(server)} Nothing is exposed automatically.`,
+      });
+      return;
+    }
+
+    const list = section.content.createDiv({
+      cls: "chatobby-mcp__tool-access-list",
+    });
+    for (const capability of capabilities) {
+      const row = list.createEl("label", {
+        cls: "chatobby-mcp__tool-access-row",
+      });
+      const checkbox = row.createEl("input", {
+        attr: {
+          type: "checkbox",
+          "aria-label": `Expose ${capability.kind.toLocaleLowerCase()} ${capability.title} to agents`,
+        },
+      });
+      checkbox.checked = capability.enabled;
+      checkbox.disabled = this.busy || server.builtIn || !server.writable;
+      const copy = row.createDiv({ cls: "chatobby-mcp__tool-access-copy" });
+      const heading = copy.createDiv({
+        cls: "chatobby-mcp__tool-access-heading",
+      });
+      heading.createSpan({
+        cls: "chatobby-mcp__tool-access-title",
+        text: capability.title,
+      });
+      heading.createSpan({
+        cls: "chatobby-mcp__tool-access-kind",
+        text: capability.kind,
+      });
+      if (capability.description) {
+        copy.createDiv({
+          cls: "chatobby-mcp__tool-access-description",
+          text: capability.description,
+        });
+      }
+      checkbox.addEventListener(
+        "change",
+        () =>
+          void this.runIntent({
+            type: "mcp.set-tool-enabled",
+            payload: {
+              expectedConfigRevision: model.configRevision,
+              serverId: server.id,
+              toolName: capability.name,
+              enabled: checkbox.checked,
+              scope: server.writable ? "user" : undefined,
+            },
+          }),
+      );
+    }
   }
 
   private renderCredentialSelector(
@@ -709,7 +1104,8 @@ export class McpView extends ChatobbyComponent {
   ): void {
     const section = createPageSection(parent, {
       title: "Authentication",
-      description: "Choose which token this plugin should use. The token stays in Obsidian; Chatobby saves only the secret name that points to it.",
+      description:
+        "Choose which token this plugin should use. The token stays in Obsidian; Chatobby saves only the secret name that points to it.",
       surface: "divided",
     });
     const status = section.content.createDiv({
@@ -735,12 +1131,15 @@ export class McpView extends ChatobbyComponent {
     const actions = createPageActionRow(section.content);
     const link = actions.createEl("button", {
       cls: "mod-cta",
-      text: server.credentialReference ? "Change linked token" : "Link selected token",
+      text: server.credentialReference
+        ? "Change linked token"
+        : "Link selected token",
       attr: { type: "button" },
     });
     const updateLinkState = (): void => {
-      link.disabled = !credential.select.value
-        || credential.select.value === server.credentialReference;
+      link.disabled =
+        !credential.select.value ||
+        credential.select.value === server.credentialReference;
     };
     credential.select.addEventListener("change", updateLinkState);
     credential.onSecretsChanged(updateLinkState);
@@ -754,36 +1153,63 @@ export class McpView extends ChatobbyComponent {
           expectedConfigRevision: model.configRevision,
           serverId: server.id,
           reference,
-          scope: server.writable ? writableScope(server.sourceScope) : undefined,
+          scope: server.writable ? "user" : undefined,
         },
       });
     });
   }
 
-  private renderEditor(parent: HTMLElement, model: FrontendPluginMcpScreenViewModel): void {
+  private renderEditor(
+    parent: HTMLElement,
+    model: FrontendPluginMcpScreenViewModel,
+    seed: FrontendMcpServerViewModel | null = null,
+  ): void {
     const section = createPageSection(parent, {
-      title: "Add a connection",
-      description: "Connections give Chatobby new tools from services or programs you choose. Nothing is enabled until you review it.",
+      title: seed ? "Review and add connection" : "Add a connection",
+      description: seed
+        ? "This project suggested a connection. Review its address or command before saving a separate disabled copy in your Chatobby settings."
+        : "Connections give Chatobby new tools from services or programs you choose. Nothing is enabled until you review it.",
       surface: "inset",
     });
     const form = section.content.createDiv({ cls: "chatobby-mcp__editor" });
     const introduction = form.createDiv({ cls: "chatobby-mcp__editor-intro" });
-    const introductionIcon = introduction.createSpan({ cls: "chatobby-mcp__editor-intro-icon", attr: { "aria-hidden": "true" } });
+    const introductionIcon = introduction.createSpan({
+      cls: "chatobby-mcp__editor-intro-icon",
+      attr: { "aria-hidden": "true" },
+    });
     setIcon(introductionIcon, "plug-zap");
     const introductionCopy = introduction.createDiv();
-    introductionCopy.createDiv({ cls: "chatobby-mcp__editor-intro-title", text: "What would you like to connect?" });
+    introductionCopy.createDiv({
+      cls: "chatobby-mcp__editor-intro-title",
+      text: seed ? "Project suggestion" : "What would you like to connect?",
+    });
     introductionCopy.createDiv({
       cls: "chatobby-mcp__editor-intro-copy",
-      text: "Choose a connection type below. If a service is already in Verified, use that guided setup instead.",
+      text: seed
+        ? "The project file remains unchanged and cannot enable this connection or its tools."
+        : "Choose a connection type below. If a service is already in Verified, use that guided setup instead.",
     });
-    const browse = introduction.createEl("button", { text: "Browse Verified", attr: { type: "button" } });
-    browse.addEventListener("click", () => void this.changeView("discover", ""));
+    const browse = introduction.createEl("button", {
+      text: "Browse Verified",
+      attr: { type: "button" },
+    });
+    browse.addEventListener(
+      "click",
+      () => void this.changeView("discover", ""),
+    );
 
-    const transport = selectField(form, "Connection type", "mcp:new:transport", [
-      ["remote", "Online service"],
-      ["local", "Program on this computer"],
-    ]);
-    transport.closest<HTMLElement>(".chatobby-mcp__field")?.addClass("chatobby-visually-hidden");
+    const transport = selectField(
+      form,
+      "Connection type",
+      "mcp:new:transport",
+      [
+        ["remote", "Online service"],
+        ["local", "Program on this computer"],
+      ],
+    );
+    transport
+      .closest<HTMLElement>(".chatobby-mcp__field")
+      ?.addClass("chatobby-visually-hidden");
     const choices = form.createDiv({
       cls: "chatobby-mcp__connection-choices",
       attr: { role: "group", "aria-label": "Connection type" },
@@ -804,21 +1230,47 @@ export class McpView extends ChatobbyComponent {
     );
 
     const basics = form.createDiv({ cls: "chatobby-mcp__editor-section" });
-    basics.createDiv({ cls: "chatobby-mcp__editor-section-title", text: "Connection details" });
-    const name = inputField(basics, "Connection name", "mcp:new:name", "For example: GitHub or My calendar", "A short name you will recognize later.");
-    const scope = selectField(basics, "Where should it be available?", "mcp:new:scope", [
-      ["project", "This project"],
-      ["user", "All projects"],
-    ], "This controls where the connection is listed; permissions still decide what agents may use.");
+    basics.createDiv({
+      cls: "chatobby-mcp__editor-section-title",
+      text: "Connection details",
+    });
+    const name = inputField(
+      basics,
+      "Connection name",
+      "mcp:new:name",
+      "For example: GitHub or My calendar",
+      "A short name you will recognize later.",
+    );
+    basics.createDiv({
+      cls: "chatobby-mcp__save-note",
+      text: "Saved in your Chatobby settings. Repository files and project instructions cannot register, enable, or change agent tool access.",
+    });
 
-    const remoteFields = form.createDiv({ cls: "chatobby-mcp__editor-section chatobby-mcp__remote-fields" });
-    remoteFields.createDiv({ cls: "chatobby-mcp__editor-section-title", text: "Online service" });
-    const url = inputField(remoteFields, "Server address", "mcp:new:url", "https://example.com/mcp", "Paste the MCP address supplied by the service.");
-    const authentication = selectField(remoteFields, "How do you sign in?", "mcp:new:auth", [
-      ["oauth", "Browser sign-in"],
-      ["bearer", "Token stored by Obsidian"],
-      ["none", "No sign-in"],
-    ], "Choose the method documented by the service. Chatobby never stores the token value in its settings.");
+    const remoteFields = form.createDiv({
+      cls: "chatobby-mcp__editor-section chatobby-mcp__remote-fields",
+    });
+    remoteFields.createDiv({
+      cls: "chatobby-mcp__editor-section-title",
+      text: "Online service",
+    });
+    const url = inputField(
+      remoteFields,
+      "Server address",
+      "mcp:new:url",
+      "https://example.com/mcp",
+      "Paste the MCP address supplied by the service.",
+    );
+    const authentication = selectField(
+      remoteFields,
+      "How do you sign in?",
+      "mcp:new:auth",
+      [
+        ["oauth", "Browser sign-in"],
+        ["bearer", "Token stored by Obsidian"],
+        ["none", "No sign-in"],
+      ],
+      "Choose the method documented by the service. Chatobby never stores the token value in its settings.",
+    );
     const bearerField = secretReferenceField(
       this.props.app,
       remoteFields,
@@ -827,22 +1279,63 @@ export class McpView extends ChatobbyComponent {
       "",
     );
 
-    const localFields = form.createDiv({ cls: "chatobby-mcp__editor-section chatobby-mcp__local-fields" });
-    localFields.createDiv({ cls: "chatobby-mcp__editor-section-title", text: "Program on this computer" });
-    const command = inputField(localFields, "Program or command", "mcp:new:command", "For example: npx", "Use the command from the server's installation instructions.");
-    const argumentsInput = textAreaField(localFields, "Arguments", "mcp:new:arguments", "Put each argument on its own line.");
-    const workingDirectory = inputField(localFields, "Working folder", "mcp:new:cwd", "Optional", "Leave blank unless the server requires a particular folder.");
+    const localFields = form.createDiv({
+      cls: "chatobby-mcp__editor-section chatobby-mcp__local-fields",
+    });
+    localFields.createDiv({
+      cls: "chatobby-mcp__editor-section-title",
+      text: "Program on this computer",
+    });
+    const command = inputField(
+      localFields,
+      "Program or command",
+      "mcp:new:command",
+      "For example: npx",
+      "Use the command from the server's installation instructions.",
+    );
+    const argumentsInput = textAreaField(
+      localFields,
+      "Arguments",
+      "mcp:new:arguments",
+      "Put each argument on its own line.",
+    );
+    const workingDirectory = inputField(
+      localFields,
+      "Working folder",
+      "mcp:new:cwd",
+      "Optional",
+      "Leave blank unless the server requires a particular folder.",
+    );
 
-    const advanced = form.createEl("details", { cls: "chatobby-mcp__advanced" });
+    const advanced = form.createEl("details", {
+      cls: "chatobby-mcp__advanced",
+    });
     advanced.createEl("summary", { text: "Advanced options" });
-    const advancedBody = advanced.createDiv({ cls: "chatobby-mcp__advanced-body" });
-    const lifecycle = selectField(advancedBody, "When should Chatobby start it?", "mcp:new:lifecycle", [
-      ["lazy", "Only when one of its tools is used"],
-      ["keep-alive", "Keep it available after first use"],
-      ["eager", "When Chatobby starts"],
-    ]);
-    const environment = textAreaField(advancedBody, "Environment variables", "mcp:new:environment", "Use NAME=ENV_VARIABLE, one per line. Values come from the existing environment.");
-    const headers = textAreaField(advancedBody, "Request headers", "mcp:new:headers", "Use HEADER=ENV_VARIABLE, one per line. Values come from the existing environment.");
+    const advancedBody = advanced.createDiv({
+      cls: "chatobby-mcp__advanced-body",
+    });
+    const lifecycle = selectField(
+      advancedBody,
+      "When should Chatobby start it?",
+      "mcp:new:lifecycle",
+      [
+        ["lazy", "Only when one of its tools is used"],
+        ["keep-alive", "Keep it available after first use"],
+        ["eager", "When Chatobby starts"],
+      ],
+    );
+    const environment = textAreaField(
+      advancedBody,
+      "Environment variables",
+      "mcp:new:environment",
+      "Use NAME=ENV_VARIABLE, one per line. Values come from the existing environment.",
+    );
+    const headers = textAreaField(
+      advancedBody,
+      "Request headers",
+      "mcp:new:headers",
+      "Use HEADER=ENV_VARIABLE, one per line. Values come from the existing environment.",
+    );
     const refreshTransport = (): void => {
       const remote = transport.value === "remote";
       remoteFields.toggleClass("is-hidden", !remote);
@@ -851,8 +1344,12 @@ export class McpView extends ChatobbyComponent {
         "is-hidden",
         !remote || authentication.value !== "bearer",
       );
-      headers.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", !remote);
-      environment.closest<HTMLElement>(".chatobby-mcp__field")?.toggleClass("is-hidden", remote);
+      headers
+        .closest<HTMLElement>(".chatobby-mcp__field")
+        ?.toggleClass("is-hidden", !remote);
+      environment
+        .closest<HTMLElement>(".chatobby-mcp__field")
+        ?.toggleClass("is-hidden", remote);
       remoteChoice.setAttr("aria-pressed", String(remote));
       localChoice.setAttr("aria-pressed", String(!remote));
       remoteChoice.toggleClass("is-selected", remote);
@@ -864,35 +1361,103 @@ export class McpView extends ChatobbyComponent {
     };
     transport.addEventListener("change", refreshTransport);
     authentication.addEventListener("change", refreshTransport);
+    if (seed) {
+      name.value = seed.id;
+      transport.value = seed.transport;
+      command.value = seed.command ?? "";
+      argumentsInput.value = seed.arguments.join("\n");
+      workingDirectory.value = seed.workingDirectory ?? "";
+      url.value = seed.url ?? "";
+      authentication.value = seed.authentication;
+      lifecycle.value = "lazy";
+    }
     refreshTransport();
     form.createDiv({
       cls: "chatobby-mcp__save-note",
-      text: "Saving adds this connection turned off. Test it, review the tools it provides, then enable it when you are ready.",
+      text: "Saving creates a disabled connection with no exposed tools. Check details validates this form only; it does not contact or start the server. Test and select tools after saving.",
     });
+    const validation = form.createDiv({
+      cls: "chatobby-mcp__form-validation is-hidden",
+      attr: { role: "alert", "aria-live": "polite" },
+    });
+    const validateDraft = (): FrontendMcpServerDraft | null => {
+      const fields = [name, url, command, bearerField.select, environment, headers];
+      for (const field of fields) field.removeAttribute("aria-invalid");
+      const errors: string[] = [];
+      let firstInvalid: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | undefined;
+      const reject = (field: typeof firstInvalid, message: string): void => {
+        errors.push(message);
+        field?.setAttribute("aria-invalid", "true");
+        firstInvalid ??= field;
+      };
+      if (!name.value.trim()) reject(name, "Enter a connection name.");
+      if (transport.value === "local") {
+        if (!command.value.trim()) reject(command, "Enter the program or command to run.");
+      } else {
+        if (!url.value.trim()) reject(url, "Enter the server address.");
+        else if (!safeExternalUrl(url.value.trim())) reject(url, "Use a complete server address starting with http:// or https://.");
+        if (authentication.value === "bearer" && !bearerField.select.value)
+          reject(bearerField.select, "Choose a saved access token.");
+      }
+      for (const field of transport.value === "local" ? [environment] : [headers]) {
+        try { mappings(field.value); }
+        catch { reject(field, "Use NAME=ENV_VARIABLE, one mapping per line."); }
+      }
+      validation.textContent = errors.join(" ");
+      validation.toggleClass("is-hidden", errors.length === 0);
+      if (errors.length) { firstInvalid?.focus(); return null; }
+      return collectDraft();
+    };
     const actions = createPageActionRow(form);
     action(actions, "Cancel", () => {
       this.creating = false;
+      this.editorSeed = null;
       this.renderState(this.props.getModel());
     });
-    const preview = actions.createEl("button", { text: "Test connection", attr: { type: "button" } });
-    preview.addEventListener("click", () => void this.runIntent({
-      type: "mcp.preview",
-      payload: { draft: collectDraft() },
-    }));
-    const save = actions.createEl("button", { cls: "mod-cta", text: "Save connection", attr: { type: "button" } });
-    save.addEventListener("click", () => void this.runIntent({
-      type: "mcp.save",
-      payload: {
-        expectedConfigRevision: model.configRevision,
-        draft: collectDraft(),
+    const preview = actions.createEl("button", {
+      text: "Check details",
+      attr: { type: "button" },
+    });
+    preview.addEventListener(
+      "click",
+      () => {
+        const draft = validateDraft();
+        if (!draft) return;
+        void this.runIntent({
+          type: "mcp.preview",
+          payload: { draft },
+        });
       },
-    }, () => {
-      this.creating = false;
-    }));
+    );
+    const save = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "Save connection",
+      attr: { type: "button" },
+    });
+    save.addEventListener(
+      "click",
+      () => {
+        const draft = validateDraft();
+        if (!draft) return;
+        void this.runIntent(
+          {
+            type: "mcp.save",
+            payload: {
+              expectedConfigRevision: model.configRevision,
+              draft,
+            },
+          },
+          () => {
+            this.creating = false;
+            this.editorSeed = null;
+          },
+        );
+      },
+    );
 
     const collectDraft = (): FrontendMcpServerDraft => ({
       name: name.value.trim(),
-      scope: scope.value === "user" ? "user" : "project",
+      scope: "user",
       enabled: false,
       lifecycle: isLifecycle(lifecycle.value) ? lifecycle.value : "lazy",
       transport: transport.value === "local" ? "local" : "remote",
@@ -900,10 +1465,12 @@ export class McpView extends ChatobbyComponent {
       arguments: lines(argumentsInput.value),
       workingDirectory: workingDirectory.value.trim() || undefined,
       url: url.value.trim() || undefined,
-      authentication: isAuthentication(authentication.value) ? authentication.value : "oauth",
+      authentication: isAuthentication(authentication.value)
+        ? authentication.value
+        : "oauth",
       bearerCredentialReference: bearerField.select.value || undefined,
-      environment: mappings(environment.value),
-      headers: mappings(headers.value),
+      environment: transport.value === "local" ? mappings(environment.value) : [],
+      headers: transport.value === "local" ? [] : mappings(headers.value),
     });
   }
 
@@ -915,7 +1482,8 @@ export class McpView extends ChatobbyComponent {
     if (!pending) return;
     const section = createPageSection(parent, {
       title: `Sign in to ${pending.serverId}`,
-      description: "Open the sign-in page, then paste the returned code or redirect URL.",
+      description:
+        "Open the sign-in page, then paste the returned code or redirect URL.",
       surface: "inset",
     });
     const authorizationUrl = safeExternalUrl(pending.authorizationUrl);
@@ -926,17 +1494,26 @@ export class McpView extends ChatobbyComponent {
         attr: { target: "_blank", rel: "noopener noreferrer" },
       });
     }
-    const input = inputField(section.content, "Code or redirect URL", `mcp:auth:${pending.serverId}`, "");
+    const input = inputField(
+      section.content,
+      "Code or redirect URL",
+      `mcp:auth:${pending.serverId}`,
+      "",
+    );
     const actions = createPageActionRow(section.content);
     const complete = actions.createEl("button", {
       cls: "mod-cta",
       text: "Complete sign-in",
       attr: { type: "button" },
     });
-    complete.addEventListener("click", () => void this.runIntent({
-      type: "mcp.auth-complete",
-      payload: { serverId: pending.serverId, input: input.value.trim() },
-    }));
+    complete.addEventListener(
+      "click",
+      () =>
+        void this.runIntent({
+          type: "mcp.auth-complete",
+          payload: { serverId: pending.serverId, input: input.value.trim() },
+        }),
+    );
   }
 
   private filteredPlugins(
@@ -945,13 +1522,20 @@ export class McpView extends ChatobbyComponent {
   ): readonly FrontendChatobbyPluginSummary[] {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const filtered = plugins.filter((plugin) => {
-      if (this.connectionFilter !== "all" && plugin.transport !== this.connectionFilter) return false;
+      if (
+        this.connectionFilter !== "all" &&
+        plugin.transport !== this.connectionFilter
+      )
+        return false;
       if (!normalizedQuery) return true;
       return `${plugin.title} ${plugin.description} ${plugin.publisher} ${plugin.sourceLabel}`
         .toLocaleLowerCase()
         .includes(normalizedQuery);
     });
-    if (this.sort === "name") return [...filtered].sort((left, right) => left.title.localeCompare(right.title));
+    if (this.sort === "name")
+      return [...filtered].sort((left, right) =>
+        left.title.localeCompare(right.title),
+      );
     return filtered;
   }
 
@@ -986,7 +1570,10 @@ export class McpView extends ChatobbyComponent {
     query: string,
     cursor?: string,
   ): Promise<void> {
-    await this.runIntent({ type: "mcp.set-view", payload: { tab, query, cursor } });
+    await this.runIntent({
+      type: "mcp.set-view",
+      payload: { tab, query, cursor },
+    });
   }
 
   private async refresh(): Promise<void> {
@@ -998,7 +1585,10 @@ export class McpView extends ChatobbyComponent {
     }
   }
 
-  private async runIntent(intent: McpViewIntent, onSuccess?: () => void): Promise<void> {
+  private async runIntent(
+    intent: McpViewIntent,
+    onSuccess?: () => void,
+  ): Promise<void> {
     if (this.busy) return;
     this.busy = true;
     this.localError = null;
@@ -1011,7 +1601,10 @@ export class McpView extends ChatobbyComponent {
         intent.type === "mcp.connect" || intent.type === "mcp.discover"
           ? intent.payload.serverId
           : undefined;
-      if (!cancelledServerId || !this.cancelledServerIds.has(cancelledServerId)) {
+      if (
+        !cancelledServerId ||
+        !this.cancelledServerIds.has(cancelledServerId)
+      ) {
         this.localError = errorMessage(error);
       }
     } finally {
@@ -1027,7 +1620,10 @@ export class McpView extends ChatobbyComponent {
     if (this.cancelledServerIds.has(serverId)) return;
     this.cancelledServerIds.add(serverId);
     try {
-      await this.props.onIntent({ type: "mcp.disconnect", payload: { serverId } });
+      await this.props.onIntent({
+        type: "mcp.disconnect",
+        payload: { serverId },
+      });
       this.localError = null;
     } catch (error) {
       this.cancelledServerIds.delete(serverId);
@@ -1035,6 +1631,22 @@ export class McpView extends ChatobbyComponent {
     }
     this.renderState(this.props.getModel());
   }
+}
+
+function localExecutionReason(server: FrontendMcpServerViewModel): string {
+  if (
+    server.transport === "local" &&
+    server.localExecution?.status === "unavailable"
+  ) {
+    return server.localExecution.reason;
+  }
+  return "Local executable connections are unavailable until the runtime reports an admitted execution mode.";
+}
+
+function requiresRegistrationReview(
+  server: FrontendMcpServerViewModel,
+): boolean {
+  return server.sourceScope === "project" && !server.writable && !server.builtIn;
 }
 
 interface SecretReferenceField {
@@ -1061,7 +1673,9 @@ function secretReferenceField(
   });
   const listeners = new Set<() => void>();
   const refresh = (preferredReference = select.value): void => {
-    const references = app.secretStorage.listSecrets().sort((left, right) => left.localeCompare(right));
+    const references = app.secretStorage
+      .listSecrets()
+      .sort((left, right) => left.localeCompare(right));
     select.empty();
     const empty = select.createEl("option", { text: "Choose a saved token…" });
     empty.value = "";
@@ -1078,7 +1692,9 @@ function secretReferenceField(
   };
   refresh(initialReference);
 
-  const management = wrapper.createDiv({ cls: "chatobby-mcp__secret-management" });
+  const management = wrapper.createDiv({
+    cls: "chatobby-mcp__secret-management",
+  });
   management.createSpan({
     cls: "chatobby-mcp__secret-help",
     text: "Need another token? Add or manage it in Obsidian, then refresh this list.",
@@ -1107,15 +1723,24 @@ function inputField(
 ): HTMLInputElement {
   const wrapper = parent.createEl("label", { cls: "chatobby-mcp__field" });
   wrapper.createSpan({ text: label });
-  const input = wrapper.createEl("input", { attr: { placeholder, "data-page-state-key": key } });
+  const input = wrapper.createEl("input", {
+    attr: { placeholder, "data-page-state-key": key },
+  });
   if (help) wrapper.createSpan({ cls: "chatobby-mcp__field-help", text: help });
   return input;
 }
 
-function textAreaField(parent: HTMLElement, label: string, key: string, help?: string): HTMLTextAreaElement {
+function textAreaField(
+  parent: HTMLElement,
+  label: string,
+  key: string,
+  help?: string,
+): HTMLTextAreaElement {
   const wrapper = parent.createEl("label", { cls: "chatobby-mcp__field" });
   wrapper.createSpan({ text: label });
-  const textarea = wrapper.createEl("textarea", { attr: { rows: "3", "data-page-state-key": key } });
+  const textarea = wrapper.createEl("textarea", {
+    attr: { rows: "3", "data-page-state-key": key },
+  });
   if (help) wrapper.createSpan({ cls: "chatobby-mcp__field-help", text: help });
   return textarea;
 }
@@ -1129,7 +1754,9 @@ function selectField(
 ): HTMLSelectElement {
   const wrapper = parent.createEl("label", { cls: "chatobby-mcp__field" });
   wrapper.createSpan({ text: label });
-  const select = wrapper.createEl("select", { attr: { "data-page-state-key": key } });
+  const select = wrapper.createEl("select", {
+    attr: { "data-page-state-key": key },
+  });
   selectOptions(select, options);
   if (help) wrapper.createSpan({ cls: "chatobby-mcp__field-help", text: help });
   return select;
@@ -1146,11 +1773,22 @@ function connectionChoice(
     cls: "chatobby-mcp__connection-choice",
     attr: { type: "button", "aria-pressed": "false" },
   });
-  const icon = button.createSpan({ cls: "chatobby-mcp__connection-choice-icon", attr: { "aria-hidden": "true" } });
+  const icon = button.createSpan({
+    cls: "chatobby-mcp__connection-choice-icon",
+    attr: { "aria-hidden": "true" },
+  });
   setIcon(icon, iconName);
-  const copy = button.createSpan({ cls: "chatobby-mcp__connection-choice-copy" });
-  copy.createSpan({ cls: "chatobby-mcp__connection-choice-title", text: title });
-  copy.createSpan({ cls: "chatobby-mcp__connection-choice-description", text: description });
+  const copy = button.createSpan({
+    cls: "chatobby-mcp__connection-choice-copy",
+  });
+  copy.createSpan({
+    cls: "chatobby-mcp__connection-choice-title",
+    text: title,
+  });
+  copy.createSpan({
+    cls: "chatobby-mcp__connection-choice-description",
+    text: description,
+  });
   button.addEventListener("click", onChoose);
   return button;
 }
@@ -1165,8 +1803,15 @@ function selectOptions(
   }
 }
 
-function action(parent: HTMLElement, label: string, onClick: () => void): HTMLButtonElement {
-  const button = parent.createEl("button", { text: label, attr: { type: "button" } });
+function action(
+  parent: HTMLElement,
+  label: string,
+  onClick: () => void,
+): HTMLButtonElement {
+  const button = parent.createEl("button", {
+    text: label,
+    attr: { type: "button" },
+  });
   button.addEventListener("click", onClick);
   return button;
 }
@@ -1177,7 +1822,10 @@ function detail(parent: HTMLElement, label: string, value: string): void {
 }
 
 function lines(value: string): readonly string[] {
-  return value.split(/\r?\n/u).map((entry) => entry.trim()).filter(Boolean);
+  return value
+    .split(/\r?\n/u)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function mappings(value: string): FrontendMcpServerDraft["environment"] {
@@ -1193,11 +1841,15 @@ function mappings(value: string): FrontendMcpServerDraft["environment"] {
   });
 }
 
-function isLifecycle(value: string): value is FrontendMcpServerDraft["lifecycle"] {
+function isLifecycle(
+  value: string,
+): value is FrontendMcpServerDraft["lifecycle"] {
   return value === "lazy" || value === "eager" || value === "keep-alive";
 }
 
-function isAuthentication(value: string): value is NonNullable<FrontendMcpServerDraft["authentication"]> {
+function isAuthentication(
+  value: string,
+): value is NonNullable<FrontendMcpServerDraft["authentication"]> {
   return value === "oauth" || value === "bearer" || value === "none";
 }
 
@@ -1209,12 +1861,10 @@ function isPluginSort(value: string): value is PluginSort {
   return value === "relevance" || value === "name";
 }
 
-function writableScope(scope: FrontendMcpServerViewModel["sourceScope"]): "user" | "project" {
-  return scope === "project" ? "project" : "user";
-}
-
 function pluginSubtitle(plugin: FrontendChatobbyPluginDetail): string {
-  return [plugin.publisher, plugin.version, plugin.sourceLabel].filter(Boolean).join(" · ");
+  return [plugin.publisher, plugin.version, plugin.sourceLabel]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function pluginIcon(plugin: FrontendChatobbyPluginSummary): string {
@@ -1224,22 +1874,29 @@ function pluginIcon(plugin: FrontendChatobbyPluginSummary): string {
   return "plug";
 }
 
-function capabilityIcon(kind: FrontendChatobbyPluginCapability["kind"]): string {
+function capabilityIcon(
+  kind: FrontendChatobbyPluginCapability["kind"],
+): string {
   if (kind === "mcp-tool") return "wrench";
   if (kind === "mcp-resource") return "file-box";
   if (kind === "skill") return "sparkles";
   if (kind === "command") return "terminal";
   if (kind === "workflow") return "workflow";
-  if (kind === "context-query") return "braces";
   return "plug";
 }
 
 function capabilityCountLabel(plugin: FrontendChatobbyPluginSummary): string {
   const counts = plugin.capabilityCounts;
   const values = [
-    counts.mcpServers > 0 ? `${counts.mcpServers} ${counts.mcpServers === 1 ? "server" : "servers"}` : "",
-    counts.skills > 0 ? `${counts.skills} ${counts.skills === 1 ? "skill" : "skills"}` : "",
-    counts.commands > 0 ? `${counts.commands} ${counts.commands === 1 ? "command" : "commands"}` : "",
+    counts.mcpServers > 0
+      ? `${counts.mcpServers} ${counts.mcpServers === 1 ? "server" : "servers"}`
+      : "",
+    counts.skills > 0
+      ? `${counts.skills} ${counts.skills === 1 ? "skill" : "skills"}`
+      : "",
+    counts.commands > 0
+      ? `${counts.commands} ${counts.commands === 1 ? "command" : "commands"}`
+      : "",
   ].filter(Boolean);
   return values.join(" · ") || "Plugin";
 }
@@ -1251,7 +1908,6 @@ function capabilityCountTitle(plugin: FrontendChatobbyPluginSummary): string {
     `${counts.skills} skills`,
     `${counts.commands} commands`,
     `${counts.workflows} workflows`,
-    `${counts.contextQueries} context queries`,
   ].join(", ");
 }
 
@@ -1259,7 +1915,9 @@ function safeExternalUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.href : undefined;
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.href
+      : undefined;
   } catch {
     return undefined;
   }

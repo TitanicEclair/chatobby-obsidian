@@ -39,6 +39,121 @@ describe("FrontendStore", () => {
     expect(store.local.expandedBlockIds.has("tool-1")).toBe(true);
   });
 
+  it("applies a contiguous reconnect replay and rejects a wrong-view patch", () => {
+    const store = new FrontendStore();
+    store.replace(bootstrap());
+    const patch = createPatch(1, 0, [{ type: "composer.replace", composer: { controls: [], canSubmit: false } }]);
+    store.applyReplay({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      requestId: "subscribe-1",
+      runtimeInstanceId: "runtime-1",
+      viewId: "view-1",
+      status: "replayed",
+      baseSequence: 0,
+      baseRevision: 0,
+      replay: [patch],
+      sequence: 1,
+      revision: 1,
+      oldestReplayableSequence: 1,
+    });
+    expect(store.snapshot?.composer.canSubmit).toBe(false);
+    expect(() => store.apply({ ...createPatch(2, 1, []), viewId: "view-2" })).toThrow("another view");
+  });
+
+  it("orders screen responses by request epoch and rejects patch-versus-load races", () => {
+    const store = new FrontendStore();
+    store.replace(bootstrap());
+    const screen = { screenId: "events", revision: 1 } as FrontendBootstrap["screenModels"][number];
+    store.replaceScreen({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      runtimeInstanceId: "runtime-1",
+      viewId: "view-1",
+      requestId: "screen-2",
+      requestEpoch: 2,
+      baseSequence: 0,
+      screenRevision: 1,
+      screen,
+    });
+    expect(() => store.replaceScreen({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      runtimeInstanceId: "runtime-1",
+      viewId: "view-1",
+      requestId: "screen-1",
+      requestEpoch: 1,
+      baseSequence: 0,
+      screenRevision: 1,
+      screen,
+    })).toThrow("Stale screen response");
+
+    store.apply(createPatch(1, 0, []));
+    expect(() => store.replaceScreen({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      runtimeInstanceId: "runtime-1",
+      viewId: "view-1",
+      requestId: "screen-3",
+      requestEpoch: 3,
+      baseSequence: 0,
+      screenRevision: 2,
+      screen: { ...screen, revision: 2 },
+    })).toThrow("Stale screen response");
+  });
+
+  it("supports explicit session clear and rejects missing feed mutation targets", () => {
+    const store = new FrontendStore();
+    store.replace(bootstrap());
+    store.apply(createPatch(1, 0, [{ type: "session.clear" }]));
+    expect(store.snapshot?.session).toBeNull();
+
+    expect(() => store.apply(createPatch(2, 1, [
+      { type: "feed.text.append", blockId: "missing", text: "x" },
+    ]))).toThrow("append target is missing");
+  });
+
+  it("rolls back feed indexes and screen authority when one patch operation fails", () => {
+    const store = new FrontendStore();
+    const eventScreen = { screenId: "events", revision: 1 } as FrontendBootstrap["screenModels"][number];
+    store.replace({
+      ...bootstrap(),
+      feed: {
+        revision: 1,
+        blocks: [{ type: "text", id: "original", text: "before", phase: "streaming" }],
+      },
+      screenModels: [eventScreen],
+    });
+
+    expect(() => store.apply(createPatch(1, 0, [
+      { type: "feed.block.remove", blockId: "original" },
+      { type: "screen.replace", screen: { ...eventScreen, revision: 2 } },
+      { type: "feed.text.append", blockId: "missing", text: "x" },
+    ]))).toThrow("append target is missing");
+
+    expect(store.snapshot).toMatchObject({
+      sequence: 0,
+      revision: 0,
+      feed: { blocks: [{ id: "original", text: "before" }] },
+      screenModels: [{ screenId: "events", revision: 1 }],
+    });
+    store.replaceScreen({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      runtimeInstanceId: "runtime-1",
+      viewId: "view-1",
+      requestId: "screen-after-failure",
+      requestEpoch: 0,
+      baseSequence: 0,
+      screenRevision: 2,
+      screen: { ...eventScreen, revision: 2 },
+    });
+    store.apply(createPatch(1, 0, [
+      { type: "feed.text.append", blockId: "original", text: " after" },
+    ]));
+    expect(store.snapshot?.feed.blocks[0]).toMatchObject({ text: "before after" });
+  });
+
   it("applies runtime-owned task plan replacements", () => {
     const store = new FrontendStore();
     store.replace(bootstrap());
@@ -124,7 +239,9 @@ describe("FrontendStore", () => {
 function createPatch(sequence: number, baseRevision: number, operations: FrontendPatch["operations"]): FrontendPatch {
   return {
     schemaVersion: 1,
+    protocolVersion: 2,
     runtimeInstanceId: "runtime-1",
+    viewId: "view-1",
     scope: { kind: "view", viewId: "view-1" },
     sequence,
     baseRevision,
@@ -136,7 +253,7 @@ function createPatch(sequence: number, baseRevision: number, operations: Fronten
 function bootstrap(): FrontendBootstrap {
   return {
     schemaVersion: 1,
-    protocolVersion: 1,
+    protocolVersion: 2,
     runtimeInstanceId: "runtime-1",
     revision: 0,
     sequence: 0,

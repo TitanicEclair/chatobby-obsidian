@@ -1,3 +1,6 @@
+/* Events page: event inventory, execution history, and schedule editor.
+   Shared full-page hierarchy remains in ui/shared/page-shell.css. */
+
 .chatobby-events {
   min-width: 0;
   height: 100%;
@@ -24,6 +27,7 @@
   gap: var(--size-2-3);
 }
 
+/* Inventory cards expose lifecycle state without relying on color alone. */
 .chatobby-events__card {
   display: grid;
   min-width: 0;
@@ -126,6 +130,7 @@
   color: var(--text-faint);
 }
 
+/* Run history uses compact rows so status, origin, and failure remain scannable. */
 .chatobby-events__history-row {
   display: grid;
   min-width: 0;
@@ -176,6 +181,7 @@
   color: var(--text-normal);
 }
 
+/* Editor rules begin here; schedule controls below are owned by the same form. */
 .chatobby-events__editor-header {
   display: flex;
   align-items: center;
@@ -322,6 +328,7 @@
   border-top: var(--border-width) solid var(--chatobby-border);
 }
 
+/* Stack form controls when this page is hosted in a narrow Obsidian leaf. */
 @container chatobby-page (max-width: 520px) {
   .chatobby-events__intro,
   .chatobby-events__card {

@@ -1,7 +1,7 @@
 // ObsidianBridgeClient — 2nd WebSocket to the bridge endpoint.
 // Manages: lifecycle, Hello, ping/pong, in-flight table, reconnect.
 //
-// See docs/tooling/bridge-executor.md §7 for architecture.
+// See docs/wire-protocol.md for the authenticated bridge architecture.
 
 import type { App } from "obsidian";
 import type {

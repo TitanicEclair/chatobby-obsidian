@@ -151,6 +151,10 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 type SessionWorkspace = FrontendProjectSessionViewModel["workspace"];
 
+type BrowsedWorkspace =
+  | { readonly kind: "vault"; readonly label: "Vault" }
+  | { readonly kind: "project"; readonly projectId: string; readonly label: string };
+
 type SessionMoveDestination =
   | { readonly kind: "vault"; readonly name: "Vault"; readonly current: boolean; readonly available: true }
   | {
@@ -179,7 +183,7 @@ class MoveSessionModal extends Modal {
     this.setTitle("Move chat");
     this.contentEl.createDiv({
       cls: "chatobby-projects__move-intro",
-      text: `Choose where “${this.sessionName}” belongs. Its messages stay unchanged.`,
+      text: `Choose where “${this.sessionName}” belongs. Future file, tool, and memory work uses the new workspace; existing messages remain in this conversation. Start a new Project chat for separate context.`,
     });
     const search = this.contentEl.createEl("input", {
       cls: "chatobby-projects__move-search",
@@ -260,6 +264,8 @@ export class ProjectsView extends ChatobbyComponent {
   private localError: string | null = null;
   private busyAction: string | null = null;
   private editor: EditorMode = null;
+  private editorModal: Modal | null = null;
+  private editorShell: PageShell | null = null;
   private projectSearchTimer: number | null = null;
   private sessionSearchTimer: number | null = null;
   private viewUpdateTail = Promise.resolve();
@@ -293,6 +299,9 @@ export class ProjectsView extends ChatobbyComponent {
   }
 
   override destroy(): void {
+    this.editorModal?.close();
+    this.editorModal = null;
+    this.editorShell = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
     if (this.projectSearchTimer !== null) window.clearTimeout(this.projectSearchTimer);
@@ -311,6 +320,17 @@ export class ProjectsView extends ChatobbyComponent {
 
   async selectProject(projectId: string): Promise<void> {
     await this.changeView({ selectedProjectId: projectId });
+  }
+
+  openEditor(create = false): void {
+    const model = this.props.getModel();
+    if (!model) return;
+    if (create) this.startCreating(model);
+    else { this.editor = "details"; this.renderState(model); }
+  }
+
+  showSessionMenu(event: MouseEvent, session: FrontendProjectSessionViewModel): void {
+    this.openSessionMenu(event, session);
   }
 
   handleKeydown(event: KeyboardEvent): boolean {
@@ -351,6 +371,7 @@ export class ProjectsView extends ChatobbyComponent {
       return;
     }
     this.reconcilePendingSessionMoves(model);
+    this.renderEditor(model);
     shell.setTitle("Projects", "Keep related folders and chats together.");
 		shell.updateBody(
 			this.editor
@@ -364,10 +385,6 @@ export class ProjectsView extends ChatobbyComponent {
     const layout = body.createDiv({ cls: "chatobby-projects__workspace" });
     this.renderRail(layout.createEl("aside", { cls: "chatobby-projects__rail" }), model);
     const detail = layout.createEl("main", { cls: "chatobby-projects__detail" });
-    if (this.editor === "create") {
-      this.renderCreateForm(detail);
-      return;
-    }
     if (!model.detail && !model.selectedProjectId) {
       this.renderVaultDetail(detail, model);
       return;
@@ -382,8 +399,45 @@ export class ProjectsView extends ChatobbyComponent {
       });
       return;
     }
-    if (this.editor === "details") this.renderDetailsForm(detail, model.detail);
-    else this.renderDetail(detail, model, model.detail);
+    this.renderDetail(detail, model, model.detail);
+  }
+
+  private renderEditor(model: FrontendProjectScreenViewModel): void {
+    if (!this.editor) {
+      this.editorModal?.close();
+      this.editorModal = null;
+      this.editorShell = null;
+      return;
+    }
+    if (!this.editorModal) {
+      const modal = new Modal(this.props.app);
+      this.editorModal = modal;
+      modal.modalEl.addClass("chatobby-project-editor-modal");
+      modal.contentEl.addClass("chatobby-page", "chatobby-projects");
+      this.editorShell = new PageShell(modal.contentEl, { title: this.editor === "create" ? "Create Project" : "Edit Project", width: "form" });
+      modal.onClose = () => {
+        this.editor = null;
+        this.editorModal = null;
+        this.editorShell = null;
+      };
+      modal.open();
+    }
+    const shell = this.editorShell;
+    if (!shell) return;
+    shell.setBusy(this.busyAction !== null);
+    shell.setStatus(this.localError ? { tone: "error", message: this.localError } : null);
+    shell.updateBody(`editor:${this.editor}:${model.selectedProjectId ?? "new"}`, (body) => {
+      if (this.editor === "create") this.renderCreateForm(body);
+      else if (model.detail) {
+        this.renderDetailsForm(body, model.detail);
+        const folders = createPageSection(body, { title: "Folders", description: "Changes to folder links apply immediately. Your files stay in place." });
+        for (const root of model.detail.roots) this.renderRoot(folders.content, model.detail, root);
+        const add = folders.content.createEl("button", { text: "Add folders", attr: { type: "button" } });
+        add.disabled = this.busyAction !== null || model.detail.lifecycle !== "active";
+        const detail = model.detail;
+        add.addEventListener("click", () => void this.addFolders(detail));
+      }
+    });
   }
 
   private renderRail(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
@@ -477,7 +531,7 @@ export class ProjectsView extends ChatobbyComponent {
     const folders = createPageSection(parent, {
       title: "Folders",
       description: detail.roots.length === 0
-        ? "This Project currently uses the vault root. Add folders when you need a narrower workspace."
+        ? "No Project folder is linked. This Project stays rootless and does not inherit Vault access."
         : "Folders available to chats in this Project. Permissions still decide what agents may access.",
       className: "chatobby-projects__folders",
     });
@@ -485,7 +539,7 @@ export class ProjectsView extends ChatobbyComponent {
       createPageState(folders.content, {
         kind: "empty",
         title: "No folders attached",
-        description: "New chats still belong to this Project and run from the vault root.",
+        description: "New chats keep this Project identity. Add a Project folder before relying on Project-scoped file access.",
       });
     } else {
       const list = folders.content.createDiv({ cls: "chatobby-projects__folder-list" });
@@ -512,9 +566,11 @@ export class ProjectsView extends ChatobbyComponent {
       }) : undefined,
     });
 
-    if (model.runningIn.projectId === detail.projectId) {
-      parent.createDiv({ cls: "chatobby-projects__current-note", text: "The current chat belongs to this Project." });
-    }
+    this.renderWorkspaceContext(parent, model, {
+      kind: "project",
+      projectId: detail.projectId,
+      label: detail.name,
+    });
   }
 
   private renderVaultDetail(parent: HTMLElement, model: FrontendProjectScreenViewModel): void {
@@ -541,9 +597,22 @@ export class ProjectsView extends ChatobbyComponent {
         payload: { workspace: { kind: "vault" } },
       }),
     });
-    if (model.runningIn.kind === "vault") {
-      parent.createDiv({ cls: "chatobby-projects__current-note", text: "The current chat belongs to the Vault." });
-    }
+    this.renderWorkspaceContext(parent, model, { kind: "vault", label: "Vault" });
+  }
+
+  private renderWorkspaceContext(
+    parent: HTMLElement,
+    model: FrontendProjectScreenViewModel,
+    browsing: BrowsedWorkspace,
+  ): void {
+    const runningHere = browsing.kind === "vault"
+      ? model.runningIn.kind === "vault"
+      : model.runningIn.kind === "project" && model.runningIn.projectId === browsing.projectId;
+    const suffix = runningHere ? "" : ". Browsing does not move the active chat.";
+    parent.createDiv({
+      cls: "chatobby-projects__current-note",
+      text: `Browsing ${browsing.label} · Running in ${model.runningIn.label}${suffix}`,
+    });
   }
 
   private renderChatSection(
@@ -911,7 +980,7 @@ export class ProjectsView extends ChatobbyComponent {
 
   private async addFolders(detail: FrontendProjectDetailViewModel): Promise<void> {
     const folders = await chooseSystemDirectories("Add folders to Project", true);
-    if (folders.length === 0 || !await confirmDirectoryMarkers(this.props.app, folders.length)) return;
+    if (folders.length === 0) return;
     await this.runAction("add-folders", async () => {
       const current = this.props.getModel()?.detail;
       if (!current || current.projectId !== detail.projectId) throw new Error("The Project changed while adding folders.");
@@ -943,7 +1012,6 @@ export class ProjectsView extends ChatobbyComponent {
   private async relinkRoot(detail: FrontendProjectDetailViewModel, root: FrontendProjectRootViewModel): Promise<void> {
     const [folder] = await chooseSystemDirectories(`Choose ${root.label}`, false);
     if (!folder) return;
-    if (!await confirmDirectoryMarkers(this.props.app, 1)) return;
     await this.run(`relink:${root.rootId}`, {
       type: "projects.root-relink",
       payload: {
@@ -1255,16 +1323,6 @@ function sameSessionWorkspace(left: SessionWorkspace, right: SessionWorkspace): 
   );
 }
 
-function confirmDirectoryMarkers(app: App, count: number): Promise<boolean> {
-  return confirmAction(app, {
-    title: count === 1 ? "Add this folder?" : `Add ${count} folders?`,
-    message:
-      "Chatobby will keep the folders in place and may write a small .chatobby-root.json identity file inside each one. " +
-      "This does not grant agents access; the active permission policy still applies.",
-    confirmLabel: count === 1 ? "Add folder" : "Add folders",
-  });
-}
-
 function choiceSelect(
   parent: HTMLElement,
   options: readonly { readonly value: string; readonly label: string }[],
@@ -1325,8 +1383,8 @@ function renderMatchRanges(
   if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
 }
 
-function formatRelativeDate(value: string): string {
-  const time = Date.parse(value);
+function formatRelativeDate(value: string | undefined): string {
+  const time = value ? Date.parse(value) : Number.NaN;
   if (!Number.isFinite(time)) return "Date unavailable";
   const elapsed = Math.max(0, Date.now() - time);
   if (elapsed < 60_000) return "just now";

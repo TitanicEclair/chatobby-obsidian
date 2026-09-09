@@ -135,4 +135,43 @@ describe("frontend feed adapter", () => {
       },
     });
   });
+
+  it("preserves every canonical subagent message field without fabrication", () => {
+    const message = {
+      id: "message-1",
+      runId: "run-1",
+      nodeId: "node-1",
+      threadId: "thread-1",
+      from: { kind: "agent" as const, id: "actor-1", label: "Researcher" },
+      to: [{ kind: "parent" as const, id: "main-1", label: "Main agent" }],
+      kind: "request" as const,
+      text: "Review this result",
+      data: { resultId: "result-1", counts: [1, 2] },
+      correlationId: "correlation-1",
+      replyTo: "message-0",
+      blocking: true,
+      deadline: 1_000,
+      status: "acknowledged" as const,
+      createdAt: 100,
+      acknowledgedAt: 200,
+      response: {
+        actor: { kind: "parent" as const, id: "main-1" },
+        text: "Accepted",
+        data: { accepted: true },
+        createdAt: 300,
+      },
+    };
+
+    const projection = toFeedDocumentProjection({
+      revision: 5,
+      blocks: [{ type: "message", id: "feed-message-1", message }],
+    });
+
+    expect(projection.blocks[0]).toEqual({
+      type: "subagent-communication",
+      id: "feed-message-1",
+      messageId: "feed-message-1",
+      message,
+    });
+  });
 });

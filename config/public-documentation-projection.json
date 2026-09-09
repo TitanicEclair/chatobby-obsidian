@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "TitanicEclair/chatobby",
+  "destinationRepository": "TitanicEclair/chatobby-obsidian",
+  "files": [
+    "README.md",
+    "docs/alpha-guide.md",
+    "docs/api/feed.md",
+    "docs/architecture/frontend-modules.md",
+    "docs/architecture/frontend-styles.md",
+    "docs/architecture/managed-runtime-lifecycle.md",
+    "docs/events.md",
+    "docs/installation.md",
+    "docs/live-update-lifecycle.md",
+    "docs/local-model-connections.md",
+    "docs/mcp-connections.md",
+    "docs/obsidian-automation.md",
+    "docs/obsidian-cli-and-terminal.md",
+    "docs/project-guidance.md",
+    "docs/projects.md",
+    "docs/providers-and-models.md",
+    "docs/release-boundary.md",
+    "docs/responsibility-boundaries.md",
+    "docs/subagents.md",
+    "docs/troubleshooting.md",
+    "docs/wire-protocol.md"
+  ],
+  "retiredFiles": [
+    "docs/context-queries.md"
+  ]
+}

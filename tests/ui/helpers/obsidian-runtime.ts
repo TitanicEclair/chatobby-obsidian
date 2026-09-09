@@ -51,6 +51,8 @@ export class ItemView extends Component {
   getDisplayText(): string {
     return "Test View";
   }
+
+  async setState(_state: unknown, _result: unknown): Promise<void> {}
 }
 
 export class Plugin extends Component {
@@ -108,10 +110,15 @@ export class Setting {
     this.settingEl.classList.add("setting-item-heading");
     return this;
   }
-  addText(): this {
+  addText(callback?: (text: TestTextComponent) => unknown): this {
+    callback?.(new TestTextComponent(this.controlEl));
     return this;
   }
-  addDropdown(): this {
+  addTextArea(): this {
+    return this;
+  }
+  addDropdown(callback: (dropdown: TestDropdownComponent) => unknown): this {
+    callback(new TestDropdownComponent(this.controlEl));
     return this;
   }
   addToggle(callback: (toggle: TestToggleComponent) => unknown): this {
@@ -122,9 +129,31 @@ export class Setting {
     callback(new TestSliderComponent(this.controlEl));
     return this;
   }
-  addButton(): this {
+  addButton(callback?: (button: TestButtonComponent) => unknown): this {
+    callback?.(new TestButtonComponent(this.controlEl));
     return this;
   }
+}
+
+class TestTextComponent {
+  readonly inputEl: HTMLInputElement;
+  constructor(host: HTMLElement) { this.inputEl = host.createEl("input"); }
+  setValue(value: string): this { this.inputEl.value = value; return this; }
+  setPlaceholder(value: string): this { this.inputEl.placeholder = value; return this; }
+  setDisabled(value: boolean): this { this.inputEl.disabled = value; return this; }
+  onChange(callback: (value: string) => void): this { this.inputEl.addEventListener("input", () => callback(this.inputEl.value)); return this; }
+}
+
+class TestButtonComponent {
+  readonly buttonEl: HTMLButtonElement;
+  constructor(host: HTMLElement) { this.buttonEl = host.createEl("button"); }
+  setButtonText(text: string): this { this.buttonEl.textContent = text; return this; }
+  setDisabled(value: boolean): this { this.buttonEl.disabled = value; return this; }
+  setTooltip(text: string): this { this.buttonEl.title = text; return this; }
+  setIcon(icon: string): this { this.buttonEl.dataset.icon = icon; return this; }
+  setCta(): this { this.buttonEl.classList.add("mod-cta"); return this; }
+  setWarning(): this { this.buttonEl.classList.add("mod-warning"); return this; }
+  onClick(callback: () => unknown): this { this.buttonEl.addEventListener("click", () => { callback(); }); return this; }
 }
 
 export class SecretComponent {
@@ -171,7 +200,9 @@ export class Modal {
   }
   close(): void {
     this.modalEl.remove();
+    this.onClose();
   }
+  onClose(): void {}
   setTitle(title: string): this {
     this.titleEl.textContent = title;
     return this;
@@ -261,6 +292,31 @@ function markdownNode(node: Node): string {
       return "\n";
     default:
       return body;
+  }
+}
+
+class TestDropdownComponent {
+  readonly selectEl: HTMLSelectElement;
+  constructor(host: HTMLElement) {
+    this.selectEl = document.createElement("select");
+    host.appendChild(this.selectEl);
+  }
+  addOption(value: string, label: string): this {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    this.selectEl.appendChild(option);
+    return this;
+  }
+  addOptions(options: Record<string, string>): this {
+    for (const [value, label] of Object.entries(options)) this.addOption(value, label);
+    return this;
+  }
+  setValue(value: string): this { this.selectEl.value = value; return this; }
+  setDisabled(disabled: boolean): this { this.selectEl.disabled = disabled; return this; }
+  onChange(handler: (value: string) => void): this {
+    this.selectEl.addEventListener("change", () => handler(this.selectEl.value));
+    return this;
   }
 }
 

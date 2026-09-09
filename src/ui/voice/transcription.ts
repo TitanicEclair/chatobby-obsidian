@@ -1,8 +1,7 @@
 /**
- * Send audio to server, receive transcript.
+ * Reserved source boundary for future transcription transport.
  *
- * Takes PCM audio from MicRecorder, sends to the chatobby server
- * for speech-to-text transcription, returns the transcript.
- *
- * Target architecture — see docs/ui-state-guide.md
+ * No production transport is exported from this placeholder. A future
+ * implementation must route through a typed controller rather than raw UI
+ * network calls; see docs/architecture/frontend-modules.md.
  */

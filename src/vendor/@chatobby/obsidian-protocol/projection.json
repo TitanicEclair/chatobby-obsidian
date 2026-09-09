@@ -4,6 +4,8 @@
   "sourceRoot": "packages/chatobby-obsidian-protocol/src",
   "entry": "packages/chatobby-obsidian-protocol/src/index.ts",
   "contractSurface": "complete-package-entry-closure",
+  "sourceRevision": "c7aa300c2e79617f64afe18b945fb1f3176adbe6",
+  "sourceContentSha256": "c2fe7d9e91f77264d8a4956a467f6d1d56ffc7026bd7b17a37ec3779b3df7034",
   "protocolVersion": 2,
   "sourceFiles": [
     {
@@ -32,7 +34,11 @@
     },
     {
       "path": "index.ts",
-      "sha256": "170c5e2e1d42b4a9d8c52fe6e1e1e88208aec6af5b7437c072095dd22e3d3fcd"
+      "sha256": "ebfb02f46a538957d2eafdf4aba34d6fc633d757b85f0603dafaf54079ad2b84"
+    },
+    {
+      "path": "invocation-metadata.ts",
+      "sha256": "6febdfa3a3f3713a72340376192e683ec3eea2469909a6213a98de48c8d56483"
     },
     {
       "path": "mcp-policy.ts",
@@ -118,13 +124,23 @@
     },
     {
       "path": "index.d.ts",
-      "size": 3278,
-      "sha256": "2aadecba50ca4ed7d4aa62ba6f6d8c78100fc40f70851a192ba1f3ebc84175c5"
+      "size": 3389,
+      "sha256": "1669225b6226ba1fe04e81bedc4e923185f53a06ea680822f469d530bbfc7d0a"
     },
     {
       "path": "index.ts",
-      "size": 3769,
-      "sha256": "170c5e2e1d42b4a9d8c52fe6e1e1e88208aec6af5b7437c072095dd22e3d3fcd"
+      "size": 3880,
+      "sha256": "ebfb02f46a538957d2eafdf4aba34d6fc633d757b85f0603dafaf54079ad2b84"
+    },
+    {
+      "path": "invocation-metadata.d.ts",
+      "size": 362,
+      "sha256": "54fc1d634948c690c719523416dcb54e701df725f169e9e181bfa3fa17c560b4"
+    },
+    {
+      "path": "invocation-metadata.ts",
+      "size": 624,
+      "sha256": "6febdfa3a3f3713a72340376192e683ec3eea2469909a6213a98de48c8d56483"
     },
     {
       "path": "mcp-policy.d.ts",

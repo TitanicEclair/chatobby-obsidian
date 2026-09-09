@@ -1,54 +1,69 @@
-import { setIcon } from "obsidian";
-import type {
-  FrontendPermissionDecision,
-  FrontendPermissionScreenViewModel,
-} from "../../vendor/chatobby-client/frontend-contracts.js";
+import type { FrontendIntent, FrontendPermissionScreenViewModel } from "../../vendor/chatobby-client/frontend-contracts.js";
 import { ChatobbyComponent } from "../shared/component";
+import { nativeSetupIntentIsCurrent, type NativeSetupIntent, renderNativeSetup } from "./native-setup-view";
+import { renderWorkspaceAccess, type WorkspaceAccessChoice } from "./workspace-access-view";
 import {
-  createPageDisclosure,
   createPageIconButton,
   createPageSection,
   createPageState,
   PageShell,
 } from "../shared/page-shell";
 
-const DECISIONS: readonly FrontendPermissionDecision[] = ["allow", "ask", "deny"];
+type AccessMode = FrontendPermissionScreenViewModel["accessPolicy"]["accessMode"];
 
 export type PermissionViewIntent =
-  | { readonly type: "permissions.select-profile"; readonly payload: { readonly profileId: string } }
-  | { readonly type: "permissions.activate-profile" | "permissions.duplicate-profile"; readonly payload: { readonly profileId: string } }
-  | { readonly type: "permissions.delete-profile"; readonly payload: { readonly profileId: string; readonly replacementProfileId?: string } }
-  | {
-      readonly type: "permissions.set-live-agent-profile";
-      readonly payload: {
-        readonly authority: FrontendPermissionScreenViewModel["liveAgents"][number]["authority"];
-        readonly profileId: string;
-        readonly expectedBindingRevision: number;
-      };
-    }
-  | { readonly type: "permissions.update-profile"; readonly payload: { readonly profileId: string; readonly name: string; readonly description: string } }
-  | { readonly type: "permissions.set-capability"; readonly payload: { readonly profileId: string; readonly capabilityId: string; readonly decision: FrontendPermissionDecision } }
-  | { readonly type: "permissions.set-target"; readonly payload: { readonly profileId: string; readonly keys: readonly string[]; readonly decision: FrontendPermissionDecision } }
-  | { readonly type: "permissions.set-rule"; readonly payload: { readonly profileId: string; readonly section: string; readonly pattern: string; readonly decision: FrontendPermissionDecision } }
-  | { readonly type: "permissions.remove-rule"; readonly payload: { readonly profileId: string; readonly section: string; readonly pattern: string } }
-  | { readonly type: "permissions.add-channel" | "permissions.remove-channel"; readonly payload: { readonly profileId: string; readonly channelId: string } }
-  | { readonly type: "permissions.set-channel"; readonly payload: { readonly profileId: string; readonly channelId: string; readonly action: "connect" | "read" | "send"; readonly decision: FrontendPermissionDecision } };
+  | NativeSetupIntent
+  | Pick<Extract<FrontendIntent, { type: "permissions.set-workspace-vault-access" }>, "type" | "payload">
+  | (Pick<Extract<FrontendIntent, { type: "permissions.set-access-policy" }>, "type" | "payload">
+    & { readonly mainSessionId: string })
+  | Pick<Extract<FrontendIntent, { type: "permissions.set-obsidian-vault-access" }>, "type" | "payload">;
 
 export interface PermissionsViewProps {
+  workspacePage?: boolean;
+  onManageTools?(): void;
   getModel(): FrontendPermissionScreenViewModel | null;
-  subscribe(listener: (model: FrontendPermissionScreenViewModel | null) => void): () => void;
+  getActiveSessionId(): string | null;
+  supportsObsidianVaultAccess(): boolean;
+  supportsNativeSetup?(): boolean;
+  subscribe(
+    listener: (model: FrontendPermissionScreenViewModel | null) => void,
+  ): () => void;
   onRefresh(): Promise<void>;
   onIntent(intent: PermissionViewIntent): Promise<void>;
   onBack(): void;
 }
 
-/** Native renderer for the runtime-owned permission policy screen. */
+const ACCESS_MODES: readonly {
+  readonly id: AccessMode;
+  readonly title: string;
+  readonly description: string;
+}[] = [
+  {
+    id: "read-only",
+    title: "Read-only",
+    description:
+      "Read files inside the selected working roots without changing them. Local processes require a ready native backend and keep selected roots read-only. Obsidian app access is a separate exception below.",
+  },
+  {
+    id: "workspace",
+    title: "Workspace",
+    description:
+      "Read, edit and delete files inside the selected working roots. Local processes require a ready native backend. Obsidian app access is a separate exception below.",
+  },
+  {
+    id: "full",
+    title: "Full access",
+    description:
+      "Run unsandboxed as your user account, access files outside the selected roots, and use the network.",
+  },
+];
+
+/** Simple renderer for the runtime-owned access policy. */
 export class PermissionsView extends ChatobbyComponent {
+  private readonly modeGroupName = `chatobby-access-mode-${crypto.randomUUID()}`;
   private unsubscribe: (() => void) | null = null;
   private localError: string | null = null;
   private saving = false;
-  private editingProfileId: string | null = null;
-  private deletingProfileId: string | null = null;
   private shell: PageShell | null = null;
   private reloadButton: HTMLButtonElement | null = null;
 
@@ -77,15 +92,26 @@ export class PermissionsView extends ChatobbyComponent {
     container.tabIndex = -1;
     this.shell = new PageShell(container, {
       title: "Permissions",
+      subtitle: "Choose what Chatobby can access.",
       width: "form",
       headerClass: "chatobby-permissions__header",
       titleClass: "chatobby-permissions__title",
       actionsClass: "chatobby-permissions__header-actions",
       bodyClass: "chatobby-permissions__body",
     });
-    this.reloadButton = iconButton(this.shell.actions, "refresh-cw", "Reload permissions");
+    this.reloadButton = createPageIconButton(
+      this.shell.actions,
+      "refresh-cw",
+      "Reload permissions",
+      { className: "chatobby-permissions__icon-btn" },
+    );
     this.reloadButton.addEventListener("click", () => void this.refresh());
-    iconButton(this.shell.actions, "x", "Close permissions").addEventListener("click", () => this.props.onBack());
+    createPageIconButton(
+      this.shell.actions,
+      "x",
+      "Close permissions",
+      { className: "chatobby-permissions__icon-btn" },
+    ).addEventListener("click", () => this.props.onBack());
     this.unsubscribe = this.props.subscribe((model) => this.renderState(model));
     this.renderState(this.props.getModel());
   }
@@ -105,451 +131,500 @@ export class PermissionsView extends ChatobbyComponent {
     this.reloadButton?.setAttr("aria-busy", String(model?.loading ?? false));
     shell.setStatus(
       error
-        ? { tone: "error", message: error, actionLabel: "Try again", onAction: () => void this.refresh() }
+        ? {
+            tone: "error",
+            message: error,
+            actionLabel: "Try again",
+            onAction: () => void this.refresh(),
+          }
         : model?.statusMessage
           ? { tone: "success", message: model.statusMessage }
           : null,
     );
-    shell.updateBody(`permissions:${model?.selectedProfileId ?? "loading"}`, (body) => {
+    shell.updateBody(`permissions:${model?.accessPolicySessionId ?? "loading"}`, (body) => {
       if (!model) {
         createPageState(body, {
           kind: error ? "error" : "loading",
-          title: error ? "Permission profiles are unavailable" : "Loading permission profiles",
-          description: error ? "Check the runtime connection and try again." : "Reading policies and current assignments.",
+          title: error ? "Permissions are unavailable" : "Loading permissions",
+          description: error
+            ? "Check the runtime connection and try again."
+            : "Reading the current access boundary.",
         });
         return;
       }
-      this.renderPolicyContext(body, model);
-      this.renderProfiles(body, model);
-      this.renderTemporaryApprovals(body, model);
-      this.renderCapabilities(body, model);
-      this.renderChannels(body, model);
-      this.renderAdvanced(body, model);
-      const storage = createPageDisclosure(body, "policy-storage", "Technical details");
-      storage.addClass("chatobby-permissions__storage");
-      for (const line of model.storageLines ?? []) storage.createDiv({ text: line });
-    });
-  }
-
-  private renderPolicyContext(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const context = body.createDiv({ cls: "chatobby-permissions__policy-context" });
-    const current = context.createDiv({ cls: "chatobby-permissions__policy-context-row is-current" });
-    const currentCopy = current.createDiv({ cls: "chatobby-permissions__policy-context-copy" });
-    currentCopy.createDiv({ cls: "chatobby-permissions__policy-context-label", text: "Current chat" });
-    currentCopy.createDiv({
-      cls: "chatobby-permissions__policy-context-detail",
-      text: bindingSourceLabel(model.currentChatPolicy.bindingSource),
-    });
-    current.createDiv({
-      cls: "chatobby-permissions__policy-context-value",
-      text: model.currentChatPolicy.name,
-    });
-
-    const installation = context.createDiv({ cls: "chatobby-permissions__policy-context-row" });
-    const installationCopy = installation.createDiv({ cls: "chatobby-permissions__policy-context-copy" });
-    installationCopy.createDiv({
-      cls: "chatobby-permissions__policy-context-label",
-      text: "Default for new chats",
-    });
-    installationCopy.createDiv({
-      cls: "chatobby-permissions__policy-context-detail",
-      text: "Used only when a chat has no specific policy assignment.",
-    });
-    installation.createDiv({
-      cls: "chatobby-permissions__policy-context-value",
-      text: model.installationDefaultPolicy.name,
-    });
-  }
-
-  private renderProfiles(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const section = this.section(body, "Permission policy", "Choose the permissions used by this session.");
-    const toolbar = section.createDiv({ cls: "chatobby-permissions__profile-toolbar" });
-    const picker = toolbar.createDiv({ cls: "chatobby-permissions__profile-picker" });
-    const select = picker.createEl("select", {
-      cls: "chatobby-permissions__profile-select",
-      attr: { "aria-label": "Selected permission profile", "data-page-state-key": "permissions:selected-profile" },
-    });
-	for (const profile of model.profiles) {
-		select.createEl("option", { text: profile.name, attr: { value: profile.id } }).selected = profile.selected;
-	}
-    setIcon(picker.createSpan({ cls: "chatobby-permissions__profile-chevron" }), "chevron-down");
-    select.addEventListener("change", () => {
-      this.editingProfileId = null;
-      this.deletingProfileId = null;
-      void this.runIntent({ type: "permissions.select-profile", payload: { profileId: select.value } });
-    });
-    const profile = model.selectedProfile;
-    const liveMain = (model.liveAgents ?? []).find((agent) => agent.authority.kind === "main");
-    if (profile.activeForMain) toolbar.createSpan({ cls: "chatobby-permissions__active-label", text: "Used by this session" });
-    else if (profile.canActivate) {
-      const useForSession = toolbar.createEl("button", {
-        cls: "chatobby-permissions__secondary-btn",
-        text: "Use for this session",
-        attr: { type: "button" },
-      });
-      useForSession.disabled = !liveMain;
-      if (!liveMain) {
-        useForSession.setAttr("title", "This session is still connecting. Reload permissions and try again.");
-      } else {
-        useForSession.addEventListener("click", () => void this.runIntent({
-          type: "permissions.set-live-agent-profile",
-          payload: {
-            authority: liveMain.authority,
-            profileId: profile.id,
-            expectedBindingRevision: liveMain.bindingRevision,
-          },
-        }));
-      }
-    }
-    toolbar.createEl("button", { cls: "chatobby-permissions__secondary-btn", text: profile.duplicateLabel, attr: { type: "button" } })
-      .addEventListener("click", () => void this.runIntent({ type: "permissions.duplicate-profile", payload: { profileId: profile.id } }));
-    if (profile.canDelete) {
-      const remove = iconButton(toolbar, "trash-2", "Delete profile");
-      remove.addEventListener("click", () => {
-        this.editingProfileId = null;
-        this.deletingProfileId = profile.id;
-        this.renderState(this.props.getModel());
-      });
-    }
-    const card = section.createDiv({ cls: "chatobby-permissions__profile-card" });
-    const summary = card.createDiv({ cls: "chatobby-permissions__profile-summary" });
-    const copy = summary.createDiv({ cls: "chatobby-permissions__profile-copy" });
-    copy.createDiv({ cls: "chatobby-permissions__profile-name", text: profile.name });
-    copy.createDiv({ cls: "chatobby-permissions__profile-description", text: profile.description });
-    if (profile.canEdit && this.editingProfileId !== profile.id) {
-      summary.createEl("button", { cls: "chatobby-permissions__secondary-btn", text: "Edit", attr: { type: "button" } })
-        .addEventListener("click", () => {
-          this.editingProfileId = profile.id;
-          this.renderState(this.props.getModel());
+      if (model.migrationNotice) {
+        body.createDiv({
+          cls: "chatobby-permissions__notice",
+          text: model.migrationNotice,
+          attr: { role: "status" },
         });
-    }
-    if (profile.builtIn) {
-      card.createDiv({ cls: "chatobby-permissions__profile-note", text: "This policy is built in. Select Customize to make an editable copy." });
-      return;
-    }
-    if (this.deletingProfileId === profile.id) {
-      this.renderDeleteConfirmation(card, model);
-      return;
-    }
-    if (this.editingProfileId !== profile.id) return;
-    const editor = card.createDiv({ cls: "chatobby-permissions__profile-editor" });
-    const nameLabel = editor.createEl("label", { cls: "chatobby-permissions__profile-field" });
-    nameLabel.createSpan({ text: "Policy name" });
-    const name = nameLabel.createEl("input", {
-      cls: "chatobby-permissions__profile-name-input",
-      value: profile.name,
-      attr: { "aria-label": "Profile name", "data-page-state-key": `permissions:${profile.id}:name` },
+      }
+      if (this.props.workspacePage) {
+        renderWorkspaceAccess(body, model, this.saving, this.props.supportsObsidianVaultAccess(),
+          (choice, enabled) => void this.setWorkspaceAccess(choice, enabled), () => this.props.onManageTools?.());
+      } else {
+        this.renderScope(body, model);
+        this.renderModes(body, model);
+        this.renderNetwork(body, model);
+        this.renderObsidianVaultAccess(body, model);
+      }
+      this.renderNativeSupport(body, model);
+      renderNativeSetup(body, model, this.props.supportsNativeSetup?.() === true, this.saving,
+        (intent) => void this.setNativeSetup(intent));
+      if (!this.props.workspacePage) this.renderEffectiveAccess(body, model);
     });
-    const descriptionLabel = editor.createEl("label", { cls: "chatobby-permissions__profile-field" });
-    descriptionLabel.createSpan({ text: "Description" });
-    const description = descriptionLabel.createEl("textarea", {
-      cls: "chatobby-permissions__profile-description-input",
+  }
+
+  private renderScope(
+    body: HTMLElement,
+    model: FrontendPermissionScreenViewModel,
+  ): void {
+    const scopeName = model.scope.kind === "project" ? "Project" : "Vault";
+    const section = createPageSection(body, {
+      title: "Working scope",
+      description:
+        model.scope.kind === "project"
+          ? "This chat's Project identity, file roots, and memory scope stay bound to the active Project. Viewing another Project does not change this boundary. Policy and workspace changes govern future actions; they do not remove existing conversation context."
+          : "No Project is active, so the runtime is reporting the Vault boundary explicitly. Policy and workspace changes govern future actions; they do not remove existing conversation context.",
+      surface: "divided",
+      className: "chatobby-permissions__section",
+    });
+    const summary = section.content.createDiv({
+      cls: "chatobby-permissions__scope-summary",
+    });
+    const copy = summary.createDiv({ cls: "chatobby-permissions__scope-copy" });
+    copy.createDiv({
+      cls: "chatobby-permissions__scope-label",
+      text: model.scope.kind === "project" ? "Active Project" : "Vault",
+    });
+    copy.createDiv({
+      cls: "chatobby-permissions__scope-detail",
+      text: `${scopeName} · ${model.scope.selectedRootCount} selected ${model.scope.selectedRootCount === 1 ? "root" : "roots"}`,
+    });
+    summary.createSpan({
+      cls: `chatobby-permissions__status-pill ${model.scope.filesystemBound ? "is-ready" : "is-attention"}`,
+      text: model.scope.filesystemBound ? "Bound" : "No file roots",
+    });
+    if (!model.scope.filesystemBound) {
+      const full = model.accessPolicy.accessMode === "full";
+      section.content.createDiv({
+        cls: "chatobby-permissions__warning",
+        text:
+          model.scope.kind === "project"
+            ? full
+              ? "This Project has no selected roots and does not fall back to the whole Vault. Full access can still reach explicit host paths with unsandboxed user-account authority."
+              : "This Project has no selected roots. File and local-process access stays unavailable; Chatobby does not fall back to the whole Vault."
+            : full
+              ? "No Vault roots are registered. Full access can still reach explicit host paths with unsandboxed user-account authority."
+              : "No Vault roots are available. File and local-process access stays unavailable.",
+        attr: { role: "status" },
+      });
+    }
+  }
+
+  private renderModes(
+    body: HTMLElement,
+    model: FrontendPermissionScreenViewModel,
+  ): void {
+    const policyOwnerIsActive = model.accessPolicySessionId === this.props.getActiveSessionId();
+    const section = createPageSection(body, {
+      title: "Access mode",
+      description:
+        "Workspace restrictions help limit accidental changes; not intended to contain untrusted code. Obsidian vault access below is an app-authority exception; MCP tool exposure is chosen separately in Plugins.",
+      surface: "divided",
+      className: "chatobby-permissions__section",
+    });
+    section.content.createDiv({ cls: "chatobby-permissions__notice", attr: { role: "note" },
+      text: "Access mode and agent network belong to this saved chat and are kept when you reopen it. Other independent chats, including chats in the same Project, keep their own settings. Tabs showing this same chat share its settings; delegated agents inherit their parent session's policy. Changing them affects future actions without changing roots or memory scope." });
+    if (!policyOwnerIsActive) section.content.createDiv({ cls: "chatobby-permissions__notice", attr: { role: "note" },
+      text: this.props.getActiveSessionId() ? "Controlled by parent session. Mode and network are read-only here." : "No active session is available to change this policy." });
+    const group = section.content.createDiv({
+      cls: "chatobby-permissions__mode-list",
+      attr: { role: "radiogroup", "aria-label": "Agent access mode" },
+    });
+    for (const option of ACCESS_MODES) {
+      const label = group.createEl("label", {
+        cls: `chatobby-permissions__mode${model.accessPolicy.accessMode === option.id ? " is-selected" : ""}`,
+      });
+      const radio = label.createEl("input", {
+        attr: {
+          type: "radio",
+          name: this.modeGroupName,
+          value: option.id,
+          "aria-label": option.title,
+          "data-page-focus-key": `permissions:${model.accessPolicySessionId}:mode:${option.id}`,
+        },
+      });
+      radio.checked = model.accessPolicy.accessMode === option.id;
+      radio.disabled = this.saving || model.loading || !policyOwnerIsActive;
+      const copy = label.createDiv({ cls: "chatobby-permissions__mode-copy" });
+      copy.createDiv({
+        cls: "chatobby-permissions__mode-title",
+        text: option.title,
+      });
+      copy.createDiv({
+        cls: "chatobby-permissions__mode-description",
+        text: option.description,
+      });
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        void this.setPolicy(
+          model,
+          option.id,
+          option.id === "full" ? true : model.accessPolicy.agentNetworkAccess,
+        );
+      });
+    }
+    if (model.accessPolicy.accessMode === "full") {
+      section.content.createDiv({
+        cls: "chatobby-permissions__warning",
+        text:
+          "Full access is ordinary unsandboxed execution as your user account. It includes files outside the selected roots and network access.",
+        attr: { role: "alert" },
+      });
+    }
+  }
+
+  private renderNetwork(
+    body: HTMLElement,
+    model: FrontendPermissionScreenViewModel,
+  ): void {
+    const full = model.accessPolicy.accessMode === "full";
+    const policyOwnerIsActive = model.accessPolicySessionId === this.props.getActiveSessionId();
+    const section = createPageSection(body, {
+      title: "Agent network access",
+      description:
+        "This network setting applies to this chat. New chats start with network On. It controls network use by sandboxed agent operations, not delegated Obsidian app operations, a connection test you explicitly start, model requests, or update checks.",
+      surface: "divided",
+      className: "chatobby-permissions__section",
+    });
+    const label = section.content.createEl("label", {
+      cls: "chatobby-permissions__network-control",
+    });
+    const copy = label.createDiv({ cls: "chatobby-permissions__network-copy" });
+    copy.createDiv({
+      cls: "chatobby-permissions__network-title",
+      text: model.accessPolicy.agentNetworkAccess ? "On" : "Off",
+    });
+    copy.createDiv({
+      cls: "chatobby-permissions__scope-detail",
+      text: !policyOwnerIsActive ? "Controlled by parent session."
+        : full
+        ? "Full access always includes network access."
+        : "MCP servers and their selected tools remain a separate choice.",
+    });
+    const toggle = label.createEl("input", {
+      cls: "chatobby-permissions__network-toggle",
       attr: {
-        "aria-label": "Profile description",
-        placeholder: "When should this profile be used?",
-        "data-page-state-key": `permissions:${profile.id}:description`,
+        type: "checkbox",
+        role: "switch",
+        "aria-label": "Allow agent network access",
+        "data-page-focus-key": `permissions:${model.accessPolicySessionId}:network`,
       },
     });
-    description.value = profile.description;
-    const editorActions = editor.createDiv({ cls: "chatobby-permissions__profile-editor-actions" });
-    editorActions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => {
-      this.editingProfileId = null;
-      this.renderState(this.props.getModel());
-    });
-    editorActions.createEl("button", { cls: "mod-cta", text: "Save", attr: { type: "button" } }).addEventListener("click", () => {
-      if (!name.value.trim()) return this.setLocalError("Policy name cannot be empty.");
-      void this.runIntent({
-        type: "permissions.update-profile",
-        payload: { profileId: profile.id, name: name.value.trim(), description: description.value.trim() },
-      }, () => { this.editingProfileId = null; });
-    });
+    toggle.checked = model.accessPolicy.agentNetworkAccess;
+    toggle.disabled = this.saving || model.loading || full || !policyOwnerIsActive;
+    toggle.addEventListener("change", () =>
+      void this.setPolicy(model, model.accessPolicy.accessMode, toggle.checked),
+    );
   }
 
-  private renderTemporaryApprovals(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const approvals = model.temporaryApprovals ?? [];
-    if (approvals.length === 0) return;
-    const section = this.section(body, "Temporary session access", model.temporaryApprovalDescription);
-    const list = section.createDiv({ cls: "chatobby-permissions__live-agents" });
-    for (const approval of approvals) {
-      const row = list.createDiv({ cls: "chatobby-permissions__live-agent" });
-      const copy = row.createDiv({ cls: "chatobby-permissions__live-agent-copy" });
-      copy.createDiv({ cls: "chatobby-permissions__live-agent-name", text: approval.surfaceLabel });
-      copy.createDiv({ cls: "chatobby-permissions__profile-description", text: approval.pattern });
-      row.createSpan({ cls: "chatobby-permissions__active-label", text: "Allowed for this session" });
-    }
-  }
-
-  private renderDeleteConfirmation(card: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const profile = model.selectedProfile;
-    const confirmation = card.createDiv({ cls: "chatobby-permissions__delete-confirmation" });
-    confirmation.createDiv({
-      cls: "chatobby-permissions__delete-title",
-      text: `Delete “${profile.name}”?`,
-    });
-    confirmation.createDiv({
-      cls: "chatobby-permissions__delete-description",
-      text: profile.deleteImpactLabel ?? "This custom policy will be permanently removed.",
-    });
-    let replacement: HTMLSelectElement | null = null;
-    if (profile.deleteReplacementRequired) {
-      const field = confirmation.createEl("label", { cls: "chatobby-permissions__profile-field" });
-      field.createSpan({ text: "Replacement policy" });
-      replacement = field.createEl("select", { attr: { "aria-label": "Replacement permission policy" } });
-	  replacement.createEl("option", { text: "Choose a replacement…", attr: { value: "" } });
-      for (const candidate of model.profiles) {
-        if (candidate.id === profile.id) continue;
-		replacement.createEl("option", { text: candidate.name, attr: { value: candidate.id } });
-      }
-    }
-    const actions = confirmation.createDiv({ cls: "chatobby-permissions__profile-editor-actions" });
-    actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => {
-      this.deletingProfileId = null;
-      this.renderState(this.props.getModel());
-    });
-    const remove = actions.createEl("button", {
-      cls: "mod-warning",
-      text: "Delete policy",
-      attr: { type: "button" },
-    });
-    if (replacement) remove.disabled = true;
-    replacement?.addEventListener("change", () => {
-      remove.disabled = !replacement?.value;
-    });
-    remove.addEventListener("click", () => {
-      if (profile.deleteReplacementRequired && !replacement?.value) return;
-      void this.runIntent(
-        {
-          type: "permissions.delete-profile",
-          payload: {
-            profileId: profile.id,
-            replacementProfileId: replacement?.value || undefined,
-          },
-        },
-        () => { this.deletingProfileId = null; },
-      );
-    });
-  }
-
-  private renderCapabilities(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const section = this.section(body, "Capabilities", model.capabilityDescription);
-    section.createDiv({ cls: "chatobby-permissions__connection-note", text: "These settings control what each tool may do without disconnecting Chatobby from Obsidian." });
-    if (model.inventoryWarning) section.createDiv({ cls: "chatobby-permissions__inventory-warning", text: model.inventoryWarning });
-    const groups = section.createDiv({ cls: "chatobby-permissions__capabilities" });
-    for (const group of model.capabilities ?? []) {
-      const details = groups.createEl("details", {
-        cls: "chatobby-permissions__capability",
-        attr: { "data-page-state-key": `capability:${group.id}` },
-      });
-      const summary = details.createEl("summary", { cls: "chatobby-permissions__capability-summary" });
-      const copy = summary.createDiv({ cls: "chatobby-permissions__capability-copy" });
-      copy.createDiv({ cls: "chatobby-permissions__capability-name", text: group.label });
-      copy.createDiv({ cls: "chatobby-permissions__capability-description", text: group.description });
-      copy.createDiv({ cls: "chatobby-permissions__capability-count", text: group.countLabel });
-      this.renderDecisionControls(summary, group.label, group.decision.value, group.decision.disabled, (decision) => void this.runIntent({
-        type: "permissions.set-capability",
-        payload: { profileId: model.selectedProfileId, capabilityId: group.id, decision },
-      }));
-      const targets = details.createDiv({ cls: "chatobby-permissions__rules" });
-      for (const target of group.targets) {
-        this.renderDecisionRow(targets, target.label, target.description, target.source, target.inherited, target.decision.value, target.decision.disabled, (decision) => void this.runIntent({
-          type: "permissions.set-target",
-          payload: { profileId: model.selectedProfileId, keys: target.keys, decision },
-        }));
-      }
-    }
-  }
-
-  private renderChannels(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const section = this.section(body, "Channel access", model.channelDescription);
-    const list = section.createDiv({ cls: "chatobby-permissions__channel-list" });
-    const channels = model.channels ?? [];
-    const availableChannels = model.availableChannels ?? [];
-    if (channels.length === 0) list.createDiv({ cls: "chatobby-permissions__channel-empty", text: "This policy does not have access to any channels." });
-    for (const channel of channels) {
-      const row = list.createDiv({ cls: "chatobby-permissions__channel" });
-      const copy = row.createDiv({ cls: "chatobby-permissions__channel-copy" });
-      copy.createDiv({ cls: "chatobby-permissions__channel-name", text: channel.label });
-      const actions = row.createDiv({ cls: "chatobby-permissions__channel-actions" });
-      for (const action of ["connect", "read", "send"] as const) {
-        const control = actions.createDiv({ cls: "chatobby-permissions__channel-action" });
-        control.createSpan({ text: titleCase(action) });
-        this.renderDecisionControls(control, `${channel.label} ${action}`, channel.decisions[action], channel.disabled, (decision) => void this.runIntent({
-          type: "permissions.set-channel",
-          payload: { profileId: model.selectedProfileId, channelId: channel.channelId, action, decision },
-        }));
-      }
-      if (!channel.disabled) {
-        iconButton(row, "x", `Remove ${channel.label}`).addEventListener("click", () => void this.runIntent({
-          type: "permissions.remove-channel",
-          payload: { profileId: model.selectedProfileId, channelId: channel.channelId },
-        }));
-      }
-    }
-    if (model.selectedProfile.builtIn) {
-      const addRow = list.createDiv({ cls: "chatobby-permissions__add-channel" });
-      addRow.createEl("button", {
-        cls: "chatobby-permissions__secondary-btn",
-        text: "Customize to choose channels",
-        attr: { type: "button" },
-      }).addEventListener("click", () => void this.runIntent({
-        type: "permissions.duplicate-profile",
-        payload: { profileId: model.selectedProfileId },
-      }));
-    } else if (availableChannels.length > 0) {
-      const addRow = list.createDiv({ cls: "chatobby-permissions__add-channel" });
-      const select = addRow.createEl("select", { attr: { "aria-label": "Channel to add" } });
-      for (const option of availableChannels) {
-        select.createEl("option", { text: option.label, attr: { value: option.value } });
-      }
-      addRow.createEl("button", { cls: "chatobby-permissions__add-btn", text: "Add channel", attr: { type: "button" } }).addEventListener("click", () => {
-        if (select.value) void this.runIntent({ type: "permissions.add-channel", payload: { profileId: model.selectedProfileId, channelId: select.value } });
-      });
-    }
-  }
-
-  private renderAdvanced(body: HTMLElement, model: FrontendPermissionScreenViewModel): void {
-    const details = body.createEl("details", {
-      cls: "chatobby-permissions__advanced",
-      attr: { "data-page-state-key": "advanced-rules" },
-    });
-    details.createEl("summary", { text: "Advanced rules" });
-    details.createDiv({ cls: "chatobby-permissions__section-description", text: model.advancedDescription });
-    for (const group of model.advancedGroups ?? []) {
-      const section = details.createDiv({ cls: "chatobby-permissions__advanced-section" });
-      section.createDiv({ cls: "chatobby-permissions__advanced-title", text: group.label });
-      const list = section.createDiv({ cls: "chatobby-permissions__rules" });
-      for (const rule of group.rules) {
-        const row = list.createDiv({ cls: "chatobby-permissions__rule" });
-        row.createDiv({ cls: "chatobby-permissions__rule-copy" }).createDiv({ cls: "chatobby-permissions__rule-label", text: rule.pattern });
-        this.renderDecisionControls(row, rule.pattern, rule.decision, group.disabled, (decision) => void this.runIntent({
-          type: "permissions.set-rule",
-          payload: { profileId: model.selectedProfileId, section: group.section, pattern: rule.pattern, decision },
-        }));
-        if (!group.disabled) iconButton(row, "x", `Remove ${rule.pattern}`).addEventListener("click", () => void this.runIntent({
-          type: "permissions.remove-rule",
-          payload: { profileId: model.selectedProfileId, section: group.section, pattern: rule.pattern },
-        }));
-      }
-      if (!group.disabled) this.renderAddRule(list, model.selectedProfileId, group.section, group.placeholder);
-    }
-  }
-
-  private renderAddRule(parent: HTMLElement, profileId: string, section: string, placeholder: string): void {
-    const row = parent.createDiv({ cls: "chatobby-permissions__add-rule" });
-    const input = row.createEl("input", { attr: { type: "text", placeholder, "aria-label": `New ${section} rule` } });
-    const decision = row.createEl("select", { attr: { "aria-label": "New rule decision" } });
-	for (const value of DECISIONS) decision.createEl("option", { text: titleCase(value), attr: { value } });
-    decision.value = "ask";
-    const save = (): void => {
-      if (!input.value.trim() || !isDecision(decision.value)) return;
-      void this.runIntent({ type: "permissions.set-rule", payload: { profileId, section, pattern: input.value.trim(), decision: decision.value } });
-    };
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") { event.preventDefault(); save(); }
-    });
-    row.createEl("button", { cls: "chatobby-permissions__add-btn", text: "Add", attr: { type: "button" } }).addEventListener("click", save);
-  }
-
-  private renderDecisionRow(
-    parent: HTMLElement,
-    labelText: string,
-    description: string | undefined,
-    source: string | undefined,
-    inherited: boolean,
-    current: FrontendPermissionDecision | "mixed",
-    disabled: boolean,
-    onDecision: (decision: FrontendPermissionDecision) => void,
+  private renderObsidianVaultAccess(
+    body: HTMLElement,
+    model: FrontendPermissionScreenViewModel,
   ): void {
-    const row = parent.createDiv({ cls: "chatobby-permissions__rule" });
-    const copy = row.createDiv({ cls: "chatobby-permissions__rule-copy" });
-    const label = copy.createDiv({ cls: "chatobby-permissions__rule-label", text: labelText });
-    if (source) label.createSpan({ cls: "chatobby-permissions__source", text: source });
-    if (inherited) label.setAttr("title", "Uses the setting selected for this group.");
-    if (description) copy.createDiv({ cls: "chatobby-permissions__rule-description", text: description });
-    this.renderDecisionControls(row, labelText, current, disabled, onDecision);
-  }
-
-  private renderDecisionControls(
-    parent: HTMLElement,
-    label: string,
-    current: FrontendPermissionDecision | "mixed",
-    disabled: boolean,
-    onDecision: (decision: FrontendPermissionDecision) => void,
-  ): void {
-    const decisions = parent.createDiv({ cls: "chatobby-permissions__decisions" });
-    if (current === "mixed") decisions.createSpan({ cls: "chatobby-permissions__mixed", text: "Mixed" });
-    for (const decision of DECISIONS) {
-      const button = decisions.createEl("button", {
-        cls: `chatobby-permissions__decision${decision === current ? " is-active" : ""}`,
-        text: titleCase(decision),
-        attr: { type: "button", "data-decision": decision, "aria-pressed": String(decision === current), "aria-label": `${label}: ${decision}` },
-      });
-      button.disabled = disabled || this.saving;
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onDecision(decision);
-      });
-    }
-  }
-
-  private section(body: HTMLElement, title: string, description: string): HTMLElement {
-    return createPageSection(body, {
-      title,
-      description,
+    const grant = model.obsidianVaultAccess;
+    const supported = this.props.supportsObsidianVaultAccess();
+    const available = supported && grant?.status === "available" && !model.loading;
+    const section = createPageSection(body, {
+      title: "Obsidian vault access",
+      description: "This switch applies only to the current Project or Vault, not the whole installation. It includes Obsidian CLI, vault-level tools, and passive Obsidian context. MCP servers and tools still need their separate switches in Plugins.",
+      surface: "divided",
       className: "chatobby-permissions__section",
-    }).content;
+    });
+    const label = section.content.createEl("label", { cls: "chatobby-permissions__network-control" });
+    const copy = label.createDiv({ cls: "chatobby-permissions__network-copy" });
+    copy.createDiv({
+      cls: "chatobby-permissions__network-title",
+      text: available ? grant.enabled ? "On" : "Off" : model.loading ? "Loading" : "Unavailable",
+    });
+    copy.createDiv({
+      cls: "chatobby-permissions__scope-detail",
+      text: available
+        ? `${grant.source === "default" ? "Runtime default" : "Your explicit choice"} for this chat's ${model.scope.kind === "project" ? "Project" : "Vault"}.`
+        : !supported ? "This runtime connection has not enabled Obsidian vault-access controls."
+          : grant?.status === "unavailable" ? grant.reason : "Waiting for the runtime to confirm this chat's access.",
+    });
+    const toggle = label.createEl("input", {
+      cls: "chatobby-permissions__network-toggle",
+      attr: { type: "checkbox", role: "switch", "aria-label": "Allow Obsidian vault access", "data-page-state-key": "permissions:obsidian-vault" },
+    });
+    toggle.checked = available && grant.enabled;
+    toggle.disabled = !available || this.saving;
+    toggle.addEventListener("change", () => void this.setObsidianVaultAccess(model, toggle.checked));
+    section.content.createDiv({
+      cls: "chatobby-permissions__warning",
+      text: "Uses Obsidian’s app authority outside the sandbox. When On, these operations can read or change the vault in any access mode and use Obsidian’s network access. Project roots, memory scope, and identity do not change.",
+      attr: { role: "note" },
+    });
   }
 
-  private async refresh(): Promise<void> {
-    this.localError = null;
-    try {
-      await this.props.onRefresh();
-    } catch (error) {
-      this.setLocalError(errorMessage(error));
+  private renderNativeSupport(
+    body: HTMLElement,
+    model: FrontendPermissionScreenViewModel,
+  ): void {
+    if (model.nativeSupport.backendId === "landstrip") return;
+    const section = createPageSection(body, {
+      title: "Workspace protection",
+      description:
+        "Current protection for Read-only and Workspace access.",
+      surface: "divided",
+      className: "chatobby-permissions__section",
+    });
+    const row = section.content.createDiv({
+      cls: "chatobby-permissions__support-summary",
+    });
+    const copy = row.createDiv({ cls: "chatobby-permissions__scope-copy" });
+    copy.createDiv({
+      cls: "chatobby-permissions__scope-label",
+      text: nativeSupportLabel(model.nativeSupport.status),
+    });
+    if (model.nativeSupport.backendId) {
+      copy.createDiv({
+        cls: "chatobby-permissions__scope-detail",
+        text: nativeBackendLabel(model.nativeSupport.backendId),
+      });
+    }
+    row.createSpan({
+      cls: `chatobby-permissions__status-pill ${model.nativeSupport.status === "ready" ? "is-ready" : "is-attention"}`,
+      text: model.nativeSupport.status === "ready" ? "Ready" : "Not ready",
+    });
+    if (model.nativeSupport.reason) {
+      section.content.createDiv({
+        cls: "chatobby-permissions__support-detail",
+        text: model.nativeSupport.reason,
+      });
+    }
+    if (model.nativeSupport.userAction) {
+      section.content.createDiv({
+        cls: "chatobby-permissions__support-action",
+        text: model.nativeSupport.userAction,
+      });
     }
   }
 
-  private async runIntent(intent: PermissionViewIntent, onSuccess?: () => void): Promise<void> {
-    if (this.saving) return;
+  private renderEffectiveAccess(
+    body: HTMLElement,
+    model: FrontendPermissionScreenViewModel,
+  ): void {
+    const section = createPageSection(body, {
+      title: "Effective now",
+      description: "Runtime-reported behavior for this exact session and scope.",
+      surface: "divided",
+      className: "chatobby-permissions__section",
+    });
+    const rows = section.content.createDiv({
+      cls: "chatobby-permissions__effective-list",
+    });
+    effectiveRow(
+      rows,
+      "Files",
+      model.effective.fileWrite
+        ? "Read and write"
+        : model.effective.fileRead
+          ? "Read only"
+          : "Unavailable",
+    );
+    effectiveRow(rows, "Obsidian",
+      !model.loading && this.props.supportsObsidianVaultAccess() && model.obsidianVaultAccess?.status === "available"
+        ? obsidianAccessLabel(model.effective.obsidian) : "Unavailable");
+    effectiveRow(
+      rows,
+      "Local processes",
+      localProcessLabel(model.effective.localProcess),
+    );
+    effectiveRow(
+      rows,
+      "Agent network",
+      model.effective.agentNetworkAccess ? "On" : "Off",
+    );
+    if (model.effective.warning) {
+      section.content.createDiv({
+        cls: "chatobby-permissions__warning",
+        text: model.effective.warning,
+        attr: { role: "status" },
+      });
+    }
+  }
+
+  private async setPolicy(
+    model: FrontendPermissionScreenViewModel,
+    accessMode: AccessMode,
+    agentNetworkAccess: boolean,
+  ): Promise<void> {
+    if (this.saving || model.loading) return;
+    if (model.accessPolicySessionId !== this.props.getActiveSessionId()) {
+      this.renderState(this.props.getModel());
+      return;
+    }
+    const current = this.props.getModel();
+    if (current?.loading || current?.accessPolicySessionId !== model.accessPolicySessionId
+      || current.accessPolicy.revision !== model.accessPolicy.revision) {
+      this.renderState(current);
+      return;
+    }
     this.saving = true;
     this.localError = null;
-    this.renderState(this.props.getModel());
+    this.renderState(model);
     try {
-      await this.props.onIntent(intent);
-      onSuccess?.();
+      await this.props.onIntent({
+        type: "permissions.set-access-policy",
+        mainSessionId: model.accessPolicySessionId,
+        payload: {
+          expectedRevision: model.accessPolicy.revision,
+          accessMode,
+          agentNetworkAccess: accessMode === "full" ? true : agentNetworkAccess,
+        },
+      });
     } catch (error) {
-      this.localError = errorMessage(error);
+      if (this.props.getModel()?.accessPolicySessionId === model.accessPolicySessionId
+        && this.props.getActiveSessionId() === model.accessPolicySessionId)
+        this.localError = error instanceof Error ? error.message : String(error);
     } finally {
       this.saving = false;
       this.renderState(this.props.getModel());
     }
   }
-}
 
-function iconButton(parent: HTMLElement, icon: string, label: string): HTMLButtonElement {
-  return createPageIconButton(parent, icon, label, { className: "chatobby-permissions__icon-btn" });
-}
+  private async setObsidianVaultAccess(model: FrontendPermissionScreenViewModel, enabled: boolean): Promise<void> {
+    if (this.saving || !this.props.supportsObsidianVaultAccess() || model.loading || model.obsidianVaultAccess?.status !== "available") return;
+    const grant = model.obsidianVaultAccess;
+    const current = this.props.getModel();
+    if (current?.loading || current?.obsidianVaultAccess?.status !== "available"
+      || current.obsidianVaultAccess.sessionId !== grant.sessionId
+      || current.obsidianVaultAccess.bindingRevision !== grant.bindingRevision
+      || current.obsidianVaultAccess.revision !== grant.revision) {
+      this.localError = "The active chat or its permissions changed. Review the current access before trying again.";
+      this.renderState(current);
+      return;
+    }
+    this.saving = true;
+    this.localError = null;
+    this.renderState(model);
+    try {
+      await this.props.onIntent({
+        type: "permissions.set-obsidian-vault-access",
+        payload: {
+          expectedRevision: grant.revision,
+          expectedSessionId: grant.sessionId,
+          expectedBindingRevision: grant.bindingRevision,
+          enabled,
+        },
+      });
+    } catch (error) {
+      this.localError = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.saving = false;
+      this.renderState(this.props.getModel());
+    }
+  }
 
-function titleCase(value: string): string {
-  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
-}
+  private async setWorkspaceAccess(choice: WorkspaceAccessChoice, enabled: boolean): Promise<void> {
+    if (this.saving || !this.props.supportsObsidianVaultAccess()) return;
+    const current = this.props.getModel();
+    if (current?.loading || !current?.workspaceVaultAccess?.some((entry) => entry.projectId === choice.projectId && entry.projectRevision === choice.projectRevision && entry.revision === choice.revision)) {
+      this.setLocalError("This area's access changed. Reload Permissions and review it again."); return;
+    }
+    this.saving = true;
+    this.localError = null;
+    this.renderState(current);
+    try {
+      await this.props.onIntent({ type: "permissions.set-workspace-vault-access", payload: {
+        projectId: choice.projectId, expectedProjectRevision: choice.projectRevision, expectedRevision: choice.revision, enabled,
+      } });
+    } catch (error) { this.localError = error instanceof Error ? error.message : String(error); }
+    finally { this.saving = false; this.renderState(this.props.getModel()); }
+  }
 
-function bindingSourceLabel(source: string): string {
-  switch (source) {
-    case "user-session": return "Assigned specifically to this chat.";
-    case "installation-default": return "Inherited from the installation default.";
-    case "role": return "Inherited from this agent's role.";
-    case "workflow-node": return "Assigned by a legacy supervised-run record.";
-    case "run": return "Assigned to this active run.";
-    default: return "Resolved by Chatobby's live permission binding.";
+  private async setNativeSetup(intent: NativeSetupIntent): Promise<void> {
+    if (!this.isMounted || this.saving) return;
+    if (!this.props.supportsNativeSetup?.() || !nativeSetupIntentIsCurrent(this.props.getModel(), intent)) {
+      this.setLocalError("The native setup target or connection changed. Reload and review the grants or installed verification again.");
+      return;
+    }
+    this.saving = true;
+    this.localError = null;
+    this.renderState(this.props.getModel());
+    try {
+      await this.props.onIntent(intent);
+    } catch (error) {
+      this.localError = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.saving = false;
+      if (this.isMounted) this.renderState(this.props.getModel());
+    }
+  }
+
+  private async refresh(): Promise<void> {
+    const sessionId = this.props.getActiveSessionId();
+    const model = this.props.getModel();
+    const previousError = this.localError;
+    const isCurrent = () => this.isMounted && this.props.getActiveSessionId() === sessionId
+      && this.props.getModel() === model;
+    try {
+      await this.props.onRefresh();
+      // The controller owns the current load's success/error display. A resolved
+      // callback may already have shown an error, including the same error again.
+    } catch (error) {
+      if (isCurrent() && this.localError === previousError)
+        this.localError = error instanceof Error ? error.message : String(error);
+    }
+    if (isCurrent()) this.renderState(this.props.getModel());
   }
 }
 
-function isDecision(value: string): value is FrontendPermissionDecision {
-  return value === "allow" || value === "ask" || value === "deny";
+function effectiveRow(parent: HTMLElement, label: string, value: string): void {
+  const row = parent.createDiv({ cls: "chatobby-permissions__effective-row" });
+  row.createSpan({ cls: "chatobby-permissions__effective-label", text: label });
+  row.createSpan({ cls: "chatobby-permissions__effective-value", text: value });
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function nativeSupportLabel(
+  status: FrontendPermissionScreenViewModel["nativeSupport"]["status"],
+): string {
+  if (status === "ready") return "Workspace protection is ready";
+  if (status === "setup-required") return "Setup required";
+  if (status === "unsupported") return "Not supported on this device";
+  return "Not yet verified";
+}
+
+function nativeBackendLabel(
+  backend: NonNullable<
+    FrontendPermissionScreenViewModel["nativeSupport"]["backendId"]
+  >,
+): string {
+  if (backend === "windows-appcontainer") return "Windows AppContainer";
+  if (backend === "linux-bubblewrap") return "Linux bubblewrap";
+  if (backend === "macos-seatbelt") return "macOS Seatbelt";
+  if (backend === "landstrip") return "Landstrip";
+  return "Native backend";
+}
+
+function localProcessLabel(
+  value: FrontendPermissionScreenViewModel["effective"]["localProcess"],
+): string {
+  if (value === "native-contained")
+    return "Workspace-restricted by the ready native backend";
+  if (value === "unsandboxed") return "Unsandboxed as your user account";
+  return "Unavailable";
+}
+
+function obsidianAccessLabel(
+  value: FrontendPermissionScreenViewModel["effective"]["obsidian"],
+): string {
+  if (value === "app-authority") return "Obsidian app authority outside the sandbox";
+  if (value === "typed-read") return "Read-only operations";
+  if (value === "typed-workspace") return "Workspace operations";
+  if (value === "unsandboxed") return "Unrestricted";
+  return "Unavailable";
 }

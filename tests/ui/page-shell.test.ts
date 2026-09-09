@@ -7,6 +7,7 @@ import {
   focusPageNavigation,
   movePageNavigation,
   PageShell,
+  reconcileKeyed,
 } from "../../src/ui/shared/page-shell";
 
 describe("PageShell", () => {
@@ -34,7 +35,7 @@ describe("PageShell", () => {
 
   it("preserves controls, disclosures, scrolling, and focus within one body scope", () => {
     const parent = document.body.createDiv();
-    const shell = new PageShell(parent, { title: "Queries" });
+    const shell = new PageShell(parent, { title: "Details" });
     const render = (value: string): void => {
       const input = shell.body.createEl("input", {
         value,
@@ -45,7 +46,7 @@ describe("PageShell", () => {
       input.focus();
     };
 
-    shell.updateBody("queries", () => render("Initial"));
+    shell.updateBody("details", () => render("Initial"));
     const input = shell.body.querySelector<HTMLInputElement>("input");
     if (!input) throw new Error("input missing");
     input.value = "Draft";
@@ -55,7 +56,7 @@ describe("PageShell", () => {
     details.open = true;
     shell.body.scrollTop = 24;
 
-    shell.updateBody("queries", () => render("Server value"));
+    shell.updateBody("details", () => render("Server value"));
 
     const restored = shell.body.querySelector<HTMLInputElement>("input");
     expect(restored?.value).toBe("Draft");
@@ -143,5 +144,48 @@ describe("PageShell", () => {
     expect(movePageNavigation(parent, 1)).toBe(true);
     expect(selectSuggestions).toHaveBeenCalledOnce();
     expect(document.activeElement?.textContent).toBe("Suggestions");
+  });
+});
+
+describe("keyed page rows", () => {
+  it("updates unchanged rows without moving mounted controls or losing their drafts", () => {
+    const parent = document.body.createDiv();
+    const create = (): HTMLElement => {
+      const row = document.createElement("div");
+      row.createEl("input");
+      return row;
+    };
+    const render = (items: string[]): void => reconcileKeyed(parent, items, (id) => id, create, () => {});
+    render(["first", "second", "third"]);
+    const rows = Array.from(parent.children);
+    const input = rows[1]!.querySelector("input")!;
+    input.value = "Unsaved edit";
+    input.focus();
+    const observer = new MutationObserver(() => {});
+    observer.observe(parent, { childList: true });
+    render(["first", "second", "third"]);
+    expect(observer.takeRecords()).toEqual([]);
+    expect(Array.from(parent.children)).toEqual(rows);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("Unsaved edit");
+    observer.disconnect();
+    parent.remove();
+  });
+
+  it("inserts, reorders and removes rows while retaining surviving elements", () => {
+    const parent = document.body.createDiv();
+    // Existing callers also mount new elements inside their create callback.
+    const render = (items: string[]): void => reconcileKeyed(parent, items, (id) => id,
+      () => parent.createDiv(), (row, id) => { row.dataset.label = id; });
+    render(["a", "b", "c"]);
+    const original = Array.from(parent.children);
+    render(["new", "c", "a"]);
+    expect(Array.from(parent.children).map((row) => (row as HTMLElement).dataset.label)).toEqual(["new", "c", "a"]);
+    expect(parent.children[1]).toBe(original[2]);
+    expect(parent.children[2]).toBe(original[0]);
+    expect(original[1]!.isConnected).toBe(false);
+    render([]);
+    expect(parent.children.length).toBe(0);
+    parent.remove();
   });
 });

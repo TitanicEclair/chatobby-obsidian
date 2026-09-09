@@ -1,4 +1,5 @@
-/* Stable, Obsidian-native structure shared by every full-page Chatobby surface. */
+/* Stable, Obsidian-native structure shared by every full-page Chatobby surface.
+   Feature CSS may style content but must not reimplement this hierarchy. */
 
 .chatobby-page {
   display: flex;
@@ -19,6 +20,7 @@
 .chatobby-page,
 .chatobby-page * { box-sizing: border-box; }
 
+/* Page identity, navigation actions, tabs, and operation status. */
 .chatobby-page__header {
   display: grid;
   width: 100%;
@@ -195,6 +197,7 @@
 .chatobby-page__status-message { min-width: 0; overflow-wrap: anywhere; }
 .chatobby-page__status-action { color: var(--text-normal); background: transparent; box-shadow: none; }
 
+/* Body width modes and shared section/form primitives. */
 .chatobby-page__body {
   display: flex;
   width: 100%;
@@ -243,6 +246,7 @@
 }
 
 .chatobby-page__section-header {
+  padding: var(--chatobby-section-header-padding, 0);
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -260,13 +264,14 @@
 }
 
 .chatobby-page__section-description {
+  max-width: var(--chatobby-section-description-width, none);
   margin-top: var(--size-2-1);
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   line-height: var(--line-height-normal);
 }
 
-.chatobby-page__section-content { min-width: 0; }
+.chatobby-page__section-content { min-width: 0; padding: var(--chatobby-section-content-padding, 0); }
 
 .chatobby-page__toolbar {
   display: flex;
@@ -303,6 +308,7 @@
   cursor: pointer;
 }
 
+/* Consistent loading, empty, warning, and error state layout. */
 .chatobby-page__state {
   display: grid;
   min-height: 120px;
@@ -323,6 +329,7 @@
 .chatobby-page__state-description { margin-top: var(--size-2-1); color: var(--text-faint); font-size: var(--font-ui-smaller); }
 .chatobby-page__state > button { grid-column: 2; justify-self: start; }
 
+/* Reusable master/detail scaffold. Each pane is an intentional scroll owner. */
 .chatobby-page__master-detail {
   display: grid;
   width: 100%;
@@ -340,6 +347,7 @@
   background: var(--chatobby-surface-muted);
 }
 
+/* Page breakpoints are relative to the Obsidian leaf via this named container. */
 @container chatobby-page (max-width: 760px) {
   .chatobby-page__master-detail {
     grid-template-columns: minmax(0, 1fr);
@@ -376,6 +384,7 @@
     animation-duration: 2s;
   }
 }
+/* Host fills the shell region without adding another scroll container. */
 .chatobby-page-host {
 	display: flex;
 	min-width: 0;
@@ -383,4 +392,23 @@
 	flex: 1 1 auto;
 	flex-direction: column;
 	overflow: hidden;
+}
+
+/* Workspace page and native Project editor presentation. */
+.chatobby-workspace-page .chatobby-page__header {
+  min-height: 96px;
+  padding-block: 22px;
+  border-bottom-color: color-mix(in srgb, var(--chatobby-border) 65%, transparent);
+}
+.chatobby-workspace-page .chatobby-page__title { font-size: 24px; letter-spacing: -0.6px; line-height: 1.3; }
+.chatobby-workspace-page .chatobby-page__subtitle { margin-top: 6px; color: var(--text-muted); font-size: var(--font-ui-small); white-space: normal; line-height: 1.5; }
+.chatobby-workspace-page .chatobby-page__body { padding-top: 24px; }
+.chatobby-project-editor-modal .chatobby-page__header { border: 0; padding: 0 0 18px; }
+.chatobby-project-editor-modal .chatobby-page__title { font-size: 23px; }
+.chatobby-project-editor-modal .chatobby-page__body { padding: 0; overflow-y: auto; }
+.chatobby-project-editor-modal .chatobby-page__section:first-child .chatobby-page__section-title { display: none; }
+
+@container chatobby-page (max-width: 480px) {
+  .chatobby-workspace-page .chatobby-page__header { min-height: 80px; padding-block: 16px; }
+  .chatobby-workspace-page .chatobby-page__title { font-size: 21px; }
 }

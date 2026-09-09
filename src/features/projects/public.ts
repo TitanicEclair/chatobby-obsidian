@@ -1,5 +1,7 @@
 /** Full-screen controller used by the Chatobby view to manage Projects and their sessions. */
 export { ProjectsScreenController, type ProjectsScreenControllerOptions } from "./application/projects-screen-controller";
+/** Native sidebar for global pages, Projects and saved conversations. */
+export { ProjectNavigatorView, VIEW_TYPE_CHATOBBY_NAVIGATOR } from "./ui/project-navigator-view";
 
 /** Native folder-launch decisions used by Obsidian's file explorer integration. */
 export {

@@ -1,8 +1,7 @@
 /**
- * MicRecorder — Web Audio API PCM capture.
+ * Reserved source boundary for future microphone capture.
  *
- * Configurable push-to-talk key. Captures PCM audio from the microphone
- * and sends it to the server for transcription.
- *
- * Target architecture — see docs/ui-state-guide.md
+ * No production recorder is exported from this placeholder. A future
+ * implementation must expose typed capabilities to presentation; see
+ * docs/architecture/frontend-modules.md.
  */

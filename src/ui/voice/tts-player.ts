@@ -1,8 +1,7 @@
 /**
- * Play TTS audio from tool results.
+ * Reserved source boundary for future text-to-speech playback.
  *
- * Receives audio data from TTS tool results and plays it
- * through the user's audio output.
- *
- * Target architecture — see docs/ui-state-guide.md
+ * No production player is exported from this placeholder. A future
+ * implementation must receive typed presentation data through a feature
+ * controller; see docs/architecture/frontend-modules.md.
  */

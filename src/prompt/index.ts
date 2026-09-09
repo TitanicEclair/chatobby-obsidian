@@ -3,6 +3,7 @@ import type { VaultContext } from "../types";
 import type { WsPromptContextPacket } from "../vendor/chatobby-client/connector-types.js";
 import { OBSIDIAN_TOOL_CAPABILITY_CATALOG } from "../vendor/@chatobby/obsidian-protocol/index.js";
 import { getObsidianSemanticContextService, getObsidianUiSnapshotService } from "../obsidian-context";
+import { collectObsidianCapabilityState } from "../obsidian-bridge/dependency-snapshot";
 import { gatherEnvironmentContext } from "./environment";
 import {
   CONTEXT_HEADING_MAX_CHARS,
@@ -31,6 +32,28 @@ export interface PromptWorkspaceContext {
   workingDirectory: string;
   sessionMessageCount: number;
   sessionName?: string;
+}
+
+/** Advertise connector capabilities without collecting passive note, editor, or UI context. */
+export function gatherVaultCapabilities(app: App): NonNullable<VaultContext["capabilities"]> {
+  return projectVaultCapabilities(collectObsidianCapabilityState(app));
+}
+
+function projectVaultCapabilities(
+  state: ReturnType<typeof collectObsidianCapabilityState>,
+): NonNullable<VaultContext["capabilities"]> {
+  return {
+    featureFamilies: [...state.capabilities],
+    integrations: state.plugins
+      .filter((plugin) => RELEVANT_PLUGIN_IDS.has(plugin.id) && (plugin.installed || plugin.enabled))
+      .map((plugin) => ({
+        id: plugin.id,
+        name: plugin.name,
+        installed: plugin.installed,
+        enabled: plugin.enabled,
+      })),
+    runtimeDependencies: state.runtimeDependencies.map((dependency) => ({ ...dependency })),
+  };
 }
 
 export function gatherVaultContext(app: App, options: { chatobbyVersion?: string } = {}): VaultContext {
@@ -87,18 +110,7 @@ export function gatherVaultContext(app: App, options: { chatobbyVersion?: string
       ...(uiContext ?? {}),
     },
     environment: gatherEnvironmentContext(app, { chatobbyVersion: options.chatobbyVersion }),
-    capabilities: {
-      featureFamilies: [...snapshot.capabilities.capabilities],
-      integrations: snapshot.capabilities.plugins
-        .filter((plugin) => RELEVANT_PLUGIN_IDS.has(plugin.id) && (plugin.installed || plugin.enabled))
-        .map((plugin) => ({
-          id: plugin.id,
-          name: plugin.name,
-          installed: plugin.installed,
-          enabled: plugin.enabled,
-        })),
-      runtimeDependencies: snapshot.capabilities.runtimeDependencies.map((dependency) => ({ ...dependency })),
-    },
+    capabilities: projectVaultCapabilities(snapshot.capabilities),
     ...(activeNote ? {
       notePath: activeNote.path,
       cursor: snapshot.cursor,

@@ -1,8 +1,14 @@
 import { win32 } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveChatobbyPlatformPaths } from "../../src/runtime/infrastructure/platform-paths";
+import { resolveChatobbyPlatformPaths, runtimeDevelopmentPairsRoot } from "../../src/runtime/infrastructure/platform-paths";
 
 describe("Chatobby platform paths", () => {
+  it("uses the canonical external development namespace on all supported platforms", () => {
+    expect(runtimeDevelopmentPairsRoot({ platform: "win32", home: "C:\\Users\\tester", localAppData: "D:\\Local" })).toBe("D:\\Local\\Chatobby\\runtime\\development-pairs");
+    expect(runtimeDevelopmentPairsRoot({ platform: "darwin", home: "/Users/tester" })).toBe("/Users/tester/Library/Application Support/Chatobby/runtime/development-pairs");
+    expect(runtimeDevelopmentPairsRoot({ platform: "linux", home: "/home/tester", xdgDataHome: "/data", xdgStateHome: "/state" })).toBe("/data/Chatobby/runtime/development-pairs");
+    expect(() => runtimeDevelopmentPairsRoot({ platform: "freebsd", home: "/home/tester" })).toThrow(/unsupported/u);
+  });
   it("retains the Windows account-local runtime layout", () => {
     const paths = resolveChatobbyPlatformPaths({
       platform: "win32",

@@ -2,6 +2,373 @@
 
 ## [Unreleased]
 
+- Keep the runtime connected when several restored tabs finish an interrupted update together; finalize or roll back the installation once.
+
+- Keep newer sidebar activity when an older directory response arrives, with bounded refresh retries instead of an internal error message.
+
+- Refresh runtime provenance for the managed foreground Stop fix and its cancellation integration tests.
+
+- Refresh the exact runtime projection for Windows PowerShell startup and Stop compatibility fixes.
+
+- Restore saved chat and page titles in background Obsidian tabs after startup or plugin reload.
+
+- Keep long channel participant names readable with end ellipsis under Obsidian button styles.
+
+- Bound local test workers to two so installation fixtures retain their existing
+  deadlines without competing against an unbounded process pool.
+
+- Run hosted connector builds only as manual final production checks after local
+  paired and UI acceptance; remove duplicate push/pull-request build triggers.
+
+- Correct Settings help for Automatic Windows PowerShell and local-server model discovery.
+- Accept the runtime's signed native qualification file through the generated asset contract. Native capability tests belong to development and release validation; the paired runtime no longer runs startup verification probes.
+- Remove the manual workspace-verification checklist and repetitive app-access toggle subtitles. The paired runtime supports Windows Vault chats with protected internal storage and reports actual launch failures directly.
+- Use a single Memory workspace selector and simpler memory types. Make Channel dates small sticky bubbles and align participant rows.
+- Attach selected Project folders without a second confirmation dialog. Fix the misleading folder-access description in the Guide.
+
+- Show Project chats in batches of five and Vault chats in batches of 50, preserving expanded lists and search across hidden chats. Remove the redundant Manage access button from role creation; roles inherit their initiating chat’s access.
+- Add public Obsidian automation documentation and align model setup help with server discovery and per-model defaults.
+
+- Simplify local model connections with model discovery, individual model selection and tests, server defaults, optional overrides and inline errors. Preserve existing per-model settings and give each new server its own identity.
+
+- Welcome new users in a short native modal with direct access to model connections and the Chatobby Guide in Settings. Replace the former permission checklist.
+- Show release highlights once after an update, with a separate roadmap for agent knowledge and memory, chat and effort modes, session annotations, and inline note comments. Reopen them from Settings → What’s new.
+- Open subscription sign-in in the system default browser, including when Obsidian Web viewer is enabled.
+
+- Preserve Projects sidebar scrolling and keyboard focus when collapsing groups or refreshing chat activity by leaving unchanged keyed rows mounted in place.
+- Rewrite the community README around Channels, custom roles, memory, Events and model connections. Replace slogan artwork with editable SVG workflow illustrations, add section navigation and document the always-free core harness.
+
+- Recover interrupted runtime backup cleanup after plugin restart, including partially deleted backups. Preserve signed-package and authenticated-reconnection checks before finishing an accepted installation.
+
+- Refresh account model choices when opening the picker without clearing search or changing the selected model. Show discovery failures and cached-list status, with expandable unavailable-model explanations in Settings.
+
+- Add Settings sign-in for ChatGPT, GitHub Copilot and xAI subscriptions, with explicit browser/code actions and cancellation. Keep Anthropic API keys and existing token-plan providers.
+- Put newly created chats above saved list entries and display the runtime's live title before transcript persistence.
+- Keep streaming reasoning in a scrollable window that follows new text until scrolled back; preserve automatic completion folding.
+- Refresh the composer's provider and model labels when the runtime changes provider, while preserving pending picker choices during unrelated refreshes.
+
+- Refresh native chat navigation when sessions or turn activity change, coalesce directory requests, and clear old completion marks when work resumes. Accept missing dates for first-turn chats before their transcript is saved.
+- Prepare two live GIF demonstrations and version-specific 0.5.0 community links.
+
+## [0.5.0] - 2026-09-07
+
+- Open Chatobby pages in native named Obsidian tabs and preserve restored chat titles and paths.
+- Polish Permissions with padded cards, concise verification and optional technical details; add a search icon, a visible Connect MCP button and balanced Guide spacing.
+- Replace the advanced run inspector with agent conversations; retire old lifetime caps and budget, retry, clone, fork and priority controls.
+- Explain persistent agents, invitation wake-up, targeted channel DMs and read-only history queries in the illustrated community README.
+- Align Markdown list markers with paragraph content in the conversation feed.
+
+- Build a native Obsidian workspace with a left Projects navigator, searchable and reorderable chat groups, Project editing modals, independent feature tabs and transfers into native splits. Keep the running conversation and mounted page drafts intact.
+- Replace the permanent agent rail with a compact Subagents dropdown. Lead the global Subagents page with active parents and children, feed links and Stop; edit continuing roles in an explicit Vault or Project folder.
+- Add operator-authored Channels, participant management, search, replies and a persistent composer. Browse and edit selected Project memory without rebinding the chat. Keep mode and agent network in the composer, with independent app-access choices in Permissions and server/tool switches in Plugins.
+- Explain empty MCP forms inline, fix overlapping Project-editor loads, preserve native verification requests beyond the generic client deadline, and improve keyboard tab navigation and responsive page styling. Pin the current user prompt as its opening scrolls away and render app-access switches consistently with the native theme.
+- Introduce an illustrated community README with original diagrams, synthetic live-product screenshots and updated user guides. Include its assets and linked guides in the reviewable public-source projection.
+
+- The earlier provenance-only intake included saved-policy binding/reopen and
+  Windows Project shell-directory corrections. The workspace redesign above
+  supersedes that intake's unchanged-controls scope; installed acceptance is
+  recorded against each exact development pair in the redesign record.
+
+- Keep a visible warning when the runtime retains an interrupted Landstrip
+  verification with unproved historical cleanup, including after a new check
+  passes. Reuse explicit Verify review/confirmation without claiming old process,
+  file-permission or profile repair. Active-operation, revision and legacy grant
+  recovery guards remain unchanged; fresh installed/native proof is separate.
+
+- Scope mode and agent-network controls to the current durable chat, preserving
+  independent sessions in the same Project and shared settings for tabs showing
+  one chat. Reopen/defaults/migration remain runtime-owned; no connector policy
+  store or Project-default layer is introduced. Bind actions to the projected
+  session and policy revision, suppress late outcomes on replacement sessions,
+  and keep Full truthfully Network On. Preserve the existing four composer
+  controls and Permissions network switch. Canonical checkbox/radio state is
+  not restored from stale page drafts. Source-only regressions do not establish
+  installed/native acceptance.
+
+- Show the runtime's saved-policy warning after a successful composer mode
+  acknowledgment without reporting that persisted choice as rejected or
+  reverting it. Native enforcement and readiness remain separate from saving.
+
+- Restore the shield-first composer Read-only/Workspace/Full menu using the
+  canonical installation-wide policy from exact source
+  `0343c1dfeeef9b0c194a42a6b9757f7bb3081b59`. Read current policy revision and
+  network choice, await the existing policy acknowledgment, reject stale
+  session/runtime changes, and never save a legacy permission-profile preference.
+  Pending/errors retain the displayed runtime mode; vault/MCP toggles are separate.
+  The focused composer helper preserves the existing view-size boundary. Exact
+  comparison, full checks, 1,107 tests (two intentional skips) and Community-review
+  development build pass; final installation/native Verify remain distinct.
+
+- Refresh generated provenance to source
+  `f3cd4a1d11911d92c013b14c88e585323a82799b`, including the bounded Windows
+  payload eligibility/Verify forwarding and fish EOF-probe correction. Browser
+  contracts and permission controls are unchanged. The mixed-revision native
+  selected-read/Stop regression passed; rebuilt exact-pair installation and live
+  acceptance remain separate, and old failure receipts/residue are preserved.
+  Exact backend comparison, complete checks, 1,092 tests (two intentional skips)
+  and the development build including Community-review checks pass.
+
+- Refresh generated intake to exact source
+  `cff8e8f82c09767e5325db7c23995b411fe04d92` for the bounded Windows
+  payload-only Stop fix and corrected compaction/MCP guidance. Only source
+  provenance manifests change; browser contracts and permission controls do not.
+  Preserve the prior e23 functional pass and final Stop cleanup failure separately;
+  fresh native proof, rebuilt-pair installation and live acceptance remain pending.
+  Exact backend comparison, full check, 1,092 tests (two intentional skips), six
+  focused parity/documentation tests and Community-review development build pass.
+
+- Refresh the exact generated source intake to
+  `e23cf93d6cf7096691124acd39a51e97887446f8`, including the finite Landstrip
+  dependency-source inventory and its normal reviewable typed projection.
+  Preserve exact receipt hashes and all existing permission controls. Windows
+  supports only disjoint Project geometry when installed verification passes;
+  whole-Vault and protected-storage overlaps remain unavailable without fallback.
+  Exact backend comparison, complete checks, 1,092 tests (two intentional skips)
+  and the development build including Community-review checks pass.
+  Native-test runtime, installed-pair acceptance and publication remain separate.
+
+- Render Landstrip's per-launch policy without a separate root-setup action or
+  a readiness claim. Preserve older recorded-grant recovery and describe
+  Landstrip attempt recovery without promising permission/profile repair.
+  Name the actual backend, correct Read-only process guidance, and distinguish
+  installation-wide mode/network from Project/Vault-specific Obsidian access.
+  Focused DOM regressions do not replace pending installed-pair and live UI checks.
+
+- Add explicit review/confirmation for installed native verification and its
+  recorded synthetic recovery. Bind consent to the current session, installation
+  fingerprint and verification revision; disclose constrained-tool draining,
+  fixed public connection checks and retained synthetic evidence. Never infer
+  readiness from configured grants or a successful UI request. Keep all four
+  composer controls and the three access modes. Describe workspace restrictions
+  as accidental-change mitigation, not untrusted-code containment.
+  The complete canonical projection now targets source
+  `fe9d93fba1d909b8c2c394c8c40d09aa112581ad`; exact backend comparison, connector
+  checks, 1,092 tests (two intentional skips) and development build pass.
+  Installed/native acceptance remains pending.
+
+- Materialize new development bundles in the canonical external
+  `runtime/development-pairs` cache, keeping immutable code outside Vault roots.
+  Preserve exact historical current/rollback caches without moving or repairing
+  them. Accept only the validated current `external-v1` location marker; pending
+  and unknown values fail closed. Refresh all five projections from source
+  `c047e8ea3900d41e55436d688b8b0988a9fc04ab`; this is not native readiness or
+  installed/live acceptance.
+
+- Require both Windows Host and Setup for new native development-pair admission,
+  before connector deployment or runtime staging. Preserve historical Host-only
+  current state for rollback, without treating it as native readiness. Refresh
+  all five projections from sealed source `9227269a5da3b80c586c50cefce1c5c27d0fbb70`;
+  actual combined helper build and installed/native acceptance remain separate.
+
+- Explain exact Project/root/mode/network grant reuse across chats, first-time
+  tuple setup, and Vault-level explicit recovery without claiming native support.
+  Refresh all five canonical projections from sealed source
+  `29e15d4442c66dfce92916ec4a1f0c1f5e21bbf9`; no policy or installed state changes.
+
+- Add explicit review/confirmation for native root setup and recorded-grant
+  recovery. Show authenticated current and previous roots separately, submit
+  only opaque host references and revisions, and reject stale/disconnected
+  consent. Busy maintenance pauses constrained work; configured grants never
+  become a readiness claim. This adds no automatic setup, local ACL store,
+  mode/network change or installed/native-effect acceptance.
+- Regenerate all five canonical projections from source
+  `682aa468edde8d18a313d501d57d9880c2637a85`, including the optional native
+  setup capability. The exact paired upgrade remains required.
+
+- Carry the complete finite Windows helper and its legal notices through the
+  canonical development asset inventory. Reject partial or changed helper
+  groups, and refuse a native-capable current pair's downgrade to base-only
+  assets before maintenance or launch. The shared measured file bound replaces
+  the old connector-only limit; native containment is not inferred from packaging.
+
+- Require schema-3 development candidates with the complete canonical asset
+  inventory. Verify and atomically cache the executable plus parser, image/OCR,
+  and export dependencies before launch; reject missing, altered, linked, or
+  extra files without repairing an existing cache. Reuse also requires the
+  exact current bundle and its receipted running instance. Preserve old
+  receipts for rollback only; production signatures and permissions are unchanged.
+- Expose queued/background automatic compaction in the current model's modal
+  and an explicit connection scheduling kind in model setup. New connections
+  default Local/self-hosted; old unclassified connections stay Unspecified.
+  Explain session-only queuing and retain Compact now's stop-and-settle action.
+- Wait for an accepted new-chat or Project resume transition before submitting
+  the first prompt, including presentation settlement, instead of requiring a
+  second Enter or briefly choosing the preceding chat.
+- Give the preceding-prompt navigator its own padded, theme-aware feed row,
+  with two-line text and an accessible full label. Keep it hidden in source
+  mode and refresh its position after content resize without moving the reader.
+- Keep access mode, provider, model, and supported effort controls directly
+  reachable in narrow composers: collapse labels before wrapping icons, with
+  current-value accessible names and tooltips. Searchable pickers escape pane
+  clipping, stay within the owning viewport, and release focus/listeners on close.
+  Read-only, Workspace, and Full remain runtime-projected choices; no Auto mode
+  or policy change is introduced. DOM/CSS regressions are not live visual proof.
+
+- Add the runtime-owned Obsidian vault-access switch alongside the three access
+  modes. It explicitly uses Obsidian app authority outside the sandbox, including
+  existing CLI/vault tools in any mode, without changing Project roots, memory,
+  identity, or independent MCP switches. Unknown or unnegotiated access remains
+  unavailable; updates bind the current session/binding and shared policy revision.
+- Negotiate capability inventory without passive note/editor collection, and
+  collect normal-prompt Obsidian context only between matching fresh host
+  eligibility checks. Off/revocation drops passive context while preserving
+  explicit text and attachments. Reconnect clears optional feature selection.
+  Background context watchers now send revision-only invalidations without
+  reading editor contents or sending note paths, including after revocation.
+  Focused tests cover these boundaries; matched-pair live acceptance remains
+  pending and this does not establish native process isolation.
+
+- Refresh all five canonical connector projections against the frozen source
+  integration revision; this provenance refresh changes no contract bytes.
+- Settle Stop and completed tool rows before rendering task progress, and keep
+  the last successfully rendered snapshot when a widget throws so the next
+  update can recover instead of retaining stale activity.
+- Keep the connector UI loaded with a persistent, redacted diagnostic when an
+  exact development-pair adoption fails, and block every runtime start route
+  including owned crash retries and in-flight launches until a valid pair is
+  restaged and the plugin is reloaded.
+- Reset Memory's Add form to an enabled runtime-projected location when its
+  available target set changes, and revalidate that location immediately before
+  dispatch so a preserved Vault selection cannot cross into a Project session.
+- Reuse a verified current development-pair runtime across ordinary managed-mode
+  app reloads and restarts instead of falling back to an uninstalled bare
+  `chatobby` command.
+- Rebind generated runtime, Obsidian protocol, and platform-path projection
+  receipts to the exact source revision carrying runtime-owned memory storage
+  and host-proven Project/Vault historical memory isolation.
+- Keep the composer available during background compaction, report unknown
+  context usage as awaiting the provider's measurement, and stop inferring
+  successful compaction from an activity flag ending.
+- Clear and immediately refetch the context meter when an idle session changes
+  model so the toolbar cannot display the previous model's token window.
+- End connector-owned optimistic progress when a prompt fails before runtime
+  acceptance, while preserving real streaming or background-compaction activity,
+  the restored draft, and explicit error feedback.
+- Use Obsidian's complete interface and monospace font stacks with system
+  fallbacks so an unavailable theme font cannot make Chatobby fall back to the
+  browser's serif default.
+- Correct CI operating guidance with the read-only 2026-09-05 state: private
+  pull-request verification and artifact build are green, pull-request live
+  smoke is intentionally skipped, the trusted `dev` smoke remains queued
+  because no matching runner or required variables are registered, and local
+  installed TEST-3 for the active pair remains pending. The documented
+  protected runner is a target requiring explicit provisioning, not current
+  acceptance evidence.
+- Refresh dev-only lint and test transitive dependencies within their existing
+  major lines so the connector dependency audit is clean without changing the
+  shipped plugin dependency boundary.
+- Replace permission profiles and per-capability Allow/Ask/Deny controls with
+  one Read-only, Workspace, or Full access selector and a separate agent-network
+  switch. Full is explicitly unsandboxed and always network-on; constrained
+  modes show actual native support and a rootless Project never falls back to
+  Vault scope. MCP tool exposure remains separate in Plugins.
+- Remove active permission-profile selectors from Events and subagent roles.
+  They inherit the current Project or Vault access policy; retained legacy
+  overrides remain visible as review-required and are removed by an explicit
+  save instead of being silently revived.
+- Add real remote MCP **Test & discover** with cancellable, isolated discovery;
+  keep every newly discovered tool off until explicitly selected, and show
+  per-server tool switches separately from project, filesystem, shell, and
+  agent-network access. Local executable discovery is available only through
+  runtime-reported admission: the current admitted path is unsandboxed explicit
+  Full access, while constrained modes remain unavailable until a genuinely
+  brokered native path is implemented and verified.
+- Treat repository MCP files as read-only suggestions rather than executable
+  authority: they cannot contact or authenticate with a server before review.
+  **Review & add** shows their command or address and creates a separate
+  disabled user-owned connection without importing credentials or tool access.
+- Add a signed stable Guide channel with connector and consumer-schema ranges
+  plus immutable hash-bound revisions, allowing compatible Guide content to be
+  updated after one connector upgrade without changing application versions,
+  tags, runtime bundles, or release assets. Invalid or unsupported updates
+  leave existing user-edited guide notes untouched. Add a loopback-HTTPS-only
+  development feed seam using the exact pair's ephemeral signing key; release
+  builds reject that override before creating artifacts.
+- Add a dry-run-first, Markdown-only public documentation projection with an
+  explicit allowlist and hash receipt, so GitHub README and guide pages can be
+  reviewed independently of connector versions and release assets.
+- Retire the Chatobby Context Queries product surface from connector navigation,
+  commands, plugin-capability summaries, help, and frontend feature code while
+  leaving unrelated Obsidian query plugins and stored backend data untouched.
+- Label the Project or Vault being **Browsed** separately from where the active
+  chat is **Running in**, state that browsing does not move that chat, and stop
+  describing rootless Projects as inheriting Vault access. Moving a chat or
+  changing its access policy governs future file, tool, and memory authority
+  without erasing context already present in the conversation; a new Project
+  chat is the separate-context path.
+- Simplify local-model setup around externally managed server connections:
+  remove the connector's llama.cpp process-management controls, keep the real
+  model-request test, and place uncommon identity, protocol, limit, and
+  capability declarations behind a clearly labelled advanced section.
+- Correct the MCP connection editor's validation action to **Check details** so
+  it no longer implies that schema preview contacted the server, and distinguish
+  connection scope from the separate sandbox and network authority.
+- Refresh an open model picker and Chatobby Settings provider list when the
+  runtime activates a signed live catalogue update, without reloading Obsidian
+  or shipping a hardcoded connector-side model inventory. Retired active models
+  remain visible but disabled after in-flight work settles, without silent
+  reselection.
+- Preserve an accepted exact-pair development runtime in connector-owned,
+  SHA-addressed storage, revalidate it after plugin reload, and reuse it for
+  ordinary restarts without falling back to a stale developer launcher or a
+  removable source-worktree path.
+- Make the backend-contract gate generate and compare a fresh exact-source
+  vendor projection instead of trusting an ambient ignored source build cache.
+- Preserve active runtime work during updates and development-pair
+  reconciliation by accepting only the canonical typed HTTP 409 maintenance
+  deferral; unrelated or malformed conflict responses remain failures.
+- Govern connector GitHub Actions artifacts and caches with the canonical
+  Chatobby retention classes, a weekly read-only inventory, and a bounded
+  owner-approved exact-ID cleanup path that cannot delete workflow runs,
+  releases, tags, or public release assets.
+- Adopt paired frontend protocol v2 with explicit lifecycle states,
+  capability negotiation, atomic bootstrap/replay cutover, controlled resync,
+  strict runtime/view/scope/revision reduction, race-safe detailed screens,
+  explicit session clearing, discriminated intent outcomes, and lossless
+  canonical feed entities. Patch reduction commits its snapshot, feed index,
+  and screen authority transactionally only after every operation succeeds.
+  Normal checks now verify the complete generated client projection receipt
+  without an optional private-source environment.
+
+- Refresh developer documentation for the current frontend modules, CSS
+  ownership, managed runtime, and connector wire boundaries. Repair stale
+  source references and add local documentation-link regression coverage
+  without changing rendered frontend behavior.
+- Add a guarded disposable-vault frontend loop that builds only the development
+  bundle, transactionally installs and hash-verifies the exact connector
+  artifacts, reloads only Chatobby, and reports fresh Obsidian developer errors
+  without rebuilding or restarting the managed runtime.
+- Add immutable exact-version runtime discovery, installed-package verification
+  before network access, a narrow automatic bootstrap coordinator, serialized
+  account-local installation, rollback-aware retry/removal UX, and an explicit
+  release-only approval boundary. Community/public builds keep automatic
+  provisioning disabled pending Obsidian approval and the canonical
+  runtime-owned maintenance-admission contract.
+- Extend private connector CI to build and hash the exact three connector
+  artifacts after verification, prove their file-install contract in a
+  temporary vault, and pass the same receipt to a trusted-push-only disposable
+  self-hosted Obsidian smoke boundary. No untrusted pull-request code can enter
+  that runner.
+- Adopt source/runtime and connector development changes as one fingerprinted
+  pair: verify exact connector artifacts, launch the immutable development
+  runtime fingerprint, use runtime-owned maintenance admission, and promote
+  the current receipt only after an authenticated protocol-v2 frontend has
+  negotiated, subscribed, and completed a fresh bootstrap for that exact pair.
+  Bounded bootstrap failures write a non-current result and restore the prior
+  exact pair, the pre-adoption configured runtime, or the original stopped
+  state when no earlier pair receipt exists.
+- Make exact development-pair activation override a configured developer
+  launcher, and place the Obsidian vault selector before every disposable-vault
+  command so reload, diagnostics, and smoke checks cannot target the active
+  primary vault by accident.
+- Preserve the signed exact-version Guide path for the existing 0.4.3 consumer,
+  while newer consumers verify the compatible stable Guide channel before the
+  existing write confirmation; no Guide path overwrites user files after an
+  invalid, unsupported, or unavailable fetch.
+- Add machine-classified README-only and documentation-version release lanes so
+  prose skips unrelated frontend/runtime suites while intentional product
+  releases still build and verify exact artifacts through the candidate gate.
+
 ## [0.4.3] - 2026-08-17
 
 - Allow automatic context compaction to pause long tool-driven work at a safe

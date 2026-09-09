@@ -1,7 +1,15 @@
-/* Chatobby semantic theme contract + cross-cutting responsive behavior. */
+/* Chatobby semantic theme contract. Raw Obsidian semantic colors are mapped
+   here so component modules consume stable Chatobby surface/status variables. */
 
 .workspace-leaf-content[data-type="chatobby-view"],
-.chatobby-view {
+.chatobby-workspace,
+.chatobby-navigator,
+.chatobby-project-editor-modal,
+.chatobby-provider-login,
+.chatobby-provider-modal,
+.chatobby-intro,
+.chatobby-view,
+.chatobby-selection-menu {
   --chatobby-canvas: var(--background-primary);
   --chatobby-surface-raised: color-mix(in srgb, var(--background-primary-alt) 88%, var(--background-primary));
   --chatobby-surface-muted: color-mix(in srgb, var(--background-secondary) 78%, var(--background-primary));
@@ -45,6 +53,7 @@
   --chatobby-page-wide-width: min(920px, 100%);
 }
 
+/* Shared interaction reset for compact icon and session controls. */
 .chatobby-tab-bar__tab,
 .chatobby-tab-bar__close,
 .chatobby-tab-bar__new,
@@ -56,16 +65,10 @@
   border: 0;
   box-shadow: none;
 }
+/* Cross-cutting density tokens respond to the nearest Chatobby container. */
 @container (max-width: 500px) {
   .chatobby-tab-bar__item {
     min-width: 104px;
-  }
-
-  /* In narrow layouts the controls row wraps; keep the model picker greedy. */
-  .chatobby-control--provider,
-  .chatobby-control--thinking,
-  .chatobby-control--permission {
-    flex: 1 1 auto;
   }
 
   .chatobby-feed__block--user {
@@ -76,10 +79,6 @@
     display: none;
   }
 
-  .chatobby-composer-controls {
-    max-height: 64px;
-    overflow-y: auto;
-  }
 }
 
 @container (max-width: 360px) {

@@ -1,54 +1,15 @@
 import { type App, type TAbstractFile, TFile, TFolder } from "obsidian";
 import { describe, expect, it, vi } from "vitest";
+import { CHATOBBY_GUIDE_DIRECTORY, downloadChatobbyGuide } from "../../src/features/guide/public";
 import {
-  CHATOBBY_GUIDE_DIRECTORY,
-  CHATOBBY_GUIDE_FILES,
-  CHATOBBY_GUIDE_MARKDOWN,
-  downloadChatobbyGuide,
-} from "../../src/features/guide/public";
+  CHATOBBY_GUIDE_ASSET_FORMAT,
+  CHATOBBY_GUIDE_CHANNEL_ASSET_SCHEMA_VERSION,
+  CHATOBBY_GUIDE_PRODUCT,
+  type ChatobbyGuideChannelAsset,
+} from "../../src/vendor/chatobby-client/ws-client.js";
 
-describe("Chatobby guide", () => {
-  it("ships a linked folder whose index targets all exist", () => {
-    expect(CHATOBBY_GUIDE_FILES).toHaveLength(11);
-    const paths = new Set(CHATOBBY_GUIDE_FILES.map((file) => file.path));
-    const links = [...CHATOBBY_GUIDE_MARKDOWN.matchAll(/\[\[([^|\]]+)/gu)].map(
-      (match) => match[1]!,
-    );
-    expect(links.length).toBeGreaterThan(5);
-    for (const link of links) {
-      expect(paths.has(`${CHATOBBY_GUIDE_DIRECTORY}/${link}.md`)).toBe(true);
-    }
-  });
-
-  it("provides beginner-facing explanations, workflows, and connected navigation", () => {
-    const completeGuide = CHATOBBY_GUIDE_FILES.map((file) => file.content).join(
-      "\n",
-    );
-    expect(completeGuide.length).toBeGreaterThan(20_000);
-    expect(completeGuide).toContain("much like a group chat");
-    expect(completeGuide).toContain("Give an agent channel access");
-    expect(completeGuide).toContain("secret name versus secret value");
-    expect(completeGuide).toContain(
-      "Creating a secret does not automatically link it",
-    );
-    expect(completeGuide).toContain("Which account sign-ins work?");
-    expect(completeGuide).toContain(
-      "Connection and managed process are different",
-    );
-    expect(completeGuide).toContain(
-      "chats cannot use it until you restore a connection",
-    );
-    expect(completeGuide).toContain(
-      "A message sent during automatic compaction is accepted once",
-    );
-    expect(completeGuide).toContain("Native, user, and Project skills");
-    expect(completeGuide).toContain("progressive loading");
-    expect(completeGuide).toContain(
-      "[[02 - Permissions and safety|Permissions]]",
-    );
-  });
-
-  it("copies every guide page after one confirmation", async () => {
+describe("external Chatobby guide", () => {
+  it("copies every verified compatible-channel page after one confirmation", async () => {
     const entries = new Map<string, TAbstractFile>();
     const createFolder = vi.fn(async (path: string) => {
       entries.set(path, new TFolder(path) as unknown as TAbstractFile);
@@ -58,68 +19,68 @@ describe("Chatobby guide", () => {
       entries.set(path, file as unknown as TAbstractFile);
       return file;
     });
-    const app = {
-      vault: {
-        getAbstractFileByPath: (path: string) => entries.get(path) ?? null,
-        createFolder,
-        create,
-        modify: vi.fn(async () => {}),
-      },
-    } as unknown as App;
+    const app = appFixture(entries, createFolder, create);
 
-    const result = downloadChatobbyGuide({
-      app,
-      getTransport: () => null,
-    });
-    document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();
-    await result;
-
-    expect(createFolder).toHaveBeenCalledWith(CHATOBBY_GUIDE_DIRECTORY);
-    expect(create).toHaveBeenCalledTimes(CHATOBBY_GUIDE_FILES.length);
-    expect(entries.has(`${CHATOBBY_GUIDE_DIRECTORY}/00 - Start Here.md`)).toBe(
-      true,
-    );
-  });
-
-  it("rejects a runtime guide file outside the guide folder", async () => {
-    const created: string[] = [];
-    const entries = new Map<string, TAbstractFile>();
-    const app = {
-      vault: {
-        getAbstractFileByPath: (path: string) => entries.get(path) ?? null,
-        createFolder: async (path: string) => {
-          entries.set(path, new TFolder(path) as unknown as TAbstractFile);
-        },
-        create: async (path: string) => {
-          created.push(path);
-          const file = new TFile(path);
-          entries.set(path, file as unknown as TAbstractFile);
-          return file;
-        },
-        modify: vi.fn(async () => {}),
-      },
-    } as unknown as App;
-
-    const result = downloadChatobbyGuide({
-      app,
-      getTransport: () => ({
-        getGuide: async () => ({
-          content: "unsafe",
-          path: "Outside.md",
-          title: "Unsafe",
-          version: "test",
-          earlyAccess: true,
-          confirmationNotice: "Confirm",
-          files: [
-            { path: "../Outside.md", title: "Unsafe", content: "unsafe" },
-          ],
-        }),
-      }),
-    });
+    const result = downloadChatobbyGuide({ app, fetchGuide: async () => guideAsset() });
     await Promise.resolve();
     document.body.querySelector<HTMLButtonElement>(".modal .mod-cta")?.click();
     await result;
 
-    expect(created).toEqual(CHATOBBY_GUIDE_FILES.map((file) => file.path));
+    expect(createFolder).toHaveBeenCalledWith(CHATOBBY_GUIDE_DIRECTORY);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(entries.has(`${CHATOBBY_GUIDE_DIRECTORY}/00 - Start Here.md`)).toBe(true);
+  });
+
+  it("leaves the existing vault guide untouched when download or verification fails", async () => {
+    const existing = new TFile(`${CHATOBBY_GUIDE_DIRECTORY}/00 - Start Here.md`);
+    const entries = new Map<string, TAbstractFile>([
+      [CHATOBBY_GUIDE_DIRECTORY, new TFolder(CHATOBBY_GUIDE_DIRECTORY) as unknown as TAbstractFile],
+      [existing.path, existing as unknown as TAbstractFile],
+    ]);
+    const create = vi.fn();
+    const modify = vi.fn();
+    const onError = vi.fn();
+    const app = {
+      vault: { getAbstractFileByPath: (path: string) => entries.get(path) ?? null, createFolder: vi.fn(), create, modify },
+    } as unknown as App;
+
+    await downloadChatobbyGuide({ app, fetchGuide: async () => { throw new Error("offline"); }, onError });
+
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/left unchanged.*Retry/u));
+    expect(create).not.toHaveBeenCalled();
+    expect(modify).not.toHaveBeenCalled();
+    expect(document.body.querySelector(".modal")).toBeNull();
   });
 });
+
+function guideAsset(): ChatobbyGuideChannelAsset {
+  return {
+    schemaVersion: CHATOBBY_GUIDE_CHANNEL_ASSET_SCHEMA_VERSION,
+    product: CHATOBBY_GUIDE_PRODUCT,
+    guideRevision: "2026-08-21.1",
+    format: CHATOBBY_GUIDE_ASSET_FORMAT,
+    indexPath: `${CHATOBBY_GUIDE_DIRECTORY}/00 - Start Here.md`,
+    title: "Chatobby Guide",
+    earlyAccess: true,
+    confirmationNotice: "Copy this exact guide?",
+    files: [
+      { path: `${CHATOBBY_GUIDE_DIRECTORY}/00 - Start Here.md`, title: "Chatobby Guide", content: "# Chatobby Guide\n" },
+      { path: `${CHATOBBY_GUIDE_DIRECTORY}/01 - Basics.md`, title: "Basics", content: "# Basics\n" },
+    ],
+  };
+}
+
+function appFixture(
+  entries: Map<string, TAbstractFile>,
+  createFolder: (path: string) => Promise<void>,
+  create: (path: string) => Promise<TFile>,
+): App {
+  return {
+    vault: {
+      getAbstractFileByPath: (path: string) => entries.get(path) ?? null,
+      createFolder,
+      create,
+      modify: vi.fn(async () => {}),
+    },
+  } as unknown as App;
+}

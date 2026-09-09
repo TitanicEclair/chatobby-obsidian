@@ -1,5 +1,5 @@
 // Bridge error mapping — Obsidian errors → ObsidianBridgeErrorCode.
-// See docs/tooling/bridge-executor.md for the error code table.
+// See docs/wire-protocol.md for bridge error-boundary requirements.
 
 import type { ObsidianBridgeErrorPayload } from "../vendor/@chatobby/obsidian-protocol/index.js";
 import { BridgeError } from "./types";
@@ -48,7 +48,7 @@ export function toBridgeErrorPayload(error: unknown): ObsidianBridgeErrorPayload
   };
 }
 
-// I dont think the below are being used.
+// Stable constructors used by the router and error-contract regression tests.
 /**
  * Create an INVALID_INPUT error payload.
  */

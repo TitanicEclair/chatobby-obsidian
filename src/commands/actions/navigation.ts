@@ -71,12 +71,6 @@ export const navigationActions: ChatobbyAction[] = [
     run: (services) => services.withView((view) => view.commandOpenPage("events")),
   },
   {
-    id: "open-queries",
-    name: "Open context queries",
-    group: "navigation",
-    run: (services) => services.withView((view) => view.commandOpenPage("queries")),
-  },
-  {
     id: "open-mcp",
     name: "Open plugins",
     group: "navigation",

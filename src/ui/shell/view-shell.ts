@@ -2,7 +2,7 @@
 // Builds the static layout once on view open. Returns element references.
 // All event wiring goes through ShellHandlers callbacks.
 //
-// Architecture (see docs/ui-state-guide.md):
+// Architecture (see docs/architecture/frontend-modules.md):
 //   - SessionTabBar is a sibling of ViewShell (tabs above the shell)
 //   - Toolbar holds connection status + session info only (model/thinking live in the composer)
 //   - ComposerCard wraps ComposerInput + ComposerControls + ComposerActions

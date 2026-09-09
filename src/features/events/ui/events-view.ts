@@ -315,9 +315,12 @@ export class EventsView extends ChatobbyComponent {
       draft.projectPath = project.value;
       void this.runIntent({ type: "events.set-editor-project", payload: { projectPath: project.value } });
     });
-    const permission = fieldSelect(form, "Permission policy", editor.permissionChoices.map((choice) => [choice.value, choice.label]), draft.permissionProfileId);
-    permission.disabled = editor.permissionChoices.length === 0;
-    permission.addEventListener("change", () => { draft.permissionProfileId = permission.value; });
+    const permission = form.createDiv({ cls: "chatobby-events__field" });
+    permission.createSpan({ text: "Access policy" });
+    permission.createDiv({
+      cls: "chatobby-events__field-help",
+      text: "This event uses the current access policy for its selected Project or Vault workspace. It cannot select or widen a separate permission profile.",
+    });
     const agent = fieldSelect(form, "Agent", editor.agentChoices.map((choice) => [choice.value, choice.label]), draft.agentId);
     agent.disabled = editor.agentChoices.length === 0;
     agent.addEventListener("change", () => { draft.agentId = agent.value; });
@@ -368,7 +371,7 @@ export class EventsView extends ChatobbyComponent {
     save.disabled = !editor.saveEnabled || this.busy;
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      if (!editor.saveEnabled) return this.showFormError(form, "Wait for the project's permission policies and agents to load before saving.");
+      if (!editor.saveEnabled) return this.showFormError(form, "Wait for the Project and agent choices to load before saving.");
       if (draft.allowWhenViewClosed && !draft.backgroundConsent) return this.showFormError(form, "Confirm background execution before saving this event.");
       void this.runIntent({
         type: "events.save",
@@ -505,7 +508,7 @@ export class EventsView extends ChatobbyComponent {
       return;
     }
     this.draft.projectPath = editor.projectPath;
-    if (!editor.permissionChoices.some((choice) => choice.value === this.draft?.permissionProfileId)) this.draft.permissionProfileId = editor.permissionProfileId;
+    this.draft.permissionProfileId = editor.permissionProfileId;
     if (!editor.agentChoices.some((choice) => choice.value === this.draft?.agentId && !choice.disabledReason)) this.draft.agentId = editor.agentId;
   }
 

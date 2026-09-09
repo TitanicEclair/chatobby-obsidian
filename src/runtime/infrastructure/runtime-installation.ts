@@ -11,6 +11,7 @@ export { runtimeInstallRoot } from "./platform-paths";
 
 export const RUNTIME_PACKAGE_MANIFEST_FILE = "runtime.manifest.json";
 export const PENDING_RUNTIME_INSTALLATION_FILE = "pending-installation.json";
+export const RUNTIME_INSTALLATION_LOCK_DIRECTORY = ".installation-lock";
 
 export interface RuntimePackageFile {
   path: string;
@@ -70,10 +71,8 @@ interface RuntimeInstallPointer {
   previousVersion?: string;
 }
 
-interface RuntimeInstallJournal {
-  schemaVersion: 1;
+interface RuntimeInstallJournalFields {
   operationId: string;
-  state: "prepared" | "activated";
   runtimeVersion: string;
   runtimePackageFingerprint: string;
   executable: string;
@@ -81,6 +80,11 @@ interface RuntimeInstallJournal {
   hadExistingVersion: boolean;
   containsSecretValues: false;
 }
+
+type RuntimeInstallJournal = RuntimeInstallJournalFields & (
+  | { schemaVersion: 1; state: "prepared" | "activated" }
+  | { schemaVersion: 2; state: "prepared" | "activated" | "finalizing" }
+);
 
 /** Resolve a development runtime or a fully verified installer-owned release package. */
 export class ManagedRuntimeResolver {
@@ -171,6 +175,48 @@ export class RuntimePackageInstaller {
     manifest: RuntimePackageManifest,
     pluginVersion: string,
   ): Promise<PendingRuntimePackageInstallation> {
+    return this.withInstallationLock(() => this.prepareInstallUnlocked(sourceDirectory, manifest, pluginVersion));
+  }
+
+  /** Verify the active pointer and complete signed inventory before any network check. */
+  async readVerifiedInstalledVersion(pluginVersion: string): Promise<string | null> {
+    const installed = await resolveInstalledRuntime(this.installRoot, pluginVersion, this.trustedPublicKey);
+    return installed?.manifest.version ?? null;
+  }
+
+  /** Remove only connector-owned runtime package state after the process has stopped. */
+  async removeInstalledRuntime(): Promise<void> {
+    await this.withInstallationLock(async () => {
+      if (await this.readPendingJournal()) {
+        throw new Error("Recover or roll back the pending Chatobby runtime installation before removing it");
+      }
+      const allowed = new Set([
+        RUNTIME_INSTALLATION_LOCK_DIRECTORY,
+        "current.json",
+        "updates",
+        "versions",
+      ]);
+      const entries = await readdir(this.installRoot, { withFileTypes: true }).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+        throw error;
+      });
+      const unexpected = entries.map((entry) => entry.name).filter((name) => !allowed.has(name));
+      if (unexpected.length > 0) {
+        throw new Error(`Runtime directory contains unowned entries: ${unexpected.sort().join(", ")}`);
+      }
+      await Promise.all([
+        rm(join(this.installRoot, "current.json"), { force: true }),
+        rm(join(this.installRoot, "updates"), { recursive: true, force: true }),
+        rm(join(this.installRoot, "versions"), { recursive: true, force: true }),
+      ]);
+    });
+  }
+
+  private async prepareInstallUnlocked(
+    sourceDirectory: string,
+    manifest: RuntimePackageManifest,
+    pluginVersion: string,
+  ): Promise<PendingRuntimePackageInstallation> {
     if (await this.readPendingJournal()) {
       throw new Error("A previous Chatobby runtime installation requires recovery before another installation can begin");
     }
@@ -220,7 +266,7 @@ export class RuntimePackageInstaller {
       throw error;
     }
     const journal: RuntimeInstallJournal = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       operationId,
       state: "prepared",
       runtimeVersion: manifest.version,
@@ -257,7 +303,7 @@ export class RuntimePackageInstaller {
     ) {
       throw new Error("The interrupted Chatobby runtime installation does not match its signed package");
     }
-    if (journal.hadExistingVersion) {
+    if (journal.hadExistingVersion && journal.state !== "finalizing") {
       const backupDirectory = this.operationDirectory(journal, "backup");
       const backupManifest = await readRuntimePackageManifest(backupDirectory);
       await verifyRuntimePackage(backupDirectory, backupManifest, pluginVersion, this.trustedPublicKey, true);
@@ -268,7 +314,7 @@ export class RuntimePackageInstaller {
     const current = readPointer(this.installRoot);
     const expectedActive = activationPointer(journal.runtimeVersion, journal.previousPointer);
     if (
-      journal.state === "activated"
+      journal.state !== "prepared"
         ? !samePointer(current, expectedActive)
         : !samePointer(current, journal.previousPointer) && !samePointer(current, expectedActive)
     ) {
@@ -303,13 +349,14 @@ export class RuntimePackageInstaller {
       executable: packagePath(versionDirectory, journal.executable),
       runtimeVersion: journal.runtimeVersion,
       runtimePackageFingerprint: journal.runtimePackageFingerprint,
-      activationState: journal.state,
+      activationState: journal.state === "prepared" ? "prepared" : "activated",
       activate: async () => {
-        if (finalized || journal.state === "activated") return;
+        if (finalized || journal.state !== "prepared") return;
         try {
           await writePointer(this.installRoot, activationPointer(journal.runtimeVersion, journal.previousPointer));
-          journal = { ...journal, state: "activated" };
-          await writePendingJournal(this.installRoot, journal);
+          const activated = { ...journal, schemaVersion: 2, state: "activated" } as const;
+          await writePendingJournal(this.installRoot, activated);
+          journal = activated;
           installation.activationState = "activated";
         } catch (error) {
           await restorePointer(this.installRoot, journal.previousPointer).catch(() => undefined);
@@ -318,12 +365,19 @@ export class RuntimePackageInstaller {
       },
       finalize: async () => {
         if (finalized) return;
-        if (journal.state !== "activated") throw new Error("Cannot finalize a runtime package before activation");
+        if (journal.state === "prepared") throw new Error("Cannot finalize a runtime package before activation");
+        if (journal.state !== "finalizing") {
+          // Persist acceptance before the first irreversible backup deletion.
+          // Recovery must not require files that cleanup may already have removed.
+          const finalizing = { ...journal, schemaVersion: 2, state: "finalizing" } as const;
+          await writePendingJournal(this.installRoot, finalizing);
+          journal = finalizing;
+        }
         if (journal.hadExistingVersion) {
-          // Keep the journal when cleanup is temporarily blocked. A later plugin
-          // start can retry without losing the rollback identity.
+          // Windows may retain short-lived executable/directory handles. Keep
+          // the finalizing journal if bounded retries cannot complete cleanup.
           try {
-            await this.removeDirectory(backupDirectory, { recursive: true, force: true });
+            await this.removeDirectory(backupDirectory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
           } catch {
             return;
           }
@@ -338,6 +392,9 @@ export class RuntimePackageInstaller {
       },
       rollback: async () => {
         if (finalized) return;
+        if (journal.state === "finalizing") {
+          throw new Error("Runtime cleanup has already started; verify and finish the accepted installation before repairing it");
+        }
         await this.removeDirectory(failedDirectory, { recursive: true, force: true });
         if (existsSync(versionDirectory)) await rename(versionDirectory, failedDirectory);
         try {
@@ -391,6 +448,68 @@ export class RuntimePackageInstaller {
       }
       await this.removeDirectory(join(versionsRoot, entry.name), { recursive: true, force: true });
     }
+  }
+
+  private async withInstallationLock<T>(operation: () => Promise<T>): Promise<T> {
+    await mkdir(this.installRoot, { recursive: true, mode: 0o700 });
+    await setPrivateDirectoryMode(this.installRoot);
+    const lockDirectory = join(this.installRoot, RUNTIME_INSTALLATION_LOCK_DIRECTORY);
+    try {
+      await mkdir(lockDirectory, { mode: 0o700 });
+      await setPrivateDirectoryMode(lockDirectory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        if (!await installationLockOwnerIsGone(lockDirectory)) {
+          throw new Error("Another Chatobby vault is currently changing the account-local runtime installation");
+        }
+        await rm(lockDirectory, { recursive: true, force: true });
+        await mkdir(lockDirectory, { mode: 0o700 });
+        await setPrivateDirectoryMode(lockDirectory);
+      } else {
+        throw error;
+      }
+    }
+    try {
+      await writeFile(join(lockDirectory, "owner.json"), `${JSON.stringify({
+        schemaVersion: 1,
+        pid: process.pid,
+        operationId: randomUUID(),
+        acquiredAt: new Date().toISOString(),
+        containsSecretValues: false,
+      }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+      return await operation();
+    } finally {
+      await rm(lockDirectory, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+}
+
+/** Reclaim only a lock whose recorded process has exited or whose owner record never completed. */
+async function installationLockOwnerIsGone(lockDirectory: string): Promise<boolean> {
+  try {
+    const value: unknown = JSON.parse(await readFile(join(lockDirectory, "owner.json"), "utf8"));
+    if (
+      isRecord(value)
+      && typeof value.pid === "number"
+      && Number.isSafeInteger(value.pid)
+      && value.pid > 0
+    ) {
+      return !processIsRunning(value.pid);
+    }
+  } catch {
+    // A process can exit after creating the directory but before writing its
+    // owner record. Keep a live contender's short creation window protected.
+  }
+  const info = await lstat(lockDirectory).catch(() => null);
+  return Boolean(info && Date.now() - info.mtimeMs >= 30_000);
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
   }
 }
 
@@ -539,7 +658,7 @@ function runtimePackageSigningPayload(manifest: RuntimePackageManifest): string 
   });
 }
 
-function runtimePackageFingerprint(manifest: RuntimePackageManifest): string {
+export function runtimePackageFingerprint(manifest: RuntimePackageManifest): string {
   return createHash("sha256").update(runtimePackageSigningPayload(manifest)).digest("hex");
 }
 
@@ -665,10 +784,10 @@ async function writePendingJournal(root: string, journal: RuntimeInstallJournal)
 function isRuntimeInstallJournal(value: unknown): value is RuntimeInstallJournal {
   if (!isRecord(value)) return false;
   if (
-    value.schemaVersion !== 1
+    (value.schemaVersion !== 1 && value.schemaVersion !== 2)
     || typeof value.operationId !== "string"
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.operationId)
-    || (value.state !== "prepared" && value.state !== "activated")
+    || (value.state !== "prepared" && value.state !== "activated" && !(value.schemaVersion === 2 && value.state === "finalizing"))
     || typeof value.runtimeVersion !== "string"
     || !/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(value.runtimeVersion)
     || typeof value.runtimePackageFingerprint !== "string"

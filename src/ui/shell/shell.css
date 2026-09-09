@@ -1,4 +1,5 @@
-/* Shell: chatobby view root layout + theme tokens */
+/* Static Chatobby view shell and root sizing. Theme tokens live in tokens.css;
+   feature pages mount inside this single full-height flex boundary. */
 
 .workspace-leaf-content[data-type="chatobby-view"],
 .workspace-leaf-content[data-type="chatobby-view"] .view-content,
@@ -7,6 +8,7 @@
   background: var(--chatobby-canvas);
 }
 
+/* Transition overlay preserves the mounted view while session identity changes. */
 .chatobby-session-transition-host {
   position: absolute;
   inset: 0;
@@ -41,6 +43,7 @@
   .chatobby-session-transition__dots::after { content: "..."; animation: none; }
 }
 
+/* Main view establishes the container-query context used by child surfaces. */
 .chatobby-view {
   display: flex;
   flex-direction: column;
@@ -49,7 +52,7 @@
   padding: var(--size-4-3) var(--size-4-2) var(--size-4-4);
   color: var(--text-normal);
   font-size: var(--chatobby-body-size);
-  font-family: var(--font-interface-theme);
+  font-family: var(--font-interface, system-ui, sans-serif);
   container-type: inline-size;
   overflow: hidden;
 }

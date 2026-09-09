@@ -1,5 +1,5 @@
 // Bridge executor local types.
-// See docs/tooling/bridge-executor.md for architecture.
+// See docs/wire-protocol.md for the connector bridge boundary.
 
 import type { App } from "obsidian";
 import type { ObsidianBridgeErrorCode, ObsidianOperationName } from "../vendor/@chatobby/obsidian-protocol/index.js";

@@ -1,6 +1,6 @@
 import type { WorkspaceLeaf } from "obsidian";
 
-export type ChatobbyViewMode = "chat" | "projects" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp" | "settings";
+export type ChatobbyViewMode = "chat" | "projects" | "subagents" | "channels" | "permissions" | "memory" | "events" | "mcp" | "settings";
 export type ChatobbySubagentTab = "runs" | "inbox" | "agents" | "settings";
 export type ExclusiveViewSurface = "chat" | "overlays" | "subagents" | "channels";
 
@@ -20,6 +20,11 @@ export interface ChatobbyNavigationState {
   messageId?: string;
   pluginId?: string;
   projectId?: string;
+}
+
+export function channelNavigationState(event: Event): ChatobbyNavigationState {
+  const detail = (event as CustomEvent<{ channelId?: string; messageId?: string }>).detail;
+  return { mode: "channels", channelId: detail?.channelId, messageId: detail?.messageId };
 }
 
 /** Map internal routes onto the page ribbon without treating child feeds as management pages. */
@@ -45,7 +50,6 @@ interface NavigationHandlers {
   openPermissions: () => void;
   openMemory: () => void;
   openEvents: () => void;
-  openQueries: () => void;
   openMcp: (state: ChatobbyNavigationState) => void;
   openProjects: (state: ChatobbyNavigationState) => void;
   openSettings: () => void;
@@ -128,7 +132,6 @@ export class ViewNavigationController {
     else if (state.mode === "permissions") this.handlers.openPermissions();
     else if (state.mode === "memory") this.handlers.openMemory();
     else if (state.mode === "events") this.handlers.openEvents();
-    else if (state.mode === "queries") this.handlers.openQueries();
     else if (state.mode === "mcp") this.handlers.openMcp(state);
     else if (state.mode === "projects") this.handlers.openProjects(state);
     else if (state.mode === "settings") this.handlers.openSettings();
@@ -196,7 +199,6 @@ function isViewMode(value: unknown): value is ChatobbyViewMode {
     || value === "permissions"
     || value === "memory"
     || value === "events"
-    || value === "queries"
     || value === "mcp"
     || value === "settings";
 }

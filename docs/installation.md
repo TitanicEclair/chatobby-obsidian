@@ -13,10 +13,11 @@ not standalone installers.
   arm64;
 - Obsidian 1.11.4 or newer;
 - a current backup of the vault you plan to use; and
-- an account or API key for at least one supported model provider.
+- a supported provider account or a running compatible local model server.
 
-Chatobby itself is free during alpha. Model providers may charge for API usage
-under their own terms.
+The core Chatobby harness is free and will remain free. Model providers set
+their own subscription and API prices; local servers do not require a paid
+model-provider account.
 
 ## Install
 
@@ -29,7 +30,7 @@ under their own terms.
    GitHub release, verifies its signed update descriptor, verifies the signed
    runtime manifest and every packaged file, installs it atomically for the
    current operating-system account, and reconnects the vault.
-5. In the Chatobby view, select the **Settings** gear. Connect a model provider
+5. In the Chatobby view, select **Settings** in the sidebar. Connect a model provider
    or local model server, then begin with a copied test note and a low-risk
    read-only request. API keys use the same protected runtime credential store;
    moving the setup page does not copy them into plugin settings.
@@ -37,6 +38,15 @@ under their own terms.
 Obsidian's **Settings → Chatobby** page remains available for runtime,
 document-processing, documentation, and support discovery. It links back to
 the everyday Settings page inside Chatobby.
+
+**Add guide to vault** is a separate, user-confirmed content action. Connector
+versions that support the Guide channel verify the signed stable
+`guide-channel.json`, require its connector and consumer-schema compatibility
+ranges, download the immutable hash-bound guide revision it names, validate the
+bounded `Chatobby Guide/*.md` file set, and only then ask whether to write the
+notes. The guide is not bundled into the plugin or runtime. Public Guide channel activation is pending for the workspace candidate. Offline, missing,
+incompatible, or invalid assets leave every existing guide note unchanged and
+show a retryable error.
 
 The plugin installation path does not run a downloaded installer and does not
 request administrator or root access. Windows may show an unknown-publisher
@@ -57,16 +67,40 @@ updates are deliberate: Chatobby checks a small signed GitHub descriptor and
 shows a compact **Update Chatobby** action when a compatible runtime is newer.
 The package is downloaded and installed only after you open the guide and
 confirm the update. The previous runtime remains available for rollback if an
-installation fails. The standalone installer remains an alternative.
+installation fails. Standalone installer tooling is reserved for controlled
+development and release testing; it is not the public installation path.
 
 Connector and runtime versions must be compatible. If Chatobby reports a
 version mismatch, update both components before retrying.
 
+### Approval-gated one-action provisioning
+
+The private connector contains a release-only automatic provisioning path, but
+Community/public builds must leave it disabled until Obsidian grants the
+documented exception for installing and updating the separately distributed
+closed-source runtime. This is not enabled by README disclosure alone.
+
+When an approved build enables it, connector version `N` requests only
+`releases/download/N/runtime-index.json`; it never follows `releases/latest`.
+An already-installed, fully verified compatible runtime is reused without a
+network request. Otherwise Chatobby stages and verifies runtime `N`, waits for
+runtime-owned maintenance admission, activates atomically, and reconnects. The
+normal install/update confirmation disappears, while explicit **Retry setup**,
+**Repair Chatobby**, diagnostics, and **Remove local runtime** remain available.
+
+If initial setup is offline, the connector remains loaded and shows a retry
+action. If an update cannot be downloaded, a previous verified compatible
+runtime remains selected. Signature, target, protocol, inventory, or hash
+failure prevents execution. Interrupted activation uses the installation
+journal to roll back or complete recovery on the next load.
+
 ## Uninstall
 
-1. Remove or disable Chatobby from Obsidian Community plugin settings.
-2. Close Obsidian and remove Chatobby's machine-local runtime directory for
-   your operating system if you also want to remove the runtime.
+1. If you also want to remove the runtime program files, use **Remove local
+   runtime** from Chatobby's runtime menu before uninstalling the plugin.
+2. Remove or disable Chatobby from Obsidian Community plugin settings.
+3. If the plugin is already gone, close Obsidian and remove Chatobby's
+   machine-local runtime directory manually.
 
 Uninstalling program files intentionally preserves vault content, sessions,
 memory, event definitions, provider credentials, and other user-owned data.

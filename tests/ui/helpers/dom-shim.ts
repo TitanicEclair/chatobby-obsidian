@@ -7,11 +7,12 @@ interface CreateElOptions {
 
 declare global {
   interface HTMLElement {
+    setText(text: string): void;
     createDiv(options?: CreateElOptions): HTMLDivElement;
     createSpan(options?: CreateElOptions): HTMLSpanElement;
     createEl<K extends keyof HTMLElementTagNameMap>(tag: K, options?: CreateElOptions): HTMLElementTagNameMap[K];
     empty(): void;
-    addClass(cls: string): void;
+    addClass(...classes: string[]): void;
     removeClass(cls: string): void;
     toggleClass(cls: string, value?: boolean): void;
     hasClass(cls: string): boolean;
@@ -22,6 +23,7 @@ declare global {
 }
 
 if (typeof HTMLElement !== "undefined") {
+  HTMLElement.prototype.setText = function setText(text: string): void { this.textContent = text; };
   HTMLElement.prototype.createEl = function createEl<K extends keyof HTMLElementTagNameMap>(
     this: HTMLElement,
     tag: K,
@@ -52,8 +54,8 @@ if (typeof HTMLElement !== "undefined") {
     this.replaceChildren();
   };
 
-  HTMLElement.prototype.addClass = function addClass(this: HTMLElement, cls: string): void {
-    this.classList.add(...cls.split(" "));
+  HTMLElement.prototype.addClass = function addClass(this: HTMLElement, ...classes: string[]): void {
+    this.classList.add(...classes.flatMap((cls) => cls.split(" ")));
   };
 
   HTMLElement.prototype.removeClass = function removeClass(this: HTMLElement, cls: string): void {

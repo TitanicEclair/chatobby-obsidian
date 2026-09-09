@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Menu, type App } from "obsidian";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FrontendProjectScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 import { ProjectsView, type ProjectsViewIntent } from "../../src/features/projects/ui/projects-view";
 import { ProjectCreationDraftStore } from "../../src/features/projects/application/project-creation-draft";
@@ -191,6 +191,7 @@ function button(root: HTMLElement, label: string): HTMLButtonElement {
 }
 
 describe("ProjectsView", () => {
+  afterEach(() => { document.body.empty(); chooseSystemDirectories.mockReset(); Menu.lastShown = null; });
 	it("isolates the Project rail from theme-wide aside sizing", () => {
 		const css = readFileSync(resolve(import.meta.dirname, "../../src/features/projects/ui/projects.css"), "utf8");
 		expect(css).toMatch(/\.chatobby-projects__rail\s*\{[\s\S]*?max-width:\s*none;[\s\S]*?float:\s*none;/u);
@@ -207,10 +208,71 @@ describe("ProjectsView", () => {
 		expect(root.textContent).toContain("Folders");
 		expect(root.textContent).toContain("Chats");
 		expect(root.querySelectorAll(".chatobby-page__tab")).toHaveLength(0);
-		expect(root.textContent).not.toContain("Viewing");
+		expect(root.textContent).toContain("Browsing Alpha · Running in Vault");
+		expect(root.textContent).toContain("Browsing does not move the active chat");
 		expect(root.textContent).not.toContain("Available on this device");
 		expect(root.textContent).not.toContain("Integrations");
   });
+
+	it("shows when the browsed Project is also running without implying a context reset", () => {
+		const root = mount(harness({
+			model: projectModel({
+				runningIn: {
+					kind: "project",
+					label: "Alpha",
+					projectId: "project:alpha",
+					activeRootId: "root:alpha",
+					attachedRootIds: ["root:alpha"],
+				},
+			}),
+		}).view);
+
+		expect(root.textContent).toContain("Browsing Alpha · Running in Alpha");
+		expect(root.textContent).not.toContain("Browsing does not move the active chat");
+	});
+
+	it("keeps a running Project explicit while browsing Vault", () => {
+		const root = mount(harness({
+			model: projectModel({
+				selectedProjectId: undefined,
+				detail: undefined,
+				runningIn: {
+					kind: "project",
+					label: "Alpha",
+					projectId: "project:alpha",
+					activeRootId: "root:alpha",
+					attachedRootIds: ["root:alpha"],
+				},
+			}),
+		}).view);
+
+		expect(root.textContent).toContain("Browsing Vault · Running in Alpha");
+		expect(root.textContent).toContain("Browsing does not move the active chat");
+	});
+
+	it("describes a rootless Project without granting or inheriting Vault scope", () => {
+		const base = projectModel();
+		const detail = base.detail;
+		if (!detail) throw new Error("Project detail fixture is missing");
+		const root = mount(harness({
+			model: projectModel({
+				projects: base.projects.map((project) => project.projectId === detail.projectId
+					? { ...project, primaryRootId: undefined, primaryRootLabel: undefined, rootCount: 0 }
+					: project),
+				detail: {
+					...detail,
+					primaryRootId: undefined,
+					roots: [],
+				},
+			}),
+		}).view);
+
+		expect(root.textContent).toContain("No Project folder is linked");
+		expect(root.textContent).toContain("stays rootless and does not inherit Vault access");
+		expect(root.textContent).toContain("Add a Project folder before relying on Project-scoped file access");
+		expect(root.textContent).not.toContain("uses the vault root");
+		expect(root.textContent).not.toContain("run from the vault root");
+	});
 
 	it("keeps Project filters beside Project search and submits immediately on Enter", async () => {
 		const instance = harness();
@@ -291,29 +353,31 @@ describe("ProjectsView", () => {
 	it("keeps Create Project available while viewing a Project and opens it immediately", () => {
 		const root = mount(harness().view);
 		button(root, "Create Project").click();
-		expect(root.textContent).toContain("No existing folder is selected. Chatobby will create a folder named after this Project in the vault root.");
-		expect(root.querySelector<HTMLInputElement>('input[aria-label="Project name"]')).not.toBeNull();
+    const editor = document.body.querySelector<HTMLElement>(".chatobby-project-editor-modal")!;
+		expect(editor.textContent).toContain("No existing folder is selected. Chatobby will create a folder named after this Project in the vault root.");
+		expect(editor.querySelector<HTMLInputElement>('input[aria-label="Project name"]')).not.toBeNull();
 	});
 
 	it("accumulates multiple existing folders across rerenders and submits the chosen primary root", async () => {
 		const instance = harness();
 		const root = mount(instance.view);
 		button(root, "Create Project").click();
-		const name = root.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
+    const editor = document.body.querySelector<HTMLElement>(".chatobby-project-editor-modal")!;
+		const name = editor.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
 		if (!name) throw new Error("Project name input is unavailable");
 		name.value = "External workspace";
 		name.dispatchEvent(new Event("input", { bubbles: true }));
 
 		chooseSystemDirectories.mockResolvedValueOnce(["C:\\Y1S2\\chatopet"]);
-		button(root, "Choose folders").click();
-		await vi.waitFor(() => expect(root.textContent).toContain("C:\\Y1S2\\chatopet"));
+		button(editor, "Choose folders").click();
+		await vi.waitFor(() => expect(editor.textContent).toContain("C:\\Y1S2\\chatopet"));
 		chooseSystemDirectories.mockResolvedValueOnce(["D:\\Chatobby\\plugin"]);
-		button(root, "Add more folders").click();
-		await vi.waitFor(() => expect(root.textContent).toContain("D:\\Chatobby\\plugin"));
+		button(editor, "Add more folders").click();
+		await vi.waitFor(() => expect(editor.textContent).toContain("D:\\Chatobby\\plugin"));
 
-		button(root, "Make plugin primary").click();
-		await vi.waitFor(() => expect(root.textContent).toContain("pluginPrimary"));
-		root.querySelector<HTMLFormElement>(".chatobby-projects__form")?.dispatchEvent(new Event("submit"));
+		button(editor, "Make plugin primary").click();
+		await vi.waitFor(() => expect(editor.textContent).toContain("pluginPrimary"));
+		editor.querySelector<HTMLFormElement>(".chatobby-projects__form")?.dispatchEvent(new Event("submit"));
 
 		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
 			type: "projects.create",
@@ -333,11 +397,12 @@ describe("ProjectsView", () => {
 		const instance = harness();
 		const root = mount(instance.view);
 		button(root, "Create Project").click();
-		const name = root.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
+    const editor = document.body.querySelector<HTMLElement>(".chatobby-project-editor-modal")!;
+		const name = editor.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
 		if (!name) throw new Error("Project name input is unavailable");
 		name.value = "Created in vault";
 		name.dispatchEvent(new Event("input", { bubbles: true }));
-		root.querySelector<HTMLFormElement>(".chatobby-projects__form")?.dispatchEvent(new Event("submit"));
+		editor.querySelector<HTMLFormElement>(".chatobby-projects__form")?.dispatchEvent(new Event("submit"));
 
 		await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
 			type: "projects.create",
@@ -396,39 +461,42 @@ describe("ProjectsView", () => {
     const instance = harness({ onIntent: async () => { throw new Error("Project revision changed"); } });
     const root = mount(instance.view);
 		openProjectMenu(root, "Alpha", "Edit name and description");
-    const form = root.querySelector<HTMLFormElement>(".chatobby-projects__form");
+    const editor = document.body.querySelector<HTMLElement>(".chatobby-project-editor-modal")!;
+    const form = editor.querySelector<HTMLFormElement>(".chatobby-projects__form");
     if (!form) throw new Error("Project details form is unavailable");
 
     form.dispatchEvent(new Event("submit"));
 
-    await vi.waitFor(() => expect(root.textContent).toContain("Project revision changed"));
-    expect(root.querySelector(".chatobby-projects__form")).not.toBeNull();
+    await vi.waitFor(() => expect(editor.textContent).toContain("Project revision changed"));
+    expect(editor.querySelector(".chatobby-projects__form")).not.toBeNull();
   });
 
   it("closes an editor after a successful mutation", async () => {
     const instance = harness();
     const root = mount(instance.view);
 		openProjectMenu(root, "Alpha", "Edit name and description");
-    const form = root.querySelector<HTMLFormElement>(".chatobby-projects__form");
+    const editor = document.body.querySelector<HTMLElement>(".chatobby-project-editor-modal")!;
+    const form = editor.querySelector<HTMLFormElement>(".chatobby-projects__form");
     if (!form) throw new Error("Project details form is unavailable");
 
     form.dispatchEvent(new Event("submit"));
 
     await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalled());
-    await vi.waitFor(() => expect(root.querySelector(".chatobby-projects__form")).toBeNull());
+    await vi.waitFor(() => expect(document.body.querySelector(".chatobby-project-editor-modal")).toBeNull());
   });
 
   it("preserves an unsaved editor while a live Project snapshot refreshes", () => {
     const instance = harness();
     const root = mount(instance.view);
 		openProjectMenu(root, "Alpha", "Edit name and description");
-    const name = root.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
+    const editor = document.body.querySelector<HTMLElement>(".chatobby-project-editor-modal")!;
+    const name = editor.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
     if (!name) throw new Error("Project name field is unavailable");
     name.value = "Unsaved local name";
 
     instance.setModel(projectModel({ revision: 5, snapshotSequence: 9 }));
 
-    expect(root.querySelector<HTMLInputElement>('input[aria-label="Project name"]')?.value)
+    expect(editor.querySelector<HTMLInputElement>('input[aria-label="Project name"]')?.value)
       .toBe("Unsaved local name");
   });
 
@@ -472,10 +540,8 @@ describe("ProjectsView", () => {
 		const instance = harness();
     const root = mount(instance.view);
 		button(root, "Add folders").click();
-		await vi.waitFor(() => expect(document.body.textContent).toContain(".chatobby-root.json"));
-		const modal = document.body.querySelector<HTMLElement>(".modal");
-		if (!modal) throw new Error("Folder confirmation is unavailable");
-		button(modal, "Add folder").click();
+		expect(document.body.textContent).not.toContain("Add this folder?");
+    expect(document.body.textContent).not.toContain("This does not grant agents access");
 
     await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledWith({
       type: "projects.roots-add-batch",
@@ -564,6 +630,9 @@ describe("ProjectsView", () => {
 		await vi.waitFor(() => expect(document.body.textContent).toContain("Choose where"));
 		const modal = document.body.querySelector<HTMLElement>(".modal");
 		if (!modal) throw new Error("Move chat modal is unavailable");
+		expect(modal.textContent).toContain("Future file, tool, and memory work uses the new workspace");
+		expect(modal.textContent).toContain("existing messages remain in this conversation");
+		expect(modal.textContent).toContain("Start a new Project chat for separate context");
 		const destinations = modal.querySelectorAll<HTMLButtonElement>(".chatobby-projects__move-destination");
 		expect(destinations[0]?.textContent).toContain("Vault");
 		expect(destinations[0]?.classList.contains("is-sticky")).toBe(true);

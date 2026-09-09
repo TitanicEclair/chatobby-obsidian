@@ -5,6 +5,7 @@ import type {
   FrontendProjectMessageSearchHitViewModel,
   FrontendProjectRootViewModel,
   FrontendProjectScreenViewModel,
+  FrontendProjectSessionViewModel,
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import type { App } from "obsidian";
 import type { SessionAdvancedAction } from "../../../ui/session/session-maintenance";
@@ -26,6 +27,7 @@ export interface ProjectsScreenControllerOptions {
   deleteSession(sessionId: string): Promise<void>;
   runSessionAction(sessionId: string, action: SessionAdvancedAction): Promise<void>;
   navigateToMessageHit(hit: FrontendProjectMessageSearchHitViewModel): Promise<void>;
+  openSessionIntent?(intent: Extract<ProjectsViewIntent, { type: "session.create" | "session.resume-by-id" }>): Promise<void>;
 }
 
 /** Binds the runtime-owned Projects projection to the native Obsidian page. */
@@ -39,11 +41,23 @@ export class ProjectsScreenController {
     return this.view?.handleKeydown(event) ?? false;
   }
 
-  open(projectId?: string): void {
+  async openEditor(projectId?: string): Promise<void> {
+    this.open(projectId, false);
+    await this.refresh(projectId);
+    if (projectId) await this.view?.selectProject(projectId);
+    this.view?.openEditor(!projectId);
+  }
+
+  showSessionMenu(event: MouseEvent, session: FrontendProjectSessionViewModel): void {
+    if (!this.view) this.open();
+    this.view?.showSessionMenu(event, session);
+  }
+
+  open(projectId?: string, refresh = true): void {
     this.options.prepareOpen();
     if (this.view) {
       this.options.onOpened();
-		void this.refreshAndSelect(projectId);
+		if (refresh) void this.refreshAndSelect(projectId);
       return;
     }
     this.view = new ProjectsView({
@@ -75,7 +89,7 @@ export class ProjectsScreenController {
     this.options.onOpened();
     this.view.render(this.options.getHost());
     window.requestAnimationFrame(() => this.view?.focusContainer());
-    void this.refreshAndSelect(projectId);
+    if (refresh) void this.refreshAndSelect(projectId);
   }
 
 	async createForCurrentSession(input: {
@@ -160,6 +174,10 @@ export class ProjectsScreenController {
 	}
 
   private async dispatch(input: ProjectsViewIntent): Promise<void> {
+    if (this.options.openSessionIntent && (input.type === "session.create" || input.type === "session.resume-by-id")) {
+      await this.options.openSessionIntent(input);
+      return;
+    }
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) throw new Error("Chatobby frontend is not initialized");
 		let intentId = crypto.randomUUID();
@@ -218,7 +236,7 @@ export class ProjectsScreenController {
     if (outcome.status === "rejected" || outcome.status === "conflict") {
       throw new ProjectIntentError(
         outcome.notice?.message ?? "The Project action could not be applied.",
-        outcome.errorCode,
+        outcome.status === "rejected" ? outcome.errorCode : undefined,
       );
     }
     this.view?.setLocalError(null);

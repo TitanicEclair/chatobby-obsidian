@@ -1,12 +1,22 @@
 // Generated from packages/chatobby/src/frontend-client.ts. Do not edit.
+import {
+	type ProviderLoginMethod,
+	type ProviderLoginState,
+	parseProviderLoginState,
+} from "./provider-auth-contracts.ts";
+
+export type { ProviderAuthentication, ProviderLoginMethod, ProviderLoginState } from "./provider-auth-contracts.ts";
+
 import { parseObsidianBridgeConnectionConfig } from "@chatobby/obsidian-protocol";
 import type {
 	AutoNameStrategy,
+	ObsidianVaultAccessContextStamp,
 	WsAutoCompactionSettings,
 	WsBashResult,
 	WsBridgeConfig,
 	WsExtensionUIRequest,
 	WsForkMessage,
+	WsLocalModelDiscoveryResult,
 	WsLocalModelProvider,
 	WsLocalModelProviderDocument,
 	WsLocalModelProviderProbeResult,
@@ -23,14 +33,46 @@ import type {
 	WsSessionStats,
 	WsStoredSessionSelector,
 } from "./connector-types.ts";
+import { parseObsidianVaultAccessContextStamp } from "./connector-types.ts";
 
 export type {
+	ObsidianVaultAccessContextStamp,
 	WsManagedLocalModelServerProfile,
 	WsManagedLocalModelServerSnapshot,
 	WsManagedLocalModelServerStatus,
 	WsProjectDirectoryCandidateRequest,
 	WsProjectDirectoryCandidateResult,
 } from "./connector-types.ts";
+export type {
+	ChatobbyGuideAsset,
+	ChatobbyGuideAssetFile,
+	ChatobbyGuideChannel,
+	ChatobbyGuideChannelAsset,
+	ChatobbyGuideChannelAssetDescriptor,
+	ChatobbyGuideFileSet,
+	ChatobbyGuideReleaseDescriptor,
+} from "./guide-release-asset.ts";
+export {
+	CHATOBBY_GUIDE_ASSET_FORMAT,
+	CHATOBBY_GUIDE_ASSET_SCHEMA_VERSION,
+	CHATOBBY_GUIDE_CHANNEL_ASSET_SCHEMA_VERSION,
+	CHATOBBY_GUIDE_CHANNEL_CONSUMER_SCHEMA_VERSION,
+	CHATOBBY_GUIDE_CHANNEL_FILE,
+	CHATOBBY_GUIDE_CHANNEL_NAME,
+	CHATOBBY_GUIDE_CHANNEL_PRODUCT,
+	CHATOBBY_GUIDE_CHANNEL_SCHEMA_VERSION,
+	CHATOBBY_GUIDE_DIRECTORY,
+	CHATOBBY_GUIDE_MAX_ASSET_BYTES,
+	CHATOBBY_GUIDE_MAX_FILES,
+	CHATOBBY_GUIDE_PRODUCT,
+	chatobbyGuideChannelSigningPayload,
+	isChatobbyGuideChannelCompatible,
+	parseChatobbyGuideAsset,
+	parseChatobbyGuideChannel,
+	parseChatobbyGuideChannelAsset,
+	parseChatobbyGuideReleaseDescriptor,
+	validateChatobbyGuidePath,
+} from "./guide-release-asset.ts";
 
 import {
 	CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS,
@@ -48,18 +90,24 @@ import {
 	type RuntimeServerPending,
 } from "./control/contracts.ts";
 import {
-	type FrontendBootstrap,
-	type FrontendBootstrapRequest,
+	CHATOBBY_FRONTEND_PROTOCOL_VERSION,
 	type FrontendIntent,
 	type FrontendIntentResult,
+	type FrontendLifecycleState,
+	type FrontendNegotiationRequest,
+	type FrontendNegotiationResult,
 	type FrontendPatch,
+	type FrontendProtocolError,
 	type FrontendScreenRequest,
-	type FrontendScreenViewModel,
-	type FrontendSubscriptionAck,
+	type FrontendScreenResponse,
 	type FrontendSubscriptionRequest,
-	parseFrontendBootstrap,
+	type FrontendSubscriptionResult,
+	parseFrontendIntentResult,
+	parseFrontendNegotiationResult,
 	parseFrontendPatch,
-	parseFrontendScreen,
+	parseFrontendProtocolError,
+	parseFrontendScreenResponse,
+	parseFrontendSubscriptionResult,
 } from "./frontend-contracts.ts";
 
 const MCP_FRONTEND_OPERATION_TIMEOUT_MS = 105_000;
@@ -67,6 +115,14 @@ const MCP_FRONTEND_OPERATION_TIMEOUT_MS = 105_000;
 export type {
 	RuntimeClientHello,
 	RuntimeIdentity,
+	RuntimeMaintenanceActiveWorkKind,
+	RuntimeMaintenanceAdmission,
+	RuntimeMaintenanceAdmitRequest,
+	RuntimeMaintenanceLeaseRequest,
+	RuntimeMaintenanceLeaseResult,
+	RuntimeMaintenancePurpose,
+	RuntimeMaintenanceSnapshot,
+	RuntimeMaintenanceTargetIdentity,
 	RuntimeReadyDescriptor,
 	RuntimeServerActivationRequired,
 	RuntimeServerHello,
@@ -76,6 +132,8 @@ export type {
 export {
 	CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION,
 	CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+	parseRuntimeMaintenanceAdmitRequest,
+	parseRuntimeMaintenanceLeaseRequest,
 	parseRuntimeReadyDescriptor,
 	RUNTIME_CLOSE_CODES,
 } from "./control/contracts.ts";
@@ -177,6 +235,10 @@ export class ChatobbyWsClient {
 	private readonly pending = new Map<string, PendingRequest>();
 	private readonly bridgeConfigListeners = new Set<(config: WsBridgeConfig) => void>();
 	private readonly frontendPatchListeners = new Set<(patch: FrontendPatch) => void>();
+	private readonly frontendProtocolErrorListeners = new Set<(error: FrontendProtocolError) => void>();
+	private readonly frontendLifecycleListeners = new Set<(state: FrontendLifecycleState) => void>();
+	private readonly bufferedFrontendPatches: FrontendPatch[] = [];
+	private frontendLifecycle: FrontendLifecycleState = "disconnected";
 	private extensionUIHandler?: ExtensionUIHandler;
 
 	constructor(options: WsClientOptions) {
@@ -190,6 +252,7 @@ export class ChatobbyWsClient {
 		if (!WebSocketConstructor) throw new Error("WebSocket is not available in this runtime");
 
 		this.closedByUser = false;
+		this.setFrontendLifecycle("connecting");
 		this.connecting = new Promise<void>((resolve, reject) => {
 			const socket = new WebSocketConstructor(this.options.url);
 			let opened = false;
@@ -211,6 +274,7 @@ export class ChatobbyWsClient {
 				if (ready) return;
 				ready = true;
 				this.connected = true;
+				this.setFrontendLifecycle("negotiating");
 				clearConnectTimer();
 				clearHelloTimer();
 				resolve();
@@ -279,6 +343,7 @@ export class ChatobbyWsClient {
 				clearConnectTimer();
 				clearHelloTimer();
 				this.connected = false;
+				this.setFrontendLifecycle(this.closedByUser ? "closed" : "disconnected");
 				const terminalRuntimeFailure = isTerminalRuntimeCloseCode(event.code);
 				if (terminalRuntimeFailure) this.reconnectBlocked = true;
 				if (this.ws === socket) this.ws = null;
@@ -327,6 +392,7 @@ export class ChatobbyWsClient {
 	async disconnect(): Promise<void> {
 		this.closedByUser = true;
 		this.connected = false;
+		this.setFrontendLifecycle("closed");
 		if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
 		this.reconnectTimer = undefined;
 		this.rejectPending(new Error("WebSocket disconnected"));
@@ -343,20 +409,36 @@ export class ChatobbyWsClient {
 		});
 	}
 
-	async getFrontendBootstrap(request: FrontendBootstrapRequest): Promise<FrontendBootstrap> {
-		return parseFrontendBootstrap(resultField(await this.send("frontend_bootstrap", request), "bootstrap"));
+	async negotiateFrontend(request: FrontendNegotiationRequest): Promise<FrontendNegotiationResult> {
+		this.setFrontendLifecycle("negotiating");
+		return parseFrontendNegotiationResult(resultField(await this.send("frontend_negotiate", request), "negotiation"));
 	}
 
-	async getFrontendScreen(request: FrontendScreenRequest): Promise<FrontendScreenViewModel> {
-		return parseFrontendScreen(resultField(await this.send("frontend_screen", request), "screen"));
+	async getFrontendScreen(request: FrontendScreenRequest): Promise<FrontendScreenResponse> {
+		return parseFrontendScreenResponse(resultField(await this.send("frontend_screen", request), "response"));
 	}
 
-	async subscribeFrontend(request: FrontendSubscriptionRequest): Promise<FrontendSubscriptionAck> {
-		return resultField(await this.send("frontend_subscribe", request), "subscription");
+	async subscribeFrontend(request: FrontendSubscriptionRequest): Promise<FrontendSubscriptionResult> {
+		this.setFrontendLifecycle(request.resume ? "replaying" : "bootstrapping");
+		const result = parseFrontendSubscriptionResult(
+			resultField(await this.send("frontend_subscribe", request), "subscription"),
+		);
+		if (result.status === "resync-required") this.setFrontendLifecycle("resynchronizing");
+		return result;
 	}
 
 	async dispatchFrontendIntent(intent: FrontendIntent): Promise<FrontendIntentResult> {
-		return resultField(await this.send("frontend_intent", intent), "outcome");
+		return parseFrontendIntentResult(resultField(await this.send("frontend_intent", intent), "outcome"));
+	}
+
+	activateFrontendLive(): void {
+		this.setFrontendLifecycle("live");
+		const buffered = this.bufferedFrontendPatches.splice(0).sort((left, right) => left.sequence - right.sequence);
+		for (const patch of buffered) for (const listener of this.frontendPatchListeners) listener(patch);
+	}
+
+	get frontendState(): FrontendLifecycleState {
+		return this.frontendLifecycle;
 	}
 
 	async registerProjectDirectoryCandidate(
@@ -458,6 +540,13 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("get_session_stats", {}), "stats");
 	}
 
+	/** Fresh host-authorized passive-context evidence for the authenticated current session. */
+	async getObsidianVaultAccessContext(): Promise<ObsidianVaultAccessContextStamp | undefined> {
+		const state: unknown = resultField(await this.send("get_state", {}), "state");
+		if (!isRecord(state)) throw new Error("Chatobby runtime returned an invalid session state");
+		return parseObsidianVaultAccessContextStamp(state.obsidianVaultAccess);
+	}
+
 	async getLastAssistantText(): Promise<string | null> {
 		return resultField(await this.send("get_last_assistant_text", {}), "text");
 	}
@@ -496,6 +585,10 @@ export class ChatobbyWsClient {
 		);
 	}
 
+	async discoverLocalModels(provider: WsLocalModelProvider, apiKey?: string): Promise<WsLocalModelDiscoveryResult> {
+		return resultField(await this.send("discover_local_models", { provider, apiKey }), "result");
+	}
+
 	async testLocalModelProvider(
 		provider: WsLocalModelProvider,
 		apiKey?: string,
@@ -532,6 +625,7 @@ export class ChatobbyWsClient {
 	}
 
 	async setAutoCompaction(settings: {
+		mode?: WsAutoCompactionSettings["mode"];
 		enabled?: boolean;
 		thresholdPercent?: number;
 		customInstructions?: string;
@@ -541,6 +635,26 @@ export class ChatobbyWsClient {
 
 	async setAutoNameStrategy(strategy: AutoNameStrategy): Promise<void> {
 		await this.send("set_auto_name_strategy", { strategy });
+	}
+
+	async startProviderLogin(provider: string, method: ProviderLoginMethod): Promise<ProviderLoginState> {
+		return parseProviderLoginState(
+			resultField(await this.send("provider_login_start", { provider, method }), "state"),
+		);
+	}
+
+	async getProviderLogin(loginId: string): Promise<ProviderLoginState> {
+		return parseProviderLoginState(resultField(await this.send("provider_login_status", { loginId }), "state"));
+	}
+
+	async respondToProviderLogin(loginId: string, promptId: string, value: string): Promise<ProviderLoginState> {
+		return parseProviderLoginState(
+			resultField(await this.send("provider_login_respond", { loginId, promptId, value }), "state"),
+		);
+	}
+
+	async cancelProviderLogin(loginId: string): Promise<ProviderLoginState> {
+		return parseProviderLoginState(resultField(await this.send("provider_login_cancel", { loginId }), "state"));
 	}
 
 	async setProviderApiKey(provider: string, apiKey: string): Promise<void> {
@@ -575,6 +689,7 @@ export class ChatobbyWsClient {
 		return resultField(await this.send("get_runtime_info", {}), "info");
 	}
 
+	/** @deprecated Use the signed exact-version guide release descriptor. */
 	async getGuide(): Promise<{
 		content: string;
 		path: string;
@@ -595,6 +710,17 @@ export class ChatobbyWsClient {
 	onFrontendPatch(listener: (patch: FrontendPatch) => void): () => void {
 		this.frontendPatchListeners.add(listener);
 		return () => this.frontendPatchListeners.delete(listener);
+	}
+
+	onFrontendProtocolError(listener: (error: FrontendProtocolError) => void): () => void {
+		this.frontendProtocolErrorListeners.add(listener);
+		return () => this.frontendProtocolErrorListeners.delete(listener);
+	}
+
+	onFrontendLifecycle(listener: (state: FrontendLifecycleState) => void): () => void {
+		this.frontendLifecycleListeners.add(listener);
+		listener(this.frontendLifecycle);
+		return () => this.frontendLifecycleListeners.delete(listener);
 	}
 
 	onExtensionUI(handler: ExtensionUIHandler): void {
@@ -639,9 +765,35 @@ export class ChatobbyWsClient {
 		if (parsed.type === "frontend_patch") {
 			try {
 				const patch = parseFrontendPatch(parsed.patch);
-				for (const listener of this.frontendPatchListeners) listener(patch);
-			} catch {
-				return;
+				if (this.frontendLifecycle === "bootstrapping" || this.frontendLifecycle === "replaying") {
+					this.bufferedFrontendPatches.push(patch);
+				} else {
+					for (const listener of this.frontendPatchListeners) listener(patch);
+				}
+			} catch (error) {
+				this.emitFrontendProtocolError({
+					schemaVersion: 1,
+					protocolVersion: CHATOBBY_FRONTEND_PROTOCOL_VERSION,
+					code: "malformed-entity",
+					message: error instanceof Error ? error.message : String(error),
+					retryable: true,
+					resync: "full-bootstrap",
+				});
+			}
+			return;
+		}
+		if (parsed.type === "frontend_protocol_error") {
+			try {
+				this.emitFrontendProtocolError(parseFrontendProtocolError(parsed.error));
+			} catch (error) {
+				this.emitFrontendProtocolError({
+					schemaVersion: 1,
+					protocolVersion: CHATOBBY_FRONTEND_PROTOCOL_VERSION,
+					code: "malformed-envelope",
+					message: error instanceof Error ? error.message : String(error),
+					retryable: false,
+					resync: "close",
+				});
 			}
 			return;
 		}
@@ -689,13 +841,15 @@ export class ChatobbyWsClient {
 				frontendIntentType === "mcp.discover" ||
 				frontendIntentType === "mcp.auth-complete"
 					? MCP_FRONTEND_OPERATION_TIMEOUT_MS
-					: method === "compact"
-						? CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS
-						: method === "prompt"
-							? CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS
-							: method === "bash"
-								? 130_000
-								: 30_000);
+					: frontendIntentType === "permissions.verify-native-sandbox"
+						? 10 * 60_000
+						: method === "compact"
+							? CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS
+							: method === "prompt"
+								? CHATOBBY_PROMPT_REQUEST_TIMEOUT_MS
+								: method === "bash"
+									? 130_000
+									: 30_000);
 			const timer = window.setTimeout(() => {
 				if (!this.pending.delete(id)) return;
 				reject(new Error(`Chatobby runtime request timed out after ${timeout}ms: ${method}`));
@@ -717,6 +871,17 @@ export class ChatobbyWsClient {
 			pending.reject(error);
 		}
 		this.pending.clear();
+	}
+
+	private emitFrontendProtocolError(error: FrontendProtocolError): void {
+		this.setFrontendLifecycle(error.resync === "close" ? "degraded" : "resynchronizing");
+		for (const listener of this.frontendProtocolErrorListeners) listener(error);
+	}
+
+	private setFrontendLifecycle(state: FrontendLifecycleState): void {
+		if (this.frontendLifecycle === state) return;
+		this.frontendLifecycle = state;
+		for (const listener of this.frontendLifecycleListeners) listener(state);
 	}
 }
 

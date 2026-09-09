@@ -8,6 +8,30 @@ import type {
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../src/vendor/chatobby-client/ws-client.js";
 
 describe("RuntimeUpdateManager", () => {
+  it("uses an exact verified installed runtime without a network request", async () => {
+    const client = clientFor(descriptor("0.1.3"));
+    const installer = installerFor();
+    const manager = new RuntimeUpdateManager(deps(client, installer, "0.1.3"));
+
+    await expect(manager.ensureRequiredRuntime()).resolves.toBe("current");
+    expect(client.fetchExact).not.toHaveBeenCalled();
+    expect(manager.state).toMatchObject({ status: "current", installedVersion: "0.1.3" });
+  });
+
+  it("does not automatically downgrade a newer unverified pointer", async () => {
+    const client = clientFor(descriptor("0.1.3"));
+    const installer = installerFor();
+    const managerDeps = deps(client, installer, "0.1.4");
+    managerDeps.installer.readVerifiedInstalledVersion = vi.fn(async () => {
+      throw new Error("not compatible with this connector");
+    });
+    const manager = new RuntimeUpdateManager(managerDeps);
+
+    await expect(manager.ensureRequiredRuntime()).rejects.toThrow("will not downgrade it");
+    expect(client.fetchExact).not.toHaveBeenCalled();
+    expect(installer.prepareInstall).not.toHaveBeenCalled();
+  });
+
   it("advertises newer releases without installing them", async () => {
     const client = clientFor(descriptor("0.1.3"));
     const installer = installerFor();
@@ -23,7 +47,7 @@ describe("RuntimeUpdateManager", () => {
     const order: string[] = [];
     const update = descriptor("0.1.3");
     const client: RuntimeUpdateClientLike = {
-      fetchLatest: vi.fn(async () => update),
+      fetchExact: vi.fn(async () => update),
       stage: vi.fn(async (_descriptor, _pluginVersion, _signal, progress) => {
         order.push("stage");
         progress({ phase: "downloading", completed: 10, total: 10 });
@@ -70,11 +94,18 @@ describe("RuntimeUpdateManager", () => {
     const client = clientFor(update);
     const blocked = new RuntimeUpdateManager({
       ...deps(client, installerFor(), "0.1.2"),
-      hasActiveWork: () => true,
+      admitMaintenance: vi.fn(async () => ({
+        schemaVersion: 1 as const,
+        operationId: "runtime-update-test",
+        status: "deferred" as const,
+        retryAfterMs: 1_000,
+        activeWorkKinds: ["response" as const],
+      })),
     });
     await blocked.check();
-    await expect(blocked.install()).rejects.toThrow("Finish the current Chatobby response");
-    expect(client.stage).not.toHaveBeenCalled();
+    await expect(blocked.install()).resolves.toBe("0.1.2");
+    expect(client.stage).toHaveBeenCalledOnce();
+    expect(blocked.state).toMatchObject({ status: "deferred", reason: "active-work" });
 
     const order: string[] = [];
     const failing = new RuntimeUpdateManager({
@@ -190,6 +221,7 @@ describe("RuntimeUpdateManager", () => {
       ...deps(clientFor(descriptor("0.1.3")), installerFor(), "0.1.2"),
       installer: {
         prepareInstall: installerFor().prepareInstall,
+        readVerifiedInstalledVersion: vi.fn(async () => "0.1.2"),
         resumePendingInstall: vi.fn(async () => ({
           executable: "runtime",
           runtimeVersion: "0.1.3",
@@ -216,6 +248,7 @@ describe("RuntimeUpdateManager", () => {
       ...deps(clientFor(descriptor("0.1.3")), installerFor(), "0.1.2"),
       installer: {
         prepareInstall: installerFor().prepareInstall,
+        readVerifiedInstalledVersion: vi.fn(async () => "0.1.2"),
         resumePendingInstall: vi.fn(async () => ({
           executable: "runtime",
           runtimeVersion: "0.1.3",
@@ -252,6 +285,47 @@ describe("RuntimeUpdateManager", () => {
     expect(finalize).toHaveBeenCalledOnce();
     expect(rollback).not.toHaveBeenCalled();
   });
+  it.each(["accepted", "failed"] as const)("coordinates recovered rollback with %s concurrent finalization", async (outcome) => {
+    let accept!: () => void;
+    let reject!: (error: Error) => void;
+    const acceptance = new Promise<void>((resolve, rejectPromise) => { accept = resolve; reject = rejectPromise; });
+    const finalize = vi.fn(() => acceptance);
+    const rollback = vi.fn(async () => {});
+    const stopRuntime = vi.fn(async () => {});
+    const base = deps(clientFor(descriptor("0.1.3")), installerFor(), "0.1.2");
+    const manager = new RuntimeUpdateManager({
+      ...base,
+      installer: {
+        ...base.installer,
+        resumePendingInstall: async () => ({
+          executable: "runtime", runtimeVersion: "0.1.3", runtimePackageFingerprint: "f".repeat(64),
+          activationState: "activated", activate: async () => {}, finalize, rollback,
+        }),
+      },
+      stopRuntime,
+    });
+    await manager.recoverInterruptedInstallation();
+    const identity = {
+      instanceId: "instance", vaultId: "vault", pid: 1, startedAt: 1,
+      runtimeVersion: "0.1.3", protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+      runtimePackageFingerprint: "f".repeat(64),
+    };
+    const finalizations = Promise.allSettled(Array.from({ length: 4 }, () => manager.finalizeRecoveredRuntime(identity)));
+    await expect(manager.finalizeRecoveredRuntime({ ...identity, runtimePackageFingerprint: "e".repeat(64) }))
+      .rejects.toThrow("does not match");
+    const rollbacks = Promise.all(Array.from({ length: 4 }, () => manager.rollbackRecoveredRuntime()));
+    await Promise.resolve();
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(stopRuntime).not.toHaveBeenCalled();
+    if (outcome === "accepted") accept();
+    else reject(new Error("journal write failed before cleanup"));
+    const results = await finalizations;
+    expect(results.every((result) => result.status === (outcome === "accepted" ? "fulfilled" : "rejected"))).toBe(true);
+    expect(await rollbacks).toEqual(Array.from({ length: 4 }, () => outcome === "failed"));
+    expect(stopRuntime).toHaveBeenCalledTimes(outcome === "failed" ? 1 : 0);
+    expect(rollback).toHaveBeenCalledTimes(outcome === "failed" ? 1 : 0);
+    await expect(manager.rollbackRecoveredRuntime()).resolves.toBe(false);
+  });
 });
 
 function deps(
@@ -273,18 +347,21 @@ function deps(
   installedVersion: string | null,
 ) {
   return {
-    pluginVersion: "0.1.2",
+    pluginVersion: "0.1.3",
     enabled: true,
     client,
     installer: {
       resumePendingInstall: vi.fn(async () => null),
+      readVerifiedInstalledVersion: vi.fn(async () => installedVersion),
       prepareInstall: async (source: string, manifest: RuntimePackageManifest, pluginVersion: string) => ({
         activationState: "prepared" as const,
         ...await installer.prepareInstall(source, manifest, pluginVersion),
       }),
     },
     getInstalledVersion: () => installedVersion,
-    hasActiveWork: () => false,
+    admitMaintenance: vi.fn(async () => null),
+    cancelMaintenance: vi.fn(async () => {}),
+    commitMaintenance: vi.fn(async () => {}),
     stopRuntime: vi.fn(async () => {}),
     startRuntime: vi.fn(async () => {}),
   };
@@ -293,6 +370,7 @@ function deps(
 function installerFor() {
   return {
     resumePendingInstall: vi.fn(async () => null),
+    readVerifiedInstalledVersion: vi.fn(async () => null),
     prepareInstall: vi.fn(async () => ({
       executable: "runtime",
       runtimeVersion: "0.1.3",
@@ -307,7 +385,7 @@ function installerFor() {
 
 function clientFor(update: RuntimeUpdateDescriptor): RuntimeUpdateClientLike {
   return {
-    fetchLatest: vi.fn(async () => update),
+    fetchExact: vi.fn(async () => update),
     stage: vi.fn(async () => ({
       directory: "staged",
       manifest: manifest(update.version),

@@ -1,6 +1,6 @@
 // Vault identity helpers — get vault metadata for bridge Hello and context.get.
 //
-// See docs/tooling/bridge-executor.md §7.2 for the Hello message.
+// See docs/wire-protocol.md for connection and capability ownership.
 
 import type { App } from "obsidian";
 import type { ObsidianBridgeVault } from "../../../vendor/@chatobby/obsidian-protocol/index.js";

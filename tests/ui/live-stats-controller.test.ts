@@ -73,9 +73,36 @@ describe("LiveStatsController", () => {
     expect(changes.at(-1)?.contextUsage?.tokens).toBe(96_000);
     controller.dispose();
   });
+
+  it("drops and replaces idle cached stats when the active model changes", async () => {
+    const getSessionStats = vi
+      .fn<() => Promise<WsSessionStats>>()
+      .mockResolvedValueOnce(statsWithWindow(120_000, 400_000))
+      .mockResolvedValueOnce(statsWithWindow(200, 8_000));
+    const changes: Array<WsSessionStats | null> = [];
+    const controller = new LiveStatsController({
+      getTransport: () => ({ isConnected: true, getSessionStats }) as never,
+      getSessionState: () => ({ isStreaming: false, isCompacting: false }),
+      onChange: (stats) => changes.push(stats),
+    });
+
+    await controller.refresh();
+    expect(controller.current()?.contextUsage?.contextWindow).toBe(400_000);
+
+    controller.refreshAfterModelChange();
+    expect(controller.current()).toBeNull();
+    expect(changes.at(-1)).toBeNull();
+    await vi.waitFor(() => expect(controller.current()?.contextUsage?.contextWindow).toBe(8_000));
+    expect(getSessionStats).toHaveBeenCalledTimes(2);
+    controller.dispose();
+  });
 });
 
 function statsWithContext(tokens: number): WsSessionStats {
+	return statsWithWindow(tokens, 1_000_000);
+}
+
+function statsWithWindow(tokens: number, contextWindow: number): WsSessionStats {
   return {
     sessionFile: "s.jsonl",
     sessionId: "s",
@@ -94,8 +121,8 @@ function statsWithContext(tokens: number): WsSessionStats {
     cost: 0,
     contextUsage: {
       tokens,
-      contextWindow: 1_000_000,
-      percent: (tokens / 1_000_000) * 100,
+		contextWindow,
+		percent: (tokens / contextWindow) * 100,
     },
   };
 }

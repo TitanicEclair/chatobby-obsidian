@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS } from "../../vendor/chatobby-client/control/contracts";
+import type {
+  RuntimeMaintenanceAdmission,
+  RuntimeMaintenanceAdmitRequest,
+  RuntimeMaintenanceLeaseRequest,
+  RuntimeMaintenancePurpose,
+  RuntimeMaintenanceTargetIdentity,
+} from "../../vendor/chatobby-client/ws-client.js";
 import type { ChatobbyVaultRuntimePaths } from "../../vault-runtime";
 import type {
   EnsureRuntimeRequest,
@@ -45,6 +52,7 @@ export interface ManagedCommand {
   command: string;
   args: string[];
   runtimePackageFingerprint?: string;
+  developmentBuildFingerprint?: string;
   /** Require this exact launch to complete the authenticated package-activation handshake. */
   runtimeActivationRequired?: boolean;
 }
@@ -52,6 +60,7 @@ export interface ManagedCommand {
 export interface RuntimeManagerDeps {
   getConfiguration(): RuntimeConfiguration;
   getVaultPaths(): ChatobbyVaultRuntimePaths | null;
+  assertRuntimeStartAllowed(): void;
   resolveManagedCommand(): ManagedCommand | null | Promise<ManagedCommand | null>;
   connectRuntime(runtime: ReadyRuntime): Promise<void>;
   disconnectRuntime(): Promise<void>;
@@ -77,6 +86,21 @@ export interface RuntimeControlClientLike {
   status(descriptor: RuntimeReadyDescriptor, controlToken: string): Promise<unknown>;
   detach(descriptor: RuntimeReadyDescriptor, controlToken: string, attachmentId: string): Promise<void>;
   shutdown(descriptor: RuntimeControlDescriptor, controlToken: string): Promise<void>;
+  admitMaintenance(
+    descriptor: RuntimeControlDescriptor,
+    controlToken: string,
+    request: RuntimeMaintenanceAdmitRequest,
+  ): Promise<RuntimeMaintenanceAdmission>;
+  cancelMaintenance(
+    descriptor: RuntimeControlDescriptor,
+    controlToken: string,
+    request: RuntimeMaintenanceLeaseRequest,
+  ): Promise<unknown>;
+  commitMaintenance(
+    descriptor: RuntimeControlDescriptor,
+    controlToken: string,
+    request: RuntimeMaintenanceLeaseRequest,
+  ): Promise<unknown>;
 }
 
 type RuntimeStateListener = (state: RuntimeLifecycleState) => void;
@@ -102,6 +126,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
   private restartTimer: number | null = null;
   private stabilityTimer: number | null = null;
   private recoveryPromise: Promise<void> | null = null;
+  private developmentCommandOverride: ManagedCommand | null = null;
 
   constructor(deps: RuntimeManagerDeps) {
     this.deps = deps;
@@ -121,7 +146,19 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     return () => this.listeners.delete(listener);
   }
 
+  setDevelopmentCommandOverride(command: ManagedCommand | null): void {
+    this.developmentCommandOverride = command;
+  }
+
+  /** Cancel owned pending starts while preserving an already restored exact runtime. */
+  blockRuntimeStartsUntilReload(): void {
+    this.desiredRunning = false;
+    this.generation += 1;
+    this.cancelTimers();
+  }
+
   ensureReady(request: EnsureRuntimeRequest, managedCommand?: ManagedCommand): Promise<ReadyRuntime> {
+    this.assertRuntimeStartAllowed();
     const mode = this.deps.getConfiguration().mode;
     if (this.readyRuntime?.ownership === mode && this.stateValue.status === "ready") {
       return Promise.resolve(this.readyRuntime);
@@ -138,11 +175,24 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
   }
 
   async restart(_reason: RuntimeActionReason): Promise<ReadyRuntime> {
+    this.assertRuntimeStartAllowed();
     this.restartPolicy.reset();
     this.launchAttempt = 0;
     await this.stop("manual-restart");
-    this.desiredRunning = true;
     return this.ensureReady({ reason: "manual-restart" });
+  }
+
+  async reattachExistingForMaintenance(): Promise<ReadyRuntime | null> {
+    this.assertRuntimeStartAllowed();
+    const mode = this.deps.getConfiguration().mode;
+    if (mode === "external") return null;
+    const vaultPaths = this.deps.getVaultPaths();
+    if (!vaultPaths) return null;
+    const candidate = await this.leases.readCandidate(vaultPaths.vaultId);
+    if (!candidate) return null;
+    await this.control.status(candidate.descriptor, candidate.controlToken);
+    this.desiredRunning = true;
+    return this.authenticateCandidate(candidate, mode, this.generation, null);
   }
 
   reportConnectionFailure(message: string): Promise<void> {
@@ -183,6 +233,40 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
       if (!exited) await processHandle.terminate();
     }
     this.emit({ status: "idle", mode });
+  }
+
+  async admitMaintenance(
+    operationId: string,
+    purpose: RuntimeMaintenancePurpose,
+    target: RuntimeMaintenanceTargetIdentity,
+  ): Promise<RuntimeMaintenanceAdmission | null> {
+    const candidate = this.candidate;
+    const identity = this.readyRuntime?.identity;
+    if (!candidate || !identity) return null;
+    return this.control.admitMaintenance(candidate.descriptor, candidate.controlToken, {
+      schemaVersion: 1,
+      operationId,
+      purpose,
+      current: {
+        instanceId: identity.instanceId,
+        runtimePackageFingerprint: identity.runtimePackageFingerprint,
+        developmentBuildFingerprint: identity.developmentBuildFingerprint,
+      },
+      target,
+    });
+  }
+
+  async cancelMaintenance(operationId: string, leaseId: string): Promise<void> {
+    const candidate = this.candidate;
+    if (!candidate) return;
+    await this.control.cancelMaintenance(candidate.descriptor, candidate.controlToken, { schemaVersion: 1, operationId, leaseId });
+  }
+
+  async commitMaintenance(operationId: string, leaseId: string): Promise<void> {
+    const candidate = this.candidate;
+    if (!candidate) return;
+    await this.control.commitMaintenance(candidate.descriptor, candidate.controlToken, { schemaVersion: 1, operationId, leaseId });
+    await this.disconnectCommittedRuntime(candidate);
   }
 
   async detach(_reason: RuntimeDetachReason): Promise<void> {
@@ -269,12 +353,20 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
       runtimeVersion: "external",
       protocolVersion: 0,
       runtimePackageFingerprint: null,
+      developmentBuildFingerprint: null,
     };
     const runtime: ReadyRuntime = { identity, endpoint: url, ownership: "external" };
     this.assertCurrent(generation);
     this.emit({ status: "authenticating", mode: "external", endpoint: url });
-    await this.deps.connectRuntime(runtime);
-    this.assertCurrent(generation);
+    try {
+      await this.deps.connectRuntime(runtime);
+      this.assertCurrent(generation);
+    } catch (error) {
+      if (generation !== this.generation || !this.desiredRunning) {
+        await this.deps.disconnectRuntime().catch(() => {});
+      }
+      throw error;
+    }
     return this.acceptReady(runtime, null, null);
   }
 
@@ -286,10 +378,14 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     const vaultPaths = this.deps.getVaultPaths();
     if (!vaultPaths) throw new RuntimeStartError("configuration_invalid", "Chatobby requires a filesystem-backed vault");
 		const vaultId = vaultPaths.vaultId;
-    let managedCommand: ManagedCommand | null = null;
-    if (mode === "managed") {
+    // A current development-pair receipt is verified before this override is
+    // installed. Keep its immutable cached command ahead of both the ordinary
+    // developer launcher and the development-build managed resolver.
+    let managedCommand: ManagedCommand | null = commandOverride ?? this.developmentCommandOverride;
+    if (mode === "managed" && !managedCommand) {
       try {
-        managedCommand = commandOverride ?? await this.deps.resolveManagedCommand();
+        managedCommand = await this.deps.resolveManagedCommand();
+        this.assertCurrent(generation);
       } catch (error) {
         throw new RuntimeStartError(
           error instanceof RuntimePackageValidationError ? error.code : "runtime_package_invalid",
@@ -302,11 +398,17 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     }
 		if (vaultPaths.legacyVaultId !== vaultId) {
 			await this.retireLegacyVaultLease(vaultPaths.legacyVaultId);
+			this.assertCurrent(generation);
 		}
     const expectedFingerprint = managedCommand?.runtimePackageFingerprint;
+    const expectedDevelopmentFingerprint = managedCommand?.developmentBuildFingerprint;
     const existing = await this.leases.readCandidate(vaultId);
+    this.assertCurrent(generation);
     if (existing) {
-      if (expectedFingerprint && existing.descriptor.runtimePackageFingerprint !== expectedFingerprint) {
+      if (
+        (expectedFingerprint && existing.descriptor.runtimePackageFingerprint !== expectedFingerprint)
+        || (expectedDevelopmentFingerprint && existing.descriptor.developmentBuildFingerprint !== expectedDevelopmentFingerprint)
+      ) {
         await this.control.shutdown(existing.descriptor, existing.controlToken).catch(() => {});
         await this.leases.discardStaleDescriptor(vaultId);
       } else {
@@ -335,6 +437,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     }
     if (!existing && expectedFingerprint && this.leases.readLegacyShutdownTarget) {
       const legacy = await this.leases.readLegacyShutdownTarget(vaultId);
+      this.assertCurrent(generation);
       if (legacy) {
         await this.control.shutdown(legacy.descriptor, legacy.controlToken).catch(() => {});
         await this.leases.discardStaleDescriptor(vaultId);
@@ -343,6 +446,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
 
     this.assertCurrent(generation);
     const prepared = await this.leases.prepare(vaultId);
+    this.assertCurrent(generation);
     const launch = this.buildLaunch(mode, prepared, vaultPaths, managedCommand);
     this.launchAttempt += 1;
     this.emit({ status: "spawning", mode, attempt: this.launchAttempt });
@@ -353,6 +457,7 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
       throw new RuntimeStartError(classifySpawnFailure(error), errorMessage(error));
     }
     this.processHandle = handle;
+    this.assertCurrent(generation);
     const candidate = await this.waitForCandidate(prepared, handle, generation);
     await this.control.status(candidate.descriptor, candidate.controlToken).catch((error) => {
       throw new RuntimeStartError("authentication_failed", errorMessage(error));
@@ -422,10 +527,13 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         this.deps.authenticationTimeoutMs ?? AUTHENTICATION_TIMEOUT_MS,
         "Chatobby runtime authentication timed out",
       );
+      this.assertCurrent(generation);
     } catch (error) {
+      if (generation !== this.generation || !this.desiredRunning) {
+        await this.deps.disconnectRuntime().catch(() => {});
+      }
       throw new RuntimeStartError(classifyConnectionFailure(error), errorMessage(error));
     }
-    this.assertCurrent(generation);
     return this.acceptReady(runtime, candidate, handle);
   }
 
@@ -484,9 +592,9 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
   ): ManagedRuntimeLaunch {
     const configuration = this.deps.getConfiguration();
     const detached = mode === "managed" && configuration.lifetime === "background";
-    const command = mode === "managed"
-      ? managedCommand
-      : { command: configuration.developerCommand, args: [...configuration.developerArgs] };
+    const command = managedCommand ?? (mode === "managed"
+      ? null
+      : { command: configuration.developerCommand, args: [...configuration.developerArgs] });
     if (!command) throw new RuntimeStartError("runtime_not_installed", "The Chatobby runtime is not installed");
     if (!command.command.trim()) {
       throw new RuntimeStartError("configuration_invalid", "Chatobby runtime command is empty");
@@ -532,6 +640,9 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
         ...(mode === "managed" && command.runtimeActivationRequired
           ? { CHATOBBY_RUNTIME_ACTIVATION_REQUIRED: "1" }
           : {}),
+        ...(command.developmentBuildFingerprint
+          ? { CHATOBBY_DEVELOPMENT_BUILD_FINGERPRINT: command.developmentBuildFingerprint }
+          : {}),
       },
       cwd: vaultPaths.vaultRoot,
       instanceId: lease.instanceId,
@@ -560,6 +671,25 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
       this.emit({ status: "error", mode, diagnostics, retryAt });
       this.scheduleRestart(decision.delayMs!, "automatic-restart");
     });
+  }
+
+  private async disconnectCommittedRuntime(candidate: RuntimeLeaseCandidate): Promise<void> {
+    const mode = this.deps.getConfiguration().mode;
+    this.desiredRunning = false;
+    this.generation += 1;
+    this.cancelTimers();
+    this.emit({ status: "stopping", mode });
+    await this.deps.disconnectRuntime().catch(() => {});
+    const processHandle = this.processHandle;
+    this.readyRuntime = null;
+    this.candidate = null;
+    this.processHandle = null;
+    const exited = processHandle
+      ? await Promise.race([processHandle.exited.then(() => true), delay(SHUTDOWN_WAIT_MS).then(() => false)])
+      : true;
+    if (!exited) await processHandle?.terminate();
+    await this.leases.discardStaleDescriptor(candidate.descriptor.vaultId).catch(() => {});
+    this.emit({ status: "idle", mode });
   }
 
   private async recoverUnavailableRuntime(
@@ -617,6 +747,11 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     if (generation !== this.generation || !this.desiredRunning) {
       throw new RuntimeStartError("connection_failed", "Chatobby runtime startup was cancelled");
     }
+    this.assertRuntimeStartAllowed();
+  }
+
+  private assertRuntimeStartAllowed(): void {
+    this.deps.assertRuntimeStartAllowed();
   }
 
   private emit(state: RuntimeLifecycleState): void {

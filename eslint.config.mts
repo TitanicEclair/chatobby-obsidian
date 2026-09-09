@@ -6,6 +6,7 @@ export default defineConfig(
   globalIgnores([
     "node_modules",
     "release",
+    "ci-artifacts",
     "main.js",
     "styles.css",
     "scripts",
@@ -47,6 +48,14 @@ export default defineConfig(
       "obsidianmd/settings-tab/prefer-setting-definitions": "off",
       "@typescript-eslint/no-base-to-string": "off",
       "@typescript-eslint/restrict-template-expressions": "off",
+    },
+  },
+  {
+    files: ["src/vendor/chatobby-client/guide-release-asset.ts"],
+    rules: {
+      // This generated canonical validator deliberately rejects ASCII control
+      // characters. Keep the exception scoped to the generated source file.
+      "no-control-regex": "off",
     },
   },
 );

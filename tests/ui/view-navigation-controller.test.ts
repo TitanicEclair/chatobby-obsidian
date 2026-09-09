@@ -39,7 +39,6 @@ describe("ViewNavigationController", () => {
       openPermissions: vi.fn(),
       openMemory: vi.fn(),
       openEvents: vi.fn(),
-      openQueries: vi.fn(),
       openMcp: vi.fn(),
       openProjects: vi.fn(),
       openSettings: vi.fn(),
@@ -85,6 +84,20 @@ describe("ViewNavigationController", () => {
     expect(shouldActivateLeafSession(false, current, {})).toBe(true);
   });
 
+  it("falls back to chat when restoring a retired Context Queries route", () => {
+    expect(parseNavigationState({ mode: "queries" })).toEqual({
+      mode: "chat",
+      runId: undefined,
+      nodeId: undefined,
+      subagentTab: undefined,
+      feedOnly: undefined,
+      channelId: undefined,
+      messageId: undefined,
+      pluginId: undefined,
+      projectId: undefined,
+    });
+  });
+
   it("does not mark the Subagents management page active for a child conversation feed", () => {
     expect(ribbonModeForNavigation("subagents", {
       mode: "subagents",
@@ -125,7 +138,6 @@ describe("ViewNavigationController", () => {
       { mode: "permissions" },
       { mode: "memory" },
       { mode: "events" },
-      { mode: "queries" },
       { mode: "mcp" },
       { mode: "settings" },
     ];
@@ -201,7 +213,6 @@ function createController(
     openPermissions: vi.fn(),
     openMemory: vi.fn(),
     openEvents: vi.fn(),
-    openQueries: vi.fn(),
     openMcp,
     openProjects,
     openSettings: vi.fn(),

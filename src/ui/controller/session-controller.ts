@@ -364,6 +364,9 @@ export class SessionController {
       await operation();
       await this.options.settlePresentation();
     });
+    // A prompt must await the selected target, including presentation settlement.
+    // A rejected competing operation must not replace or clear the owner's wait.
+    if (!this.sessionTargetTransition) this.sessionTargetTransition = promise;
     this.options.refreshTabBar();
     return promise.catch((error: unknown) => {
       if (error instanceof OperationConflictError) {
@@ -371,7 +374,10 @@ export class SessionController {
         return;
       }
       throw error;
-    }).finally(() => this.options.refreshTabBar());
+    }).finally(() => {
+      if (this.sessionTargetTransition === promise) this.sessionTargetTransition = null;
+      this.options.refreshTabBar();
+    });
   }
 
   private isReusableBlankSession(tab: SessionTab): boolean {

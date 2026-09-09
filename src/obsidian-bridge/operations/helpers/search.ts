@@ -1,7 +1,7 @@
 // Search helpers — ported from chaude/src/read-tools.ts:27.
 // findLiteralMatches: literal string search with surrounding context.
 //
-// See docs/tooling/bridge-executor.md §8 for the vault.search mapping.
+// Search normalization remains an adapter concern; see docs/wire-protocol.md.
 
 import type { App, TFile } from "obsidian";
 import type { ObsidianNoteRef } from "./note-io";

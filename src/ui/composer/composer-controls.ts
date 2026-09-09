@@ -1,6 +1,7 @@
 // ComposerControls — compact, native rendering of the runtime-owned control model.
 
-import { Menu, setIcon } from "obsidian";
+import { setIcon } from "obsidian";
+import type { WsProviderInfo } from "../../types";
 import type {
   FrontendChoiceControl,
   FrontendComposerViewModel,
@@ -14,16 +15,30 @@ export interface ComposerControlsHost {
   getViewModel(): FrontendComposerViewModel | null;
   applyControl(id: Exclude<PickerKind, "provider">, value: string): Promise<void>;
   isBackendAvailable(): boolean;
+  refreshModelCatalogue?(): Promise<WsProviderInfo[]>;
+}
+
+/** Reconcile only the connection that initiated discovery, before exposing its status. */
+export async function refreshComposerModelCatalogue<T extends { isConnected: boolean; getProviders(): Promise<WsProviderInfo[]> }>(
+  getTransport: () => T | null,
+  synchronize: (transport: T) => Promise<void>,
+): Promise<WsProviderInfo[]> {
+  const transport = getTransport();
+  if (!transport?.isConnected) return [];
+  const providers = await transport.getProviders();
+  if (transport !== getTransport()) return [];
+  await synchronize(transport);
+  return transport === getTransport() ? providers : [];
 }
 
 /** Native buttons and searchable menus; all option semantics come from the runtime. */
 export class ComposerControls extends ChatobbyComponent {
   private readonly buttons = new Map<PickerKind, HTMLButtonElement>();
-  private overflowButton: HTMLButtonElement | null = null;
   private picker: SelectionMenu | null = null;
   private activePickerKind: PickerKind | null = null;
   private activePickerAnchor: HTMLButtonElement | null = null;
   private providerFilter = "";
+  private runtimeProvider: string | undefined;
   private selectedModel = "";
 
   constructor(private readonly host: ComposerControlsHost) {
@@ -42,23 +57,13 @@ export class ComposerControls extends ChatobbyComponent {
     }
     this.providerFilter = this.resolveProviderFilter(model);
     this.selectedModel = this.resolveModelSelection(model);
-    for (const id of ["permission", "provider", "model", "effort"] as const) {
+    for (const id of ["permission", "network", "provider", "model", "effort"] as const) {
       const control = findControl(model, id);
       if (!control) continue;
       const button = this.buildPickerButton(container, control);
       button.addEventListener("click", () => this.togglePicker(id));
       this.buttons.set(id, button);
     }
-    this.overflowButton = container.createEl("button", {
-      cls: "chatobby-control-button chatobby-control-overflow",
-      attr: {
-        type: "button",
-        "aria-label": "More composer options",
-        title: "More composer options",
-      },
-    });
-    setIcon(this.overflowButton, "ellipsis");
-    this.overflowButton.addEventListener("click", (event) => this.openOverflow(event));
     this.refreshControlLabels();
   }
 
@@ -73,7 +78,8 @@ export class ComposerControls extends ChatobbyComponent {
     }
     this.container?.removeClass("is-hidden");
     const expectedControls = model.controls.length;
-    if (this.buttons.size !== expectedControls) {
+    if (this.buttons.size !== expectedControls || model.controls.some((control) => !this.buttons.has(control.id))) {
+      this.closePicker(false);
       this.buttons.clear();
       this.container?.empty();
       this.onRender(this.container!);
@@ -92,7 +98,6 @@ export class ComposerControls extends ChatobbyComponent {
   override destroy(): void {
     this.closePicker(false);
     this.buttons.clear();
-    this.overflowButton = null;
     super.destroy();
   }
 
@@ -105,8 +110,8 @@ export class ComposerControls extends ChatobbyComponent {
     this.openPicker(kind);
   }
 
-  private openPicker(kind: PickerKind, anchorOverride?: HTMLButtonElement): void {
-    const anchor = anchorOverride ?? this.buttons.get(kind);
+  private openPicker(kind: PickerKind): void {
+    const anchor = this.buttons.get(kind);
     const control = this.control(kind);
     if (!anchor || !control) return;
     let picker: SelectionMenu;
@@ -160,6 +165,24 @@ export class ComposerControls extends ChatobbyComponent {
     anchor.setAttr("aria-expanded", "true");
     anchor.setAttr("aria-controls", picker.id);
     picker.render(this.container!);
+    if ((kind === "provider" || kind === "model") && this.host.refreshModelCatalogue) {
+      void this.host.refreshModelCatalogue().then((providers) => {
+        if (this.picker !== picker) return;
+        this.refresh();
+        const selected = providers.filter((provider) => kind === "provider" || provider.id === this.providerFilter);
+        const messages = selected.flatMap((provider) => {
+          const discovery = provider.modelDiscovery;
+          if (!discovery) return [];
+          const error = discovery.error ? `${discovery.error} ${discovery.usingCachedModels ? "Keeping the last account model list." : "Showing bundled choices until access can be checked."}` : "";
+          const count = discovery.unavailableModels.length;
+          const excluded = count ? `${count} account ${count === 1 ? "model needs" : "models need"} attention. See this connection in Settings for details.` : "";
+          return [error, excluded].filter(Boolean);
+        });
+        picker.setNotice(messages.join("\n"));
+      }).catch(() => {
+        if (this.picker === picker) picker.setNotice("Could not refresh model choices. Check the runtime connection in Settings.");
+      });
+    }
   }
 
   private closePicker(restoreFocus: boolean): void {
@@ -212,12 +235,19 @@ export class ComposerControls extends ChatobbyComponent {
       button.title = option?.disabledReason
         ? `${control.label}: ${option.label}. ${option.disabledReason}`
         : `${control.label}: ${option?.label ?? "Not selected"}`;
+      button.setAttr("aria-label", button.title);
     }
   }
 
   private resolveProviderFilter(model: FrontendComposerViewModel): string {
     const provider = findControl(model, "provider");
     if (!provider) return "";
+    // Keep a pending picker choice during unrelated refreshes, but follow an
+    // authoritative provider change from another view or restored session.
+    if (provider.value !== this.runtimeProvider) {
+      this.runtimeProvider = provider.value;
+      return provider.value || provider.options[0]?.value || "";
+    }
     if (provider.options.some((option) => option.value === this.providerFilter)) return this.providerFilter;
     return provider.value || provider.options[0]?.value || "";
   }
@@ -257,27 +287,12 @@ export class ComposerControls extends ChatobbyComponent {
     return button;
   }
 
-  private openOverflow(event: MouseEvent): void {
-    const anchor = this.overflowButton;
-    if (!anchor) return;
-    const menu = new Menu();
-    for (const kind of ["provider", "effort"] as const) {
-      const control = this.control(kind);
-      if (!control) continue;
-      const value = kind === "provider" ? this.providerFilter : control.value;
-      const selected = control.options.find((option) => option.value === value)?.label ?? control.label;
-      menu.addItem((item) => item
-        .setTitle(`${control.label}: ${selected}`)
-        .setIcon(controlIcon(kind))
-        .onClick(() => this.openPicker(kind, anchor)));
-    }
-    menu.showAtMouseEvent(event);
-  }
 }
 
 function controlIcon(id: PickerKind): string {
   switch (id) {
     case "permission": return "shield-check";
+    case "network": return "globe";
     case "provider": return "server";
     case "model": return "bot";
     case "effort": return "gauge";

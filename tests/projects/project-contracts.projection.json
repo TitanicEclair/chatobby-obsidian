@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceRepository": "TitanicEclair/pi-mono",
-  "sourceCommit": "2f060768ed475315f2e8d161432cd85ffac23470",
+  "sourceCommit": "df9aec0c0c9c351c4b66713a92ed102926fa814f",
   "generator": "scripts/build-vendor-artifacts.mjs",
   "sourceArtifact": "vendor/project-contracts",
   "connectorArtifact": "src/vendor/@chatobby/project-contracts",
@@ -9,7 +9,7 @@
     "errors.ts": "3b68f23617a8c2f408ed3ae7ed0424b80aa84812b5e31414631066320b24a336",
     "ids.ts": "5962153551aad005b9245d8e7d46b17cf37cefac5482c536d34a21de54976a0e",
     "index.ts": "334cc7047b5d7713df917bdec4bf5b72db64bce46c6d962b6704e2266e0d4c37",
-    "models.ts": "fa78ea3a66dc423a5d54478ee594191f6f73ce0c14994c39378cde71bec5a804",
+    "models.ts": "44e219095a919c81d190b57333bcfea47883636e996fe381a7b1ac261c0e80e0",
     "operations.ts": "93f52a6a9e481bdcd8cdcf7dac96175d4eb96117e7bcb6acc65179465bc71215",
     "validation.ts": "b182dca1def7ba99ecbd3fcfc43033cc21ae58fe8b7cdca0d782714fa69b38fc"
   }

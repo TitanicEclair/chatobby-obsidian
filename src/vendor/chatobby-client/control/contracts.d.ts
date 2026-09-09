@@ -1,6 +1,6 @@
 import { CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION, CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "./product.generated.js";
 export { CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION, CHATOBBY_RUNTIME_PROTOCOL_VERSION };
-export declare const CHATOBBY_RUNTIME_VERSION: "0.4.3";
+export declare const CHATOBBY_RUNTIME_VERSION: "0.5.0";
 export declare const CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS = 5000;
 export declare const CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS: number;
 export declare const CHATOBBY_RUNTIME_REATTACH_GRACE_MS = 15000;
@@ -22,6 +22,8 @@ export interface RuntimeIdentity {
     runtimeVersion: string;
     protocolVersion: number;
     runtimePackageFingerprint: string | null;
+    /** Exact private-source development build; never substitutes for a verified release package fingerprint. */
+    developmentBuildFingerprint: string | null;
 }
 export interface RuntimeReadyDescriptor extends RuntimeIdentity {
     schemaVersion: typeof CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION;
@@ -33,6 +35,54 @@ export interface RuntimeReadyDescriptor extends RuntimeIdentity {
 export interface RuntimeStatusResponse {
     ready: boolean;
     identity: RuntimeIdentity;
+    maintenance: RuntimeMaintenanceSnapshot;
+}
+export type RuntimeMaintenancePurpose = "runtime-update" | "development-reconcile";
+export type RuntimeMaintenanceActiveWorkKind = "maintenance" | "response" | "compaction" | "queued-prompt" | "subagent" | "event";
+export interface RuntimeMaintenanceSnapshot {
+    acceptingWork: boolean;
+    activeWorkKinds: RuntimeMaintenanceActiveWorkKind[];
+}
+export interface RuntimeMaintenanceCurrentIdentity {
+    instanceId: string;
+    runtimePackageFingerprint: string | null;
+    developmentBuildFingerprint: string | null;
+}
+export interface RuntimeMaintenanceTargetIdentity {
+    runtimeVersion: string;
+    runtimePackageFingerprint: string | null;
+    developmentBuildFingerprint: string | null;
+}
+export interface RuntimeMaintenanceAdmitRequest {
+    schemaVersion: 1;
+    operationId: string;
+    purpose: RuntimeMaintenancePurpose;
+    current: RuntimeMaintenanceCurrentIdentity;
+    target: RuntimeMaintenanceTargetIdentity;
+}
+export type RuntimeMaintenanceAdmission = {
+    schemaVersion: 1;
+    status: "admitted";
+    operationId: string;
+    leaseId: string;
+    expiresAt: number;
+} | {
+    schemaVersion: 1;
+    status: "deferred";
+    operationId: string;
+    retryAfterMs: number;
+    activeWorkKinds: RuntimeMaintenanceActiveWorkKind[];
+};
+export interface RuntimeMaintenanceLeaseRequest {
+    schemaVersion: 1;
+    operationId: string;
+    leaseId: string;
+}
+export interface RuntimeMaintenanceLeaseResult {
+    schemaVersion: 1;
+    status: "committed" | "cancelled";
+    operationId: string;
+    leaseId: string;
 }
 export interface RuntimeClientHello {
     type: "hello";
@@ -86,3 +136,5 @@ export declare function parseRuntimeServerPending(value: unknown): RuntimeServer
 export declare function parseRuntimeServerActivationRequired(value: unknown): RuntimeServerActivationRequired | null;
 export declare function parseRuntimeClientActivationResult(value: unknown): RuntimeClientActivationResult | null;
 export declare function parseRuntimeReadyDescriptor(value: unknown): RuntimeReadyDescriptor | null;
+export declare function parseRuntimeMaintenanceAdmitRequest(value: unknown): RuntimeMaintenanceAdmitRequest | null;
+export declare function parseRuntimeMaintenanceLeaseRequest(value: unknown): RuntimeMaintenanceLeaseRequest | null;

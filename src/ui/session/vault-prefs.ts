@@ -5,7 +5,8 @@
  * Resolves effective preferences by walking up the directory tree
  * from a given path to the vault root, falling back to vaultDefaults.
  *
- * Target architecture — see docs/vault-session-prefs.md for full design.
+ * Session ownership and persistence boundaries are summarized in
+ * docs/architecture/frontend-modules.md.
  */
 
 import type { App } from "obsidian";

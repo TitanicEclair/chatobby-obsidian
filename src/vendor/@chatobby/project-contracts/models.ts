@@ -239,7 +239,7 @@ export type SessionWorkspaceBindingV1 =
 			readonly kind: "project";
 			readonly vaultId: VaultId;
 			readonly projectId: ProjectId;
-			/** Omitted for a folderless Project; its session runs from the Vault root. */
+			/** Omitted for a folderless Project; filesystem work remains unavailable until a root is selected. */
 			readonly activeRootId?: RootId;
 			readonly sessionAttachedRootIds: readonly RootId[];
 	  };

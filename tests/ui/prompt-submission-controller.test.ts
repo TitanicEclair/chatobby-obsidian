@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FeedStore } from "../../src/features/feed/public";
 import type { ChatobbyTransport } from "../../src/transport/ws-client";
 import {
+	recordPromptFailure,
   retractAcceptedPrompt,
   submitPrompt,
 } from "../../src/ui/controller/prompt-submission-controller";
+import { createFeedStore, feedSelectors } from "../../src/features/feed/public";
 
 type PromptTransport = Pick<
   ChatobbyTransport,
@@ -160,4 +162,28 @@ describe("prompt submission controller", () => {
     resolvePrompt?.("started");
     await expect(submission).resolves.toBeUndefined();
   });
+
+	it("ends optimistic Working progress when a prompt fails before acceptance", () => {
+		const feed = createFeedStore();
+		feed.dispatch({ type: "feed.user-prompt-submitted", text: "failed request", startRun: true });
+		expect(feed.select(feedSelectors.runTiming).runStartedAt).not.toBeNull();
+
+		recordPromptFailure(feed, "failed request", "Prompt failed: synthetic failure", false);
+
+		expect(feed.select(feedSelectors.runTiming).runStartedAt).toBeNull();
+		const lastId = feed.select(feedSelectors.orderedBlockIds).at(-1);
+		expect(lastId && feed.select(feedSelectors.blockById(lastId))).toMatchObject({
+			type: "system",
+			message: { content: [{ text: "Prompt failed: synthetic failure" }] },
+		});
+	});
+
+	it("preserves authoritative activity when a concurrent prompt is rejected", () => {
+		const feed = createFeedStore();
+		feed.dispatch({ type: "feed.runtime-activity-synchronized", active: true });
+
+		recordPromptFailure(feed, "rejected steer", "Prompt failed: active turn", true);
+
+		expect(feed.select(feedSelectors.runTiming).runStartedAt).not.toBeNull();
+	});
 });

@@ -30,7 +30,9 @@ export type SourcePlatformPathRequest =
 			readonly role:
 				| "device-data-root"
 				| "device-bindings-root"
+				| "native-sandbox-root"
 				| "projects-device-identity"
+				| "projects-rootless-workspaces-root"
 				| "local-models-root"
 				| "local-model-server-profiles";
 	  }
@@ -85,6 +87,7 @@ export type ConnectorPlatformPathRequest =
 				| "runtime-data-root"
 				| "runtime-state-root"
 				| "runtime-versions-root"
+				| "runtime-development-pairs-root"
 				| "runtime-current-pointer"
 				| "runtime-leases-root"
 				| "runtime-log-root";
@@ -105,8 +108,12 @@ export function resolveSourcePlatformPath(
 			return resolveDeviceDataRoot(environment);
 		case "device-bindings-root":
 			return path.join(resolveDeviceDataRoot(environment), "projects", "device-bindings");
+		case "native-sandbox-root":
+			return path.join(resolveDeviceDataRoot(environment), "sandbox");
 		case "projects-device-identity":
 			return path.join(resolveDeviceDataRoot(environment), "projects", "device.json");
+		case "projects-rootless-workspaces-root":
+			return path.join(resolveDeviceDataRoot(environment), "projects", "rootless-workspaces");
 		case "local-models-root":
 			return path.join(resolveDeviceDataRoot(environment), "local-models");
 		case "local-model-server-profiles":
@@ -287,6 +294,8 @@ export function resolveConnectorPlatformPath(
 			return roots.state;
 		case "runtime-versions-root":
 			return path.join(roots.data, "runtime", "versions");
+		case "runtime-development-pairs-root":
+			return path.join(roots.data, "runtime", "development-pairs");
 		case "runtime-version":
 			return path.join(roots.data, "runtime", "versions", encodePlatformPathKey(request.version));
 		case "runtime-current-pointer":

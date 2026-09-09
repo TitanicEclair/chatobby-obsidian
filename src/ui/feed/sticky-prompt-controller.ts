@@ -10,6 +10,7 @@ interface StickyPromptControllerOptions {
 /** Maintains one compact pointer to the prompt governing the visible response. */
 export class StickyPromptController {
 	private button: HTMLButtonElement | null = null;
+	private text: HTMLSpanElement | null = null;
 	private highlighted: HTMLElement | null = null;
 	private highlightTimer: number | null = null;
 
@@ -20,6 +21,7 @@ export class StickyPromptController {
 			cls: "chatobby-feed__sticky-prompt is-hidden",
 			attr: { type: "button", "aria-label": "Return to the preceding prompt" },
 		});
+		this.text = this.button.createSpan({ cls: "chatobby-feed__sticky-prompt-text" });
 		this.button.addEventListener("click", () => this.open());
 	}
 
@@ -30,26 +32,30 @@ export class StickyPromptController {
 			button?.addClass("is-hidden");
 			return;
 		}
-		const threshold = scroll.getBoundingClientRect().top + 8;
+		const threshold = scroll.getBoundingClientRect().top;
 		let candidate: FeedBlock | null = null;
 		for (const block of this.options.getOrderedBlocks()) {
 			if (block.type !== "user") continue;
 			const element = this.options.getBlockElement(block.id);
+			// Once its opening line scrolls away, this prompt governs the visible response,
+			// even when the tail of its bubble is still clipped at the viewport edge.
 			if (!element || element.getBoundingClientRect().top >= threshold) break;
 			candidate = block;
 		}
 		const label = candidate?.type === "user" ? promptLabel(candidate.message.content) : "";
 		button.toggleClass("is-hidden", !candidate || !label);
-		button.textContent = label;
+		if (this.text?.textContent !== label && this.text) this.text.textContent = label;
 		button.dataset.targetBlockId = candidate?.id ?? "";
-		if (label) button.setAttr("aria-label", `Return to prompt: ${label}`);
+		button.setAttr("aria-label", label ? `Return to prompt: ${label}` : "Return to the preceding prompt");
 	}
 
 	clear(): void {
 		if (this.highlightTimer !== null) window.clearTimeout(this.highlightTimer);
 		this.highlightTimer = null;
+		this.highlighted?.removeClass("is-feed-target");
 		this.highlighted = null;
 		this.button = null;
+		this.text = null;
 	}
 
 	private open(): void {

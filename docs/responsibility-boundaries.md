@@ -26,7 +26,8 @@ The WebSocket and Obsidian bridge are the product boundary. The backend is the a
 
 - Vault-scoped runtime manager, demand registry, managed/external/developer mode selection, and product-facing runtime status.
 - Composer, autocomplete, tabs, feed presentation, tool cards, keyboard/focus, scroll, and responsive layout.
-- Gathering active-note, selection, cursor, open-note, and attachment context.
+- Gathering passive active-note, selection, cursor, and open-note context only
+  with fresh runtime eligibility; explicit user text/attachments remain separate.
 - A presentation-only frontend document per visible session; runtime feed
   projections remain authoritative.
 - One leaf-local working directory, active session recovery path, authenticated
@@ -110,6 +111,122 @@ one typed intent per action. `MemoryView` renders that view model and owns only
 local disclosure and draft state. When the backend is unavailable, the
 controller supplies one inline availability error; it does not reconstruct
 memory policy or produce stacked Notices.
+
+Historical memory authority also remains runtime-owned and follows the exact
+host-proven Project/Vault ancestry. Moving a chat preserves visible conversation
+context but does not grant the new workspace access to prior-workspace memory.
+The connector does not relabel legacy history or infer Vault authority from a
+missing Project folder.
+
+## Permissions and passive Obsidian context
+
+The runtime owns the three access modes and agent-network policy for each durable
+session. Independent chats, including chats in the same Project, keep separate
+choices; two tabs attached to the same saved chat render the same authoritative
+policy. Reopen restores that policy. New independent chats start Workspace/On;
+existing chats without a session record snapshot their previous effective policy
+once through the runtime's migration owner. Installation settings do not
+live-override sessions, and the connector owns no policy/default store.
+Delegated agents use their initiating parent's policy owner, not independent
+chat defaults. Their child views display "Controlled by parent session" and
+disable mode/network editing; they cannot silently change their parent or siblings.
+
+The Permissions screen carries the runtime's `accessPolicySessionId`. Its mode
+and network actions require that exact identity in the existing `mainSessionId`
+envelope plus the current session-policy revision. The renderer and controller
+reject stale selections; late responses cannot update a replacement session's
+UI. A successful save may carry an enforcement warning, which is displayed
+without treating persistence as rejected or manufacturing native readiness.
+Full remains unsandboxed and necessarily Network On; constrained modes expose
+the existing session network switch. Roots, memory scopes, and existing context
+are not changed by a policy selection.
+
+The separate Obsidian vault-access choice
+is keyed to the authenticated Project or Vault. The connector renders it only after the
+optional `obsidian-vault-access` capability is negotiated and a current target
+projection is available. Grant updates carry the runtime's grant revision and
+expected session/binding revisions; the host derives the target. The available
+grant's own `revision`, not the session mode revision, supplies its CAS input. There is no
+connector grant store or folder-based default. Project defaults are Off, normal
+Vault defaults are On, and conservative migrated defaults may be Off; the
+runtime's projected choice, not the connector, is authoritative.
+
+This connector requires the paired runtime upgrade. Earlier runtimes reject
+the new capability name; the connector does not guess or retry a weaker
+negotiation. The new runtime accepts older eight-capability clients without
+exposing this control. Optional selection is not a promise that older runtime
+parsers accept newer capability names.
+
+Obsidian vault access includes the existing CLI and vault-level tools:
+**Uses Obsidian’s app authority outside the sandbox.** This explicit exception
+can read or change the vault in any access mode and can use Obsidian's network
+access. It neither rewrites Project roots, identity, or memory scope nor enables
+MCP servers/tools. Native process readiness is reported separately and is not
+proved by this grant or its UI.
+
+Frontend negotiation reads capabilities only, without collecting passive note
+or editor context. Before each normal prompt, `ChatobbyView` checks fresh
+authenticated eligibility, gathers passive context, and rechecks the exact
+session/vault/binding/policy stamp. Missing, revoked, or stale eligibility omits
+the entire passive packet; changed leaf/session/transport stops submission.
+Explicit user text and attachments remain intact. The runtime independently
+revalidates the stamp before intake; a connector stamp cannot mint authority.
+
+Background semantic-context watchers emit only change categories, sequence,
+timestamp, and revision counters. They invalidate the cached snapshot without
+capturing editor contents or sending a focus path/summary, including after
+revocation and bridge rebind. A later eligible demand captures fresh context.
+The paired runtime must also discard legacy event summaries and must not turn
+an invalidation or sequence gap into an unauthorised context read.
+
+## Native setup and recovery consent
+
+The optional `native-sandbox-setup` capability gates explicit Permissions
+actions. The runtime resolves current authenticated roots and separately reads
+recorded older roots from its canonical owned-grant journal. The connector
+displays those exact paths only for user review; it does not derive a target,
+copy a journal, submit paths/SIDs, or treat configured as verified containment.
+Review then confirmation carries only opaque references, the current session
+and expected revisions. Stale targets/connections reject without a fallback.
+
+Landstrip applies the current policy to each launch; its canonical
+`not-required` root-setup state has no grant to dereference and never means
+verified or ready. The connector keeps actual Landstrip availability/reasons
+separate from selected mode and shows no per-root setup action. Historical
+recorded grants, when projected by their owner, retain explicit recovery.
+
+For backends with explicit Setup grants, configured grants reuse only the exact authenticated Vault/Project root set,
+mode and network choice across chats. Each first-time mode/network combination
+still requires explicit setup. Recorded recovery is Vault-authenticated user
+control, not a model permission or cross-Project execution grant. Permissions
+inspection reads journal/protection consistency only; native launch verification
+remains a separate runtime boundary and is not a readiness claim.
+
+Setup/recovery temporarily pauses all constrained work on the shared native
+backend while owned processes drain and grants are checked. Full access and
+ordinary host processes are not stopped. Missing backend composition remains
+unavailable. Revoke removes only witnessed owned grants; profile identity is
+retained. It does not change the three access modes, network preference,
+Obsidian app-authority exception, Project memory, or independent MCP switches.
+Reverting this UI hides future actions but does not undo existing native grants;
+recovery remains a canonical runtime responsibility.
+
+The active Landstrip runtime admits signed release qualification bound to its
+binary, policy, source revision and native development-test receipt. The
+connector's generated asset contract recognizes the bounded data file; package
+signature and inventory checks authenticate it. It does not run synthetic
+capability tests during installation or startup. Normal Permissions has no
+verification checklist. Historical Verify contracts and records remain for the
+retained alternative backend and recovery tests; the active Landstrip composition
+does not consult or rewrite that record. Legacy Windows grant recovery remains
+with its original owner. Actual launch errors, identity changes and failed process
+cleanup remain runtime errors, not automatic permission changes.
+
+The current alpha claim is workspace accidental-change mitigation, not a boundary
+for untrusted code. Network On uses ordinary networking; the vault switch governs
+the supplied Obsidian tools/CLI, not all indirect shell access to applications.
+These limits do not remove independent MCP controls, Project memory boundaries
+or the requirement for actual native development and release tests.
 
 ## Channel route
 

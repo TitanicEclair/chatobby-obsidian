@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="450" viewBox="0 0 1200 450" role="img" aria-labelledby="title desc">
+  <title id="title">A scheduled weekly Project summary</title>
+  <desc id="desc">An example Event runs every Friday at 5 PM. A saved role reviews changed notes and writes decisions, questions and source links into a weekly summary.</desc>
+  <rect width="1200" height="450" rx="20" fill="#f5f3ed"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="48" y="65" font-size="30" font-weight="650" fill="#242b35">Weekly Project summary</text>
+    <text x="48" y="100" font-size="18" fill="#57616d">An Event with a schedule, an agent prompt and a note to produce</text>
+    <path d="M317 260h97m-9-6 9 6-9 6m335 0h75m-9-6 9 6-9 6" fill="none" stroke="#938ba1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="50" y="155" width="263" height="241" rx="12" fill="#fff" stroke="#cfcbc3"/>
+    <path d="M50 205h263" stroke="#e4e0da"/>
+    <path d="M83 146v20m195-20v20" stroke="#938ba1" stroke-width="4" stroke-linecap="round"/>
+    <text x="181" y="188" text-anchor="middle" font-size="19" font-weight="600" fill="#725499">EVERY FRIDAY</text>
+    <g fill="#dfdbd3">
+      <circle cx="87" cy="239" r="4"/><circle cx="134" cy="239" r="4"/><circle cx="181" cy="239" r="4"/><circle cx="228" cy="239" r="4"/><circle cx="275" cy="239" r="4"/>
+      <circle cx="87" cy="269" r="4"/><circle cx="134" cy="269" r="4"/><circle cx="181" cy="269" r="4"/><circle cx="228" cy="269" r="4"/>
+    </g>
+    <circle cx="275" cy="269" r="12" fill="#e8e1f6"/>
+    <path d="m270 269 3 3 7-7" stroke="#725499" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="181" y="330" text-anchor="middle" font-size="36" font-weight="600" fill="#242b35">5:00 PM</text>
+    <text x="181" y="367" text-anchor="middle" font-size="17" fill="#68717a">Your time zone</text>
+    <rect x="422" y="155" width="310" height="241" rx="12" fill="#f0ebf7" stroke="#bdadcd"/>
+    <circle cx="458" cy="194" r="16" fill="#dfd3ed"/>
+    <path d="M451 185h12v18h-12zm3 5h6m-6 4h6m-6 4h4" stroke="#725499" stroke-width="1.6" fill="none" stroke-linejoin="round"/>
+    <text x="488" y="201" font-size="21" font-weight="600" fill="#382d48">Research role</text>
+    <text x="446" y="252" font-size="19" fill="#574765">Review changed notes.</text>
+    <text x="446" y="285" font-size="19" fill="#574765">Summarise the decisions.</text>
+    <text x="446" y="318" font-size="19" fill="#574765">Link to the sources.</text>
+    <text x="446" y="367" font-size="17" fill="#725499">Your saved Event prompt</text>
+    <path d="M833 155h277l42 42v199H833z" fill="#fff" stroke="#b9cec7" stroke-linejoin="round"/>
+    <path d="M1110 155v42h42" fill="#deece5" stroke="#b9cec7" stroke-linejoin="round"/>
+    <text x="858" y="214" font-size="22" font-weight="600" fill="#264f44">Weekly summary</text>
+    <path d="M858 234h221" stroke="#dbe5df"/>
+    <text x="858" y="271" font-size="19" fill="#313944">Decisions made</text>
+    <text x="858" y="309" font-size="19" fill="#313944">Questions to follow up</text>
+    <text x="858" y="367" font-size="18" fill="#3b7663">[[Notes]] · [[Project Index]]</text>
+  </g>
+</svg>

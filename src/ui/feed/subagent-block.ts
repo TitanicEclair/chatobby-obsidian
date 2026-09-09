@@ -91,6 +91,6 @@ function subagentMeta(activity: SubagentActivity): string[] {
   if (activity.durationMs != null) parts.push(formatDuration(activity.durationMs));
   if (activity.toolUses != null) parts.push(`${activity.toolUses} tool${activity.toolUses === 1 ? "" : "s"}`);
   if (activity.tokens) parts.push(`${activity.tokens.total} tokens`);
-  if (activity.compactionCount > 0) parts.push(`${activity.compactionCount} compaction${activity.compactionCount === 1 ? "" : "s"}`);
+  if ((activity.compactionCount ?? 0) > 0) parts.push(`${activity.compactionCount} compaction${activity.compactionCount === 1 ? "" : "s"}`);
   return parts;
 }

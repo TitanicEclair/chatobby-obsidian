@@ -9,7 +9,10 @@ export interface RuntimeStatusMenuHost {
   restart(): Promise<void>;
   stop(): Promise<void>;
   supportsRuntimeUpdates(): boolean;
+  automaticProvisioning(): boolean;
+  retryProvisioning(): Promise<void>;
   manageRuntime(repair?: boolean): void;
+  removeRuntime(): Promise<void>;
 }
 
 /** Keyboard-accessible runtime actions attached to the composer status button. */
@@ -35,26 +38,40 @@ export class RuntimeStatusMenu {
 
   private open(event: MouseEvent): void {
     const state = this.host.getState();
+    const developmentPairBlocked = state.status === "error"
+      && state.diagnostics.code === "development_pair_adoption_failed";
     const menu = new Menu();
-    if (this.host.supportsRuntimeUpdates()) {
+    if (!developmentPairBlocked && this.host.supportsRuntimeUpdates()) {
       const missing = state.status === "error"
         && state.mode === "managed"
         && state.diagnostics.code === "runtime_not_installed";
       const invalid = state.status === "error"
         && state.mode === "managed"
         && state.diagnostics.code === "runtime_package_invalid";
-      menu.addItem((item) => item
-        .setTitle(missing ? "Install Chatobby runtime" : invalid ? "Repair Chatobby" : "Check for runtime updates")
-        .setIcon(missing ? "download" : invalid ? "shield-alert" : "refresh-cw")
-        .onClick(() => this.host.manageRuntime(invalid)));
+      if (missing && this.host.automaticProvisioning()) {
+        menu.addItem((item) => item
+          .setTitle("Retry Chatobby setup")
+          .setIcon("refresh-cw")
+          .onClick(() => void this.host.retryProvisioning().catch(reportRuntimeActionFailure)));
+      } else if (invalid) {
+        menu.addItem((item) => item
+          .setTitle("Repair Chatobby")
+          .setIcon("shield-alert")
+          .onClick(() => this.host.manageRuntime(true)));
+      } else if (!this.host.automaticProvisioning()) {
+        menu.addItem((item) => item
+          .setTitle(missing ? "Install Chatobby runtime" : "Check for runtime updates")
+          .setIcon(missing ? "download" : "refresh-cw")
+          .onClick(() => this.host.manageRuntime(false)));
+      }
     }
-    if (state.status === "ready" || state.status === "error" || state.status === "crash_loop") {
+    if (!developmentPairBlocked && (state.status === "ready" || state.status === "error" || state.status === "crash_loop")) {
       menu.addItem((item) => item
         .setTitle("Restart Chatobby")
         .setIcon("refresh-cw")
         .onClick(() => void this.host.restart().catch(reportRuntimeActionFailure)));
     }
-    if (state.status !== "idle" && state.status !== "detached" && state.status !== "stopping") {
+    if (!developmentPairBlocked && state.status !== "idle" && state.status !== "detached" && state.status !== "stopping") {
       menu.addItem((item) => item
         .setTitle("Stop Chatobby")
         .setIcon("square")
@@ -66,6 +83,22 @@ export class RuntimeStatusMenu {
             destructive: true,
           })) return;
           void this.host.stop().catch(reportRuntimeActionFailure);
+        }));
+    }
+    const managed = state.status === "ready" ? state.runtime.ownership === "managed" : state.mode === "managed";
+    const missing = state.status === "error" && state.diagnostics.code === "runtime_not_installed";
+    if (!developmentPairBlocked && managed && !missing) {
+      menu.addItem((item) => item
+        .setTitle("Remove local runtime")
+        .setIcon("trash-2")
+        .onClick(async () => {
+          if (!await confirmAction(this.host.app, {
+            title: "Remove local Chatobby runtime?",
+            message: "This removes only account-local runtime program files. Chats, vault data, and credentials are preserved.",
+            confirmLabel: "Remove runtime",
+            destructive: true,
+          })) return;
+          void this.host.removeRuntime().catch(reportRuntimeActionFailure);
         }));
     }
     if (state.status === "error" || state.status === "crash_loop") {

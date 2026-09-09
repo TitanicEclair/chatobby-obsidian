@@ -23,15 +23,18 @@ export interface SubagentStartDraft {
 
 export interface SubagentAgentEditorDraft {
   definition: UserAgentDefinition;
-  permissionProfileId: string;
 }
 
 export interface SubagentScreenActions {
+  openParentSession?: (sessionId: string) => void;
+  stopParentSession?: (sessionId: string) => void;
+  openAgentFeed?: (runId: string, nodeId: string) => void;
   openPermissions: () => void;
   getAgentEditorDraft: (itemId: string) => SubagentAgentEditorDraft | undefined;
   setAgentEditorDraft: (itemId: string, draft: SubagentAgentEditorDraft) => void;
   clearAgentEditorDraft: (itemId: string) => void;
   refresh: () => Promise<void>;
+  selectRoleScope?: (scopeId: string) => Promise<void>;
   filterRuns: (query: FrontendSubagentRunFilter) => Promise<void>;
   loadMoreRuns: () => Promise<void>;
   selectRun: (runId: string) => Promise<void>;
@@ -62,7 +65,7 @@ export interface SubagentScreenActions {
   ) => Promise<void>;
   decideAcceptance: (runId: string, nodeId: string, approved: boolean, note?: string) => Promise<void>;
   promoteArtifact: (artifactId: string, expectedRevision: number, targetVaultPath: string) => Promise<void>;
-  saveDefinition: (definition: UserAgentDefinition, permissionProfileId: string) => Promise<void>;
+  saveDefinition: (definition: UserAgentDefinition) => Promise<void>;
   deleteDefinition: (definition: UserAgentDefinition) => Promise<void>;
   updateSettings: (settings: ResolvedSubagentSettings) => Promise<void>;
 }

@@ -33,6 +33,12 @@ export function isThinkingLevel(value: string): value is ThinkingLevel {
   return value === "off" || value === "minimal" || value === "low" || value === "medium" || value === "high" || value === "xhigh";
 }
 
+/** Validates a model preference before it reaches the runtime or saved settings. */
+export function requireThinkingLevel(value: string): ThinkingLevel {
+  if (!isThinkingLevel(value)) throw new Error(`Invalid thinking level: ${value}`);
+  return value;
+}
+
 /** Builds autocomplete choices for the supported thinking levels. */
 export function thinkingArgumentOptions(): SlashArgumentOption[] {
   return ["off", "minimal", "low", "medium", "high", "xhigh"].map((level) => ({

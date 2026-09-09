@@ -1,0 +1,76 @@
+.chatobby-navigator {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 16px 12px 10px;
+  color: var(--text-normal);
+  background: var(--chatobby-surface-muted);
+}
+.chatobby-navigator .is-hidden { display: none; }
+.chatobby-navigator__brand { display: flex; align-items: center; gap: 10px; padding: 1px 7px 18px; font-size: 18px; letter-spacing: -0.5px; }
+.chatobby-navigator__emblem { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--chatobby-accent); color: var(--text-on-accent); }
+.chatobby-navigator__emblem svg { width: 19px; height: 19px; }
+.chatobby-navigator button.chatobby-navigator__new {
+  display: flex; flex-shrink: 0; align-items: center; justify-content: flex-start; gap: 9px; min-height: 38px; padding: 8px 11px;
+  border: 1px solid var(--chatobby-border); border-radius: 9px; background: var(--chatobby-canvas); color: var(--text-normal); box-shadow: none; font-weight: 500;
+}
+.chatobby-navigator__new svg { width: 16px; height: 16px; vertical-align: middle; }
+.chatobby-navigator__pages { display: grid; gap: 1px; margin: 14px 0; }
+.chatobby-navigator button.chatobby-navigator__page {
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px; height: 33px; padding: 6px 10px;
+  border: 0; border-radius: 7px; background: transparent; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-small); font-weight: 400;
+}
+.chatobby-navigator__page svg { width: 16px; height: 16px; vertical-align: middle; stroke-width: 1.7; }
+.chatobby-navigator button.chatobby-navigator__page:hover { background: var(--chatobby-surface-hover); color: var(--text-normal); }
+.chatobby-navigator input.chatobby-navigator__search { width: 100%; height: 32px; flex-shrink: 0; padding-inline: 32px 8px; border-color: transparent; background: var(--chatobby-surface-muted); font-size: var(--font-ui-smaller); box-shadow: none; }
+.chatobby-navigator__heading { display: flex; align-items: center; gap: 2px; padding: 17px 6px 8px; color: var(--text-faint); font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+.chatobby-navigator__heading > span:first-child { margin-right: auto; }
+.chatobby-navigator__list { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.chatobby-navigator__group { margin-bottom: 4px; }
+.chatobby-navigator__group-header { display: flex; align-items: center; gap: 1px; border-radius: 7px; }
+.chatobby-navigator__group-header:hover { background: var(--chatobby-surface-hover); }
+.chatobby-navigator button.chatobby-navigator__group-toggle {
+  display: flex; flex: 1 1 auto; align-items: center; justify-content: flex-start; gap: 5px; min-width: 0; height: 34px; padding: 6px 4px;
+  border: 0; background: transparent; box-shadow: none; color: var(--text-normal); font-size: var(--font-ui-small); font-weight: 500;
+}
+.chatobby-navigator__group-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chatobby-navigator__group-icon { display: flex; flex: 0 0 15px; color: var(--text-faint); }
+.chatobby-navigator__group-icon svg { width: 14px; height: 14px; }
+.chatobby-navigator__sessions { padding-left: 12px; }
+.chatobby-navigator button.chatobby-navigator__more { display: block; margin: 2px 0 6px 16px; padding: 5px 6px; height: auto; border: 0; background: transparent; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: 400; }
+.chatobby-navigator button.chatobby-navigator__more:hover { color: var(--text-normal); background: var(--chatobby-surface-hover); }
+.chatobby-navigator button.chatobby-navigator__more.is-hidden { display: none; }
+.chatobby-navigator__session { display: flex; align-items: center; border-radius: 6px; }
+.chatobby-navigator__session:hover { background: var(--chatobby-surface-hover); }
+.chatobby-navigator button.chatobby-navigator__session-open {
+  display: flex; flex: 1 1 auto; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; height: 32px; padding: 6px 8px;
+  border: 0; background: transparent; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-small); font-weight: 400;
+}
+.chatobby-navigator__session-name { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
+.chatobby-navigator__activity { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
+.chatobby-navigator__session.is-complete .chatobby-navigator__activity { background: var(--chatobby-accent); }
+.chatobby-navigator__session.is-running .chatobby-navigator__activity { width: 11px; height: 11px; border: 1.5px solid var(--chatobby-border); border-top-color: var(--chatobby-accent); background: transparent; animation: chatobby-navigator-spin 0.9s linear infinite; }
+.chatobby-navigator .chatobby-navigator__action { width: 24px; height: 24px; flex: 0 0 24px; padding: 4px; color: var(--text-faint); }
+.chatobby-navigator__action svg { width: 14px; height: 14px; }
+.chatobby-navigator__group-header > .chatobby-navigator__action,
+.chatobby-navigator__session > .chatobby-navigator__action { visibility: hidden; }
+.chatobby-navigator__group-header:hover > .chatobby-navigator__action,
+.chatobby-navigator__group-header:focus-within > .chatobby-navigator__action,
+.chatobby-navigator__session:hover > .chatobby-navigator__action,
+.chatobby-navigator__session:focus-within > .chatobby-navigator__action { visibility: visible; }
+.chatobby-navigator__empty,
+.chatobby-navigator__status { padding: 10px 8px 12px 22px; color: var(--text-faint); font-size: var(--font-ui-smaller); line-height: 1.5; }
+.chatobby-navigator__group.is-root-chats { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--chatobby-border); }
+.chatobby-navigator .is-drop-target { box-shadow: inset 0 2px 0 var(--chatobby-accent); }
+.chatobby-navigator button:focus-visible { outline: 2px solid var(--chatobby-focus-ring); outline-offset: -2px; }
+@keyframes chatobby-navigator-spin { to { transform: rotate(360deg); } }
+@media (hover: none) {
+  .chatobby-navigator__group-header > .chatobby-navigator__action,
+  .chatobby-navigator__session > .chatobby-navigator__action { visibility: visible; }
+}
+@media (prefers-reduced-motion: reduce) { .chatobby-navigator__session.is-running .chatobby-navigator__activity { animation: none; border-color: var(--chatobby-accent); } }
+
+.chatobby-navigator__search-field { position: relative; flex: 0 0 auto; }
+.chatobby-navigator__search-icon { position: absolute; inset-inline-start: 10px; top: 9px; display: flex; color: var(--text-faint); pointer-events: none; }
+.chatobby-navigator__search-icon svg { width: 14px; height: 14px; }

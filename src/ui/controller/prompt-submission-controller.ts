@@ -6,6 +6,7 @@ import type {
 } from "../../types";
 import type { ChatobbyTransport } from "../../transport/ws-client";
 import type { PromptSubmissionOutcome } from "../composer/composer";
+import { gatherAuthorizedPromptContext } from "../../prompt/authorized-context";
 
 type PromptTransport = Pick<
   ChatobbyTransport,
@@ -21,6 +22,33 @@ interface SubmitPromptOptions {
   readonly context?: WsPromptContextPacket;
   readonly signal?: AbortSignal;
   readonly submissionId?: string;
+}
+
+interface AuthorizedPromptOptions extends Omit<SubmitPromptOptions, "context"> {
+  readonly readTarget: () => { sessionId?: string; runtimeInstanceId?: string } | undefined;
+  readonly canCollect: () => boolean;
+  readonly readStamp: ChatobbyTransport["getObsidianVaultAccessContext"];
+  readonly gather: () => WsPromptContextPacket;
+}
+
+/** Keep passive collection and the final dispatch bound to the same live target. */
+export async function submitAuthorizedPrompt(
+  options: AuthorizedPromptOptions,
+): Promise<PromptSubmissionOutcome | undefined> {
+  const target = options.readTarget();
+  if (!target?.sessionId) throw new Error("No active Chatobby session is available.");
+  const isCurrentTarget = () => {
+    const current = options.readTarget();
+    return current?.sessionId === target.sessionId && current?.runtimeInstanceId === target.runtimeInstanceId;
+  };
+  const context = await gatherAuthorizedPromptContext({
+    sessionId: target.sessionId,
+    readStamp: () => options.canCollect() ? options.readStamp() : Promise.resolve(undefined),
+    isCurrentTarget, gather: options.gather, signal: options.signal,
+  });
+  if (options.signal?.aborted) return undefined;
+  if (!isCurrentTarget()) throw new Error("The active chat changed before the prompt was sent. Try again in the intended chat.");
+  return submitPrompt({ ...options, context: options.canCollect() ? context : undefined });
 }
 
 export async function submitPrompt(
@@ -69,6 +97,17 @@ export async function submitPrompt(
     retracted: retraction.retracted,
     retractionReason: retraction.reason,
   };
+}
+
+/** Reconcile connector-owned optimistic progress with authoritative runtime activity. */
+export function recordPromptFailure(
+  feedStore: PromptFeedStore,
+  input: string,
+  guidance: string,
+  runtimeActive: boolean,
+): void {
+  feedStore.dispatch({ type: "feed.runtime-activity-synchronized", active: runtimeActive });
+  feedStore.dispatch({ type: "feed.local-feedback-appended", input, guidance });
 }
 
 export function toFeedAttachment(

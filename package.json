@@ -1,20 +1,29 @@
 {
   "name": "chatobby-obsidian",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "build": "npm run check:community-review && tsc --noEmit && node esbuild.config.mjs",
+    "build:documentation-version": "node scripts/check-product-identity.mjs && node esbuild.config.mjs",
     "build:release-candidate": "npm run build:release",
     "build:release": "npm run check:community-review && tsc --noEmit && node esbuild.config.mjs --release && node scripts/verify-release-artifacts.mjs release",
-    "check": "tsc --noEmit && npm run check:architecture",
+    "check": "tsc --noEmit && npm run check:frontend-protocol && npm run check:architecture && npm run check:actions-storage",
+    "check:actions-storage": "node scripts/actions-storage.mjs --check-policy",
+    "check:frontend-protocol": "node scripts/check-chatobby-client-projection.mjs",
     "check:architecture": "node scripts/check-public-api.mjs && npm run check:release-boundary && vitest run tests/architecture",
-    "check:backend-contract": "node scripts/verify-local-backend.mjs",
+    "check:backend-contract": "node scripts/verify-local-backend.mjs && vitest run tests/projects/obsidian-protocol-projection.test.ts tests/projects/platform-paths.test.ts",
     "check:release-boundary": "node scripts/check-reviewable-boundary.mjs",
+    "check:product-identity": "node scripts/check-product-identity.mjs",
     "check:community-review": "eslint . --max-warnings 0 && node scripts/check-review-source.mjs && node scripts/check-reviewable-boundary.mjs",
+    "ci:connector-artifact": "node scripts/prepare-ci-connector-artifact.mjs",
+    "dev:vault": "node scripts/dev-vault.mjs deploy",
+    "dev:vault:register": "node scripts/dev-vault.mjs register",
+    "dev:pair": "node scripts/dev-pair.mjs",
     "export:reviewable": "node scripts/export-reviewable-source.mjs",
     "test": "vitest run",
     "lint": "eslint .",
-    "lint:review": "npm run check:community-review"
+    "lint:review": "npm run check:community-review",
+    "project:public-docs": "node scripts/project-public-documentation.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

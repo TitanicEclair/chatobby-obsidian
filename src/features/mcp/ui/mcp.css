@@ -1,3 +1,6 @@
+/* MCP/plugin screen: catalogue rows, capability detail, and server editor.
+   Page-shell.css owns the surrounding navigation and content hierarchy. */
+
 .chatobby-mcp__plugin-list {
   display: flex;
   min-width: 0;
@@ -159,6 +162,7 @@
   white-space: nowrap;
 }
 
+/* Catalogue filtering remains visually separate from the selected detail. */
 .chatobby-mcp__filter-bar {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto auto;
@@ -192,6 +196,7 @@
   gap: var(--size-4-3);
 }
 
+/* Selected plugin/server detail and its capability inventory. */
 .chatobby-mcp__plugin-overview {
   gap: var(--size-2-2);
 }
@@ -221,6 +226,73 @@
   align-self: center;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
+}
+
+.chatobby-mcp__tool-access-summary,
+.chatobby-mcp__tool-empty,
+.chatobby-mcp__tool-test-note,
+.chatobby-mcp__tool-access-description {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-mcp__tool-review {
+  padding: var(--size-4-2) var(--size-4-3);
+  border-inline-start: 2px solid var(--chatobby-warning);
+  background: var(--chatobby-surface-muted);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-mcp__tool-access-list {
+  display: grid;
+}
+
+.chatobby-mcp__tool-access-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3) 0;
+  border-bottom: var(--border-width) solid var(--chatobby-border);
+  cursor: pointer;
+}
+
+.chatobby-mcp__tool-access-row:last-child {
+  border-bottom: 0;
+}
+
+.chatobby-mcp__tool-access-row > input {
+  margin-top: var(--size-2-1);
+}
+
+.chatobby-mcp__tool-access-copy {
+  min-width: 0;
+}
+
+.chatobby-mcp__tool-access-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--size-2-2);
+}
+
+.chatobby-mcp__tool-access-title {
+  overflow: hidden;
+  font-weight: var(--font-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatobby-mcp__tool-access-kind {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.chatobby-mcp__tool-access-description {
+  margin-top: var(--size-2-1);
+  overflow-wrap: anywhere;
 }
 
 .chatobby-mcp__capability {
@@ -310,6 +382,7 @@
   font-weight: var(--font-medium);
 }
 
+/* Connection editor. Secret values are managed outside frontend projection state. */
 .chatobby-mcp__editor {
   display: grid;
   min-width: 0;
@@ -427,6 +500,7 @@
   font-size: var(--font-ui-smaller);
 }
 
+/* Responsive rules follow pane width through the named page container. */
 @container chatobby-page (max-width: 760px) {
   .chatobby-mcp__filter-bar {
     grid-template-columns: minmax(0, 1fr);
@@ -497,3 +571,14 @@
     width: 100%;
   }
 }
+
+.chatobby-mcp button.chatobby-mcp__connect {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 34px; padding: 6px 12px; border: 1px solid var(--chatobby-accent);
+  border-radius: 8px; background: var(--chatobby-accent); color: var(--text-on-accent);
+  box-shadow: none; font-size: var(--font-ui-small); font-weight: 500;
+}
+.chatobby-mcp__connect > span { display: inline-flex; align-items: center; }
+.chatobby-mcp__connect svg { width: 16px; height: 16px; }
+.chatobby-mcp button.chatobby-mcp__connect:hover { filter: brightness(1.08); }
+.chatobby-mcp button.chatobby-mcp__connect:focus-visible { outline: 2px solid var(--chatobby-focus-ring); outline-offset: 3px; }

@@ -36,6 +36,15 @@ export class LiveStatsController {
     this.stats = null;
   }
 
+  /** Clear stats from an obsolete model projection and fetch the new model's
+   * measured context window even while the session is idle. */
+  refreshAfterModelChange(): void {
+    if (this.disposed) return;
+    this.reset();
+    this.options.onChange(null);
+    void this.refresh();
+  }
+
   async refresh(): Promise<void> {
     const transport = this.options.getTransport();
     if (this.disposed || !transport?.isConnected) return;

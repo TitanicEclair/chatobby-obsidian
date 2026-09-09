@@ -6,10 +6,15 @@ import type {
 import type { SubagentScreenActions } from "../domain/screen-model";
 import type { SubagentViewState } from "../state/subagent-store";
 
-const MILLISECONDS_PER_MINUTE = 60_000;
 export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, actions: SubagentScreenActions): void {
   const toolbar = host.createDiv({ cls: "chatobby-subagents__catalog-header" });
   toolbar.createDiv({ cls: "chatobby-subagents__detail-title", text: "Roles" });
+  if (state.roleScopeOptions && actions.selectRoleScope) {
+    const select = toolbar.createEl("select", { attr: { "aria-label": "Role area" } });
+    for (const option of state.roleScopeOptions) select.createEl("option", { text: option.label, value: option.value });
+    select.value = state.roleScopeId ?? "vault";
+    select.addEventListener("change", () => { void actions.selectRoleScope?.(select.value).catch(() => { select.value = state.roleScopeId ?? "vault"; }); });
+  }
   const add = toolbar.createEl("button", { text: "New", attr: { type: "button" } });
   const editor = host.createDiv({ cls: "chatobby-subagents__editor is-hidden" });
   add.addEventListener("click", () => renderAgentEditor(editor, null, state, actions));
@@ -34,7 +39,7 @@ export function renderAgentsPanel(host: HTMLElement, state: SubagentViewState, a
     meta.createSpan({ text: definition.policy.model ?? "Inherit model" });
     meta.createSpan({ text: definition.policy.executionMode ?? "Automatic executor" });
     meta.createSpan({ text: definition.policy.contextMode ?? "Fresh context" });
-    meta.createSpan({ text: permissionPolicyLabel(state, definition) });
+    meta.createSpan({ text: permissionPolicyLabel(definition) });
     if (isUserAgentDefinition(definition)) {
       const controls = card.createDiv({ cls: "chatobby-subagents__catalog-actions" });
       const edit = controls.createEl("button", { text: "Edit", attr: { type: "button" } });
@@ -54,43 +59,24 @@ export function renderSettingsPanel(host: HTMLElement, state: SubagentViewState,
   }
   const form = host.createEl("form", { cls: "chatobby-subagents__settings" });
   form.createDiv({ cls: "chatobby-subagents__detail-title", text: "Settings" });
-  const concurrency = addNumberField(form, "Agents working at once", resolved.settings.maxConcurrency, 1, 64);
-  const sibling = addToggleField(form, "Allow agents to message each other", resolved.settings.allowSiblingCommunication);
+  const sibling = addToggleField(form, "Allow legacy sibling messages", resolved.settings.allowSiblingCommunication);
   const advanced = form.createEl("details", { cls: "chatobby-subagents__role-advanced" });
-  advanced.createEl("summary", { text: "Advanced supervisor limits" });
+  advanced.createEl("summary", { text: "Storage and runtime" });
   const advancedGrid = advanced.createDiv({ cls: "chatobby-subagents__role-advanced-grid" });
-  const depth = addNumberField(advancedGrid, "Maximum delegation depth", resolved.settings.defaultMaxDepth, 0, 16);
   const retention = addNumberField(advancedGrid, "Keep completed runs (days)", resolved.settings.retentionDays, 1, 3650);
   const mode = addSelectField(advancedGrid, "Default executor", resolved.settings.defaultExecutionMode, ["auto", "in-process", "worker-process"]);
-  const turns = addOptionalNumberField(advancedGrid, "Default turn limit", resolved.settings.defaultMaxTurnsPerNode);
-	const tokens = addOptionalNumberField(advancedGrid, "Default uncached token budget", resolved.settings.defaultMaxTokens);
-  const minutes = addOptionalNumberField(
-    advancedGrid,
-    "Default time budget (minutes)",
-    resolved.settings.defaultMaxWallTimeMs === undefined
-      ? undefined
-      : resolved.settings.defaultMaxWallTimeMs / MILLISECONDS_PER_MINUTE,
-  );
   const actionsRow = form.createDiv({ cls: "chatobby-subagents__settings-actions" });
-  const submit = actionsRow.createEl("button", { cls: "mod-cta", text: "Save controls", attr: { type: "submit" } });
+  const submit = actionsRow.createEl("button", { cls: "mod-cta", text: "Save settings", attr: { type: "submit" } });
   submit.disabled = false;
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const defaultMinutes = optionalPositiveNumber(minutes.value);
     const next: ResolvedSubagentSettings = {
       ...resolved,
       settings: {
         ...resolved.settings,
-        maxConcurrency: Number(concurrency.value),
-        defaultMaxDepth: Number(depth.value),
         retentionDays: Number(retention.value),
         defaultExecutionMode: mode.value as ResolvedSubagentSettings["settings"]["defaultExecutionMode"],
         allowSiblingCommunication: sibling.checked,
-        defaultMaxTurnsPerNode: optionalPositiveNumber(turns.value),
-        defaultMaxTokens: optionalPositiveNumber(tokens.value),
-        defaultMaxWallTimeMs: defaultMinutes === undefined
-          ? undefined
-          : defaultMinutes * MILLISECONDS_PER_MINUTE,
       },
     };
     void actions.updateSettings(next);
@@ -105,13 +91,13 @@ function renderAgentEditor(
 ): void {
   host.empty();
   host.removeClass("is-hidden");
-  const draftId = existing?.id ?? "$new";
+  const draftId = `${state.roleScopeId ?? "session"}:${existing?.id ?? "$new"}`;
   const storedDraft = actions.getAgentEditorDraft(draftId);
   const initialDefinition: UserAgentDefinition = storedDraft?.definition ?? existing ?? {
     id: "",
     name: "",
     description: "",
-    scope: "vault",
+    scope: state.roleScopeId && state.roleScopeId !== "vault" ? "directory" : "vault",
     scopeId: "default",
     systemPrompt: "",
     enabled: true,
@@ -119,7 +105,6 @@ function renderAgentEditor(
     revision: 0,
     updatedAt: 0,
   };
-  const initialPermission = storedDraft?.permissionProfileId ?? assignedPermissionPolicy(state, existing?.id);
   const form = host.createEl("form");
   form.createDiv({ cls: "chatobby-subagents__editor-title", text: existing ? `Edit ${existing.name}` : "Create agent role" });
   const name = addTextField(form, "Role name", initialDefinition.name, "Research assistant");
@@ -130,6 +115,10 @@ function renderAgentEditor(
     "Finds, verifies, and summarizes research",
   );
   const availability = addRoleAvailabilityField(form, initialDefinition.scope);
+  if (state.workspaceWide && state.roleScopeId === "vault") {
+    const projectOption = availability.querySelector<HTMLOptionElement>('option[value="directory"]');
+    if (projectOption) { projectOption.disabled = true; projectOption.textContent = "Choose a Project folder in Role area first"; }
+  }
   const prompt = addTextAreaField(
     form,
     "Role instructions",
@@ -139,7 +128,7 @@ function renderAgentEditor(
   prompt.parentElement?.addClass("is-wide");
   const model = addModelField(form, state, initialDefinition.policy.model);
   let persistDraft = (): void => undefined;
-  const permission = addPermissionPolicyField(form, state, initialPermission, actions, () => persistDraft());
+  addInheritedAccessPolicyField(form, existing);
   const skills = addSkillPicker(
     form,
     state,
@@ -171,11 +160,6 @@ function renderAgentEditor(
     ["inherit", "off", "minimal", "low", "medium", "high", "xhigh"],
     "Inherit follows the main session. Higher effort can improve difficult work but costs more time and tokens.",
   );
-  const maxDepth = addOptionalNumberField(advancedGrid, "Delegation depth limit", initialDefinition.policy.maxDepth);
-  maxDepth.parentElement?.createDiv({
-    cls: "chatobby-subagents__field-help",
-    text: "Use the role default unless this role should be prevented from creating deeper subagents.",
-  });
   const enabled = addToggleField(advancedGrid, "Role enabled", initialDefinition.enabled);
   persistDraft = () => {
     actions.setAgentEditorDraft(draftId, {
@@ -198,10 +182,15 @@ function renderAgentEditor(
           tools: undefined,
           mcpTools: undefined,
           skills: skills.size > 0 ? [...skills] : undefined,
-          maxDepth: optionalNonNegativeNumber(maxDepth.value),
+          maxDepth: undefined,
+          maxTurnsPerNode: undefined,
+          maxTokens: undefined,
+          maxWallTimeMs: undefined,
+          maxToolCallsPerNode: undefined,
+          toolCallLimits: undefined,
+          permissionProfileId: undefined,
         },
       },
-      permissionProfileId: permission.value,
     });
   };
   form.addEventListener("input", persistDraft);
@@ -219,7 +208,7 @@ function renderAgentEditor(
       description: draft.definition.description.trim(),
       systemPrompt: draft.definition.systemPrompt.trim(),
     };
-    await actions.saveDefinition(definition, draft.permissionProfileId);
+    await actions.saveDefinition(definition);
     actions.clearAgentEditorDraft(draftId);
     host.addClass("is-hidden");
   }, () => actions.clearAgentEditorDraft(draftId));
@@ -245,32 +234,19 @@ function addModelField(host: HTMLElement, state: SubagentViewState, current: str
   return select;
 }
 
-function addPermissionPolicyField(
+function addInheritedAccessPolicyField(
   host: HTMLElement,
-  state: SubagentViewState,
-  current: string,
-  actions: SubagentScreenActions,
-  beforeOpen: () => void,
-): HTMLSelectElement {
+  existing: UserAgentDefinition | null,
+): void {
   const row = host.createDiv({ cls: "chatobby-subagents__field" });
-  row.createSpan({ text: "Permission policy" });
+  row.createSpan({ text: "Access policy" });
   const controls = row.createDiv({ cls: "chatobby-subagents__policy-field" });
-  const select = controls.createEl("select", { attr: { "aria-label": "Role permission policy" } });
-  select.createEl("option", { text: "Inherit parent policy", value: "inherit" });
-  const snapshot = state.permissionSnapshot;
-  for (const profile of snapshot?.document.profiles ?? []) {
-    select.createEl("option", { text: profile.name, value: profile.id });
-  }
-  select.value = current;
-  const manage = controls.createEl("button", {
-    text: "Manage policies",
-    attr: { type: "button", title: "Open permission policies" },
+  controls.createDiv({
+    cls: "chatobby-subagents__field-help",
+    text: existing?.permissionReviewRequired
+      ? "Review required. Saving removes this role's retired permission-profile override and makes it inherit the active access policy."
+      : "Uses the initiating chat’s access.",
   });
-  manage.addEventListener("click", () => {
-    beforeOpen();
-    actions.openPermissions();
-  });
-  return select;
 }
 
 function addSkillPicker(
@@ -410,13 +386,6 @@ function addNumberField(host: HTMLElement, label: string, value: number, min: nu
   return input;
 }
 
-function addOptionalNumberField(host: HTMLElement, label: string, value: number | undefined): HTMLInputElement {
-  const input = addTextField(host, label, value === undefined ? "" : String(value), "Uses default");
-  input.type = "number";
-  input.min = "0";
-  return input;
-}
-
 function addSelectField(
   host: HTMLElement,
   label: string,
@@ -445,7 +414,7 @@ function addRoleAvailabilityField(
   select.value = current === "directory" ? "directory" : "vault";
   row.createDiv({
     cls: "chatobby-subagents__field-help",
-    text: "Vault roles are available everywhere in this vault. Project roles appear only in this working directory.",
+    text: "Vault roles are available throughout this vault; Project roles appear only in this working directory. Choosing either scope does not grant file or tool access. Each run inherits the active chat's Project or Vault policy.",
   });
   return select;
 }
@@ -458,24 +427,10 @@ function addToggleField(host: HTMLElement, label: string, checked: boolean): HTM
   return input;
 }
 
-function optionalPositiveNumber(value: string): number | undefined {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function permissionPolicyLabel(state: SubagentViewState, definition: AgentDefinition): string {
-  const snapshot = state.permissionSnapshot;
-  const assignment = snapshot?.document.agentAssignments[definition.id];
-  const profileId = assignment?.mode === "profile"
-    ? assignment.profileId
-    : definition.policy.permissionProfileId;
-  if (!profileId) return "Inherits permissions";
-  return snapshot?.document.profiles.find((profile) => profile.id === profileId)?.name ?? humanize(profileId);
-}
-
-function assignedPermissionPolicy(state: SubagentViewState, roleId: string | undefined): string {
-  const assignment = roleId ? state.permissionSnapshot?.document.agentAssignments[roleId] : undefined;
-  return assignment?.mode === "profile" ? assignment.profileId : "inherit";
+function permissionPolicyLabel(definition: AgentDefinition): string {
+  return definition.permissionReviewRequired
+    ? "Review required: retired permission override"
+    : "Inherits active access policy";
 }
 
 function roleAvailabilityLabel(definition: AgentDefinition): string {
@@ -496,10 +451,4 @@ function humanize(value: string): string {
 
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "agent-role";
-}
-
-function optionalNonNegativeNumber(value: string): number | undefined {
-  if (value.trim() === "") return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }

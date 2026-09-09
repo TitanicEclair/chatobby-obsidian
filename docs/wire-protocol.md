@@ -1,752 +1,175 @@
-# Wire Protocol — WebSocket JSON-RPC
+# Connector Wire Boundaries
 
-The Obsidian plugin communicates with the chatobby server over an authenticated
-session **WebSocket** using a **JSON-RPC-like** protocol. Commands follow the
-`{ id, method, params }` convention; responses are `{ id, type: "response",
-result }` or `{ id, type: "error", error }`. Streaming events are a side-channel
-on the same socket, not tied to a specific command id. The Obsidian bridge uses
-its own second authenticated WebSocket.
+Chatobby uses several deliberately separate wire boundaries. This document is a
+map for connector developers; canonical domain schemas are generated from the
+private runtime repository and must not be restated manually here.
 
-> **Server source**: `C:\chatobby\pi-mono\packages\chatobby\src\ws-server.ts`, `ws-mode.ts`
-> **Client SDK**: `C:\chatobby\pi-mono\packages\chatobby\src\ws-client.ts`
-> **Type definitions**: [schemas.md](./schemas.md)
-> **Credentials**: [credentials.md](./credentials.md) — API keys are NOT sent over this wire
+## Source of truth
 
----
+Generated declarations under `src/vendor/chatobby-client/` define the frontend
+protocol version, message envelopes, screen projections, intents, patches, and
+extension UI contracts consumed by the connector. They are generated
+projections. Update the owning runtime contracts, regenerate through the
+documented private release workflow, and review the projection diff; never edit
+the vendor files by hand.
 
-## Connection Lifecycle
+The full API authority is the private source guide
+[`packages/chatobby/docs/frontend-protocol.md`](https://github.com/TitanicEclair/pi-mono/blob/dev/packages/chatobby/docs/frontend-protocol.md).
+This connector document explains application responsibilities only and does not
+redeclare that schema.
 
-```
-Plugin                              Chatobby Server
-  │                                       │
-  │──── WebSocket connect ───────────────>│
-  │         ws://127.0.0.1:dynamic        │
-  │──── RuntimeClientHello ──────────────>│
-  │<─── RuntimeServerHello ──────────────│  (identity/auth/protocol complete)
-  │                                       │
-  │──── get_state ───────────────────────>│  (optional: check session exists)
-  │<─── { state: WsSessionState } ───────│  (session id, model, streaming flags, counts)
-  │                                       │
-  │──── prompt { message } ──────────────>│  (start conversation)
-  │<─── { status: "started" } ───────────│
-  │                                       │
-  │<─── { type: "event", event } ────────│  (streaming events, continuous)
-  │<─── { type: "event", event } ────────│
-  │<─── { type: "event", event } ────────│
-  │                                       │
-  │<─── { type: "extension_event" } ─────│  (optional: allowlisted Pi extension event)
-  │<─── { type: "channel_event" } ───────│  (optional: vault channel update)
-  │                                       │
-  │<─── { type: "extension_ui_request" } │  (optional: UI interaction needed)
-  │──── extension_ui_response ───────────>│
-  │                                       │
-  │──── WebSocket close ─────────────────>│
-```
+Connector-owned types live beside the adapter that uses them:
 
-Managed mode gets the endpoint, instance/vault ids, protocol version, and
-session token from `ChatobbyRuntimeManager`. The hello must complete before the
-backend allocates a session runtime. Control status/detach/shutdown use a
-separate scoped token and are not JSON-RPC agent commands.
+- `src/runtime/contracts.ts` describes connector runtime modes and lifecycle
+  state;
+- `src/transport/` adapts authenticated session streaming;
+- `src/obsidian-bridge/` validates and routes runtime requests into Obsidian;
+- `src/frontend/` applies canonical frontend state and sends typed intents.
 
-The second Obsidian bridge uses protocol version 2. Its `bridge_config` carries
-the stable vault identity and registered vault root. The connector uses one
-plugin-global bridge client even when several Chatobby views have independent
-frontend transports. Project folder changes use
-`project_directory_observed`/`project_directory_observation_result`; bounded
-gap recovery uses `project_directory_rescan_requested` and its typed result.
-The connector supplies observations only. Marker verification, Project
-reconciliation, receipts, and durable mutation remain runtime responsibilities.
+See [Responsibility boundaries](responsibility-boundaries.md) for the complete
+repository ownership split.
 
----
+## Boundary map
 
-## Command Reference
+```text
+Obsidian view
+  -> connector frontend client
+      -> authenticated frontend protocol: negotiate, atomic subscribe/bootstrap/replay,
+         screens, intents, patches and typed resync
+      -> session transport: chat streaming and session-scoped operations
+  <- runtime
 
-### Prompting
-
-#### prompt
-
-Send a user message to the agent. Returns immediately; stream events via the event channel.
-
-```typescript
-// Send
-{ id: "ws_1", method: "prompt", params: {
-  message: "Summarize what I am working on.",
-  context?: {
-    schemaVersion: 1,
-    source: "obsidian",
-    vault: "My vault",
-    workspace: {
-      workingDirectory: "Projects/Current",
-      activeSurface: "note",
-      isNewSession: true,
-      sessionMessageCount: 0
-    },
-    privacy: { included: ["workspace"], omitted: ["note body outside excerpt"] }
-  },
-  attachments?: [
-    // ImageContent for inline images
-    { type: "image", data: "base64...", mimeType: "image/png" }
-  ]
-}}
-
-// Receive
-{ id: "ws_1", type: "response", result: { method: "prompt", status: "started" } }
+runtime
+  -> authenticated Obsidian bridge request
+  -> connector validates capability and arguments
+  -> Obsidian or local desktop operation
+  <- structured result or structured error
 ```
 
-**`message`** is the user's visible text. **`context`** is an optional typed
-Obsidian packet containing bounded environment, workspace/session, active-note,
-and open-note reference data. The backend escapes and fences it before the user
-message; see [vault-context.md](./vault-context.md).
+The frontend protocol is the default boundary for runtime-owned product state.
+The connector renders projections and dispatches intents; it does not mirror
+the runtime's projects, settings, permissions, memory, MCP, channel, event,
+task, or subagent stores.
 
-**`attachments`** is reserved but not wired in the current backend scaffold. Supplying attachments currently returns a handler error.
+## Frontend connection lifecycle
 
-#### steer
+`FrontendSessionRegistry` creates one authenticated frontend session per open
+Chatobby view. `FrontendProtocolController` owns the explicit lifecycle:
+`disconnected`, `connecting`, `negotiating`, `bootstrapping`, `replaying`,
+`live`, `resynchronizing`, `degraded`, and `closed`. The client:
 
-Interrupt the current generation and inject a correction. The agent sees this as a mid-turn redirect.
+1. establishes the transport using the connector-provided endpoint and session
+   credentials;
+2. negotiates protocol v2 and the complete required capability set;
+3. makes one atomic subscription call that returns either a cold bootstrap, a
+   contiguous bounded replay, or an explicit full-resync requirement;
+4. applies that exact sequence/revision cut, then releases patches buffered by
+   the generated client during cutover;
+5. requests revisioned detailed screens with runtime/view/request identity,
+   request epoch, and base sequence;
+6. dispatches typed, idempotent intents and handles discriminated outcomes;
+7. applies ordered patches or transitions to controlled resynchronization on a
+   malformed entity, wrong identity/scope, sequence/revision gap, missing feed
+   target, or stale screen response;
+8. closes the session when the view is disposed.
 
-```typescript
-{ method: "steer", params: { message: "Actually, look at this file instead" } }
-// → { method: "steer", status: "accepted" }
+Message parsing and version rejection happen at the generated client boundary;
+the connector store independently enforces reducer invariants and exhaustive
+operations. The generated client never silently discards an invalid
+`frontend_patch`: it emits a safe typed diagnostic and requests resync. UI
+modules consume typed projections, not raw JSON. Authentication material is
+held by runtime/session infrastructure and must not enter feed entities, DOM
+attributes, persisted plugin data, or logs.
+
+## Screens, intents, and patches
+
+A runtime-owned page follows a one-way flow:
+
+```text
+screen snapshot or patch -> feature controller -> view model -> DOM
+user action -> typed intent -> runtime -> resulting projection or error
 ```
 
-#### follow_up
-
-Send a follow-up message without interrupting the current generation. Queued until the agent is idle.
-
-```typescript
-{ method: "follow_up", params: { message: "Can you also check the tests?" } }
-// → { method: "follow_up", status: "started" }
-```
-
-#### abort
-
-Stop the current generation immediately.
-
-```typescript
-{ method: "abort", params: {} }
-// → { method: "abort", status: "aborted" }
-```
-
-### Session lifecycle
-
-#### new_session
-
-Start a fresh session. Previous conversation is discarded.
-
-```typescript
-{ method: "new_session", params: {} }
-// → { method: "new_session", sessionId: "abc123" }
-```
-
-#### switch_session
-
-Resume a previous session by path. The plugin applies local session preferences (model, thinking level) after switching, same as `new_session`.
-
-```typescript
-{ method: "switch_session", params: { sessionPath: "sessions/abc123.jsonl" } }
-// → { method: "switch_session", cancelled: false }
-```
-
-#### fork
-
-Fork from a specific point in conversation history. Creates a new session file. Returns the text of the forked-from message.
-
-```typescript
-{ method: "fork", params: { entryId: "msg_42" } }
-// → { method: "fork", text: "Let me refactor this...", cancelled: false }
-```
-
-#### clone
-
-Duplicate the current session at its current position.
-
-```typescript
-{ method: "clone", params: {} }
-// → { method: "clone", cancelled: false }
-```
-
-#### navigate_tree
-
-Switch branches in the session tree. Used for tree navigation UI.
-
-```typescript
-{ method: "navigate_tree", params: {
-  targetId: "entry_42",
-  summarize?: true,
-  customInstructions?: "focus on tests",
-  replaceInstructions?: false,
-  label?: "explore alternative"
-}}
-// → { method: "navigate_tree", cancelled: false }
-```
-
-#### import_jsonl
-
-Import a previously exported session.
-
-```typescript
-{ method: "import_jsonl", params: { inputPath: "exports/session.jsonl", cwdOverride?: "/project" } }
-// → { method: "import_jsonl", cancelled: false }
-```
-
-### State & messages
-
-#### get_state
-
-Get the current session snapshot.
-
-```typescript
-{ method: "get_state", params: {} }
-// → { method: "get_state", state: {
-//     sessionId: "abc123",
-//     model: "anthropic/claude-sonnet-4-20250514",
-//     thinkingLevel: "medium",
-//     isStreaming: false,
-//     isCompacting: false,
-//     sessionName: "refactor-auth",
-//     sessionFile: "sessions/abc123.jsonl",
-//     steeringMode: "all",
-//     followUpMode: "all",
-//     autoCompaction: {
-//       enabled: true,
-//       thresholdPercent: 85,
-//       effectiveThresholdPercent: 81.8
-//     },
-//     messageCount: 12,
-//     pendingMessageCount: 0
-//   }}
-```
-
-#### get_messages
-
-Get all messages in the current session.
-
-```typescript
-{ method: "get_messages", params: {} }
-// → { method: "get_messages", messages: AgentMessage[] }
-```
-
-#### get_session_stats
-
-Get session metadata for display: name, message count, token usage, model info.
-
-```typescript
-{ method: "get_session_stats", params: {} }
-// → { method: "get_session_stats", stats: {
-//     sessionFile: ".../session.jsonl",
-//     sessionId: "abc123",
-//     userMessages: 4,
-//     assistantMessages: 4,
-//     toolCalls: 2,
-//     toolResults: 2,
-//     totalMessages: 10,
-//     tokens: { input: 45000, output: 12000, cacheRead: 0, cacheWrite: 0, total: 57000 },
-//     cost: 0.42,
-//     contextUsage: { tokens: 57000, contextWindow: 200000, percent: 28.5 }
-//   }}
-```
-
-#### get_fork_messages
-
-Get user messages the user can fork from. Populates a fork-point picker.
-
-```typescript
-{ method: "get_fork_messages", params: {} }
-// → { method: "get_fork_messages", messages: [
-//     { entryId: "msg_1", text: "Help me refactor auth" },
-//     { entryId: "msg_5", text: "Now add tests" }
-//   ]}
-```
-
-#### get_last_assistant_text
-
-Get the last assistant response as plain text. For copy-to-clipboard workflow — the frontend handles clipboard itself.
-
-```typescript
-{ method: "get_last_assistant_text", params: {} }
-// → { method: "get_last_assistant_text", text: "The capital is Paris." }
-// or → { method: "get_last_assistant_text", text: null }
-```
-
-### Model & thinking
-
-#### set_model
-
-Change the active model.
-
-```typescript
-{ method: "set_model", params: { model: "anthropic/claude-opus-4-20250514" } }
-// → { method: "set_model", model: "anthropic/claude-opus-4-20250514" }
-```
-
-#### cycle_model
-
-Cycle to the next available model.
-
-```typescript
-{ method: "cycle_model", params: {} }
-// → { method: "cycle_model", model: "claude-haiku-4-5-20251001" }
-```
-
-#### get_available_models
-
-Get all models the user has credentials for. Populates a model picker UI.
-
-```typescript
-{ method: "get_available_models", params: {} }
-// → { method: "get_available_models", models: [
-//     { id: "claude-sonnet-4-20250514", name: "Claude Sonnet", provider: "anthropic" },
-//     { id: "gpt-4o", name: "GPT-4o", provider: "openai" }
-//   ]}
-```
-
-#### set_thinking_level
-
-Set the thinking/reasoning level (`off`, `minimal`, `low`, `medium`, `high`, or `xhigh`).
-
-```typescript
-{ method: "set_thinking_level", params: { level: "high" } }
-// → { method: "set_thinking_level", level: "high" }
-```
-
-#### cycle_thinking_level
-
-Cycle through thinking levels.
-
-```typescript
-{ method: "cycle_thinking_level", params: {} }
-// → { method: "cycle_thinking_level", level: "high" }
-// or → { method: "cycle_thinking_level", level: null }  // if no more levels
-```
-
-### Session settings
-
-#### set_session_name
-
-Name a session for easy identification.
-
-```typescript
-{ method: "set_session_name", params: { name: "refactor-auth" } }
-// → { method: "set_session_name" }
-```
-
-#### set_auto_compaction
-
-Update automatic compaction for the active model. It is enabled by default.
-The configured threshold is 50-95%; the effective trigger may be lower when
-the backend must reserve more room for the model response.
-
-```typescript
-{ method: "set_auto_compaction", params: { enabled: true, thresholdPercent: 85 } }
-// → { method: "set_auto_compaction", settings: {
-//      enabled: true, thresholdPercent: 85, effectiveThresholdPercent: 81.8
-//    }}
-```
-
-### Bash
-
-#### bash
-
-Execute a bash command on the server. The `excludeFromContext` flag prevents the command from appearing in the agent's context (useful for status checks).
-
-```typescript
-{ method: "bash", params: { command: "ls -la src/", excludeFromContext: false } }
-// → { method: "bash", result: { output: "total 48\n...", exitCode: 0, cancelled: false, truncated: false } }
-```
-
-### Compaction & reload
-
-#### compact
-
-Trigger context compaction (summarizes old messages to free context window).
-
-```typescript
-{ method: "compact", params: {} }
-// → { method: "compact" }
-```
-
-#### reload
-
-Hot-reload extensions, skills, prompts. Dev workflow.
-
-```typescript
-{ method: "reload", params: {} }
-// → { method: "reload" }
-```
-
-### Export
-
-#### export_html
-
-Export session as HTML for sharing.
-
-```typescript
-{ method: "export_html", params: { outputPath?: "exports/session.html" } }
-// → { method: "export_html", path: "exports/session.html" }
-```
-
-#### export_jsonl
-
-Export session as JSONL for backup/import.
-
-```typescript
-{ method: "export_jsonl", params: { outputPath?: "exports/session.jsonl" } }
-// → { method: "export_jsonl", path: "exports/session.jsonl" }
-```
-
-### Discovery
-
-#### get_commands
-
-Discover available extension, skill, and prompt commands. Returns commands not hardcoded in the TUI.
-
-```typescript
-{ method: "get_commands", params: {} }
-// → { method: "get_commands", commands: [
-//     { name: "mcp", description: "Show MCP server status", source: "extension" },
-//     { name: "refactor", description: "Refactor selected code", source: "skill" }
-//   ]}
-```
-
-### Permission profiles
-
-Permissions are backend-owned. The plugin loads a snapshot, then sends
-revision-checked mutations instead of writing `.chatobby` policy files itself.
-
-| Command | Purpose |
-|---|---|
-| `permissions_get_snapshot` | Load named profiles, active Main policy, MCP inventory, and visible subagent roles |
-| `permissions_save_profile` | Create or update one custom profile |
-| `permissions_set_active_profile` | Select the profile used by the main agent |
-| `permissions_set_session_profile` | Select or clear the policy override for this session only |
-| `permissions_delete_profile` | Delete an inactive, unassigned custom profile |
-| `permissions_set_agent_assignment` | Set one subagent role to inherit or use an explicit profile |
-
-Each command returns `{ method, snapshot }`. Mutation params carry the current
-`expectedRevision`; a stale write returns an error and the client reloads.
-Changes apply to the next authorization boundary of a running turn, but do not
-interrupt a tool already in progress. See [permissions.md](permissions.md).
-
-### Agent communication channels
-
-Channel reads are vault-scoped and cursor-bounded. Agent connect/disconnect and
-send operations happen through the agent tool surface; the plugin uses these
-read/subscription commands to render the operator-facing channel page.
-
-| Command | Purpose |
-|---|---|
-| `channels_get_snapshot` | Load channel definitions, memberships, and live agent identities |
-| `channels_query` | Filter bounded history by channel, sender, recipient, kind, text, and cursor |
-| `channels_subscribe` | Subscribe this WebSocket to live vault channel events |
-
-After subscription, changes arrive as `{ type: "channel_event", event:
-ChannelEvent }`. Messages contain immutable sender and recipient identity
-snapshots plus a delivery status for each recipient.
-
-### Subagent supervisor
-
-Subagent orchestration uses first-class commands and a separate ordered event frame. Clients must load `subagents_get_snapshot` before subscribing with `subagents_subscribe { afterSequence }`.
-
-| Command | Purpose |
-|---|---|
-| `subagents_get_snapshot` | Capabilities, current sequence, run summaries, role definitions, and resolved settings |
-| `subagents_list_runs` / `subagents_get_run` | Page run summaries or load one full node snapshot |
-| `subagents_start_run` | Start one role under the active main session |
-| `subagents_control` | Cancel, pause, resume, interrupt, steer, retry, reprioritize, fork/clone/adopt, reconcile, or decide a permission request |
-| `subagents_subscribe` | Replay events after a sequence and continue live delivery |
-| `subagents_list/save/delete_definitions` | Revision-checked role definition management |
-| `subagents_send_message` | Route a durable operator message to an exact supervised agent feed |
-| `subagents_list_messages` / `subagents_acknowledge_message` | Load the operator inbox and durably acknowledge or answer a blocking request |
-| `subagents_get_transcript` | Load a bounded node transcript page |
-| `subagents_list/promote_artifacts` | Inspect child artifacts or promote one to an explicit vault path |
-| `subagents_get/update_settings` | Read or update layered supervisor controls |
-
-Live deltas use `{ type: "subagent_event", event: SubagentEvent }`. Every event carries `runtimeId`, monotonic `sequence`, `runId`, optional `nodeId`, causation metadata, and a typed run/node/message/artifact/tool/permission/budget/executor payload. Sequence gaps require a fresh snapshot.
-
-### Extension UI
-
-#### extension_ui_response
-
-Respond to an extension UI request. See [Extension UI Bridge](#extension-ui-bridge) below.
-
-### Persistent Events
-
-| Command | Purpose |
-|---|---|
-| `events_set_operator_view` | Report visible Chatobby view state for view-closed consent checks |
-| `events_get_snapshot` | Load definitions, bounded occurrence history, and running ids |
-| `events_get_editor_options` | Load valid permission policies and agent roles for a selected project |
-| `events_save_definition` | Create or revision-check/update an Event |
-| `events_delete_definition` | Permanently delete a non-running Event |
-| `events_set_enabled` | Pause or resume an Event with an expected revision |
-| `events_trigger` | Run one definition through approval and budget policy |
-| `events_trigger_command` | Trigger a named command with operator/agent/system origin |
-| `events_approve_occurrence` | Approve one waiting occurrence |
-
-The backend stores the authoritative state in
-`<vault>/.chatobby/events/events.json`. Background execution needs both a
-definition policy and user-granted consent; an agent cannot grant consent.
-
----
-
-## Error Responses
-
-Any command can return an error:
-
-```typescript
-{ id: "ws_1", type: "error", error: { code: "NOT_FOUND", message: "Session not found" } }
-```
-
----
-
-## Event Stream
-
-Events arrive asynchronously on the same WebSocket, interleaved with responses:
-
-```typescript
-// Streaming text
-{ type: "event", event: {
-  type: "message_update",
-  message: { role: "assistant", content: [...], ... },
-  assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Hello", partial: {...} }
-}}
-
-// Tool execution
-{ type: "event", event: {
-  type: "tool_execution_start",
-  toolCallId: "tc_1",
-  toolName: "bash",
-  args: { command: "ls -la" }
-}}
-
-// Allowlisted extension event
-{ type: "extension_event", event: {
-  channel: "subagents:started",
-  source: "@gotgenes/pi-subagents",
-  timestamp: 1783180000000,
-  data: { id: "agent-1", type: "Research", description: "Map API surface" }
-}}
-```
-
-### AgentSessionEvent -> UI Mapping
-
-```
-agent_start           → Show streaming indicator, disable input
-turn_start            → New turn begins (no action yet)
-message_start         → Route by role: UserMessage → SystemBlock; AssistantMessage → new turn; ToolResultMessage → append to ToolBlock
-message_update        → Incrementally render content (see below)
-message_end           → Finalize message bubble
-tool_execution_start  → Show tool call card
-tool_execution_update → Update tool card with partial output
-tool_execution_end    → Finalize tool card (also finalizes ToolBlock when all tools done)
-turn_end              → Assistant response done — tool execution may still be in progress
-agent_end             → Hide streaming indicator, enable input
-```
-
-### message_update Rendering
-
-The `assistantMessageEvent` sub-type drives incremental rendering:
-
-| Sub-type | Action |
-|----------|--------|
-| `text_delta` | Append `delta` to current text block |
-| `text_end` | Text block done — can now render markdown |
-| `thinking_delta` | Append to collapsible thinking block |
-| `thinking_end` | Thinking block done |
-| `toolcall_delta` | Tool call arguments being assembled |
-| `toolcall_end` | Tool call ready — show card with `name` + `arguments` |
-| `done` | Turn complete (reason: stop/length/toolUse) |
-| `error` | Turn failed (reason: aborted/error) |
-
-### Extension Events
-
-`extension_event` is a top-level server-to-plugin frame for normalized Pi
-extension events:
-
-```typescript
-interface WireExtensionEvent {
-  channel: string;
-  source: string;
-  timestamp: number;
-  data: Record<string, unknown>;
-}
-```
-
-The legacy extension compatibility catalog recognizes these gotgenes lifecycle channels:
-
-```
-subagents:created
-subagents:started
-subagents:completed
-subagents:failed
-subagents:steered
-subagents:compacted
-```
-
-Chatobby's active runtime disables the gotgenes extension and uses first-class
-`subagent_event` frames. The plugin adapts run-level deltas into one compact
-feed block keyed by durable `runId`; detailed node, transcript, permission,
-message, acceptance, and artifact state remains in the dedicated screen store.
-
----
-
-## Extension UI Bridge
-
-When an extension running on the server calls `ctx.ui.select(...)` or similar, the server sends a `extension_ui_request` to the plugin. The plugin must render native Obsidian UI and respond.
-
-### Request → Response Flow
-
-```
-Server (extension calls ctx.ui.select) 
-  → { type: "extension_ui_request", request: { id: "ui_1", method: "select", params: {...} } }
-  → Plugin renders Obsidian Modal/Dropdown
-  → User picks option
-  → { method: "extension_ui_response", params: { id: "ui_1", result: "chosen option" } }
-```
-
-### UI Methods
-
-#### select — Blocking
-
-Show a selection dialog. Return the chosen option string.
-
-```typescript
-// Request params
-{ title: string; options: string[]; signal?: AbortSignal; timeout?: number }
-
-// Response result
-string  // the chosen option
-```
-
-#### confirm — Blocking
-
-Show a yes/no confirmation. Return boolean.
-
-```typescript
-// Request params
-{ title: string; message: string; signal?: AbortSignal; timeout?: number }
-
-// Response result
-boolean
-```
-
-#### input — Blocking
-
-Show a text input. Return the entered string.
-
-```typescript
-// Request params
-{ title: string; placeholder?: string; signal?: AbortSignal; timeout?: number }
-
-// Response result
-string | undefined
-```
-
-#### editor — Blocking
-
-Show a multi-line text editor. Return the edited text.
-
-```typescript
-// Request params
-{ title: string; prefill?: string }
-
-// Response result
-string | undefined
-```
-
-#### notify — Fire-and-forget
-
-Show a notification toast.
-
-```typescript
-// Request params
-{ message: string; type?: "info" | "warning" | "error" }
-
-// No response needed
-```
-
-#### setWidget — Fire-and-forget
-
-Set a widget above/below the editor.
-
-```typescript
-// Request params
-{ key: string; content: string[] | undefined; placement?: "aboveEditor" | "belowEditor" }
-
-// No response needed
-```
-
-#### setTitle — Fire-and-forget
-
-Set the window/tab title.
-
-```typescript
-// Request params
-{ title: string }
-
-// No response needed
-```
-
-### Timeout Handling
-
-Blocking requests may include a `timeout` (ms) and `signal` (AbortSignal). If the timeout expires or the signal fires, the plugin should dismiss the UI and send a response with `undefined`/`null` result.
-
----
-
-## Message Framing
-
-Each WebSocket message is a single JSON object (no newline delimiters, no batching). The `ChatobbyWsClient` SDK handles serialization and request/response correlation automatically.
-
-### Client SDK Usage
-
-```typescript
-import { ChatobbyWsClient } from "@chatobby/chatobby/client";
-
-const client = new ChatobbyWsClient({ url: "ws://localhost:9222" });
-await client.connect();
-
-// Subscribe to streaming events
-client.onEvent((event) => {
-  if (event.type === "event") {
-    handleAgentEvent(event.event);
-  } else if (event.type === "extension_event") {
-    handleExtensionEvent(event.event);
-  } else if (event.type === "extension_ui_request") {
-    handleExtensionUI(event.request);
-  }
-});
-
-// Handle extension UI requests
-client.onExtensionUI(async (request) => {
-  switch (request.method) {
-    case "select": return await showObsidianSelect(request.params);
-    case "confirm": return await showObsidianConfirm(request.params);
-    case "input": return await showObsidianInput(request.params);
-    // ...
-  }
-});
-
-// Send commands
-await client.prompt("Hello, agent!");
-await client.abort();
-const state = await client.getState();
-
-// Session lifecycle
-await client.switchSession("sessions/abc123.jsonl");
-const fork = await client.fork("msg_42");
-await client.clone();
-await client.navigateTree("entry_42", { summarize: true });
-
-// Model & thinking
-await client.setThinkingLevel("high");
-const models = await client.getAvailableModels();
-
-// Session metadata
-const stats = await client.getSessionStats();
-const last = await client.getLastAssistantText();
-await client.setSessionName("my-session");
-
-// Export & discovery
-await client.exportHtml();
-const commands = await client.getCommands();
-```
+Screens are named protocol projections. A detailed response is applied only if
+its request epoch, runtime/view identity, response sequence cut, and screen
+revision cannot overwrite a newer request or patch. Intents describe user
+actions without embedding connector callbacks. Patches update a known global
+and domain revision and are applied by `FrontendStore`; unknown/illegal
+operations are resync errors, not ignored records.
+
+Feed adapters render canonical blocks. They must preserve actual message,
+actor, recipient, run, node, turn, correlation, delivery, acknowledgement and
+timestamp meaning and must not fabricate placeholder entities.
+
+Extension panels, widgets, actions, and blocking interaction cards use the same
+generated frontend contracts. The connector may provide Obsidian presentation
+capabilities, but it must not reinterpret a runtime extension payload into a
+different domain contract.
+
+## Session transport
+
+Chat streaming and explicitly session-scoped operations use the connector's
+transport adapter. The adapter owns connection mechanics and normalization into
+the public session contract. Feed and composer code call feature/controller
+APIs rather than constructing WebSocket, HTTP, or authentication messages.
+
+Transport reconnects preserve view identity and resume only from the last
+applied sequence/revision against the same runtime instance. Too-old/future
+cursors, a replaced runtime, or a gap trigger a cold bootstrap. A lost
+connection does not authorize a new session, a silent working-directory change,
+or a synthetic success response.
+
+## Obsidian bridge
+
+The bridge is a connector-owned capability boundary for operations that require
+Obsidian, vault, filesystem, process, or permitted network access. The runtime
+sends a request envelope; `src/obsidian-bridge/bridge-router.ts` validates the
+request, routes it through the operation registry, and returns either a typed
+result or a structured bridge error.
+
+Bridge rules:
+
+- reject unknown operations and invalid arguments at the boundary;
+- check advertised capabilities before execution;
+- keep request IDs stable through success, timeout, and error responses;
+- convert exceptions to the public error taxonomy without leaking secrets or
+  absolute private data unnecessarily;
+- keep result text and structured content derived from one typed result;
+- never grant permission based only on frontend presentation state.
+
+Operation implementations and paging helpers live under
+`src/obsidian-bridge/`. Consumers outside that feature use its supported public
+entry point instead of deep-importing registry internals.
+
+## Compatibility
+
+Compatibility is explicit. Unknown optional fields may be ignored. New union,
+operation, or entity variants require a negotiated capability. Required,
+renamed, removed, or narrowed fields require a protocol version change. Unknown
+variants are rejected/resynchronized, never guessed. Generated protocol
+versions must match the runtime artifact selected by the connector release. An
+incompatible runtime is reported as an installation or connection problem; the
+connector does not guess missing fields or retain undocumented legacy forms.
+
+Protocol v2 is a paired cutover: release rollback restores the old runtime and
+connector pair together. Development-pair receipts bind the runtime protocol,
+frontend protocol, exact generated projection hash, and both repository content
+fingerprints before adoption.
+
+When changing a wire boundary:
+
+1. change the canonical owner;
+2. regenerate projections rather than hand-editing them;
+3. add schema/adapter regression tests for success, rejection, and cleanup;
+4. update the affected architecture and user documentation;
+5. verify an unpublished connector/runtime candidate together in the disposable
+   test vault when the change crosses the live boundary.
+
+## Related documentation
+
+- [Frontend modules](architecture/frontend-modules.md)
+- [Frontend styles](architecture/frontend-styles.md)
+- [Managed runtime lifecycle](architecture/managed-runtime-lifecycle.md)
+- [Release boundary](release-boundary.md)
+- [Installation](installation.md)
+- [Troubleshooting](troubleshooting.md)

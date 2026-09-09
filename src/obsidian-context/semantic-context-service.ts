@@ -407,8 +407,7 @@ export class ObsidianSemanticContextService {
 
   snapshot(): SemanticContextSnapshot {
     this.start();
-    const revised = this.flushPending();
-    if (revised) return revised;
+    this.flushPending();
     this.currentSnapshot ??= this.capture();
     return this.currentSnapshot;
   }
@@ -593,12 +592,12 @@ export class ObsidianSemanticContextService {
     this.eventRefs.push({ source, ref });
   }
 
-  private flushPending(): SemanticContextSnapshot | undefined {
+  private flushPending(): void {
     if (this.flushTimer !== null) {
       window.clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    if (this.pendingDomains.size === 0) return undefined;
+    if (this.pendingDomains.size === 0) return;
     const changed = [...this.pendingDomains];
     this.pendingDomains.clear();
     const revised = new Set<keyof ObsidianContextRevisions>();
@@ -608,29 +607,23 @@ export class ObsidianSemanticContextService {
     }
     for (const domain of revised) this.revisions[domain] += 1;
     this.sequence += 1;
-    const snapshot = this.capture();
-    this.currentSnapshot = snapshot;
+    // Unsolicited changes invalidate cached context without reading note contents.
+    // Only a demand snapshot, behind the caller's current grant, captures again.
+    this.currentSnapshot = undefined;
     this.diagnosticState.emittedEvents += 1;
     const event: ObsidianBridgeContextChanged = {
       type: "context_changed",
       sequence: this.sequence,
-      capturedAt: snapshot.capturedAt,
+      capturedAt: this.now().toISOString(),
       changed,
       revisions: { ...this.revisions },
-      ...(snapshot.focus ? {
-        summary: {
-          ...(snapshot.focus.activeLeafId ? { activeLeafId: snapshot.focus.activeLeafId } : {}),
-          viewType: snapshot.focus.viewType,
-          ...(snapshot.focus.path ? { path: snapshot.focus.path } : {}),
-        },
-      } : {}),
     };
     for (const listener of this.listeners) listener(event);
-    return snapshot;
   }
 
   private captureForPath(path: string): SemanticContextSnapshot {
-    const snapshot = this.flushPending() ?? this.capture();
+    this.flushPending();
+    const snapshot = this.capture();
     if (snapshot.editor.path === path) return snapshot;
     const workspace = this.app.workspace as unknown as WorkspaceLike;
     const leaf = workspace.getLeavesOfType("markdown")

@@ -1,17 +1,17 @@
 // Chatobby Obsidian Plugin — entry point.
 //
-// This file is pure wiring: it constructs the settings store, backend controller,
+// This file is pure wiring: it constructs the settings store, runtime manager,
 // transport, and command registry, and connects them. Functionality lives in
 // dedicated modules:
 //   - persistence           → src/state/settings-store.ts
-//   - backend lifecycle     → src/backend/backend-controller.ts (+ process.ts)
+//   - runtime lifecycle     → src/runtime/application/runtime-manager.ts
 //   - command actions       → src/commands/actions/* (registered via CommandRegistry)
 //   - obsidian:// handler   → src/uri-handler.ts
 //
 // The plugin composes one global Obsidian bridge coordinator. View transports
 // contribute ownership, while Project observation policy remains feature-owned.
 
-import { MarkdownView, Plugin } from "obsidian";
+import { MarkdownView, Notice, Plugin } from "obsidian";
 import { join } from "node:path";
 import { BridgeConnectionCoordinator, ObsidianBridgeClient } from "./obsidian-bridge";
 import { parseObsidianBridgeConnectionConfig } from "./vendor/@chatobby/obsidian-protocol/index.js";
@@ -43,24 +43,56 @@ import { OperationCoordinator, type ActiveOperation, type OperationDescriptor, t
 import { activateChatobbyLeaf } from "./ui/controller/active-chatobby-leaf";
 import {
 	ProjectDirectoryObservationService,
+	ProjectNavigatorView,
+	VIEW_TYPE_CHATOBBY_NAVIGATOR,
 	requestDirectoryProjectDecision,
 	requestDirectoryProjectDraft,
 } from "./features/projects/public";
 import { FrontendSessionRegistry } from "./runtime/application/frontend-session-registry";
 import { RuntimeUpdateClient } from "./runtime/infrastructure/runtime-update-client";
-import { RuntimeUpdateManager, type RuntimeUpdateState } from "./runtime/public";
+import {
+  automaticRuntimeProvisioningEnabled,
+  RuntimeBootstrapCoordinator,
+  RuntimeUpdateManager,
+  runtimeDevelopmentPairsRoot,
+  type RuntimeUpdateState,
+} from "./runtime/public";
 import { RuntimeInstallModal } from "./features/runtime-status/public";
 import { selectChatobbyCommandTarget } from "./ui/controller/view-targeting";
 import { addFileExplorerSessionMenuItems } from "./ui/session/file-explorer-session-menu";
-import { createFrontendBootstrapRequest } from "./ui/controller/frontend-bootstrap-request";
-import type { FrontendProjectSummaryViewModel } from "./vendor/chatobby-client/frontend-contracts.js";
+import { createFrontendNegotiationRequest } from "./ui/controller/frontend-bootstrap-request";
+import {
+	CHATOBBY_FRONTEND_PROTOCOL_VERSION,
+	frontendId,
+	type FrontendProjectSummaryViewModel,
+} from "./vendor/chatobby-client/frontend-contracts.js";
+import type { ChatobbyGuideChannelAsset } from "./vendor/chatobby-client/ws-client.js";
+import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "./vendor/chatobby-client/ws-client.js";
+import { DevelopmentPairCoordinator } from "./runtime/application/development-pair-coordinator";
+import { DevelopmentPairStartupGate } from "./runtime/application/development-pair-startup-gate";
+import {
+  verifyDevelopmentPairFrontendBootstrap,
+  type DevelopmentPairActivationProof,
+} from "./runtime/application/development-pair-bootstrap";
 import {
   disposeObsidianSemanticContextService,
   disposeObsidianUiSnapshotService,
 } from "./obsidian-context";
 import { WebSearchCredentialService } from "./credentials/web-search";
+import { WorkspacePageRegistry, WorkspacePageView, VIEW_TYPE_CHATOBBY_PAGE } from "./ui/workspace/workspace-tabs";
+import type { WorkspacePageState } from "./ui/workspace/workspace-pages";
+import { ProductIntroduction } from "./ui/modals/product-intro-modal";
 
 export default class ChatobbyPlugin extends Plugin {
+  readonly workspacePages = new WorkspacePageRegistry(this);
+  private readonly introduction = new ProductIntroduction({
+    app: this.app,
+    version: this.manifest.version,
+    getSettings: () => this.settings,
+    save: patch => this.updateSettings(patch),
+    openSettings: async () => { await this.openWorkspacePage({ mode: "settings" }); },
+  });
+  private readonly workspaceChannels = new Set<string>();
   // ── Persisted settings (public; read by SettingTab, mutated via store) ──
   settings: PluginSettings = DEFAULT_PLUGIN_SETTINGS;
 
@@ -69,6 +101,7 @@ export default class ChatobbyPlugin extends Plugin {
     this.writeProviderCredential(provider, apiKey),
   );
   private readonly runtimeDemands = new DefaultRuntimeDemandRegistry();
+  private readonly developmentPairStartup = new DevelopmentPairStartupGate();
   private readonly operations = new OperationCoordinator();
   private readonly bridgeCoordinator = new BridgeConnectionCoordinator((config) => new ObsidianBridgeClient(
     this.app,
@@ -85,7 +118,10 @@ export default class ChatobbyPlugin extends Plugin {
       new ChatobbyTransport(
         runtime,
         (reference) => this.app.secretStorage.getSecret(reference),
-        (request) => this.runtimeUpdates.activatePendingRuntime(request),
+        (request) => {
+          this.developmentPairStartup.assertRuntimeStartAllowed();
+          return this.runtimeUpdates.activatePendingRuntime(request);
+        },
       ),
     bindTransport: (channelId, transport) => {
       const unsubscribeConnection = transport.onConnectionChange((state) => {
@@ -145,21 +181,42 @@ export default class ChatobbyPlugin extends Plugin {
       advancedOcrCommand: this.settings.advancedOcrCommand,
     }),
     getVaultPaths: () => getChatobbyVaultRuntimePaths(this.app),
+    assertRuntimeStartAllowed: () => this.developmentPairStartup.assertRuntimeStartAllowed(),
     resolveManagedCommand: () => this.runtimeResolver.resolve(),
     connectRuntime: (runtime) => this.bindRuntime(runtime),
     disconnectRuntime: () => this.closeFrontendSession(),
     pluginVersion: this.manifest.version,
     runtimePublicKey: this.runtimePublicKey,
   });
+  private readonly runtimeInstaller = new RuntimePackageInstaller(runtimeInstallRoot(), this.runtimePublicKey ?? "");
+  private readonly runtimeUpdateClient = new RuntimeUpdateClient(runtimeInstallRoot(), this.runtimePublicKey ?? "");
   private readonly runtimeUpdates = new RuntimeUpdateManager({
     pluginVersion: this.manifest.version,
     enabled: this.buildMode === "release" && Boolean(this.runtimePublicKey),
-    client: new RuntimeUpdateClient(runtimeInstallRoot(), this.runtimePublicKey ?? ""),
-    installer: new RuntimePackageInstaller(runtimeInstallRoot(), this.runtimePublicKey ?? ""),
+    client: this.runtimeUpdateClient,
+    installer: this.runtimeInstaller,
     getInstalledVersion: () => readInstalledRuntimeVersion(),
-    hasActiveWork: () => this.hasActiveRuntimeWork(),
+    admitMaintenance: (operationId, target) => this.runtimeManager.admitMaintenance(operationId, "runtime-update", target),
+    cancelMaintenance: (operationId, leaseId) => this.runtimeManager.cancelMaintenance(operationId, leaseId),
+    commitMaintenance: (operationId, leaseId) => this.runtimeManager.commitMaintenance(operationId, leaseId),
     stopRuntime: () => this.runtimeManager.stop("user-action"),
-    startRuntime: (command) => this.runtimeManager.ensureReady({ reason: "manual-restart" }, command).then(() => undefined),
+    startRuntime: (command) => {
+      this.developmentPairStartup.assertRuntimeStartAllowed();
+      return this.runtimeManager.ensureReady({ reason: "manual-restart" }, command).then(() => undefined);
+    },
+  });
+  private readonly automaticRuntimeProvisioning = automaticRuntimeProvisioningEnabled(this.buildMode);
+  private readonly runtimeBootstrap = new RuntimeBootstrapCoordinator({
+    enabled: this.automaticRuntimeProvisioning,
+    hasInstalledRuntime: () => readInstalledRuntimeVersion() !== null,
+    shouldStartRuntime: () => this.settings.runtimeAutoStart,
+    reattachCompatibleRuntime: () => this.ensureRuntime("automatic-restart").then(() => undefined),
+    ensureRequiredRuntime: (signal) => {
+      this.developmentPairStartup.assertRuntimeStartAllowed();
+      return this.runtimeUpdates.ensureRequiredRuntime(signal);
+    },
+    stopProvisionedRuntime: () => this.runtimeManager.stop("user-action"),
+    reportFailure: (error) => console.error("Chatobby: automatic runtime provisioning needs attention", error),
   });
 
   private readonly visibleChatViews = new Set<ChatobbyView>();
@@ -177,10 +234,40 @@ export default class ChatobbyPlugin extends Plugin {
 		// Runtime leases, bridge registration, permissions, and Projects must all
 		// use the same path-independent identity before any connection starts.
 		await initializeChatobbyVaultIdentity(this.app);
-    await this.runtimeUpdates.recoverInterruptedInstallation();
+    const developmentVaultPaths = getChatobbyVaultRuntimePaths(this.app);
+    if (this.buildMode === "development" && developmentVaultPaths && this.manifest.dir) {
+      const adoption = new DevelopmentPairCoordinator({
+        enabled: true,
+        vaultRoot: developmentVaultPaths.vaultRoot,
+        configDir: this.app.vault.configDir,
+        pluginRoot: join(developmentVaultPaths.vaultRoot, this.manifest.dir),
+        externalRuntimeCacheRoot: runtimeDevelopmentPairsRoot(),
+        runtime: this.runtimeManager,
+        protocolVersion: CHATOBBY_RUNTIME_PROTOCOL_VERSION,
+        frontendProtocolVersion: CHATOBBY_FRONTEND_PROTOCOL_VERSION,
+        verifyFrontendBootstrap: (runtime, pairId, timeoutMs, signal) =>
+          this.verifyDevelopmentPairFrontendBootstrap(runtime, pairId, timeoutMs, signal),
+      });
+      const failure = await this.developmentPairStartup.capture(
+        this.getRuntimeMode(),
+        () => adoption.adoptPending(),
+      );
+      if (failure) {
+        this.runtimeManager.blockRuntimeStartsUntilReload();
+        console.error(
+          "Chatobby: development pair adoption failed; runtime startup remains blocked "
+          + `(${failure.state.diagnostics.code})`,
+        );
+      }
+    }
+    if (!this.developmentPairStartup.blocked) {
+      await this.runtimeUpdates.recoverInterruptedInstallation();
+    }
     this.projectDirectoryObservations.start();
 
     this.registerView(VIEW_TYPE_CHATOBBY, (leaf) => new ChatobbyView(leaf, this));
+    this.registerView(VIEW_TYPE_CHATOBBY_PAGE, (leaf) => new WorkspacePageView(leaf, this));
+    this.registerView(VIEW_TYPE_CHATOBBY_NAVIGATOR, (leaf) => new ProjectNavigatorView(leaf, this));
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
       const activation = ++this.activeLeafActivation;
       if (leaf?.view instanceof ChatobbyView) {
@@ -238,10 +325,23 @@ export default class ChatobbyPlugin extends Plugin {
         console.error("Chatobby: URI handler failed", error);
       });
     });
+    this.registerEvent(this.app.workspace.on("layout-change", () => {
+      if (!this.developmentPairStartup.blocked && !this.unloading) void this.workspacePages.restoreNativeLeaves();
+    }));
+    this.app.workspace.onLayoutReady(() => {
+      if (!this.developmentPairStartup.blocked && !this.unloading) {
+        void this.runtimeBootstrap.start();
+        void this.workspacePages.restoreNativeLeaves();
+      }
+      if (!this.unloading) this.introduction.showInitial();
+    });
   }
 
   onunload(): void {
     this.unloading = true;
+    this.introduction.dispose();
+    this.workspacePages.dispose();
+    this.runtimeBootstrap.dispose();
     if (this.vaultDirectoryRefreshTimer) window.clearTimeout(this.vaultDirectoryRefreshTimer);
     this.vaultDirectoryRefreshTimer = null;
     void this.disposePluginResources();
@@ -327,9 +427,15 @@ export default class ChatobbyPlugin extends Plugin {
     return this.frontendSessions.primary(activeChannelId);
   }
 
+  async fetchGuide(): Promise<ChatobbyGuideChannelAsset> {
+    if (this.buildMode !== "release" || !this.runtimePublicKey) {
+      throw new Error("The external Chatobby Guide is available only from a signed release build");
+    }
+    return this.runtimeUpdateClient.fetchGuide(this.manifest.version);
+  }
+
   /** Register one independently routable parent runtime for a Chatobby leaf. */
   async registerChatView(view: ChatobbyView): Promise<void> {
-    void this.runtimeUpdates.checkIfNeeded();
     await this.frontendSessions.register(view.runtimeChannelId).catch((error) => {
       console.error("Chatobby: initial leaf runtime connection failed; reconnect remains scheduled", error);
     });
@@ -352,7 +458,45 @@ export default class ChatobbyPlugin extends Plugin {
     return this.frontendSessions.get(view.runtimeChannelId);
   }
 
+  async registerWorkspaceChannel(channelId: string): Promise<void> {
+    this.workspaceChannels.add(channelId);
+    await this.frontendSessions.register(channelId);
+  }
+
+  async ensureWorkspaceChannel(channelId: string): Promise<ChatobbyTransport> {
+    await this.ensureRuntime("user-action");
+    return this.frontendSessions.ensure(channelId);
+  }
+
+  async unregisterWorkspaceChannel(channelId: string): Promise<void> {
+    this.workspaceChannels.delete(channelId);
+    await this.frontendSessions.unregister(channelId);
+  }
+
+  async openWorkspacePage(state: WorkspacePageState): Promise<void> {
+    await this.workspacePages.open(state);
+  }
+
+  async openSessionById(sessionId: string): Promise<ChatobbyView> {
+    const existing = this.chatobbyViews().find((view) => view.tabs().some((tab) => tab.sessionId === sessionId));
+    if (existing) {
+      await existing.switchToSession(sessionId);
+      existing.openMainFeed();
+      this.focusChatView(existing);
+      return existing;
+    }
+    const view = await this.openBlankView("");
+    await view.resumeSessionById(sessionId);
+    return view;
+  }
+
+  stopSessionById(sessionId: string): void {
+    const stopped = this.chatobbyViews().map((view) => view.requestStopForSession(sessionId)).some(Boolean);
+    if (!stopped) new Notice("That conversation is no longer running in an open Chatobby tab.");
+  }
+
   async activateView(): Promise<void> {
+    await this.openNavigator();
     const target = this.getActiveView();
     if (target) {
       await this.app.workspace.revealLeaf(target.leaf);
@@ -369,6 +513,16 @@ export default class ChatobbyPlugin extends Plugin {
     return this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)
       .map((leaf) => leaf.view)
       .filter((view): view is ChatobbyView => view instanceof ChatobbyView);
+  }
+
+  async openNavigator(): Promise<void> {
+    let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY_NAVIGATOR)[0];
+    if (!leaf) {
+      leaf = this.app.workspace.getLeftLeaf(false) ?? undefined;
+      if (!leaf) return;
+      await leaf.setViewState({ type: VIEW_TYPE_CHATOBBY_NAVIGATOR, active: true });
+    }
+    await this.app.workspace.revealLeaf(leaf);
   }
 
 	/** Always open a new blank Chatobby work surface in an Obsidian tab. */
@@ -478,15 +632,26 @@ export default class ChatobbyPlugin extends Plugin {
 		const transport = await this.frontendSessions.ensureUtility();
 		if (!transport.isConnected) throw new Error("Chatobby runtime did not connect.");
 		const viewId = "chatobby-project-directory-probe";
-		await transport.getFrontendBootstrap(createFrontendBootstrapRequest(this.app, this, viewId, {
-			frontend: "obsidian",
-			vault: this.app.vault.getName(),
-		}));
-		const screen = await transport.getFrontendScreen({
+		const negotiation = await transport.negotiateFrontend(createFrontendNegotiationRequest(this.app, this, viewId));
+		const subscription = await transport.subscribeFrontend({
 			schemaVersion: 1,
-			viewId,
+			protocolVersion: negotiation.protocolVersion,
+			requestId: frontendId(crypto.randomUUID(), "requestId"),
+			runtimeInstanceId: negotiation.runtimeInstanceId,
+			viewId: negotiation.viewId,
+		});
+		if (subscription.status === "resync-required") throw new Error(subscription.error.message);
+		const response = await transport.getFrontendScreen({
+			schemaVersion: 1,
+			protocolVersion: negotiation.protocolVersion,
+			runtimeInstanceId: negotiation.runtimeInstanceId,
+			viewId: negotiation.viewId,
+			requestId: frontendId(crypto.randomUUID(), "requestId"),
+			requestEpoch: 1,
+			baseSequence: subscription.sequence,
 			screenId: "projects",
 		});
+		const screen = response.screen;
 		if (screen.screenId !== "projects") throw new Error("Chatobby returned the wrong Project screen.");
 		const normalized = normalizeVaultDirectoryPath(vaultDirectoryPath);
 		return screen.projects.find(
@@ -532,6 +697,9 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   notifySessionDirectoryChanged(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY_NAVIGATOR)) {
+      if (leaf.view instanceof ProjectNavigatorView) leaf.view.refreshSessionDirectory();
+    }
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)) {
       if (leaf.view instanceof ChatobbyView) leaf.view.refreshSessionDirectoryIfOpen();
     }
@@ -562,7 +730,7 @@ export default class ChatobbyPlugin extends Plugin {
   // ── Settings + session-pref delegates (public API for settings/view/toolbar) ──
 
   getRuntimeState(): RuntimeLifecycleState {
-    return this.runtimeManager.state;
+    return this.developmentPairStartup.runtimeState(this.runtimeManager.state);
   }
 
   /** Effective runtime mode after applying the immutable release boundary. */
@@ -574,8 +742,12 @@ export default class ChatobbyPlugin extends Plugin {
     return this.buildMode === "release";
   }
 
+  usesAutomaticRuntimeProvisioning(): boolean {
+    return this.automaticRuntimeProvisioning;
+  }
+
   onRuntimeStateChange(listener: (state: RuntimeLifecycleState) => void): () => void {
-    return this.runtimeManager.onStateChange(listener);
+    return this.runtimeManager.onStateChange((state) => listener(this.developmentPairStartup.runtimeState(state)));
   }
 
   getRuntimeUpdateState(): RuntimeUpdateState {
@@ -587,6 +759,7 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   openRuntimeInstaller(repair = false): void {
+    this.developmentPairStartup.assertRuntimeStartAllowed();
     new RuntimeInstallModal(this.app, {
       getState: () => this.runtimeUpdates.state,
       onStateChange: (listener) => this.runtimeUpdates.onStateChange(listener),
@@ -595,6 +768,24 @@ export default class ChatobbyPlugin extends Plugin {
       install: (signal) => this.runtimeUpdates.install(signal),
       hasActiveWork: () => this.hasActiveRuntimeWork(),
     }, repair).open();
+  }
+
+  async retryRuntimeProvisioning(): Promise<void> {
+    this.developmentPairStartup.assertRuntimeStartAllowed();
+    if (this.automaticRuntimeProvisioning) {
+      await this.runtimeBootstrap.retry();
+      return;
+    }
+    this.openRuntimeInstaller();
+  }
+
+  async removeLocalRuntime(): Promise<void> {
+    if (this.hasActiveRuntimeWork()) {
+      throw new Error("Finish the current Chatobby work before removing the local runtime");
+    }
+    await this.runtimeManager.stop("user-action");
+    await this.runtimeInstaller.removeInstalledRuntime();
+    this.runtimeUpdates.reset();
   }
 
   private hasActiveRuntimeWork(): boolean {
@@ -616,6 +807,7 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   async restartRuntime(): Promise<void> {
+    this.developmentPairStartup.assertRuntimeStartAllowed();
     await this.runOperation(
       { key: "backend-lifecycle", id: "backend:restart", label: "Restarting Chatobby" },
       async () => {
@@ -626,6 +818,7 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   async ensureRuntime(reason: RuntimeActionReason): Promise<ReadyRuntime> {
+    this.developmentPairStartup.assertRuntimeStartAllowed();
     try {
       const runtime = await this.runtimeManager.ensureReady({ reason });
       await this.runtimeUpdates.finalizeRecoveredRuntime(runtime.identity);
@@ -686,6 +879,8 @@ export default class ChatobbyPlugin extends Plugin {
 		if (this.settings.onboardingVersion >= 1) return;
 		await this.updateSettings({ onboardingVersion: 1 });
 	}
+
+  showWhatsNew(): void { this.introduction.show("changes"); }
 
   getActiveVaultDirectory(): string {
     return this.settings.activeVaultDirectory;
@@ -761,14 +956,34 @@ export default class ChatobbyPlugin extends Plugin {
   }
 
   private async bindRuntime(runtime: ReadyRuntime): Promise<void> {
-    const liveChannelIds = new Set(
+    const liveChannelIds = new Set<string>(
       this.app.workspace.getLeavesOfType(VIEW_TYPE_CHATOBBY)
         .map((leaf) => leaf.view)
         .filter((view): view is ChatobbyView => view instanceof ChatobbyView)
         .map((view) => view.runtimeChannelId),
     );
+    for (const channelId of this.workspaceChannels) liveChannelIds.add(channelId);
     await this.frontendSessions.reconcile(liveChannelIds);
+    this.developmentPairStartup.assertRuntimeStartAllowed();
     await this.frontendSessions.bindRuntime(runtime);
+  }
+
+  private async verifyDevelopmentPairFrontendBootstrap(
+    runtime: ReadyRuntime,
+    pairId: string,
+    timeoutMs: number,
+    signal: AbortSignal,
+  ): Promise<DevelopmentPairActivationProof> {
+    const transport = await this.frontendSessions.ensureUtility();
+    const viewId = frontendId(`development-pair-${pairId.slice(0, 32)}`, "viewId");
+    return verifyDevelopmentPairFrontendBootstrap({
+      pairId,
+      runtime,
+      transport,
+      request: createFrontendNegotiationRequest(this.app, this, viewId),
+      timeoutMs,
+      signal,
+    });
   }
 
   /** Detach frontend clients without waiting on an in-flight agent command. */

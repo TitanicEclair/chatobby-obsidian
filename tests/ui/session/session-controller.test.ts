@@ -10,8 +10,113 @@ import {
   type SessionMutationRequest,
 } from "../../../src/ui/controller/session-controller";
 import type { FrontendSessionViewModel } from "../../../src/vendor/chatobby-client/frontend-contracts.js";
+import { OperationCoordinator } from "../../../src/features/operations/public";
 
 describe("SessionController", () => {
+  it("holds the first submission until an already-started create and its presentation settle", async () => {
+    let releaseCreate!: () => void;
+    let releasePresentation!: () => void;
+    const created = new Promise<void>((resolve) => { releaseCreate = resolve; });
+    const presented = new Promise<void>((resolve) => { releasePresentation = resolve; });
+    const dispatch = vi.fn(async (_request: SessionMutationRequest, target: SessionController) => {
+      await created;
+      target.applyRuntimeSession(session("first-target"));
+      return true;
+    });
+    const { controller } = harness({ dispatch, settlePresentation: () => presented });
+    const transition = controller.createSession();
+    let outcome: string | Error | undefined;
+    const submission = controller.ensureActiveSessionTarget().then(
+      (target) => { outcome = target.sessionId; },
+      (error: Error) => { outcome = error; },
+    );
+    try {
+      await flushMicrotasks();
+      expect(outcome).toBeUndefined();
+      expect(dispatch).toHaveBeenCalledOnce();
+      releaseCreate();
+      await flushMicrotasks();
+      expect(outcome).toBeUndefined();
+      releasePresentation();
+      await transition;
+      await submission;
+      expect(outcome).toBe("first-target");
+      expect(dispatch).toHaveBeenCalledOnce();
+    } finally {
+      releaseCreate();
+      releasePresentation();
+      await transition;
+      await submission;
+    }
+  });
+
+  it.each(["C:\\Project", null])("waits for the selected Project resume instead of sending to the old Vault (%s)", async (workingDirectory) => {
+    let release!: () => void;
+    const resumed = new Promise<void>((resolve) => { release = resolve; });
+    const dispatch = vi.fn(async (_request: SessionMutationRequest, target: SessionController) => {
+      await resumed;
+      target.applyRuntimeSession(session("selected-project", {
+        workingDirectory,
+        workspace: { kind: "project", projectId: "project:synthetic", label: "Synthetic" },
+      }));
+      return true;
+    });
+    const { controller } = harness({ dispatch });
+    controller.applyRuntimeSession(session("old-vault"));
+    const transition = controller.restoreSession("C:/synthetic/selected-project.jsonl");
+    let outcome: string | undefined;
+    const submission = controller.ensureActiveSessionTarget().then((target) => { outcome = target.sessionId; });
+    try {
+      await flushMicrotasks();
+      expect(outcome).toBeUndefined();
+      release();
+      await transition;
+      await submission;
+      expect(outcome).toBe("selected-project");
+      expect(dispatch).toHaveBeenCalledOnce();
+    } finally {
+      release();
+      await transition;
+      await submission;
+    }
+  });
+
+  it("does not let a rejected competing transition release the prompt wait and clears a failed owner for retry", async () => {
+    let fail!: (error: Error) => void;
+    const pending = new Promise<void>((_resolve, reject) => { fail = reject; });
+    const dispatch = vi.fn(async (request: SessionMutationRequest, target: SessionController) => {
+      if (request.type === "session.resume") await pending;
+      target.applyRuntimeSession(session("retry-target"));
+      return true;
+    });
+    const { controller } = harness({ dispatch });
+    const failure = new Error("Synthetic selected-session failure");
+    const transition = controller.restoreSession("C:/synthetic/selected.jsonl");
+    const transitionResult = transition.catch((error: Error) => error);
+    let outcome: string | Error | undefined;
+    const submission = controller.ensureActiveSessionTarget().then(
+      (target) => { outcome = target.sessionId; },
+      (error: Error) => { outcome = error; },
+    );
+    try {
+      await controller.createSession();
+      await flushMicrotasks();
+      expect(outcome).toBeUndefined();
+      expect(dispatch).toHaveBeenCalledOnce();
+      fail(failure);
+      expect(await transitionResult).toBe(failure);
+      await submission;
+      expect(outcome).toBe(failure);
+      const retry = await controller.ensureActiveSessionTarget();
+      expect(retry.sessionId).toBe("retry-target");
+      expect(dispatch).toHaveBeenCalledTimes(2);
+    } finally {
+      fail(failure);
+      await transitionResult;
+      await submission;
+    }
+  });
+
   it("keeps exactly one main session in each Obsidian leaf", () => {
     const { controller } = harness();
     controller.applyRuntimeSession(session("session-1"));
@@ -339,9 +444,11 @@ interface HarnessOptions {
   dispatch?: (request: SessionMutationRequest, controller: SessionController) => Promise<boolean>;
   synchronize?: (controller: SessionController) => Promise<void>;
   renderActiveTab?: ReturnType<typeof vi.fn>;
+  settlePresentation?: () => Promise<void>;
 }
 
 function harness(options: HarnessOptions = {}) {
+  const operations = new OperationCoordinator();
   const renderActiveTab = options.renderActiveTab ?? vi.fn();
   const persistLeafState = vi.fn();
   const claimSessionOwnership = vi.fn();
@@ -370,14 +477,18 @@ function harness(options: HarnessOptions = {}) {
     renderActiveTab,
     persistLeafState,
     exitSessionBrowser: vi.fn(),
-    runOperation: async (_descriptor, operation) => operation(),
-    getActiveOperation: () => null,
+    runOperation: (descriptor, operation) => operations.run(descriptor, operation),
+    getActiveOperation: () => operations.current("session-transition"),
     claimSessionOwnership,
     dispatchSessionIntent: (request) => options.dispatch?.(request, controller) ?? Promise.resolve(false),
     synchronizeFrontend: () => options.synchronize?.(controller) ?? Promise.resolve(),
-    settlePresentation: () => Promise.resolve(),
+    settlePresentation: options.settlePresentation ?? (() => Promise.resolve()),
   });
   return { controller, renderActiveTab, persistLeafState, claimSessionOwnership };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 20; index += 1) await Promise.resolve();
 }
 
 function session(id: string, overrides: Partial<FrontendSessionViewModel> = {}): FrontendSessionViewModel {

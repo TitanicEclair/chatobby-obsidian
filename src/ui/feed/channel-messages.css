@@ -1,3 +1,6 @@
+/* Channel-originated messages embedded in the main feed. The channel page has
+   separate history styles in features/channels/ui/channels.css. */
+
 .chatobby-channel-message {
   min-width: 0;
   max-width: min(72ch, 92%);
@@ -41,6 +44,7 @@
   overflow-wrap: anywhere;
 }
 
+/* Message body and its explicit route-to-channel action. */
 .chatobby-channel-message__bubble {
   position: relative;
   padding: var(--size-2-2) calc(var(--size-4-6) + var(--size-2-2)) var(--size-2-2) var(--size-4-3);

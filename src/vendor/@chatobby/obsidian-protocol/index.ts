@@ -59,6 +59,7 @@ export {
 export type { ObsidianVaultSelector } from "./bridge-selectors.ts";
 // --- Vault selectors ---
 export { parseVaultSelector } from "./bridge-selectors.ts";
+export { OBSIDIAN_INVOCATION_METADATA_KEY, readObsidianInvocationCapability } from "./invocation-metadata.ts";
 export type {
 	ObsidianDirectToolName,
 	ObsidianMcpPolicyOptions,

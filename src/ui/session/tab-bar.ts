@@ -1,86 +1,58 @@
 import { setIcon } from "obsidian";
 import { ChatobbyComponent } from "../shared/component";
-import { isDomNodeOfType } from "../shared/dom";
 import type { ChatobbyViewMode } from "../controller/view-navigation-controller";
 
 export interface TabBarHost {
-	sessionTitle(): string;
-	workspaceLabel(): string;
-	activeMode(): ChatobbyViewMode;
-	onReturnToChat(): void;
-	onCreateView(): void;
-	onNavigate(mode: "projects" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp" | "settings"): void;
+  sessionTitle(): string;
+  workspaceLabel(): string;
+  activeMode(): ChatobbyViewMode;
+  onReturnToChat(): void;
+  onCreateView(): void;
+  onNavigate(mode: "projects" | "subagents" | "channels" | "permissions" | "memory" | "events" | "mcp" | "settings"): void;
+  subagentHost?(): HTMLElement;
 }
 
+/** Conversation identity and a collapsed session agent switcher. Global pages live in the sidebar. */
 export class TabBar extends ChatobbyComponent {
-	private sessionTitleEl: HTMLElement | null = null;
-	private workspaceLabelEl: HTMLElement | null = null;
-	private pagesEl: HTMLElement | null = null;
-
-  constructor(private readonly host: TabBarHost) {
-    super();
-  }
+  private title: HTMLElement | null = null;
+  private scope: HTMLElement | null = null;
+  private dismiss: (() => void) | null = null;
+  constructor(private readonly host: TabBarHost) { super(); }
 
   refresh(): void {
-		if (this.sessionTitleEl) this.sessionTitleEl.textContent = this.host.sessionTitle();
-		if (this.workspaceLabelEl) this.workspaceLabelEl.textContent = this.host.workspaceLabel();
-		for (const element of Array.from(this.pagesEl?.children ?? [])) {
-			if (!isDomNodeOfType(element, HTMLElement)) continue;
-			const active = element.dataset.mode === this.host.activeMode();
-			element.toggleClass("is-active", active);
-			element.setAttr("aria-pressed", String(active));
-			if (active) element.setAttr("aria-current", "page");
-			else element.removeAttribute("aria-current");
-		}
+    if (this.title) this.title.textContent = this.host.sessionTitle();
+    if (this.scope) this.scope.textContent = this.host.workspaceLabel();
   }
 
+  override destroy(): void {
+    this.dismiss?.(); this.dismiss = null;
+    super.destroy();
+  }
+
+  protected componentClass(): string { return "chatobby-tab-bar"; }
   protected onRender(container: HTMLElement): void {
-		const sessionIdentity = container.createEl("button", {
-      cls: "chatobby-tab-bar__directory",
-      attr: { type: "button", title: "Return to main chat", "aria-label": "Return to main chat" },
+    const identity = container.createEl("button", { cls: "chatobby-tab-bar__directory", attr: { type: "button", "aria-label": "Return to main chat" } });
+    this.title = identity.createSpan({ cls: "chatobby-tab-bar__session-title" });
+    this.scope = identity.createSpan({ cls: "chatobby-tab-bar__workspace-label" });
+    identity.addEventListener("click", () => this.host.onReturnToChat());
+    const disclosure = container.createEl("details", { cls: "chatobby-agent-disclosure" });
+    const summary = disclosure.createEl("summary", { attr: { "aria-label": "Session subagents" } });
+    setIcon(summary.createSpan(), "bot");
+    summary.createSpan({ text: "Subagents" });
+    setIcon(summary.createSpan({ cls: "chatobby-agent-disclosure__chevron" }), "chevron-down");
+    const panel = disclosure.createDiv({ cls: "chatobby-agent-disclosure__panel" });
+    const agents = this.host.subagentHost?.();
+    if (agents) panel.append(agents);
+    const all = panel.createEl("button", { cls: "chatobby-agent-disclosure__all", text: "All agents and roles", attr: { type: "button" } });
+    all.addEventListener("click", () => { disclosure.open = false; this.host.onNavigate("subagents"); });
+    disclosure.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") { disclosure.open = false; summary.focus(); event.stopPropagation(); }
     });
-		this.sessionTitleEl = sessionIdentity.createSpan({ cls: "chatobby-tab-bar__session-title" });
-		this.workspaceLabelEl = sessionIdentity.createSpan({ cls: "chatobby-tab-bar__workspace-label" });
-		sessionIdentity.addEventListener("click", () => this.host.onReturnToChat());
-		const actions = container.createDiv({
-			cls: "chatobby-tab-bar__actions",
-			attr: { role: "toolbar", "aria-label": "Chatobby view controls" },
-		});
-		this.pagesEl = actions.createDiv({ cls: "chatobby-tab-bar__pages", attr: { role: "group", "aria-label": "Chatobby pages" } });
-		this.renderPage("projects", "folder-kanban", "Projects");
-		this.renderPage("subagents", "bot", "Subagents");
-		this.renderPage("channels", "messages-square", "Channels");
-		this.renderPage("permissions", "shield-check", "Permissions");
-		this.renderPage("memory", "brain", "Memory");
-		this.renderPage("events", "calendar-clock", "Events");
-		this.renderPage("queries", "braces", "Queries");
-		this.renderPage("mcp", "blocks", "Plugins");
-		this.renderPage("settings", "settings", "Settings");
-		actions.createDiv({ cls: "chatobby-tab-bar__separator", attr: { role: "separator", "aria-orientation": "vertical" } });
-    const newButton = actions.createEl("button", {
-      cls: "chatobby-tab-bar__action chatobby-tab-bar__new clickable-icon",
-			attr: { type: "button", "aria-label": "Open new Chatobby view", title: "Open new Chatobby view" },
-    });
-    setIcon(newButton, "plus");
-		newButton.addEventListener("click", () => this.host.onCreateView());
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !disclosure.contains(event.target)) disclosure.open = false;
+    };
+    container.ownerDocument.addEventListener("pointerdown", outside);
+    this.dismiss = () => container.ownerDocument.removeEventListener("pointerdown", outside);
     this.refresh();
   }
-
-  protected componentClass(): string {
-    return "chatobby-tab-bar";
-  }
-
-	private renderPage(mode: "projects" | "subagents" | "channels" | "permissions" | "memory" | "events" | "queries" | "mcp" | "settings", icon: string, label: string): void {
-		if (!this.pagesEl) return;
-		const button = this.pagesEl.createEl("button", {
-			cls: "chatobby-tab-bar__action chatobby-tab-bar__page clickable-icon",
-			attr: { type: "button", title: label, "aria-label": `Open ${label}`, "aria-pressed": "false" },
-		});
-		button.dataset.mode = mode;
-		setIcon(button, icon);
-		button.addEventListener("click", () => {
-			if (this.host.activeMode() === mode) return;
-			this.host.onNavigate(mode);
-		});
-	}
 }

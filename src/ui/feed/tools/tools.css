@@ -1,5 +1,7 @@
-/* Tool calls + unified-diff hunks */
-/* ── Tool calls: compact icon rows that expand to a formatted result ── */
+/* Tool calls and unified-diff hunks. Rows stay compact until the user expands
+   the typed result; tool execution state remains outside presentation. */
+
+/* Compact tool rows and expandable normalized results. */
 .chatobby-tool-block__items {
   display: flex;
   flex-direction: column;
@@ -59,7 +61,7 @@
 
 .chatobby-tool-item__arg-link {
   color: var(--text-faint);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   cursor: pointer;
   text-decoration: var(--link-decoration);
 }
@@ -71,14 +73,14 @@
 
 .chatobby-tool-item__arg-text {
   color: var(--text-faint);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
 }
 
 .chatobby-tool-item__stats {
   display: inline-flex;
   flex: 0 0 auto;
   gap: var(--size-2-2);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--font-ui-smaller);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -183,7 +185,7 @@
   max-height: 160px;
   overflow: auto;
   color: var(--text-muted);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--chatobby-meta-size);
   white-space: pre-wrap;
   word-break: break-word;
@@ -195,7 +197,7 @@
   overflow: auto;
   padding: var(--size-2-1) 0;
   color: var(--text-normal);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--chatobby-meta-size);
   white-space: pre-wrap;
   word-break: break-word;
@@ -203,10 +205,10 @@
 .chatobby-tool-result.is-error { color: var(--chatobby-danger); }
 
 @keyframes chatobby-spin { to { transform: rotate(360deg); } }
-/* ── Unified-diff hunks (note edits) ── */
+/* Unified-diff hunks for note edits; add/delete meaning includes text labels. */
 .chatobby-diff {
   margin: 0;
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--font-ui-smaller);
   max-height: 360px;
   overflow-y: auto;

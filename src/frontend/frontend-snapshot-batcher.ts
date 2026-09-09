@@ -41,8 +41,8 @@ export class FrontendSnapshotBatcher {
     this.pending = null;
     if (!snapshot) return;
     const previous = this.applied;
-    this.applied = snapshot;
     this.apply(snapshot, previous);
+    this.applied = snapshot;
   }
 
   destroy(): void {
@@ -57,7 +57,7 @@ export class FrontendSnapshotBatcher {
   }
 }
 
-/** Whether persisted-session directory metadata changed between snapshots. */
+/** Directory identity, metadata and turn transitions; token deltas do not refresh the sidebar. */
 export function sessionDirectoryProjectionChanged(
   previous: FrontendBootstrap["session"] | undefined,
   current: FrontendBootstrap["session"] | undefined,
@@ -65,5 +65,15 @@ export function sessionDirectoryProjectionChanged(
   return previous?.id !== current?.id
     || previous?.recoveryPath !== current?.recoveryPath
     || previous?.name !== current?.name
+    || previous?.streaming !== current?.streaming
+    || previous?.compacting !== current?.compacting
     || previous?.messageCount !== current?.messageCount;
+}
+
+/** Whether the active model changed and cached token-window statistics are stale. */
+export function sessionModelProjectionChanged(
+  previous: FrontendBootstrap["session"] | undefined,
+  current: FrontendBootstrap["session"] | undefined,
+): boolean {
+  return previous?.id === current?.id && previous?.model !== current?.model;
 }

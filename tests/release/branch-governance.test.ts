@@ -9,9 +9,9 @@ describe("connector branch governance", () => {
   it("checks dev, main, and temporary release branches", async () => {
     const workflow = await readFile(join(repositoryRoot, ".github", "workflows", "ci.yml"), "utf8");
 
-    expect(workflow).toContain("- dev");
-    expect(workflow).toContain("- main");
-    expect(workflow).toContain('"release/**"');
+    expect(workflow).toContain("options: [main, dev]");
+    expect(workflow).toContain("BASE_BRANCH: ${{ inputs.target_branch }}");
+    expect(workflow).toContain("HEAD_BRANCH: ${{ github.ref_name }}");
     expect(workflow).toContain('[[ "$HEAD_BRANCH" == release/* ]]');
     expect(workflow).toContain("feature/*|fix/*|docs/*|chore/*|automation/*|codex/*");
   });

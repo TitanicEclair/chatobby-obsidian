@@ -44,18 +44,28 @@
     "vitest.config.ts",
     "docs/api/feed.md",
     "docs/architecture/frontend-modules.md",
+    "docs/architecture/frontend-styles.md",
     "docs/architecture/managed-runtime-lifecycle.md",
     "docs/installation.md",
     "docs/alpha-guide.md",
     "docs/troubleshooting.md",
     "docs/release-boundary.md",
     "docs/responsibility-boundaries.md",
-    "docs/wire-protocol.md"
+    "docs/wire-protocol.md",
+    "docs/events.md",
+    "docs/live-update-lifecycle.md",
+    "docs/mcp-connections.md",
+    "docs/obsidian-cli-and-terminal.md",
+    "docs/project-guidance.md",
+    "docs/projects.md",
+    "docs/providers-and-models.md",
+    "docs/subagents.md"
   ],
   "reviewableExportRoots": [
     "scripts",
     "src",
-    "tests"
+    "tests",
+    "assets/readme"
   ],
   "requiredPublicationFiles": [
     "LICENSE",

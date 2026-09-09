@@ -17,6 +17,12 @@ ordinary note or coding work. A command result proves what that invocation
 reported; Chatobby still verifies important file, application, or rendered
 state proportionately.
 
+For examples of native tabs, settings forms, local-model setup and reusable
+workflows, see [Obsidian automation](obsidian-automation.md). The searchable
+**Obsidian API catalogue** is generated from the official `obsidian.d.ts`
+declarations. Current arbitrary CLI eval requires Full access and the relevant
+Obsidian access setting.
+
 ## Command discovery
 
 Chatobby builds the command inventory at runtime startup for the selected

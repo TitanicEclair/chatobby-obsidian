@@ -1,4 +1,5 @@
-/* Session bar + tab bar */
+/* Session/tab navigation. The controller owns tab identity and activation;
+   this module owns compact metadata, page actions, and keyboard focus states. */
 
 .chatobby-session-bar {
   display: flex;
@@ -17,6 +18,7 @@
   min-width: 0;
 }
 
+/* Primary page actions follow session identity in DOM order. */
 .chatobby-tab-bar__actions {
   display: flex;
   flex: 0 0 auto;
@@ -134,6 +136,7 @@
   background: color-mix(in srgb, var(--chatobby-border) 70%, transparent);
 }
 
+/* Tabs respond to the Chatobby pane rather than the application viewport. */
 @container (max-width: 560px) {
 	.chatobby-tab-bar__directory { max-width: none; }
 }

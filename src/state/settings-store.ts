@@ -20,6 +20,7 @@ import {
 /** Shape of the full data.json on disk. */
 interface PersistedData {
 	onboardingVersion?: number;
+  lastSeenPluginVersion?: string;
   runtimeMode?: string;
   runtimeAutoStart?: boolean;
   runtimeLifetime?: string;
@@ -63,6 +64,8 @@ export class SettingsStore {
 
     Object.assign(this.settings, {
 		onboardingVersion: resolveOnboardingVersion(data),
+      lastSeenPluginVersion: typeof data.lastSeenPluginVersion === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(data.lastSeenPluginVersion)
+        ? data.lastSeenPluginVersion : "",
       runtimeMode,
       runtimeAutoStart: data.runtimeAutoStart ?? DEFAULT_PLUGIN_SETTINGS.runtimeAutoStart,
       runtimeLifetime: data.runtimeLifetime === "background" ? "background" : "obsidian-session",
@@ -93,6 +96,7 @@ export class SettingsStore {
   private async save(): Promise<void> {
     await this.plugin.saveData({
 		onboardingVersion: this.settings.onboardingVersion,
+      lastSeenPluginVersion: this.settings.lastSeenPluginVersion,
       runtimeMode: this.settings.runtimeMode,
       runtimeAutoStart: this.settings.runtimeAutoStart,
       runtimeLifetime: this.settings.runtimeLifetime,

@@ -7,6 +7,8 @@ export interface RuntimeStatusHost {
   start(): Promise<void>;
   restart(): Promise<void>;
   install(repair?: boolean): Promise<void>;
+  automaticProvisioning(): boolean;
+  retryProvisioning(): Promise<void>;
 }
 
 /** Render low-noise lifecycle progress and actionable terminal failures. */
@@ -70,9 +72,16 @@ export class RuntimeStatusController {
 
     if (state.status === "idle") {
       this.actionButton(container, "Start", () => this.host.start());
-    } else if (state.status === "error" || state.status === "crash_loop") {
+    } else if (
+      (state.status === "error" || state.status === "crash_loop")
+      && state.diagnostics.code !== "development_pair_adoption_failed"
+    ) {
       if (shouldOfferRuntimeDownload(state)) {
-        this.actionButton(container, "Install runtime", () => this.host.install());
+        if (this.host.automaticProvisioning()) {
+          this.actionButton(container, "Retry setup", () => this.host.retryProvisioning());
+        } else {
+          this.actionButton(container, "Install runtime", () => this.host.install());
+        }
       } else if (shouldOfferRuntimeRepair(state)) {
         this.actionButton(container, "Repair Chatobby", () => this.host.install(true));
       } else if (state.diagnostics.code === "macos_security_blocked") {
@@ -163,6 +172,15 @@ function presentRuntimeState(state: RuntimeLifecycleState): RuntimeStatePresenta
     case "stopping":
       return { title: "Stopping Chatobby", detail: "Finishing runtime cleanup.", icon: "loader-circle", failure: false, loading: true };
     case "error":
+      if (state.diagnostics.code === "development_pair_adoption_failed") {
+        return {
+          title: "Chatobby update needs attention",
+          detail: state.diagnostics.message,
+          icon: "shield-alert",
+          failure: true,
+          loading: false,
+        };
+      }
       if (state.mode === "managed" && shouldOfferRuntimeRepair(state)) {
         return {
           title: "Chatobby needs repair",

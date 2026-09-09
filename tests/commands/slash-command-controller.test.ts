@@ -17,7 +17,6 @@ function createOptions(): SlashCommandControllerOptions {
     openMemory: vi.fn(),
     openSubagents: vi.fn(),
     openEvents: vi.fn(),
-    openQueries: vi.fn(),
     compact: vi.fn(async () => {}),
     createSession: vi.fn(async () => {}),
     setWorkingDirectory: vi.fn(async () => {}),
@@ -86,6 +85,16 @@ describe("SlashCommandController runtime catalogue", () => {
     expect(filterSlashCommands(controller.catalog(), "custom").map((entry) => entry.name)).toEqual([
       "custom-extension-command",
     ]);
+  });
+
+  it("hides the retired Context Queries screen command from an older runtime", () => {
+    const controller = new SlashCommandController(createOptions());
+    controller.setRuntimeCommands([
+      command("queries", "open-screen", { kind: "screen", screenId: "queries" }),
+      command("memory", "open-screen", { kind: "screen", screenId: "memory" }),
+    ]);
+
+    expect(controller.catalog().map((entry) => entry.name)).toEqual(["memory"]);
   });
 
   it("projects readable argument syntax from the runtime contract", () => {

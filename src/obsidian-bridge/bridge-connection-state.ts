@@ -16,7 +16,7 @@
 // hello would fail identically, so retrying would storm. The backend emits 4002 on
 // an unknown capability, wrong protocolVersion, or malformed hello shape.
 //
-// See docs/tooling/bridge-executor.md §7.1 for the full close-code table.
+// Keep close-code policy at this transport boundary; see docs/wire-protocol.md.
 
 import type { BridgeConnectionState, BridgeConnectionEvent } from "./types";
 import { RECONNECT_MAX_ATTEMPTS } from "../ui/shared/constants";

@@ -1,4 +1,5 @@
-/* Composer: input card, controls bar, send/stop, slash autocomplete */
+/* Composer: prompt editor, references/attachments, control bar, send/stop, and
+   slash autocomplete. Controllers own commands and submission state. */
 
 .chatobby-composer {
   flex: 0 0 auto;
@@ -467,7 +468,7 @@ div.chatobby-input-highlight {
   border: 0;
   box-shadow: none;
   box-sizing: border-box;
-  font-family: var(--font-interface-theme);
+  font-family: var(--font-interface, system-ui, sans-serif);
   font-size: var(--chatobby-body-size);
   font-weight: normal;
   letter-spacing: normal;
@@ -543,6 +544,7 @@ textarea.chatobby-input:focus {
 .chatobby-composer-controls-host {
   flex: 1 1 auto;
   min-width: 0;
+  container: chatobby-controls / inline-size;
 }
 
 .chatobby-composer-controls {
@@ -610,18 +612,18 @@ button.chatobby-reference-menu__option.is-active { background: var(--chatobby-su
 .chatobby-reference-menu__path { color: var(--text-muted); font-size: var(--font-ui-smaller); }
 
 .chatobby-selection-menu {
-  position: absolute;
+  /* SelectionMenu positions in its anchor's document, outside pane clipping. */
+  position: fixed;
   z-index: var(--layer-popover, 30);
-  bottom: calc(100% + var(--size-2-2));
-  left: 0;
+  margin: 0;
   display: flex;
-  width: min(380px, calc(100cqw - var(--size-4-3)));
-  max-height: min(360px, calc(100vh - 180px));
+  box-sizing: border-box;
   flex-direction: column;
   overflow: hidden;
   border: var(--border-width) solid var(--chatobby-line);
   border-radius: var(--radius-s);
   color: var(--text-normal);
+  font-family: var(--font-interface, system-ui, sans-serif);
   background: var(--chatobby-canvas);
   box-shadow: var(--shadow-s);
 }
@@ -883,14 +885,14 @@ button.chatobby-send-btn:hover {
   color: var(--text-muted);
   font-size: var(--chatobby-meta-size);
 }
-/* ── Composer controls: compact triggers for the shared searchable picker ── */
+/* Compact triggers for the shared searchable provider/model/policy picker. */
 button.chatobby-control-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--size-2-1);
-  min-width: var(--size-4-7);
-  height: var(--size-4-7, 28px);
+  min-width: var(--size-4-8, 32px);
+  height: var(--size-4-8, 32px);
   max-width: 100%;
   margin: 0;
   padding: 0 var(--size-4-1);
@@ -899,7 +901,7 @@ button.chatobby-control-button {
   box-shadow: none;
   background: transparent;
   color: var(--text-muted);
-  font-family: var(--font-interface-theme);
+  font-family: var(--font-interface, system-ui, sans-serif);
   font-size: var(--chatobby-meta-size);
   font-weight: var(--font-medium);
   line-height: var(--line-height-tight);
@@ -960,38 +962,43 @@ button.chatobby-control-button:focus-visible {
 .chatobby-control--model {
   max-width: min(260px, 36cqw);
 }
-.chatobby-control--thinking {
+.chatobby-control--effort {
   max-width: 128px;
 }
 .chatobby-control--permission {
 	max-width: min(180px, 30cqw);
 }
 
-button.chatobby-control-overflow {
-  display: none;
-  flex: 0 0 var(--size-4-7);
-  width: var(--size-4-7);
-  padding: 0;
-}
-
-@container (max-width: 680px) {
+/* Collapse words before controls. Query actual space left after attach/actions,
+   not the application window; all icons remain in keyboard/DOM order. */
+@container chatobby-controls (max-width: 480px) {
+  button.chatobby-control--network,
+  button.chatobby-control--permission,
   button.chatobby-control--provider,
-  button.chatobby-control--effort { display: none; }
-  button.chatobby-control-overflow { display: inline-flex; }
-  .chatobby-control--model { flex: 1 1 auto; max-width: none; }
-  .chatobby-control--permission { flex: 0 1 auto; max-width: min(150px, 34cqw); }
-}
-
-@container (max-width: 440px) {
-  .chatobby-control--permission,
-  .chatobby-control--model {
-    flex: 0 0 var(--size-4-7);
-    width: var(--size-4-7);
+  button.chatobby-control--effort {
+    flex: 0 0 var(--size-4-8, 32px);
+    width: var(--size-4-8, 32px);
     padding: 0;
   }
+  .chatobby-control--network .chatobby-control-button__label,
+  .chatobby-control--network .chatobby-control-button__chevron,
   .chatobby-control--permission .chatobby-control-button__label,
-  .chatobby-control--model .chatobby-control-button__label,
+  .chatobby-control--provider .chatobby-control-button__label,
+  .chatobby-control--effort .chatobby-control-button__label,
   .chatobby-control--permission .chatobby-control-button__chevron,
+  .chatobby-control--provider .chatobby-control-button__chevron,
+  .chatobby-control--effort .chatobby-control-button__chevron { display: none; }
+  .chatobby-control--model { flex: 1 1 0; max-width: none; }
+}
+
+@container chatobby-controls (max-width: 220px) {
+  .chatobby-composer-controls { flex-wrap: wrap; }
+  button.chatobby-control--model {
+    flex: 0 0 var(--size-4-8, 32px);
+    width: var(--size-4-8, 32px);
+    padding: 0;
+  }
+  .chatobby-control--model .chatobby-control-button__label,
   .chatobby-control--model .chatobby-control-button__chevron { display: none; }
 }
 
@@ -1004,7 +1011,7 @@ button.chatobby-control-overflow {
   stroke-width: 2.5;
 }
 
-/* ── Slash autocomplete (floats above the composer card) ── */
+/* Slash autocomplete floats above the card but follows editor DOM order. */
 .chatobby-slash-menu-host {
   position: absolute;
   left: 0;
@@ -1047,7 +1054,7 @@ button.chatobby-control-overflow {
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--text-faint);
-  font-family: var(--font-interface-theme);
+  font-family: var(--font-interface, system-ui, sans-serif);
   font-size: var(--font-ui-smaller);
   font-weight: var(--font-normal);
   line-height: var(--line-height-tight);
@@ -1063,13 +1070,13 @@ button.chatobby-control-overflow {
 .chatobby-slash-menu__name {
   min-width: 0;
   color: var(--text-normal);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--chatobby-meta-size);
   overflow-wrap: anywhere;
 }
 .chatobby-slash-menu__usage {
   color: var(--text-faint);
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace, ui-monospace, monospace);
   font-size: var(--font-ui-smaller);
   overflow-wrap: anywhere;
 }

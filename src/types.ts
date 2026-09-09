@@ -13,6 +13,8 @@ import type {
   WsLocalModelProvider,
   WsLocalModelProviderDocument,
   WsLocalModelProviderProbeResult,
+  WsLocalModelDiscoveryResult,
+  WsDiscoveredLocalModel,
   WsManagedLocalModelServerProfile,
   WsManagedLocalModelServerSnapshot,
   WsManagedLocalModelServerStatus,
@@ -39,6 +41,8 @@ export type {
   WsLocalModelProvider,
   WsLocalModelProviderDocument,
   WsLocalModelProviderProbeResult,
+  WsLocalModelDiscoveryResult,
+  WsDiscoveredLocalModel,
   WsManagedLocalModelServerProfile,
   WsManagedLocalModelServerSnapshot,
   WsManagedLocalModelServerStatus,
@@ -105,8 +109,6 @@ export interface WsSessionState {
   pendingMessageCount: number;
 }
 
-// Legacy prompt-context preference. Backend permission profiles own authorization.
-
 // ── Display types ────────────────────────────────────────────────────
 
 /** How thinking/reasoning blocks are rendered in the conversation feed. */
@@ -133,8 +135,10 @@ export const DEFAULT_COMPOSER_KEYBINDINGS: ComposerKeybindings = {
 
 /** Settings owned by the Obsidian SettingTab. Persisted to data.json. */
 export interface PluginSettings {
-  /** Completed first-run experience version. Zero means the setup guide is still active. */
+  /** Completed first-run experience version. Zero marks a new user's welcome. */
   onboardingVersion: number;
+  /** Highest plugin release introduction dismissed in this vault. Empty on first install. */
+  lastSeenPluginVersion: string;
   /** Product runtime ownership mode. */
   runtimeMode: "managed" | "external" | "developer";
   /** Automatically acquire the managed runtime when a visible Chatobby view opens. */
@@ -184,6 +188,7 @@ export interface PluginSettings {
 
 export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   onboardingVersion: 0,
+  lastSeenPluginVersion: "",
   runtimeMode: "managed",
   runtimeAutoStart: true,
   runtimeLifetime: "obsidian-session",
@@ -624,7 +629,8 @@ export interface SubagentActivity {
   errorMessage?: string;
   outputFile?: string;
   lastSteer?: string;
-  compactionCount: number;
+  /** Absent when the runtime does not expose an authoritative count. */
+  compactionCount?: number;
   tokensBeforeCompaction?: number;
 }
 

@@ -8,14 +8,24 @@ const requestProjectMarkerRecovery = vi.hoisted(() => vi.fn());
 vi.mock("../../src/features/projects/ui/project-marker-recovery-modal", () => ({ requestProjectMarkerRecovery }));
 
 describe("ProjectsScreenController", () => {
+	it("opens the editor with one authoritative load instead of racing two screen requests", async () => {
+		const store = new FrontendStore();
+		store.replace({ schemaVersion: 1, protocolVersion: 2, runtimeInstanceId: "runtime-1", revision: 0, sequence: 0, viewId: "view-1", session: null, composer: { controls: [], canSubmit: true }, agentRail: { items: [] }, feed: { revision: 0, blocks: [] }, screens: [], screenModels: [projectScreen()], localCommands: [] });
+		const loadScreen = vi.fn(async () => projectScreen());
+		const controller = new ProjectsScreenController({ app: {} as never, getHost: () => document.body.createDiv(), getStore: () => store, getProtocol: () => ({ loadScreen } as unknown as FrontendProtocolController), prepareOpen: vi.fn(), onOpened: vi.fn(), onClosed: vi.fn(), deleteSession: vi.fn(), runSessionAction: vi.fn(), navigateToMessageHit: vi.fn() });
+		await controller.openEditor();
+		expect(loadScreen).toHaveBeenCalledOnce();
+		controller.destroy();
+	});
 	it("opens a requested Project in the unified overview after the first screen load", async () => {
     const host = document.body.createDiv();
     const store = new FrontendStore();
     store.replace({
       schemaVersion: 1,
-      protocolVersion: 1,
+      protocolVersion: 2,
       runtimeInstanceId: "runtime-1",
       revision: 0,
+      sequence: 0,
       viewId: "view-1",
       session: null,
       composer: { controls: [], canSubmit: true },
@@ -27,7 +37,17 @@ describe("ProjectsScreenController", () => {
     });
     const loadScreen = vi.fn(async () => {
       const screen = projectScreen();
-      store.replaceScreen(screen);
+      store.replaceScreen({
+        schemaVersion: 1,
+        protocolVersion: 2,
+        runtimeInstanceId: "runtime-1",
+        viewId: "view-1",
+        requestId: "screen-projects-1",
+        requestEpoch: 1,
+        baseSequence: 0,
+        screenRevision: screen.revision,
+        screen,
+      });
       return screen;
     });
     const dispatch = vi.fn(async () => ({ status: "accepted" as const }));

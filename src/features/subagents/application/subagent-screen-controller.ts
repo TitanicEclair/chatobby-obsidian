@@ -21,6 +21,10 @@ import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
 import { SubagentsView } from "../ui/subagents-view";
 
 export interface SubagentScreenControllerOptions {
+  workspacePage?: boolean;
+  openParentSession?: (sessionId: string) => void;
+  stopParentSession?: (sessionId: string) => void;
+  openAgentFeed?: (runId: string, nodeId: string) => void;
   app: App;
   store: SubagentStore;
   getFrontendStore: () => FrontendStore;
@@ -60,6 +64,7 @@ export class SubagentScreenController {
     this.options.prepareOpen();
     this.view?.destroy();
     this.view = new SubagentsView({
+      workspacePage: this.options.workspacePage,
       store: this.store,
       actions: this.actions(),
       onBack: () => this.close(),
@@ -114,6 +119,9 @@ export class SubagentScreenController {
 
   private actions(): SubagentScreenActions {
     return {
+      openParentSession: this.options.openParentSession,
+      stopParentSession: this.options.stopParentSession,
+      openAgentFeed: this.options.openAgentFeed,
       openPermissions: () => this.options.openPermissions(),
       getAgentEditorDraft: (itemId) => cloneDraft(this.agentEditorDrafts.get(this.editorDraftKey("agent", itemId))),
       setAgentEditorDraft: (itemId, draft) => {
@@ -144,10 +152,11 @@ export class SubagentScreenController {
           type: "subagents.promote-artifact",
           payload: { artifactId, expectedArtifactRevision: expectedRevision, targetVaultPath },
         }),
-      saveDefinition: (definition, permissionProfileId) =>
-        this.dispatch({ type: "subagents.save-definition", payload: { definition, permissionProfileId } }),
+      saveDefinition: (definition) =>
+        this.dispatch({ type: "subagents.save-definition", payload: { definition, permissionProfileId: "inherit" } }),
       deleteDefinition: (definition) => this.deleteDefinition(definition),
       updateSettings: (settings) => this.updateSettings(settings),
+      selectRoleScope: (scopeId) => this.dispatch({ type: "subagents.set-role-scope", payload: { scopeId } }),
     };
   }
 
@@ -232,7 +241,7 @@ export class SubagentScreenController {
     } as FrontendIntent;
     this.view?.setActionStatus(actionStatus(input.type));
     const outcome = await this.options.getFrontendProtocol().dispatch(intent);
-    if (outcome.status === "rejected" || outcome.status === "conflict") {
+    if (outcome.status === "rejected" || outcome.status === "conflict" || outcome.status === "unavailable") {
       const message = outcome.notice?.message ?? "The subagent action could not be applied.";
       this.view?.setActionStatus(message);
       throw new Error(message);
