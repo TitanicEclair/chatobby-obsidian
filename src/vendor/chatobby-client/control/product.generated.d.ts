@@ -1,4 +1,4 @@
-export declare const CHATOBBY_PRODUCT_VERSION: "0.5.0";
+export declare const CHATOBBY_PRODUCT_VERSION: "0.5.1";
 export declare const CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION: 3;
 export declare const CHATOBBY_RUNTIME_PROTOCOL_VERSION: 4;
 export declare const CHATOBBY_CONFIG_SCHEMA_VERSION: 1;

@@ -39,10 +39,19 @@ describe("welcome and release introductions", () => {
     modal.close();
   });
   it("uses a release-notes fallback for a future update without registered highlights", () => {
-    const modal = new ProductIntroModal({} as App, "changes", "0.5.1", "0.5.0", vi.fn(), vi.fn());
+    const modal = new ProductIntroModal({} as App, "changes", "0.5.2", "0.5.1", vi.fn(), vi.fn());
     modal.open();
     expect(modal.contentEl.textContent).toContain("Open the release notes to see what changed");
     expect(modal.contentEl.textContent).not.toContain("Native tabs and a new sidebar");
+    modal.close();
+  });
+  it("shows the patch highlights without repeating the previous feature release", () => {
+    const modal = new ProductIntroModal({} as App, "changes", "0.5.1", "0.5.0", vi.fn(), vi.fn());
+    modal.open();
+    expect(modal.contentEl.textContent).toContain("Better default web search");
+    expect(modal.contentEl.textContent).toContain("More reliable workspace tools");
+    expect(modal.contentEl.textContent).not.toContain("Native tabs and a new sidebar");
+    expect(modal.contentEl.textContent).not.toContain("A new interface");
     modal.close();
   });
   it("persists dismissal once, avoids duplicate modals and does not acknowledge an unloaded introduction", () => {

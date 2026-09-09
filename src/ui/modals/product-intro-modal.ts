@@ -4,6 +4,13 @@ import { CHATOBBY_CONNECTOR_REPOSITORY_URL, CHATOBBY_SUPPORT_URL, openChatobbyUr
 
 export type IntroductionKind = "welcome" | "changes";
 export const RELEASE_HIGHLIGHTS = [{
+  version: "0.5.1",
+  items: [
+    { icon: "shield-check", title: "More reliable workspace tools", description: "Fix Windows folder handling and keep tools available after access changes." },
+    { icon: "search", title: "Better default web search", description: "Search selected sites and regions, keep more useful results, and continue through result pages." },
+    { icon: "info", title: "Clearer tool errors", description: "See why a connection or search failed. Obsidian commands check which vault they are targeting." },
+  ],
+}, {
   version: "0.5.0",
   items: [
     { icon: "panels-top-left", title: "Native tabs and a new sidebar", description: "Open chats and Chatobby pages in Obsidian tabs. Organize chats in Projects and archive them when you’re done." },
@@ -103,7 +110,7 @@ export class ProductIntroModal extends Modal {
     setIcon(emblem, this.kind === "welcome" ? "messages-square" : "panels-top-left");
     hero.createEl("p", { cls: "chatobby-intro__lead", text: this.kind === "welcome"
       ? "AI chats, agents and tools in Obsidian."
-      : "A new interface, sandboxed tools, and more ways to connect." });
+      : "Changes in this update." });
     if (this.kind === "welcome") this.renderWelcome();
     else this.renderChanges();
     const actions = this.contentEl.createDiv({ cls: "chatobby-intro__actions" });

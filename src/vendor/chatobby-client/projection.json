@@ -4,8 +4,8 @@
   "sourceRoot": "packages/chatobby/src",
   "entry": "packages/chatobby/src/frontend-client.ts",
   "contractSurface": "complete-package-entry-closure",
-  "sourceRevision": "c7aa300c2e79617f64afe18b945fb1f3176adbe6",
-  "sourceContentSha256": "ca7eeae7574648fa5fa6d3dcd6d2759cd0f8afde55d5626c19cbccdf667e8344",
+  "sourceRevision": "984e4060251356a66e23d939dbabfe70198663ab",
+  "sourceContentSha256": "94b19da67b0f1632ada9b2486aa7bfbd9f29fb4b12ed8fddf34320a3fcb84c4e",
   "protocolVersion": 2,
   "sourceFiles": [
     {
@@ -90,7 +90,7 @@
     },
     {
       "path": "control/product.generated.ts",
-      "sha256": "96523e008561e92618228bcf4f28cfcbef9da82f644ff4290f823e13577dda70"
+      "sha256": "0b2c2b806e31b496cf34928b503ca9ce2333033573250dbd4a04891ad4fd4245"
     },
     {
       "path": "control/ready-descriptor.ts",
@@ -234,7 +234,7 @@
     },
     {
       "path": "main.ts",
-      "sha256": "65feada8dd53a07b360cef5132302aff3bef247b660320e606f2b88b278fd248"
+      "sha256": "0065685d1c35fe61a73350e8d2131cd9bc66d17e0d335f43333d132786c4277a"
     },
     {
       "path": "mcp-management-contracts.ts",
@@ -278,7 +278,7 @@
     },
     {
       "path": "obsidian-bridge/routes.ts",
-      "sha256": "eb9f9dd8df26572287c14be168b628bba2e8f15b5640ff1ce8949f19c72f7445"
+      "sha256": "686e936485dd600b9782d6cc2fa975c994d34f114d0617bf318e7caf6fcf4c7e"
     },
     {
       "path": "obsidian-bridge/token.ts",
@@ -290,7 +290,7 @@
     },
     {
       "path": "obsidian-cli/agent-tool.ts",
-      "sha256": "1b6247070755a51717d1c3f682b3d542efa382b9fae406a55caba74423f4183b"
+      "sha256": "e51a9bb65998a90cb14e681b2eecaf9e079045e2818f2482742dd0c401f07fbe"
     },
     {
       "path": "obsidian-cli/authorized-process.ts",
@@ -298,7 +298,7 @@
     },
     {
       "path": "obsidian-cli/runtime.ts",
-      "sha256": "a97c482d7bfb0dec6c6eb7eb6ce4e2c54df7e37f52a8fc864bfc258817cf6e82"
+      "sha256": "f4844fa960401ae69a42e68735a54aa5aca1a0b2090906322208d19e8aca8ac3"
     },
     {
       "path": "obsidian-mcp-config.ts",
@@ -310,7 +310,7 @@
     },
     {
       "path": "operation-failures.ts",
-      "sha256": "e9bd60bb154995e03b891cb4e1fc6d1e8e8a016e968ea4cda1c9e3474e8dc07a"
+      "sha256": "a66dbefa9441260fa2a70c590820aac6b7a6527839f43dbbb96fc54a57e15724"
     },
     {
       "path": "permissions/context-publication.ts",
@@ -485,6 +485,10 @@
       "sha256": "83fd3472962794b26b762a4cb1c867d03cd0017ab5acacbd3774464e976c8b43"
     },
     {
+      "path": "sandbox/execution-failure.ts",
+      "sha256": "ecdd08bf38ff927f79a5f6829a122b7ce1efdf511b9f1a4227becf7c06fdcf80"
+    },
+    {
       "path": "sandbox/extension-execution.ts",
       "sha256": "1444e8ea3e48580099e685698bd1882e947fc4802a90273681b247fcae0c3881"
     },
@@ -505,8 +509,12 @@
       "sha256": "d6bf3a2e80669982216847ff96ea8fcfb08e4cf8a2c68b04baccd27ffe6111ff"
     },
     {
+      "path": "sandbox/host-directory.ts",
+      "sha256": "0a89f283ce633786807aad0907b937d78fd69228640506ee0a152170cb8a0056"
+    },
+    {
       "path": "sandbox/installation.ts",
-      "sha256": "4d65e11f630fb4b6f464bb842e60f0ccb427551ac7153c0a90906dbe02a1fc66"
+      "sha256": "d9ef35c9c2275e1ef41a3719aa3363d4a32362cbced1cd0bdf2fcf476c22ed0c"
     },
     {
       "path": "sandbox/landstrip-basic-collector.ts",
@@ -514,7 +522,7 @@
     },
     {
       "path": "sandbox/landstrip-installation.ts",
-      "sha256": "c1a4715611c128d84a0bb2daccce996fc436a93c6e1a56b5020b276c91f8ec87"
+      "sha256": "8146bd01f35058b7c10e6c324efe601217d03007dd4b296f25b9c598d1f14a04"
     },
     {
       "path": "sandbox/landstrip-release-support.ts",
@@ -522,7 +530,7 @@
     },
     {
       "path": "sandbox/landstrip-runtime.ts",
-      "sha256": "5e04c5d36dbc7d4f9dabc0b44fe6da815ff7fa140f2d9156bd30670d165fdec5"
+      "sha256": "3468ac63b646dda8a76388a8f027c1cf5f6157d52c9c590bb214467cd99c173c"
     },
     {
       "path": "sandbox/landstrip-verification.ts",
@@ -530,7 +538,7 @@
     },
     {
       "path": "sandbox/mcp-execution.ts",
-      "sha256": "126bd33402f4e884155f670372f492202679dee5b334839da1cf30db367dfd51"
+      "sha256": "dfd523cadc807a19f5201a60cdd85a553c43ab7780d95e80c4dc4b6cbdfcd8d9"
     },
     {
       "path": "sandbox/owner.ts",
@@ -554,7 +562,7 @@
     },
     {
       "path": "sandbox/process-execution.ts",
-      "sha256": "f2771cc1dd53149529afb194525f7f097854491946c501f197b35923ac49ef4a"
+      "sha256": "23cb35de43ff4eef3a9bd0553f803eda50ee83ed1f5689445b588509bee5f317"
     },
     {
       "path": "sandbox/provisioning.ts",
@@ -562,7 +570,7 @@
     },
     {
       "path": "sandbox/runtime-execution.ts",
-      "sha256": "ea2713ac00409ce213aa9d201c73ca900110287ffba6d1d586a8d8d50516e4de"
+      "sha256": "42cb81c340133717782f7e1ef455506cf3ca20046f2c52393bf7211146c436c4"
     },
     {
       "path": "sandbox/search-execution.ts",
@@ -578,7 +586,7 @@
     },
     {
       "path": "sandbox/windows-landstrip-stop.ts",
-      "sha256": "1323df1fe737f0ba6fdac5a10d8cbfc165284d2e9d08a542cb6439023bdad168"
+      "sha256": "7180906eb3020af64965b6e589a3485eabcded23df3916bbc7d8e8cb42d79736"
     },
     {
       "path": "sandbox/windows-powershell.ts",
@@ -674,11 +682,11 @@
     },
     {
       "path": "tool-search/agent-tool.ts",
-      "sha256": "be18df1a34f66f59919eea561282b048a5a298211d9c844b0179cb51d7d297a2"
+      "sha256": "b71687ef6f90bb2821b2733c8dacc3b37c6cad7d3f0e24423126e89588fa3405"
     },
     {
       "path": "tool-search/tool-call.ts",
-      "sha256": "ac0d7ab58e53220ca340dfd378208ed3622d35d0dd9f0deebc9e5308f8b85b6d"
+      "sha256": "e314723c4f43a24f5ca0c64dd1f8eda8f50a71337c2f02dd280b9d74ea68db7f"
     },
     {
       "path": "wire-mapping.ts",
@@ -719,7 +727,7 @@
     {
       "path": "control/contracts.d.ts",
       "size": 5509,
-      "sha256": "7be368987edff5f6526a192869bce1506de0ef5a9987f97a45c801c7e722b058"
+      "sha256": "b94ea3773fa2f56ed101e18c258bedafdaeac9b34c206f0a01e631fc5be0ebde"
     },
     {
       "path": "control/contracts.ts",
@@ -729,12 +737,12 @@
     {
       "path": "control/product.generated.d.ts",
       "size": 293,
-      "sha256": "f5eb70a903e4b1e7448554ec521de85e12411d3082c68df49bd6071e78f403fe"
+      "sha256": "65a75e092ad650007cffe006a4acd692bdb221de9aa106b3640c27395ffde491"
     },
     {
       "path": "control/product.generated.ts",
       "size": 469,
-      "sha256": "605319bf0bf7d5ff85acbd79065e9cdbc418827c39f63876886c8c5c1fd3871e"
+      "sha256": "4e43e35c6f08cf140a601787f00534c9326f3e24fb88d450907ab07167489e07"
     },
     {
       "path": "frontend-contracts.d.ts",

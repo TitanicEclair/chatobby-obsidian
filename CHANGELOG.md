@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-09
+
+- Refresh runtime provenance for reliable EOF handling when short commands exit; preserve actual input and process errors.
+
+- Show concise 0.5.1 update highlights and link to the matching release.
+- Include linked model setup, Obsidian automation and onboarding documentation in the public export; check the exported Markdown link closure before publication.
+
+- Refresh runtime provenance for improved default search, regional and site queries, retained results and clearer agent guidance.
+
+- Refresh runtime provenance for opening pages after an app-access change stops an MCP server with complete cleanup.
+
+- Refresh runtime provenance for ordinary Windows path handling, live tool discovery, and accurate MCP/Obsidian CLI failures. Browser contracts are unchanged.
+
+## [0.5.0] - 2026-09-09
+
 - Keep the runtime connected when several restored tabs finish an interrupted update together; finalize or roll back the installation once.
 
 - Keep newer sidebar activity when an older directory response arrives, with bounded refresh retries instead of an internal error message.

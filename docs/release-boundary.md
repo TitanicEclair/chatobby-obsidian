@@ -91,6 +91,35 @@ is required for development installation. The source-owned
 `packages/chatobby/docs/devops/actions-budget-policy.md` records the budget
 policy, measured audit and remaining Windows Server diagnostic boundary.
 
+### September 9 post-release boundary correction
+
+SEARCH-051 advances the development source to
+`c3a354aab65b3101c6e73e25f1b88a799b27179e`. It improves default DuckDuckGo
+queries, region preferences, site filters, actual continuation, retained results,
+paced requests and agent guidance. The generated connector changes provenance
+only; browser contracts and code remain byte-identical. Source acceptance has
+89 core web-tool tests, 43 contract tests, 2,165 runtime tests (one skip), passing
+root checks and 40 real Windows native tests. Exact backend comparison and
+disposable-vault adoption remain installation gates. No new public release is
+implied; the preceding source checkpoint below remains historical evidence.
+
+The BOUNDARY-051 checkpoint consumes source `46255327a1cf824ec3b6d9c3654b7e5cc7333d59`.
+The first installed b64c40a3d checkpoint passed tool execution but Computer Use
+found new workspace pages failed after restoring Obsidian app access Off.
+The source transport mistook an externally stopped MCP operation for incomplete
+cleanup even when its native receipt proved completion. New early regressions
+separate these outcomes while preserving missing-receipt rejection. This intake
+adds that correction; the first checkpoint is not final acceptance.
+The generated client and protocol receipt refresh changes provenance only;
+browser code and wire contracts are byte-identical. The source fixes native
+host-path capture, permission-driven tool exposure and MCP/CLI error reporting.
+Its 40 committed-source Windows native cases pass. This pair still requires
+development installation and live acceptance; it is not a new public release.
+Run the exact backend comparison before reconciliation so receipt drift fails
+before executable compilation. This check caught two stale source-SHA literals
+in projection tests after their receipts had been refreshed; both are updated
+to the verified generator revision. The acceptance records below are historical.
+
 ### September 9 local acceptance
 
 The installed development runtime uses source

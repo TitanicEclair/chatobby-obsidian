@@ -5,7 +5,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="docs/alpha-guide.md">Guide</a> ·
-  <a href="https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.0">0.5.0 release</a> ·
+  <a href="https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.1">0.5.1 release</a> ·
   <a href="https://github.com/TitanicEclair/chatobby-obsidian/discussions">Share a workflow</a> ·
   <a href="https://github.com/TitanicEclair/chatobby-obsidian/issues">Report a bug</a>
 </p>
@@ -246,8 +246,8 @@ supported. Chatobby is currently in alpha.
 
 [Installation and updates →](docs/installation.md) ·
 [Troubleshooting →](docs/troubleshooting.md) ·
-[Connector 0.5.0](https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.0) ·
-[Runtime 0.5.0](https://github.com/TitanicEclair/chatobby-runtime/releases/tag/0.5.0)
+[Connector 0.5.1](https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.1) ·
+[Runtime 0.5.1](https://github.com/TitanicEclair/chatobby-runtime/releases/tag/0.5.1)
 
 ## Roadmap
 

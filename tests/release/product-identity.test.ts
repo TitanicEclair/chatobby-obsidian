@@ -11,7 +11,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 describe("connector release identity", () => {
   it("keeps manifest, package, versions, and generated connector identity at exact N", async () => {
     const identity = await checkConnectorProductIdentity(repositoryRoot);
-    expect(identity.version).toBe("0.5.0");
+    expect(identity.version).toBe("0.5.1");
     expect(CHATOBBY_PRODUCT_VERSION).toBe(identity.version);
     expect(CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION).toBe(3);
   });

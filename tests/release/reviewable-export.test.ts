@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { exportReviewableSource } from "../../scripts/export-reviewable-source.mjs";
 
@@ -11,6 +11,27 @@ afterEach(async () => {
 });
 
 describe("reviewable connector export", () => {
+  it("exports the current documentation link closure into a fresh publication tree", async () => {
+    const destination = await temporaryDirectory("chatobby-export-current-");
+    await exportReviewableSource({ repositoryRoot: resolve(import.meta.dirname, "../.."), destination });
+    const missing: string[] = [];
+    async function inspect(directory: string): Promise<void> {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const file = join(directory, entry.name);
+        if (entry.isDirectory()) { await inspect(file); continue; }
+        if (!entry.name.endsWith(".md")) continue;
+        for (const match of (await readFile(file, "utf8")).matchAll(/!?\[[^\]]*\]\(([^)]+)\)/gu)) {
+          const raw = match[1]!.trim();
+          const target = (raw.startsWith("<") ? raw.slice(1, raw.indexOf(">")) : raw.split(/\s+["']/u)[0]!).split(/[?#]/u)[0]!;
+          if (!target || target.startsWith("/") || /^[a-z][a-z\d+.-]*:/iu.test(target)) continue;
+          try { await access(resolve(dirname(file), decodeURIComponent(target))); }
+          catch { missing.push(`${relative(destination, file)} -> ${target}`); }
+        }
+      }
+    }
+    await inspect(destination);
+    expect(missing).toEqual([]);
+  });
   it("fails strict export on publication gaps and records them in a draft", async () => {
     const repositoryRoot = await temporaryDirectory("chatobby-export-source-");
     const destination = await temporaryDirectory("chatobby-export-output-");
