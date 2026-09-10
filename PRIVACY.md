@@ -1,12 +1,17 @@
 # Privacy
 
-Last updated: 16 July 2026
+Last updated: 10 September 2026
 
 Chatobby consists of this Obsidian connector and a separately installed local
 runtime. The connector does not contain client-side telemetry and does not send
 usage analytics to Chatobby.
 
 ## Data flow
+
+Chatobby 0.5.3 runs with Full access while sandboxing is temporarily unavailable.
+File and command tools can access content outside the selected Vault or Project;
+their results can become model context. Memory and session-history tools keep
+their workspace filters independently.
 
 - The connector communicates with the Chatobby runtime over authenticated
   loopback connections on the same computer.

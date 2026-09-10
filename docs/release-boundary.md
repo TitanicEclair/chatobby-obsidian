@@ -3,6 +3,12 @@
 > Current public-alpha distribution: Obsidian Community plugin plus the
 > plugin-managed, Ed25519-verified Chatobby runtime.
 
+For 0.5.3, sandboxing is temporarily unavailable. The runtime package deliberately
+omits native sandbox executables and qualification assets. Full-access tool,
+restart, Stop and exact-pair installation checks replace native qualification
+for this execution mode. Signatures, platform compatibility, legal inventories,
+rollback and public projection gates continue to apply.
+
 ## Reviewable connector
 
 The public connector is intentionally limited to Obsidian presentation,

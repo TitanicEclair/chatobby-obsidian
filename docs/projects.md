@@ -28,16 +28,13 @@ is never replaced by a same-named vault copy.
 
 A Project has one primary folder and may include other working folders. The
 primary folder determines the initial working directory and how relative paths
-resolve. Primary and attached folders otherwise receive the same Project-root
-permission treatment, and adding one makes it available to every chat in the
-Project immediately. You do not need to add the same folder to a separate
-external-directory allowlist. This does not enable a denied capability: the
-active permission policy still decides whether the agent may read, edit, use a
-shell, or perform another operation.
+resolve. Adding a folder supplies that context to every chat in the Project.
+Chatobby 0.5.3 uses Full access while sandboxing is temporarily unavailable;
+the folder list does not restrict file or command access.
 
-A Project with no linked folder stays rootless and does not inherit Vault
-access. Its chats retain their Project identity, but add a Project folder before
-relying on Project-scoped file access.
+A Project with no linked folder retains its Project identity and memory/history
+scope. Add a folder to give its chats a working directory. Full access can still
+reach explicit paths elsewhere.
 
 ## Folder identity and external access
 
@@ -49,13 +46,8 @@ continue with a device-only binding. Creation and batch folder addition are
 all-or-nothing, so an inaccessible or expired selection never leaves a partial
 Project.
 
-Project membership identifies the workspace; it does not grant a capability.
-Paths inside any available Project folder are evaluated as Project-root paths.
-**Read-only** and **Workspace** remain bounded to those selected roots. A linked
-path that escapes a Project folder stays outside that boundary. **Full access**
-is the explicit unsandboxed mode: it runs with the user's ordinary filesystem
-and network authority, including paths outside the Project. It is not a wider
-Project sandbox.
+Project membership identifies the workspace, instructions and application data
+scope. It does not provide filesystem or network containment in 0.5.3.
 
 To reorganize an existing chat, right-click it and choose **Move chat…**. Vault
 is always the first destination, followed by searchable active Projects. Moving
@@ -87,12 +79,10 @@ the Project's folder set changes, Chatobby replaces those facts for the next
 model call. Missing or conflicting folders remain identified by state without
 a guessed local path.
 
-Choose **Read-only**, **Workspace** or **Full access** and agent network in the
-chat composer. These choices belong to the saved conversation. The independent
-**Permissions** page manages Obsidian app access per Vault/Project and reports
-installed native verification. Selecting a constrained mode alone does not
-prove local restrictions are ready. A rootless Project never falls back to the
-whole Vault. Archiving a Project preserves notes and saved conversations.
+The **Permissions** page manages Obsidian app access per Vault/Project. Access-mode
+and network controls are hidden in 0.5.3. Session-history tools search only the
+current Project, or Vault chats for a Vault session; memory uses its own Project
+rules. Archiving a Project preserves notes and saved conversations.
 
 ## Repair a Project that points at the wrong folder
 

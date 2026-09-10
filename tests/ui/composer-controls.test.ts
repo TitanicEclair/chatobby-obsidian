@@ -133,78 +133,77 @@ describe("ComposerControls", () => {
     controls.destroy();
   });
 
-  it("shows the independent Network control and dispatches only its selected value", async () => {
+  it("hides legacy permission and network controls without rebuilding model controls on refresh", () => {
     const base = composerModel();
     const applyControl = vi.fn(async () => {});
     const { controls, root } = renderControls(makeHost({ applyControl, getViewModel: () => ({ ...base, controls: [...base.controls, {
       id: "network", label: "Agent network", value: "on", options: [{ value: "on", label: "Network On" }, { value: "off", label: "Network Off" }],
     }] }) }));
-    control(root, "Agent network").click();
-    Array.from(document.querySelectorAll<HTMLButtonElement>(".chatobby-selection-menu__option")).find((button) => button.textContent === "Network Off")?.click();
-    await vi.waitFor(() => expect(applyControl).toHaveBeenCalledWith("network", "off"));
-    expect(control(root, "Permission policy").textContent).toContain("Workspace");
+    const modelButton = control(root, "Model");
+    controls.refresh(); controls.refresh();
+    expect(root.querySelector(".chatobby-control--permission")).toBeNull();
+    expect(root.querySelector(".chatobby-control--network")).toBeNull();
+    expect(control(root, "Model")).toBe(modelButton);
+    expect(applyControl).not.toHaveBeenCalled();
     controls.destroy();
   });
   it("renders semantic icons without relegating controls to overflow", () => {
     const { controls, root } = renderControls(makeHost());
 
-    expect(root.querySelector(".chatobby-control--permission .chatobby-control-button__icon")?.getAttribute("data-icon")).toBe("shield-check");
+    expect(root.querySelector(".chatobby-control--permission")).toBeNull();
     expect(root.querySelector(".chatobby-control--model .chatobby-control-button__icon")?.getAttribute("data-icon")).toBe("bot");
     expect(root.querySelector(".chatobby-control-overflow")).toBeNull();
     controls.destroy();
   });
-  it("renders four compact runtime-projected picker triggers", () => {
+  it("renders the three model and effort picker triggers", () => {
     const { controls, root } = renderControls(makeHost());
 
-    expect(control(root, "Permission policy").textContent).toContain("Workspace");
+    expect(root.querySelectorAll(".chatobby-control-button")).toHaveLength(3);
     expect(control(root, "Provider").textContent).toContain("Deepseek");
     expect(control(root, "Model").textContent).toContain("DeepSeek Chat");
     expect(control(root, "Effort").textContent).toContain("Medium");
-    expect(control(root, "Permission policy").querySelector(".chatobby-control-button__leading")).toBeNull();
     expect(root.querySelectorAll("select")).toHaveLength(0);
     controls.destroy();
   });
 
-  it("uses one searchable list and only shows runtime-projected policy descriptions", () => {
+  it("uses one searchable list for effort choices", () => {
     const { controls, root } = renderControls(makeHost());
-    const permissions = control(root, "Permission policy");
+    const permissions = control(root, "Effort");
     permissions.click();
 
-    expect(document.querySelectorAll(".chatobby-selection-menu__option")).toHaveLength(3);
+    expect(document.querySelectorAll(".chatobby-selection-menu__option")).toHaveLength(6);
     expect(permissions.getAttribute("aria-haspopup")).toBe("dialog");
-    expect(document.querySelector("[role='dialog']")?.getAttribute("aria-label")).toBe("Permission policy");
-    expect(document.querySelectorAll(".chatobby-selection-menu__option-description")).toHaveLength(1);
-    expect(document.body.textContent).toContain("Unsandboxed");
+    expect(document.querySelector("[role='dialog']")?.getAttribute("aria-label")).toBe("Effort");
     controls.destroy();
   });
 
-  it("dispatches one access-mode choice", async () => {
+  it("dispatches one effort choice", async () => {
     const applyControl = vi.fn(async () => {});
     const { controls, root } = renderControls(makeHost({ applyControl }));
-    control(root, "Permission policy").click();
+    control(root, "Effort").click();
     const readOnly = Array.from(document.querySelectorAll<HTMLButtonElement>(".chatobby-selection-menu__option"))
-      .find((button) => button.textContent?.includes("Read-only"));
+      .find((button) => button.textContent === "Low");
     readOnly?.click();
 
-    await vi.waitFor(() => expect(applyControl).toHaveBeenCalledWith("permission", "read-only"));
+    await vi.waitFor(() => expect(applyControl).toHaveBeenCalledWith("effort", "low"));
     controls.destroy();
   });
 
-  it("keeps the runtime mode and icon while a choice is pending or rejected", async () => {
+  it("keeps the runtime effort and icon while a choice is pending or rejected", async () => {
     let reject!: (error: Error) => void;
     const applyControl = vi.fn(() => new Promise<void>((_resolve, onReject) => { reject = onReject; }));
     const { controls, root } = renderControls(makeHost({ applyControl }));
-    const permission = control(root, "Permission policy");
+    const permission = control(root, "Effort");
     permission.click();
     const readOnly = Array.from(document.querySelectorAll<HTMLButtonElement>(".chatobby-selection-menu__option"))
-      .find((button) => button.textContent?.includes("Read-only"));
+      .find((button) => button.textContent === "Low");
     readOnly?.click();
-    await vi.waitFor(() => expect(applyControl).toHaveBeenCalledWith("permission", "read-only"));
-    expect(permission.textContent).toContain("Workspace");
-    expect(permission.querySelector(".chatobby-control-button__icon")?.getAttribute("data-icon")).toBe("shield-check");
+    await vi.waitFor(() => expect(applyControl).toHaveBeenCalledWith("effort", "low"));
+    expect(permission.textContent).toContain("Medium");
+    expect(permission.querySelector(".chatobby-control-button__icon")?.getAttribute("data-icon")).toBe("gauge");
     reject(new Error("Policy changed. Refresh and retry."));
     await vi.waitFor(() => expect(document.body.textContent).toContain("Could not apply this selection."));
-    expect(permission.textContent).toContain("Workspace");
+    expect(permission.textContent).toContain("Medium");
     controls.destroy();
   });
 

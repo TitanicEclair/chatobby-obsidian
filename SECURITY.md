@@ -13,6 +13,13 @@ timing depend on severity and reproducibility.
 
 ## Security boundary
 
+Chatobby 0.5.3 provides no filesystem or network sandbox. Agents run with Full
+access as your OS user account, including outside the Vault. Project memory and
+session queries are filtered by workspace, but file and shell tools remain
+unrestricted. Obsidian app-access and MCP tool selections control the provided
+integrations; they are not OS containment. Saved Read-only, Workspace and network
+choices are retained but inactive in this release.
+
 The connector authenticates a local loopback runtime, verifies signed managed
 runtime packages, validates a public protocol, and exposes only allowlisted
 Obsidian operations. The connector does not accept arbitrary JavaScript,

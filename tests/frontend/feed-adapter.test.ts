@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { toFeedDocumentProjection } from "../../src/frontend/feed-adapter";
 
 describe("frontend feed adapter", () => {
+  it("retains unchanged history projections when a streaming block changes", () => {
+    const history = { type: "text" as const, id: "old", text: "Completed paragraph", phase: "complete" as const };
+    const live = { type: "text" as const, id: "live", text: "A", phase: "streaming" as const };
+    const before = toFeedDocumentProjection({ revision: 1, blocks: [history, live] });
+    const after = toFeedDocumentProjection({ revision: 2, blocks: [history, { ...live, text: "AB" }] });
+    expect(after.blocks[0]).toBe(before.blocks[0]);
+    expect(after.blocks[1]).not.toBe(before.blocks[1]);
+    expect(after.blocks[1]).toMatchObject({ text: "AB" });
+  });
   it("preserves runtime-projected tool semantics and phases", () => {
     const projection = toFeedDocumentProjection({
       revision: 1,

@@ -16,7 +16,19 @@ export function toFeedDocumentProjection(
   return { blocks };
 }
 
+// Runtime patch application preserves unchanged block objects. Weak keys keep
+// closed conversations collectible while avoiding repeated history conversion.
+const blockProjections = new WeakMap<FrontendFeedBlock, FeedBlock[]>();
+
 function toFeedBlocks(block: FrontendFeedBlock): FeedBlock[] {
+  const existing = blockProjections.get(block);
+  if (existing) return existing;
+  const projection = projectFeedBlock(block);
+  blockProjections.set(block, projection);
+  return projection;
+}
+
+function projectFeedBlock(block: FrontendFeedBlock): FeedBlock[] {
   switch (block.type) {
     case "user":
     case "system": {

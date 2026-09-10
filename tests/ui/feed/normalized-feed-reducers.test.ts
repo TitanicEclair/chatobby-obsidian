@@ -3,6 +3,19 @@ import type { FeedBlock } from "../../../src/types";
 import { createFeedStore, feedSelectors, type FeedDocumentProjection } from "../../../src/features/feed/public";
 
 describe("normalized feed projection", () => {
+  it("does not read unchanged history payloads again while the live tail changes", () => {
+    const store = createFeedStore();
+    let reads = 0;
+    const old: FeedBlock = { type: "text", id: "old", turnId: "old-turn", get text() { reads++; return "old response"; }, startIndex: 0, endIndex: 0, status: "complete" };
+    store.dispatch({ type: "feed.document-projection-synchronized", projection: { blocks: [old] } });
+    const initialReads = reads;
+    for (let index = 0; index < 20; index++) {
+      const tail: FeedBlock = { type: "text", id: "tail", turnId: "tail-turn", text: "word ".repeat(index + 1), startIndex: 1, endIndex: 1, status: "streaming" };
+      const commit = store.dispatch({ type: "feed.document-projection-synchronized", projection: { blocks: [old, tail] } });
+      expect(commit.changes.updatedBlockIds).not.toContain("old");
+    }
+    expect(reads).toBe(initialReads);
+  });
   it("keeps an optimistic skill invocation as metadata instead of prose", () => {
     const store = createFeedStore();
     store.dispatch({

@@ -191,63 +191,20 @@ silently changes the active chat, working directory, memory injection, or
 permission context. Secret values remain in credential/runtime services and do
 not move into frontend projection state.
 
-The Permissions screen labels access mode and agent network as durable-session
-settings, not installation or Project defaults. Distinct chats are independent;
-two tabs attached to the same saved chat share its runtime projection, including
-on reopen. New independent chats start Workspace/On; migration and persistence
-remain runtime-owned. The composer keeps the existing four controls; Network
-On/Off remains on Permissions. Full forces On and disables that switch.
-Delegated child views compare the policy-owner identity to the actual selected
-session and show parent-controlled, disabled controls when they differ.
+The 0.5.3 Permissions screen receives the runtime's Full-access execution mode
+and explains that sandboxing is temporarily unavailable. Composer controls show
+provider, model and effort; legacy mode/network controls are filtered even when
+an older runtime projects them. The older-runtime Permissions fallback reports
+the mismatch and its actual policy instead of claiming Full.
 
-`composer-access-policy.ts` refreshes the current session policy before dispatch,
-checks runtime/view/session identity and `accessPolicySessionId`, and sends the
-host-owned session-policy revision. The Permissions renderer carries the same
-captured session identity to its controller; stale actions reject and late
-outcomes are not shown on a replacement session. Successful saved-policy
-warnings are notices, not rejection or readiness. Radio groups are pane-local
-DOM identities, never policy owners. Mode/network controls use existing
-focus-only keys so draft preservation cannot overwrite new authoritative
-checked values; scroll and focus still follow the ordinary page shell.
+Stored session policies remain runtime-owned and unchanged for rollback.
+Project memory/history selection and Obsidian app grants do not derive from
+file-access mode. App-grant updates retain the authenticated target, current
+grant revision and session/binding checks; stale responses cannot update a
+replacement session. MCP connection and tool choices remain independent.
 
-Roots/memory stay with each chat and app-authority grants stay with the
-authenticated Project or Vault. Read-only permits processes only through a
-ready backend while keeping selected roots read-only and allowing controlled
-private scratch; the renderer never replaces effective-availability evidence.
-
-The Permissions screen presents one separately negotiated Obsidian vault-access
-switch, with the runtime's effective/default-or-user state and shared revision.
-Unknown/loading/disconnected state is unavailable, never an inferred Vault On
-or a claimed persisted Off choice. The warning identifies Obsidian app authority
-outside the sandbox, including CLI and vault-level tools in any mode; Project
-roots/memory/identity and independent MCP switches stay unchanged. Native
-process availability remains the separate runtime-reported status.
-
-`native-setup-view.ts` renders the optional `native-sandbox-setup` projection
-inside Permissions. Current selected roots and recorded older grant roots are
-separate host-issued displays. Review opens an inline consent group focused on
-Cancel; confirmation submits only the opaque target/grant reference and CAS
-revisions through the existing screen controller. Refresh, disposal, reconnect,
-target change or a newer journal revision invalidates that consent. No local
-grant store, path selection, native command or automatic recovery is introduced.
-Native maintenance is explicitly busy; configured is never promoted to ready.
-Installed verification uses this same negotiated capability and renderer.
-Its review/confirmation carries the current session, installation fingerprint,
-verification revision and the fixed verify/recover selector, never roots or
-commands. It remains available for authenticated recovery when current Project
-roots are unresolved or the mode is Full. Busy, reconnect, installation change,
-new record revision, detached DOM or changed recovery state invalidates consent.
-The runtime's installed proof and session-native status are rendered separately;
-neither configured roots nor a resolved request upgrades the other.
-Landstrip's `not-required` root-setup state renders without accessing a grant or
-offering new root setup. Installed verification and any earlier owned grants
-remain distinct; the backend label names Landstrip, not a platform fallback.
-Its retained-attempt recovery explains the recorded-complete process cleanup
-precondition and promises no permission/profile repair. Missing inspection
-renders the runtime's actual reason without manufacturing a setup requirement.
-Canonical contract generation and exact-pair metadata remain source-owned.
-Focused DOM/controller tests are not installed visual or native acceptance;
-all four existing composer controls remain unchanged.
+The native-setup renderer is retained only for older-runtime compatibility and
+development tests. The Full-only runtime does not negotiate that capability.
 
 `frontend-bootstrap-request.ts` gathers capability inventory only.
 `prompt/authorized-context.ts` brackets passive collection with matching fresh

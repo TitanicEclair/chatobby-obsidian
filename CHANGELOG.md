@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Temporarily provide Full access only in 0.5.3. Explain the absence of sandboxing in Permissions, onboarding and update highlights; hide access-mode and network controls.
+- Keep Project memory and session-history queries scoped independently of unrestricted file and command access.
+
+- Keep streaming responses responsive by reusing unchanged feed history, coalescing slow Markdown renders, and retaining completed paragraph elements.
 ## [0.5.2] - 2026-09-10
 
 - Wait through the runtime's bounded native cleanup before completing Stop, Restart or update; test delayed shutdown beyond the previous five-second wait.

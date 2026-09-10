@@ -828,6 +828,8 @@ export type FrontendObsidianVaultAccessViewModel = {
 };
 export interface FrontendPermissionScreenViewModel {
     readonly screenId: "permissions";
+    /** Absent on older runtimes; never infer Full-only operation from the plugin version. */
+    readonly executionMode?: "full-access";
     readonly revision: number;
     /** Durable policy owner; delegated sessions display this inherited authority read-only. */
     readonly accessPolicySessionId: string;

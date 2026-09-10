@@ -19,13 +19,13 @@ const model: FrontendComposerViewModel = {
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("composer responsive controls", () => {
-  it("keeps all four named icons in DOM order, with the current selection available without words", () => {
+  it("keeps provider, model and effort icons in DOM order while hiding legacy access controls", () => {
     const controls = new ComposerControls({ getViewModel: () => model, isBackendAvailable: () => true, applyControl: vi.fn() });
     controls.render(document.body);
     const buttons = [...document.querySelectorAll<HTMLButtonElement>(".chatobby-control-button")];
-    expect(buttons).toHaveLength(4);
+    expect(buttons).toHaveLength(3);
     expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
-      "Access: Workspace", "Provider: Synthetic provider", "Model: Synthetic long model name", "Effort: Medium",
+      "Provider: Synthetic provider", "Model: Synthetic long model name", "Effort: Medium",
     ]);
     for (const button of buttons) {
       expect(button.title).toBe(button.getAttribute("aria-label"));
@@ -35,7 +35,7 @@ describe("composer responsive controls", () => {
     }
     buttons[0]?.click();
     expect([...document.querySelectorAll(".chatobby-selection-menu__option-name")].map((option) => option.textContent))
-      .toEqual(["Read-only", "Workspace", "Full"]);
+      .toEqual(["Synthetic provider"]);
     controls.destroy();
   });
 
@@ -61,24 +61,24 @@ describe("composer responsive controls", () => {
     controls.refresh();
     expect(document.querySelector(".chatobby-control--effort")).toBeNull();
     expect(document.querySelector(".chatobby-selection-menu")).toBeNull();
-    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(3);
+    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(2);
     controls.destroy();
   });
 
-  it.each([240, 320, 440, 600, 1024].flatMap((width) => ["read-only", "workspace", "full"].map((value) => ({ width, value }))))(
-    "keeps permission operable at viewport $width for projected $value", async ({ width, value }) => {
+  it.each([240, 320, 440, 600, 1024].flatMap((width) => ["medium", "high"].map((value) => ({ width, value }))))(
+    "keeps effort operable at viewport $width for projected $value", async ({ width, value }) => {
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
     const applyControl = vi.fn(async () => {});
     const controls = new ComposerControls({ getViewModel: () => model, isBackendAvailable: () => true, applyControl });
     controls.render(document.body);
-    const anchor = document.querySelector<HTMLButtonElement>(".chatobby-control--permission")!;
+    const anchor = document.querySelector<HTMLButtonElement>(".chatobby-control--effort")!;
     anchor.click();
     const menu = document.querySelector<HTMLElement>(".chatobby-selection-menu")!;
     expect(Number.parseFloat(menu.style.left) + Number.parseFloat(menu.style.width)).toBeLessThanOrEqual(width - 8);
-    const index = model.controls[0]!.options.findIndex((option) => option.value === value);
+    const index = model.controls.find((control) => control.id === "effort")!.options.findIndex((option) => option.value === value);
     document.querySelectorAll<HTMLButtonElement>(".chatobby-selection-menu__option")[index]?.click();
-    await vi.waitFor(() => expect(applyControl).toHaveBeenCalledExactlyOnceWith("permission", value));
-    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(4);
+    await vi.waitFor(() => expect(applyControl).toHaveBeenCalledExactlyOnceWith("effort", value));
+    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(3);
     await vi.waitFor(() => expect(document.activeElement).toBe(anchor));
     controls.destroy();
   });

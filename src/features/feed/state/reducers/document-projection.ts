@@ -4,6 +4,11 @@ import { assistantCallId, blockId, toolCallId } from "../../domain/ids";
 import type { FeedDocumentProjection } from "../../domain/projections";
 import type { FeedTransaction } from "../feed-transaction";
 
+// Wire projections replace changed objects. Retain conversion identity for
+// unchanged history so a text delta does not deep-compare every old tool result.
+const blockEntities = new WeakMap<FeedBlock, FeedBlockEntity>();
+const toolEntities = new WeakMap<ToolItem, ToolItemEntity>();
+
 /** Reconciles a flat external read model without replacing feed view state or unchanged entities. */
 export function reduceDocumentProjection(
   transaction: FeedTransaction,
@@ -19,6 +24,7 @@ export function reduceDocumentProjection(
   const unmatchedPendingIds = new Set(pendingLocalIds);
 
   for (const projected of projection.blocks) {
+    if (!unmatchedPendingIds.size) break;
     if (projected.type !== "user") continue;
     const projectedId = blockId(projected.id);
     const existing = transaction.getBlock(projectedId);
@@ -146,6 +152,12 @@ function reconcileTools(transaction: FeedTransaction, block: ToolBlock): void {
 }
 
 function toEntity(block: FeedDocumentProjection["blocks"][number]): FeedBlockEntity {
+  let entity = blockEntities.get(block);
+  if (!entity) { entity = projectEntity(block); blockEntities.set(block, entity); }
+  return entity;
+}
+
+function projectEntity(block: FeedDocumentProjection["blocks"][number]): FeedBlockEntity {
   const id = blockId(block.id);
   switch (block.type) {
     case "thinking":
@@ -205,7 +217,9 @@ function toEntity(block: FeedDocumentProjection["blocks"][number]): FeedBlockEnt
 }
 
 function toToolEntity(item: ToolItem): ToolItemEntity {
-  return {
+  const retained = toolEntities.get(item);
+  if (retained) return retained;
+  const entity: ToolItemEntity = {
     id: toolCallId(item.id),
     name: item.name,
     category: item.category,
@@ -220,6 +234,8 @@ function toToolEntity(item: ToolItem): ToolItemEntity {
     startTime: item.startTime,
     endTime: item.endTime,
   };
+  toolEntities.set(item, entity);
+  return entity;
 }
 
 function assertUniqueIds<T extends string>(ids: readonly T[]): void {

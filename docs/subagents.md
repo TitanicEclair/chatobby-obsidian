@@ -17,7 +17,8 @@ responsible for coordinating work and checking important claims.
 A reusable role saves instructions, a model and user skills. Manage roles for the
 Vault or a selected Project from **Subagents → Roles and settings → Roles**. Changing this editing
 area does not move your conversation. New agents inherit the initiating
-session's current access policy; role text cannot grant broader access.
+session's workspace and app-access choices. In 0.5.3 all agents have Full file,
+command and network access; sandboxing is temporarily unavailable.
 Older roles with a retired permission-profile override remain marked for review.
 Saving the role removes that override and adopts the current policy.
 
@@ -59,7 +60,7 @@ remains part of shared channel history: **DM means targeted delivery, not privat
 history**. Broadcast when everyone needs an update; DM an individual question.
 Replies should address the sender without creating endless acknowledgement loops.
 
-Invitations and messages do not change workspace access, network access or
+Invitations and messages do not move a chat's workspace or change its
 Obsidian grants. Delivery receipts distinguish successful delivery, unavailable
 recipients and failures. An invitation cannot wake a session that is not live.
 

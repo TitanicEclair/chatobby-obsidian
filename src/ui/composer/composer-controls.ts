@@ -57,7 +57,7 @@ export class ComposerControls extends ChatobbyComponent {
     }
     this.providerFilter = this.resolveProviderFilter(model);
     this.selectedModel = this.resolveModelSelection(model);
-    for (const id of ["permission", "network", "provider", "model", "effort"] as const) {
+    for (const id of ["provider", "model", "effort"] as const) {
       const control = findControl(model, id);
       if (!control) continue;
       const button = this.buildPickerButton(container, control);
@@ -77,8 +77,8 @@ export class ComposerControls extends ChatobbyComponent {
       return;
     }
     this.container?.removeClass("is-hidden");
-    const expectedControls = model.controls.length;
-    if (this.buttons.size !== expectedControls || model.controls.some((control) => !this.buttons.has(control.id))) {
+    const visibleControls = model.controls.filter(control => control.id !== "permission" && control.id !== "network");
+    if (this.buttons.size !== visibleControls.length || visibleControls.some((control) => !this.buttons.has(control.id))) {
       this.closePicker(false);
       this.buttons.clear();
       this.container?.empty();

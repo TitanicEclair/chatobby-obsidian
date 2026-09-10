@@ -2,10 +2,12 @@
 
 <p align="center">AI agents in Obsidian, with tools, memory, group chats and scheduled work.</p>
 
+**0.5.3 uses Full access. Sandboxing is temporarily unavailable.** Agents can read, change and delete files, run commands and use the network as your OS user account, including outside your vault.
+
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="docs/alpha-guide.md">Guide</a> ·
-  <a href="https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.2">0.5.2 release</a> ·
+  <a href="https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.3">0.5.3 release</a> ·
   <a href="https://github.com/TitanicEclair/chatobby-obsidian/discussions">Share a workflow</a> ·
   <a href="https://github.com/TitanicEclair/chatobby-obsidian/issues">Report a bug</a>
 </p>
@@ -34,7 +36,7 @@
 - **[Memory across chats.](#memory)** Agents save useful preferences and Project facts, update them as work changes, and reuse them in later conversations. Browse and edit the records yourself.
 - **[Scheduled workflows.](#scheduled-events)** Ask for a weekly Project summary, a weekday note review, or work triggered by a file change. Inspect runs in Events.
 - **[Obsidian notes and Projects.](#projects-and-notes)** Search notes, follow links, edit Markdown and work with folders outside the vault. Keep chats and notes side by side in native tabs.
-- **[Web, shell, skills and MCP.](#tools-and-access)** Give an agent the tools needed to research, run scripts and work with connected services, with workspace and network controls.
+- **[Web, shell, skills and MCP.](#tools-and-access)** Research online, run scripts, reuse skills and work with connected services.
 - **[Operate Obsidian.](#obsidian-automation)** Arrange tabs, edit an unsaved selection, configure connections and build reusable plugin workflows.
 - **[Your Obsidian theme.](#obsidian-themes)** Chatobby follows your theme, fonts and accent colours.
 
@@ -204,23 +206,14 @@ workflows or connect **MCP servers** for more tools and services.
   <img src="assets/readme/plugins.png" alt="The Plugins page with installed connections and the Connect MCP action." width="1200">
 </p>
 
-Choose **Read-only**, **Workspace** or **Full** access for a conversation. Workspace
-mode uses native restrictions to keep file changes within selected folders.
-Control agent network access, Obsidian app access and individual MCP connections
-from the composer and **Permissions**.
-
-<details>
-<summary>View the Permissions page</summary>
-
-<p align="center">
-  <img src="assets/readme/permissions.png" alt="Permissions for Vault and Project app access." width="1200">
-</p>
-
-</details>
+Chatobby 0.5.3 runs with **Full access**. Access-mode and network controls are
+temporarily hidden. **Permissions** manages Obsidian app access; **Plugins**
+manages MCP connections and individual tool selections. Memory and session-history
+queries keep their Project scope independently of file and command access.
 
 [Connect MCP servers →](docs/mcp-connections.md) ·
 [Obsidian CLI and terminal →](docs/obsidian-cli-and-terminal.md) ·
-[Access modes →](docs/alpha-guide.md) · [Security →](SECURITY.md)
+[Full access →](docs/alpha-guide.md#full-access-in-053) · [Security →](SECURITY.md)
 
 ## Obsidian themes
 
@@ -246,8 +239,8 @@ supported. Chatobby is currently in alpha.
 
 [Installation and updates →](docs/installation.md) ·
 [Troubleshooting →](docs/troubleshooting.md) ·
-[Connector 0.5.2](https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.2) ·
-[Runtime 0.5.2](https://github.com/TitanicEclair/chatobby-runtime/releases/tag/0.5.2)
+[Connector 0.5.3](https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.3) ·
+[Runtime 0.5.3](https://github.com/TitanicEclair/chatobby-runtime/releases/tag/0.5.3)
 
 ## Roadmap
 

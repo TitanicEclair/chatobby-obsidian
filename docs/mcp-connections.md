@@ -2,7 +2,8 @@
 
 MCP connections add optional tools from an online service or a program already
 installed on your computer. A connection, its authentication, its exposed tool
-set, and Chatobby's sandbox and network access are separate decisions.
+set are separate decisions. Local programs in Chatobby 0.5.3 run with Full access;
+sandboxing is temporarily unavailable.
 
 ## Add a connection
 
@@ -38,26 +39,21 @@ remains off until you select it.
 
 **Check details** remains available for validating a local command without
 starting it. A real local **Test & discover**, connection, or tool call follows
-the runtime-reported process boundary: **Full access** may start it unsandboxed
-as your operating-system account, while Read-only and Workspace keep it
-unavailable until Chatobby reports verified native containment. The local
-connection's page states which case applies before it can be started.
+the runtime-reported process boundary. In 0.5.3, it starts unsandboxed as your
+operating-system account. The connection page shows this before testing.
 
-Chatobby's built-in web and Obsidian MCP adapters currently use local processes,
-so they have the same limitation in constrained modes. Their names do not
-bypass process admission. Remote MCP connections remain available when agent
-network access is On; a user-started remote test is a separate, isolated setup
-action and does not create agent access.
+Chatobby's built-in web and Obsidian MCP adapters also use ordinary local
+processes. Remote MCP connections use the network. A user-started test does not
+enable that server or select its agent tools.
 
 Chatobby's verified list is curated, but verification is not a promise that a
 third-party service will always be available or suitable. Review the publisher,
 source, requested account access, and privacy terms.
 
-## Tool exposure and sandbox access
+## Choose agent tools
 
-The Plugins page shows capabilities reported by a connection. They do not grant
-filesystem, process, or network authority. Those limits belong to Chatobby's
-separate sandbox and network settings.
+The Plugins page shows capabilities reported by a connection. Tool selections
+control which of those capabilities are supplied to the agent.
 
 Every discovered tool starts off. Turning on a server does not turn on its
 tools, and newly discovered tools remain off until selected. Removing a tool
@@ -66,8 +62,7 @@ selection revokes both direct and proxied access after the connection reloads.
 Older definitions that named individual direct tools retain those exact names.
 Older definitions that implicitly exposed every tool require review and expose
 none until the user selects them. A selected tool can affect its remote service,
-but it does not change Chatobby's access mode or grant project, vault,
-filesystem, shell, or network authority.
+but it does not change Project memory or session-history scope.
 
 ## Credentials
 
@@ -88,9 +83,8 @@ secret values directly in connection arguments.
 
 > I have a local MCP command from this publisher's documentation. Walk me
 > through saving it disabled and checking its details. Explain whether the live
-> Permissions and connection status allow a contained launch or require
-> explicit unsandboxed Full access, and explain the separate tool-selection and
-> network limits before I decide whether to test it.
+> connection status allows the program to start, and let me choose its tools
+> before enabling it. I understand that local programs run with Full access.
 
 Chatobby should use the public guide and the live Plugins page. It does not need
 to inspect private product source or reveal private tool descriptions.

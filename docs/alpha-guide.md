@@ -11,14 +11,15 @@ unlock features, raise limits, or change the data Chatobby can access.
 3. Ask Chatobby to summarize a note, compare linked ideas or make an edit.
 4. Add the **Chatobby Guide** from Settings for the full feature reference.
 
-## Access modes
+## Full access in 0.5.3
 
-New chats start in **Workspace** mode with network access on. Workspace allows
-file changes in the selected Vault or Project folders; **Read-only** prevents
-file changes there. Both modes use native sandboxing on Windows, macOS and Linux.
-Chatobby's internal storage stays protected. **Full** uses your normal OS account
-access and keeps networking on. Choose the mode and network setting in the composer
-or Permissions; separate chats keep their own choices.
+Sandboxing is temporarily unavailable. All chats, subagents and Events run with
+**Full access**: files, commands and networking use your normal OS account,
+including files outside the Vault or Project. Access-mode and network controls
+are hidden. Older saved choices are retained but do not constrain this release.
+
+Project memory and session-history queries remain scoped to their workspace.
+These application filters do not restrict ordinary file or shell access.
 
 **Obsidian app access** enables tools that operate the app itself, including its
 whole-vault access. It defaults on for Vault chats and off for Projects. Existing
@@ -43,8 +44,8 @@ change before a stable release.
 
 Chatobby does not charge for this alpha. Your selected provider or integration
 may charge for requests. Remote model calls can include prompts, selected note
-context, attachments, tool arguments, and tool results. Review the active
-permission policy and provider terms before working with sensitive content.
+context, attachments, tool arguments, and tool results. Use a local model when
+you want inference to stay on your device.
 
 Chatobby has no client-side analytics or automatic crash reporting. Diagnostics
 remain local unless you choose to share a redacted copy.

@@ -1,4 +1,5 @@
-export declare const CHATOBBY_PRODUCT_VERSION: "0.5.2";
+export declare const CHATOBBY_PRODUCT_VERSION: "0.5.3";
+export declare const CHATOBBY_NATIVE_SANDBOX_ENABLED: false;
 export declare const CHATOBBY_RUNTIME_DESCRIPTOR_SCHEMA_VERSION: 3;
 export declare const CHATOBBY_RUNTIME_PROTOCOL_VERSION: 4;
 export declare const CHATOBBY_CONFIG_SCHEMA_VERSION: 1;

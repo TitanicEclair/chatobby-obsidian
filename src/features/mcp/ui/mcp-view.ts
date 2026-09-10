@@ -388,7 +388,7 @@ export class McpView extends ChatobbyComponent {
     this.renderPluginGroup(
       parent,
       "Verified connections",
-      "Definitions reviewed and shipped by Chatobby. Connection state is separate from the active sandbox and network limits.",
+      "Connection definitions reviewed and shipped by Chatobby.",
       verified,
     );
     this.renderPluginGroup(
@@ -707,7 +707,7 @@ export class McpView extends ChatobbyComponent {
       this.renderTextList(
         parent,
         "Access notes",
-        "Review the service's own access separately from Chatobby's sandbox and network limits.",
+        "Access used by this connection and its account.",
         plugin.permissions,
       );
     }
@@ -756,7 +756,7 @@ export class McpView extends ChatobbyComponent {
     const section = createPageSection(parent, {
       title: "Capabilities",
       description:
-        "These are reported by the connection. Chatobby's sandbox and network limits remain separate.",
+        "Capabilities reported by this connection. Choose which tools the agent can use.",
       surface: "divided",
     });
     for (const capability of capabilities) {

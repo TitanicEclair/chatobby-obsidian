@@ -130,22 +130,21 @@ describe("development pair coordinator", () => {
     expect(runtime.admitMaintenance).not.toHaveBeenCalled();
   }, HELPER_FIXTURE_TIMEOUT_MS);
 
-  it("does not downgrade a native-capable current pair to a base-only pending bundle", async () => {
+  it("adopts the Full-only release from a native-capable pair without losing rollback assets", async () => {
     const fixture = await createFixture();
     await addWindowsHelper(fixture);
     const initial = runtimeFixture(null, fixture.receipt.runtime.developmentBuildFingerprint, fixture.receipt.runtime.version);
     await createCoordinator(fixture, initial.manager, vi.fn(async () => activationProof(fixture.receipt.pairId))).adoptPending();
-    const previous = await readFile(join(fixture.receiptRoot, "current.json"), "utf8");
+    const previous = JSON.parse(await readFile(join(fixture.receiptRoot, "current.json"), "utf8"));
     for (const path of WINDOWS_SANDBOX_ASSET_PATHS) await unlink(join(dirname(fixture.receipt.runtime.path), path));
     fixture.receipt.runtime.assets = fixture.receipt.runtime.assets.filter((asset) => !asset.path.startsWith(`${WINDOWS_SANDBOX_ASSET_ROOT}/`));
     fixture.receipt.pairId = developmentPairId(fixture.receipt);
     await writeFile(join(fixture.receiptRoot, "pending.json"), JSON.stringify(fixture.receipt));
     const runtime = runtimeFixture(fixture.receipt.runtime.developmentBuildFingerprint, fixture.receipt.runtime.developmentBuildFingerprint, fixture.receipt.runtime.version);
-    await expect(createCoordinator(fixture, runtime.manager, vi.fn(async () => activationProof(fixture.receipt.pairId))).adoptPending()).rejects.toThrow(/helper/u);
-    expect(await readFile(join(fixture.receiptRoot, "current.json"), "utf8")).toBe(previous);
-    expect(runtime.ensureReady).not.toHaveBeenCalled();
-    expect(runtime.admitMaintenance).not.toHaveBeenCalled();
-    expect(runtime.stop).not.toHaveBeenCalled();
+    await expect(createCoordinator(fixture, runtime.manager, vi.fn(async () => activationProof(fixture.receipt.pairId))).adoptPending()).resolves.toBe("activated");
+    expect(JSON.parse(await readFile(join(fixture.receiptRoot, "current.json"), "utf8"))).toMatchObject({ pairId: fixture.receipt.pairId });
+    expect(await readFile(cachedRuntimePath(fixture, previous), "utf8")).toBe("runtime");
+    expect(runtime.ensureReady).toHaveBeenCalled();
   }, HELPER_FIXTURE_TIMEOUT_MS);
 
   it("rechecks helper bytes after maintenance admission before starting a runtime", async () => {

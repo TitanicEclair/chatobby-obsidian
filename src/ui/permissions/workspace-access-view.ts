@@ -11,18 +11,22 @@ export function renderWorkspaceAccess(
   onChange: (choice: WorkspaceAccessChoice, enabled: boolean) => void,
   onManageTools?: () => void,
 ): void {
-  const session = createPageSection(parent, {
+  if (model.executionMode !== "full-access") {
+    const session = createPageSection(parent, {
     title: "Chat access",
     description: "Choose Read-only, Workspace or Full access in the chat composer. Subagents use their parent chat’s access choices.",
     surface: "divided", className: "chatobby-permissions__section",
   });
   session.content.createDiv({ cls: "chatobby-permissions__notice", text: "Workspace restrictions help limit accidental file changes. Full access runs with your user account's authority." });
+  }
   const grants = createPageSection(parent, {
     title: "Obsidian app access",
     description: "Allow Obsidian tools and context for these Projects and chats.",
     surface: "divided", className: "chatobby-permissions__section",
   });
-  grants.content.createDiv({ cls: "chatobby-permissions__warning", text: "App access can read or change the whole Vault and use Obsidian’s network, outside workspace protection.", attr: { role: "note" } });
+  grants.content.createDiv({ cls: "chatobby-permissions__notice", text: model.executionMode === "full-access"
+    ? "Controls Chatobby’s Obsidian tools and note context. File and shell access remain unrestricted."
+    : "App access can read or change the whole Vault and use Obsidian’s network, outside workspace protection.", attr: { role: "note" } });
   if (!supported || !model.workspaceVaultAccess) {
     grants.content.createDiv({ text: "Reconnect to a runtime that supports workspace access choices." });
   } else for (const choice of model.workspaceVaultAccess) {

@@ -1085,6 +1085,8 @@ export type FrontendObsidianVaultAccessViewModel =
 
 export interface FrontendPermissionScreenViewModel {
 	readonly screenId: "permissions";
+	/** Absent on older runtimes; never infer Full-only operation from the plugin version. */
+	readonly executionMode?: "full-access";
 	readonly revision: number;
 	/** Durable policy owner; delegated sessions display this inherited authority read-only. */
 	readonly accessPolicySessionId: string;
@@ -4276,6 +4278,7 @@ function validateMcpScreen(input: Record<string, unknown>): void {
 }
 
 function validatePermissionScreen(input: Record<string, unknown>): void {
+	if (input.executionMode !== undefined) requireEnumValue(input.executionMode, "executionMode", ["full-access"]);
 	if (input.nativeSetup !== undefined) validateFrontendSandboxSetupView(input.nativeSetup);
 	requireString(input.accessPolicySessionId, "accessPolicySessionId");
 	const accessPolicy = requireRecord(input.accessPolicy, "accessPolicy");
@@ -4295,6 +4298,12 @@ function validatePermissionScreen(input: Record<string, unknown>): void {
 		throw new Error("Permission scope filesystemBound must match selectedRootCount.");
 	}
 	const nativeSupport = requireRecord(input.nativeSupport, "nativeSupport");
+	if (
+		input.executionMode === "full-access" &&
+		(accessPolicy.accessMode !== "full" || nativeSupport.status !== "unsupported" || input.nativeSetup !== undefined)
+	) {
+		throw new Error("Full-only execution must report Full access with sandboxing unavailable and no native setup.");
+	}
 	requireEnumValue(nativeSupport.status, "nativeSupport.status", [
 		"ready",
 		"setup-required",

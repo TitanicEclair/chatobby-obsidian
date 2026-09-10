@@ -29,7 +29,7 @@ describe("welcome and release introductions", () => {
   it("separates shipped changes from the roadmap and can reopen current release notes", () => {
     const modal = new ProductIntroModal({} as App, "changes", "0.5.0", "0.5.0", vi.fn(), vi.fn());
     modal.open();
-    expect(modal.contentEl.textContent).toContain("Sandboxed tools");
+    expect(modal.contentEl.textContent).toContain("Access controls introduced in 0.5.0");
     expect(modal.contentEl.textContent).toContain("Native tabs");
     const roadmap = modal.contentEl.querySelector(".chatobby-intro__roadmap")!;
     expect(roadmap.textContent).toContain("Planned");
@@ -39,7 +39,7 @@ describe("welcome and release introductions", () => {
     modal.close();
   });
   it("uses a release-notes fallback for a future update without registered highlights", () => {
-    const modal = new ProductIntroModal({} as App, "changes", "0.5.3", "0.5.2", vi.fn(), vi.fn());
+    const modal = new ProductIntroModal({} as App, "changes", "0.6.0", "0.5.3", vi.fn(), vi.fn());
     modal.open();
     expect(modal.contentEl.textContent).toContain("Open the release notes to see what changed");
     expect(modal.contentEl.textContent).not.toContain("Native tabs and a new sidebar");
@@ -53,6 +53,16 @@ describe("welcome and release introductions", () => {
     expect(modal.contentEl.textContent).not.toContain("Native tabs and a new sidebar");
     expect(modal.contentEl.textContent).not.toContain("A new interface");
     modal.close();
+  });
+  it("makes the temporary Full access explicit when upgrading or reopening the 0.5.3 notes", () => {
+    for (const previous of ["0.5.2", "0.5.3"]) {
+      const modal = new ProductIntroModal({} as App, "changes", "0.5.3", previous, vi.fn(), vi.fn());
+      modal.open();
+      expect(modal.contentEl.textContent).toContain("sandboxing temporarily unavailable");
+      expect(modal.contentEl.textContent).toContain("including outside your vault");
+      expect(modal.contentEl.textContent).toContain("Project-scoped history");
+      modal.close();
+    }
   });
   it("persists dismissal once, avoids duplicate modals and does not acknowledge an unloaded introduction", () => {
     const settings = { onboardingVersion: 1, lastSeenPluginVersion: "0.4.3" };

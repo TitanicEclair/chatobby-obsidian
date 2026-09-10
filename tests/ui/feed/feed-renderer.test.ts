@@ -300,7 +300,7 @@ describe("FeedRenderer", () => {
     expect(host.renderMarkdown).toHaveBeenCalledWith("**live**", expect.any(HTMLElement));
   });
 
-  it("keeps the newest async Markdown render when an older render finishes late", async () => {
+  it("finishes an in-flight Markdown pass before rendering the latest completed response", async () => {
     const state: LegacyFeedState = {
       ...INITIAL_LEGACY_FEED_STATE,
       activeTurnId: "turn-race",
@@ -337,13 +337,11 @@ describe("FeedRenderer", () => {
         status: "complete",
       }] },
     });
-    expect(finishes).toHaveLength(2);
-
-    finishes[1]?.();
-    await Promise.resolve();
-    expect(element.querySelector(".chatobby-text-block__content")?.textContent).toBe("new");
-
+    expect(finishes).toHaveLength(1);
     finishes[0]?.();
+    await vi.waitFor(() => expect(finishes).toHaveLength(2));
+    expect(element.querySelector(".chatobby-text-block__content")?.textContent).not.toBe("old");
+    finishes[1]?.();
     await Promise.resolve();
     expect(element.querySelector(".chatobby-text-block__content")?.textContent).toBe("new");
   });

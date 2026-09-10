@@ -10,7 +10,7 @@ Decide:
 
 - which project directory the work belongs to;
 - whether the main agent or a reusable role should run it;
-- the current access policy for that Project or Vault workspace;
+- the Obsidian app access and selected MCP tools for that Project or Vault;
 - the prompt and expected output;
 - one-off or repeating timing, local time zone, and end condition;
 - maximum runtime and daily run limit;
@@ -20,7 +20,7 @@ Example:
 
 > Create a disabled Event for this project that runs every weekday at 6 PM in
 > my local time. It should summarize notes changed today into the daily note,
-> inherit this Project's access policy, stop after 15 minutes, and run no more than once per
+> use this Project's notes, stop after 15 minutes, and run no more than once per
 > day. Show me the full definition before enabling it.
 
 ## Scheduling
@@ -40,12 +40,10 @@ Common patterns include:
 
 ## Permission and background execution
 
-An Event inherits the current access policy for its selected Project or Vault
-workspace. Project work remains bounded to that Project; it does not silently
-fall back to Vault scope. Its prompt cannot grant additional authority or
-bypass a denied action. Change the
-Project's policy deliberately when future automated work needs different
-access; the Event cannot select its own profile.
+In 0.5.3, Event agents run with Full file, command and network access while
+sandboxing is temporarily unavailable. Memory and session-history queries keep
+the selected Project or Vault scope. Obsidian app-access and MCP tool choices
+still apply; an Event prompt cannot enable those integrations.
 
 An older Event that retained a separate permission-profile override stays
 disabled and marked for review. Saving it explicitly removes that retired
@@ -76,9 +74,8 @@ single generic error.
 
 - **Nothing ran:** check enabled state, the calculated next occurrence, local
   time zone, background consent, project availability, and daily run limit.
-- **The Event asked for permission:** the current workspace policy does not authorize a
-  required operation. Review the exact check rather than broadening the entire
-  project policy.
+- **An integration is unavailable:** check Obsidian app access, enabled MCP
+  tools, connection status and the actual error in the occurrence.
 - **The Event timed out:** inspect the occurrence history and either reduce the
   work or deliberately increase the maximum runtime.
 - **The same task ran twice:** inspect occurrence IDs, trigger origin, schedule,

@@ -1,5 +1,12 @@
 # Troubleshooting
 
+## Sandboxing in 0.5.3
+
+Sandboxing is temporarily unavailable. Chatobby runs with Full access and has
+no access-mode or network switch. If you still see native sandbox setup or
+cleanup errors, check the connected runtime version in Settings and update the
+runtime to match the plugin. Project memory and history remain scoped.
+
 ## Chatobby runtime is not installed
 
 Select **Get runtime** in the Chatobby view or settings. Review the version,

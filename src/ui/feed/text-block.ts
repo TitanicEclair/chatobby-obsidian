@@ -15,6 +15,8 @@ export class TextBlockView extends ChatobbyComponent {
   private selectionRetryTimer: number | null = null;
   private renderRevision = 0;
   private lastMarkdownRenderAt: number | null = null;
+  private renderInFlight = false;
+  private renderPending = false;
 
   constructor(private readonly host: FeedHost, private block?: TextBlock) {
     super();
@@ -101,6 +103,10 @@ export class TextBlockView extends ChatobbyComponent {
 
   private scheduleMarkdownRender(force: boolean): void {
     if (!this.contentEl || !this.block) return;
+    if (this.renderInFlight) {
+      this.renderPending = true;
+      return;
+    }
     if (force) {
       this.cancelScheduledRender();
       this.renderMarkdownNow();
@@ -120,6 +126,9 @@ export class TextBlockView extends ChatobbyComponent {
 
   private renderMarkdownNow(): void {
     if (!this.contentEl || !this.block) return;
+    if (this.renderInFlight) { this.renderPending = true; return; }
+    this.renderInFlight = true;
+    this.renderPending = false;
     const revision = ++this.renderRevision;
     const isFinal = this.block.status !== "streaming";
     const staging = this.contentEl.createDiv();
@@ -132,6 +141,7 @@ export class TextBlockView extends ChatobbyComponent {
         staging,
       );
     } catch (error) {
+      this.renderInFlight = false;
       console.error("Chatobby: markdown render failed", error);
       return;
     }
@@ -143,15 +153,23 @@ export class TextBlockView extends ChatobbyComponent {
         openVaultLink: (path) => this.host.openVaultLink(path),
         openSystemPath: (path) => this.host.openSystemPath(path),
       });
-      this.commitRenderedMarkdown(staging, revision, isFinal);
+      // A completed response must never be replaced by an older streaming pass.
+      if (isFinal || this.block?.status === "streaming") this.commitRenderedMarkdown(staging, revision, isFinal);
+    };
+    const settled = () => {
+      this.renderInFlight = false;
+      if (revision === this.renderRevision && this.renderPending && this.isMounted) {
+        this.renderPending = false;
+        this.scheduleMarkdownRender(this.block?.status !== "streaming");
+      }
     };
     if (rendered instanceof Promise) {
       void rendered.then(finish).catch((error: unknown) => {
         if (revision === this.renderRevision) console.error("Chatobby: markdown render failed", error);
-      });
+      }).finally(settled);
       return;
     }
-    finish();
+    try { finish(); } finally { settled(); }
   }
 
   private commitRenderedMarkdown(staging: HTMLElement, revision: number, isFinal: boolean): void {
@@ -164,7 +182,14 @@ export class TextBlockView extends ChatobbyComponent {
       }, 100);
       return;
     }
-    this.contentEl.replaceChildren(...Array.from(staging.childNodes));
+    // Keep completed paragraphs and their links/selection/DOM identity. Only
+    // the changed suffix is replaced as the response grows.
+    const incoming = Array.from(staging.childNodes);
+    const current = Array.from(this.contentEl.childNodes);
+    let unchanged = 0;
+    while (unchanged < current.length && unchanged < incoming.length && current[unchanged]!.isEqualNode(incoming[unchanged]!)) unchanged++;
+    for (const node of current.slice(unchanged)) node.remove();
+    this.contentEl.append(...incoming.slice(unchanged));
   }
 
   private cancelScheduledRender(): void {

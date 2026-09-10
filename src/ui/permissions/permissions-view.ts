@@ -92,7 +92,7 @@ export class PermissionsView extends ChatobbyComponent {
     container.tabIndex = -1;
     this.shell = new PageShell(container, {
       title: "Permissions",
-      subtitle: "Choose what Chatobby can access.",
+      subtitle: "Runtime access and connected tools.",
       width: "form",
       headerClass: "chatobby-permissions__header",
       titleClass: "chatobby-permissions__title",
@@ -152,6 +152,24 @@ export class PermissionsView extends ChatobbyComponent {
         });
         return;
       }
+      if (model.executionMode === "full-access") {
+        const access = createPageSection(body, {
+          title: "Full access",
+          description: "Sandboxing is temporarily unavailable in Chatobby 0.5.3.",
+          surface: "divided", className: "chatobby-permissions__section",
+        });
+        access.content.createEl("p", { text: "Agents can read, change and delete files, run commands, and use the network with your OS user account’s access, including outside this vault." });
+        access.content.createEl("p", { text: "Project memory and session searches stay scoped to the current workspace. This does not restrict access through file or shell tools." });
+        if (this.props.workspacePage) {
+          renderWorkspaceAccess(body, model, this.saving, this.props.supportsObsidianVaultAccess(),
+            (choice, enabled) => void this.setWorkspaceAccess(choice, enabled), () => this.props.onManageTools?.());
+        } else {
+          this.renderObsidianVaultAccess(body, model);
+        }
+        return;
+      }
+      body.createDiv({ cls: "chatobby-permissions__notice", attr: { role: "status" },
+        text: "This runtime has not reported the Full-access-only mode of 0.5.3. Update the runtime in Settings; its current policy is shown below." });
       if (model.migrationNotice) {
         body.createDiv({
           cls: "chatobby-permissions__notice",
@@ -364,7 +382,9 @@ export class PermissionsView extends ChatobbyComponent {
     toggle.addEventListener("change", () => void this.setObsidianVaultAccess(model, toggle.checked));
     section.content.createDiv({
       cls: "chatobby-permissions__warning",
-      text: "Uses Obsidian’s app authority outside the sandbox. When On, these operations can read or change the vault in any access mode and use Obsidian’s network access. Project roots, memory scope, and identity do not change.",
+      text: model.executionMode === "full-access"
+        ? "Controls Chatobby’s Obsidian tools and note context. File and shell access remain unrestricted."
+        : "Uses Obsidian’s app authority outside the sandbox. When On, these operations can read or change the vault in any access mode and use Obsidian’s network access. Project roots, memory scope, and identity do not change.",
       attr: { role: "note" },
     });
   }

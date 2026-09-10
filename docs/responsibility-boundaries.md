@@ -120,26 +120,13 @@ missing Project folder.
 
 ## Permissions and passive Obsidian context
 
-The runtime owns the three access modes and agent-network policy for each durable
-session. Independent chats, including chats in the same Project, keep separate
-choices; two tabs attached to the same saved chat render the same authoritative
-policy. Reopen restores that policy. New independent chats start Workspace/On;
-existing chats without a session record snapshot their previous effective policy
-once through the runtime's migration owner. Installation settings do not
-live-override sessions, and the connector owns no policy/default store.
-Delegated agents use their initiating parent's policy owner, not independent
-chat defaults. Their child views display "Controlled by parent session" and
-disable mode/network editing; they cannot silently change their parent or siblings.
-
-The Permissions screen carries the runtime's `accessPolicySessionId`. Its mode
-and network actions require that exact identity in the existing `mainSessionId`
-envelope plus the current session-policy revision. The renderer and controller
-reject stale selections; late responses cannot update a replacement session's
-UI. A successful save may carry an enforcement warning, which is displayed
-without treating persistence as rejected or manufacturing native readiness.
-Full remains unsandboxed and necessarily Network On; constrained modes expose
-the existing session network switch. Roots, memory scopes, and existing context
-are not changed by a policy selection.
+Chatobby 0.5.3 supplies one product-owned effective Full/Network-On policy to
+all sessions, children, Events and tools. Sandboxing is temporarily unavailable.
+Stored mode/network records retain their bytes and revisions for rollback;
+they are inactive in this release. Older clients cannot change those choices.
+The connector hides mode/network controls and renders the runtime's explicit
+Full-access disclosure. An older connected runtime remains identified as older.
+Project memory and history-query scope are independent of filesystem access.
 
 The separate Obsidian vault-access choice
 is keyed to the authenticated Project or Vault. The connector renders it only after the
@@ -157,12 +144,9 @@ negotiation. The new runtime accepts older eight-capability clients without
 exposing this control. Optional selection is not a promise that older runtime
 parsers accept newer capability names.
 
-Obsidian vault access includes the existing CLI and vault-level tools:
-**Uses Obsidian’s app authority outside the sandbox.** This explicit exception
-can read or change the vault in any access mode and can use Obsidian's network
-access. It neither rewrites Project roots, identity, or memory scope nor enables
-MCP servers/tools. Native process readiness is reported separately and is not
-proved by this grant or its UI.
+Obsidian app access controls the supplied Obsidian tools and passive context.
+It does not contain ordinary Full-access file or command tools. Project identity,
+memory scope and enabled MCP tools retain their separate owners.
 
 Frontend negotiation reads capabilities only, without collecting passive note
 or editor context. Before each normal prompt, `ChatobbyView` checks fresh
@@ -179,54 +163,14 @@ revocation and bridge rebind. A later eligible demand captures fresh context.
 The paired runtime must also discard legacy event summaries and must not turn
 an invalidation or sequence gap into an unauthorised context read.
 
-## Native setup and recovery consent
+## Retained native implementation
 
-The optional `native-sandbox-setup` capability gates explicit Permissions
-actions. The runtime resolves current authenticated roots and separately reads
-recorded older roots from its canonical owned-grant journal. The connector
-displays those exact paths only for user review; it does not derive a target,
-copy a journal, submit paths/SIDs, or treat configured as verified containment.
-Review then confirmation carries only opaque references, the current session
-and expected revisions. Stale targets/connections reject without a fallback.
-
-Landstrip applies the current policy to each launch; its canonical
-`not-required` root-setup state has no grant to dereference and never means
-verified or ready. The connector keeps actual Landstrip availability/reasons
-separate from selected mode and shows no per-root setup action. Historical
-recorded grants, when projected by their owner, retain explicit recovery.
-
-For backends with explicit Setup grants, configured grants reuse only the exact authenticated Vault/Project root set,
-mode and network choice across chats. Each first-time mode/network combination
-still requires explicit setup. Recorded recovery is Vault-authenticated user
-control, not a model permission or cross-Project execution grant. Permissions
-inspection reads journal/protection consistency only; native launch verification
-remains a separate runtime boundary and is not a readiness claim.
-
-Setup/recovery temporarily pauses all constrained work on the shared native
-backend while owned processes drain and grants are checked. Full access and
-ordinary host processes are not stopped. Missing backend composition remains
-unavailable. Revoke removes only witnessed owned grants; profile identity is
-retained. It does not change the three access modes, network preference,
-Obsidian app-authority exception, Project memory, or independent MCP switches.
-Reverting this UI hides future actions but does not undo existing native grants;
-recovery remains a canonical runtime responsibility.
-
-The active Landstrip runtime admits signed release qualification bound to its
-binary, policy, source revision and native development-test receipt. The
-connector's generated asset contract recognizes the bounded data file; package
-signature and inventory checks authenticate it. It does not run synthetic
-capability tests during installation or startup. Normal Permissions has no
-verification checklist. Historical Verify contracts and records remain for the
-retained alternative backend and recovery tests; the active Landstrip composition
-does not consult or rewrite that record. Legacy Windows grant recovery remains
-with its original owner. Actual launch errors, identity changes and failed process
-cleanup remain runtime errors, not automatic permission changes.
-
-The current alpha claim is workspace accidental-change mitigation, not a boundary
-for untrusted code. Network On uses ordinary networking; the vault switch governs
-the supplied Obsidian tools/CLI, not all indirect shell access to applications.
-These limits do not remove independent MCP controls, Project memory boundaries
-or the requirement for actual native development and release tests.
+Native setup, verification and recovery contracts remain for development and
+older-runtime compatibility. The 0.5.3 product does not negotiate native setup,
+load sandbox binaries, capture native prerequisites, change ACLs or require
+verification. Signed package inventories remain mandatory. The Full-only
+candidate must contain no native sandbox assets. Retained native tests do not
+represent protection supplied by this release.
 
 ## Channel route
 

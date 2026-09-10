@@ -7,6 +7,20 @@ import {
 import { mount } from "./helpers/mount";
 
 describe("PermissionsView", () => {
+  it("replaces sandbox settings with Full access and retains independent workspace app grants", () => {
+    const model = permissionModel({ executionMode: "full-access", accessPolicy: { schemaVersion: 1, revision: 7, accessMode: "full", agentNetworkAccess: true },
+      workspaceVaultAccess: [{ projectId: "project-one", projectRevision: 4, label: "Research", revision: 7, enabled: false, source: "user" }] });
+    const root = mount(new PermissionsView({ workspacePage: true, getModel: () => model, getActiveSessionId: () => model.accessPolicySessionId,
+      supportsObsidianVaultAccess: () => true, supportsNativeSetup: () => true, subscribe: () => () => {}, onIntent: vi.fn(), onRefresh: async () => {}, onBack: () => {} }));
+    expect(root.textContent).toContain("Sandboxing is temporarily unavailable");
+    expect(root.textContent).toContain("including outside this vault");
+    expect(root.textContent).toContain("session searches stay scoped");
+    expect(root.textContent).not.toContain("Review verification");
+    expect(root.textContent).not.toContain("Choose Read-only");
+    expect(root.querySelectorAll("input[type='radio']")).toHaveLength(0);
+    expect(root.querySelectorAll("input[type='checkbox']")).toHaveLength(1);
+    expect(root.querySelector<HTMLInputElement>("input[aria-label='Obsidian access for Research']")?.checked).toBe(false);
+  });
   it("shows named workspace grants without an unrelated session's mode controls", async () => {
     const model = permissionModel({ workspaceVaultAccess: [{ projectId: "project-one", projectRevision: 4, label: "Research", revision: 7, enabled: false, source: "default" }] });
     const onIntent = vi.fn(async (_intent: PermissionViewIntent) => {});

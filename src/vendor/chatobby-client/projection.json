@@ -4,8 +4,8 @@
   "sourceRoot": "packages/chatobby/src",
   "entry": "packages/chatobby/src/frontend-client.ts",
   "contractSurface": "complete-package-entry-closure",
-  "sourceRevision": "37a33385b05449d91f7859eed7725def3133323c",
-  "sourceContentSha256": "b737433edff634eb94133b8b063093a56bb279b5a67f18dd62f527de845e52db",
+  "sourceRevision": "d9504ba1269f4b8161f406794d1ff819de7a2402",
+  "sourceContentSha256": "a41a3ec21ee4cb968be0b84a3f31ed68776067fa39baa4d3fb1051e666d24310",
   "protocolVersion": 2,
   "sourceFiles": [
     {
@@ -90,7 +90,7 @@
     },
     {
       "path": "control/product.generated.ts",
-      "sha256": "72f8b36b8a8f73b17c05ef5bf293a2f4d535e53a9a637f4e753aab927679d049"
+      "sha256": "acaccaf75f24d5c15c4b62805fba5ba38749deba92df7490842f5728ca33c3c7"
     },
     {
       "path": "control/ready-descriptor.ts",
@@ -129,12 +129,16 @@
       "sha256": "4a204997a34d7704a17c9489ed7f037a8ff2f629388c7e72a10613ca20b30daf"
     },
     {
+      "path": "execution-mode.ts",
+      "sha256": "2e5d4be1eb76a799af1af965f86bb7bcbe06c8e694ea5b1847afda094354688b"
+    },
+    {
       "path": "frontend-client.ts",
       "sha256": "e47cc0693a7624cb6b5c50708f3cad74100479bc4dc94d44f3d67d4fd28b2927"
     },
     {
       "path": "frontend-contracts.ts",
-      "sha256": "7e4940eede692381c88daa356e9789aa086693bb85e68c25be88f0c338849a56"
+      "sha256": "5e60041246778fa9eb7535dc859e1574345de0497d2975311a259c0db0c95895"
     },
     {
       "path": "frontend-plugin-contracts.ts",
@@ -150,7 +154,7 @@
     },
     {
       "path": "frontend/coordinator.ts",
-      "sha256": "680482068289c7bdc06fc552a169183c00d01602e405dcf4be12616a49902c7d"
+      "sha256": "90e2341ac2af67a5b11a5b6a7e21911d48bea7ca663cea49775eff7b8a855c13"
     },
     {
       "path": "frontend/domain-event-subscriptions.ts",
@@ -234,7 +238,7 @@
     },
     {
       "path": "main.ts",
-      "sha256": "0065685d1c35fe61a73350e8d2131cd9bc66d17e0d335f43333d132786c4277a"
+      "sha256": "8e4b6621b15c31c3de8c767e37bb0501fd78d33bb5c63e4dd91564e629a301f4"
     },
     {
       "path": "mcp-management-contracts.ts",
@@ -310,11 +314,11 @@
     },
     {
       "path": "operation-failures.ts",
-      "sha256": "79bf237bd765bacf140699ccb51108519c20569a4f810f97b32aa2198bede285"
+      "sha256": "7f50fe3515c88b3bed2a37ffabfab42410495642f5d28882b13e0e69b346f6b0"
     },
     {
       "path": "permissions/context-publication.ts",
-      "sha256": "03dc589accdb9b6db0b959961e20ad9851cbe244990f0bf6972381b5f663d15a"
+      "sha256": "e1e35eddbc4cfbe9599d296f0afa3152e37571d4d7cfaf0e31a0490db208b7d4"
     },
     {
       "path": "permissions/live-agent-permission-authority.ts",
@@ -342,7 +346,7 @@
     },
     {
       "path": "permissions/session-access-policy.ts",
-      "sha256": "4f540f2c7a2db8768b705f077659fc961f0a28ae319427e69a04a7b7d00a4f61"
+      "sha256": "606a5919dc244ea354a50a7ec5ea5e1a84e1d1c0b16f2875befddf0834030136"
     },
     {
       "path": "permissions/session-policy-revocation.ts",
@@ -486,11 +490,11 @@
     },
     {
       "path": "sandbox/child-diagnostics.ts",
-      "sha256": "734d166866cce80126deb4da5834bc145f022e49fa21ccecb4529173b9e4b782"
+      "sha256": "584d9fea6d4174a8dfe16cf5b72eba28b2587353630a00e108b3598c05d0619b"
     },
     {
       "path": "sandbox/execution-failure.ts",
-      "sha256": "b114540c7c65b46ae734a92f65cb14bb831dab223727b2023eb5c313f8d554a7"
+      "sha256": "c98c74013ae8cfb4b83be46ed0d7b163a218e16362513c19ec88f896b4c7d02e"
     },
     {
       "path": "sandbox/extension-execution.ts",
@@ -530,7 +534,7 @@
     },
     {
       "path": "sandbox/landstrip-installation.ts",
-      "sha256": "e8aec92c1656bd4cbc15167f2201fba39cbc0813c497c6ebcab1989f2ea734dd"
+      "sha256": "fb332abcda5d7db7551866c7226df64c69ba180e5df871af0103299d760e2386"
     },
     {
       "path": "sandbox/landstrip-release-support.ts",
@@ -538,7 +542,7 @@
     },
     {
       "path": "sandbox/landstrip-runtime.ts",
-      "sha256": "e137d4c9e37c6869a6042c493e86c28834246c3bdb1b8bb6859e7dd6c0290d35"
+      "sha256": "fe5e326a97095bdc51cce6c0849335b259e5564d03e07c9a77f386b7a1a35e0b"
     },
     {
       "path": "sandbox/landstrip-verification.ts",
@@ -546,7 +550,7 @@
     },
     {
       "path": "sandbox/mcp-execution.ts",
-      "sha256": "08cd1200f23ed6bed8c114eedee165f282528591fc925db305fcc541407876d4"
+      "sha256": "0906ad7d7821aba6a1312bab8870ab896dd6067a7dc9851ac02199a2dade42e5"
     },
     {
       "path": "sandbox/owner.ts",
@@ -570,7 +574,7 @@
     },
     {
       "path": "sandbox/process-execution.ts",
-      "sha256": "009baded418f2cd8f6ac0f11db2220b271f11e1e770900d7a6865dd9562242c5"
+      "sha256": "4de358ccb4cb5f1edd60335fbd6b39e6748ed63a2c0d361964c4ff4ecf1f36b3"
     },
     {
       "path": "sandbox/provisioning.ts",
@@ -578,7 +582,7 @@
     },
     {
       "path": "sandbox/runtime-execution.ts",
-      "sha256": "2925eb23e8c7d53eb6715b8688d9c4b062a47e16bd94293ad2e335a4fb35ab57"
+      "sha256": "25145e3921af9f744b5cb1a300083a73f94132d077cb6fb7aa48b45184c150a8"
     },
     {
       "path": "sandbox/search-execution.ts",
@@ -630,7 +634,7 @@
     },
     {
       "path": "session-search-authority.ts",
-      "sha256": "1681567de15f671d61eb2a43e2bd643b9df30c7187bb224ca985dc5991c4b934"
+      "sha256": "8a48d2fdfdd4cc05c4375e5750b0ee4ee9ba106ed05d0cca9c0c960f0f05186b"
     },
     {
       "path": "sessions/catalogue-change-hub.ts",
@@ -710,7 +714,7 @@
     },
     {
       "path": "ws-mode.ts",
-      "sha256": "7bafebcfc129d80bdcb6a80ac1cc96979692b5a4211e94bcfde44cb481d669d8"
+      "sha256": "9320397066ba5b03f9d1306188a5a8d14e29cdfd95cb3b88e5152426a9efc877"
     },
     {
       "path": "ws-server.ts",
@@ -735,7 +739,7 @@
     {
       "path": "control/contracts.d.ts",
       "size": 5668,
-      "sha256": "b8e298a2994e44527fcbe19316fba4baec2697071fd0c6936cdeb5ec1cb83c2a"
+      "sha256": "25d25225e38e11ee818169db8e3373e97151e0f2f4d08e96c23aacd31e930e6b"
     },
     {
       "path": "control/contracts.ts",
@@ -744,23 +748,23 @@
     },
     {
       "path": "control/product.generated.d.ts",
-      "size": 293,
-      "sha256": "12ea7c9115508feeb5d28d60b5b2d7805c0b15664b29ca4c77c30f9e931939a5"
+      "size": 354,
+      "sha256": "a4cbeaed99ff3a3e9585309623490941656948db84b2326708b58aa1db6f0774"
     },
     {
       "path": "control/product.generated.ts",
-      "size": 469,
-      "sha256": "de056b8416ceb072bcbf4dd4bd3d5cceb2b31c96baddc48b658ee03df6301adb"
+      "size": 532,
+      "sha256": "d546f910f49fcf5c620e31bdb26579ccd8a941844637ed60183d74c10c17b07d"
     },
     {
       "path": "frontend-contracts.d.ts",
-      "size": 90390,
-      "sha256": "6e0fcbdb2b88358d706a0a113fd9ff451144dc400691dee8071ea3675f7814b9"
+      "size": 90528,
+      "sha256": "6766deb40d613b298019b204cffe0fcada485f2909639e04ffb2062011b3ff81"
     },
     {
       "path": "frontend-contracts.ts",
-      "size": 239550,
-      "sha256": "7e1304d8e696ca23b929a324c9d806341d9bd6b6d5e138ad02444471847a9f0d"
+      "size": 240083,
+      "sha256": "93a94d71377d405e2935a6e62c944d7fcf79a7cd091fa23df8bcc667740b7160"
     },
     {
       "path": "frontend-plugin-contracts.d.ts",

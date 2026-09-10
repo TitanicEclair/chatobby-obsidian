@@ -4,6 +4,13 @@ import { CHATOBBY_CONNECTOR_REPOSITORY_URL, CHATOBBY_SUPPORT_URL, openChatobbyUr
 
 export type IntroductionKind = "welcome" | "changes";
 export const RELEASE_HIGHLIGHTS = [{
+  version: "0.5.3",
+  items: [
+    { icon: "info", title: "Full access; sandboxing temporarily unavailable", description: "Chatobby can read, change and delete files, run commands, and use the network as your OS user account, including outside your vault. Access-mode and network controls are hidden in this release." },
+    { icon: "folder", title: "Project-scoped history", description: "Memory and session searches follow the current workspace, independently of file access." },
+    { icon: "text-cursor", title: "Smoother responses", description: "Streaming updates do less repeated work in the conversation and sidebar." },
+  ],
+}, {
   version: "0.5.2",
   items: [
     { icon: "check", title: "First-install fixes", description: "Start chats and use tools in a new vault without missing permission settings." },
@@ -21,7 +28,7 @@ export const RELEASE_HIGHLIGHTS = [{
   version: "0.5.0",
   items: [
     { icon: "panels-top-left", title: "Native tabs and a new sidebar", description: "Open chats and Chatobby pages in Obsidian tabs. Organize chats in Projects and archive them when you’re done." },
-    { icon: "shield-check", title: "Sandboxed tools", description: "Choose Read-only, Workspace or Full access, with a separate network control. Local tools follow the boundary you select." },
+    { icon: "shield-check", title: "Access controls introduced in 0.5.0", description: "Read-only and Workspace controls were introduced in this release. Sandboxing is temporarily unavailable from 0.5.3." },
     { icon: "plug", title: "More ways to connect models", description: "Use local models, API keys, or supported ChatGPT, GitHub Copilot and xAI subscriptions." },
     { icon: "messages-square", title: "Agents that work together", description: "Write your own subagent prompts, coordinate in channels, send direct messages and schedule work with Events." },
   ],
@@ -137,6 +144,7 @@ export class ProductIntroModal extends Modal {
 
   private renderWelcome(): void {
     const cards = this.contentEl.createDiv({ cls: "chatobby-intro__cards" });
+    this.card(cards, "info", "Full access in 0.5.3", "Sandboxing is temporarily unavailable. Agents can read, change and delete files, run commands, and use the network as your OS user account, including outside this vault.");
     this.card(cards, "plug", "Connect a model", "Open Settings to add a local model, an API key, or a supported subscription account.");
     this.card(cards, "book-open", "Keep the Guide in your vault", "Settings also has the Chatobby Guide: add it to your vault for examples of Projects, memory, agents and channels.");
     this.contentEl.createEl("p", { cls: "chatobby-intro__footnote", text: "The core harness is free. No Chatobby account and no telemetry." });

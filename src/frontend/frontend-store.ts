@@ -125,7 +125,9 @@ export class FrontendStore {
     }
 
     let next = snapshot;
-    let nextFeedBlockIndexes = new Map(this.feedBlockIndexes);
+    // Operations only read this index. Structural changes produce a new map;
+    // appending text must not clone the entire conversation index per token.
+    let nextFeedBlockIndexes = this.feedBlockIndexes;
     const nextScreenAuthorities = new Map(this.screenAuthorities);
     for (const operation of patch.operations) {
       next = applyOperation(next, operation, nextFeedBlockIndexes);

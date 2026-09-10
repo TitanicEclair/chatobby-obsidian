@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { CHATOBBY_NATIVE_SANDBOX_ENABLED } from "../../vendor/chatobby-client/control/product.generated";
 import { copyFile, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { fingerprintRuntimeBundle, isRuntimeAssetDirectory, isRuntimeAssetPath, parseRuntimeAssetInventory, RUNTIME_MAX_ASSET_FILES, WINDOWS_SANDBOX_HELPER_ENTRY, type RuntimeAssetFile } from "../../vendor/chatobby-client/runtime-assets";
@@ -87,7 +88,7 @@ export class DevelopmentPairCoordinator {
         parseRuntimeAssetInventory(pendingAssets, { requireWindowsSandboxHelper: true });
       }
       await this.verifyReceipt(pending, pending.runtime.path);
-      if (previous?.schemaVersion === 3 && parseRuntimeAssetInventory(previous.runtime.assets)
+      if (CHATOBBY_NATIVE_SANDBOX_ENABLED && previous?.schemaVersion === 3 && parseRuntimeAssetInventory(previous.runtime.assets)
         .some((asset) => asset.path === WINDOWS_SANDBOX_HELPER_ENTRY)) {
         // Historical base-only receipts remain readable, but a current native
         // closure cannot silently disappear from a replacement candidate.

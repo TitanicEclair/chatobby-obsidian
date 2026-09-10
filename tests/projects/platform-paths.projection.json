@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "sourceRepository": "TitanicEclair/pi-mono",
-  "sourceCommit": "37a33385b05449d91f7859eed7725def3133323c",
+  "sourceCommit": "d9504ba1269f4b8161f406794d1ff819de7a2402",
   "generator": "scripts/build-vendor-artifacts.mjs",
   "sourceArtifact": "vendor/platform-paths",
   "connectorArtifact": "src/vendor/@chatobby/platform-paths",
   "files": {
     "catalogue.ts": "147bb2611cec3403f406dc033a834ef2c58b8c776b2328563381ded20bd28592",
     "index.ts": "1da8e9a594c4e39fbe96cbd6cfdbc7cf90fe7e0b32738c86f21a049481f76a83",
-    "projection.json": "e1686216cd7152ae03f44a2530fa5e4b28ff0f44a6e445bfae69ab2aa370641a",
+    "projection.json": "15085362f6fd6feff66ed3e3e27993a1de92b274bbe2f04fa44d4ac4e7bbfc9a",
     "resolver.ts": "246b4a24eeb525ac5e5160aee69619e47b032acf0a244a2c26398df737d78450"
   }
 }
