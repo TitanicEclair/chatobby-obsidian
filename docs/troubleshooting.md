@@ -7,10 +7,6 @@ platform, source, download size, and verification details, then select
 **Install**. The connector downloads and verifies the official runtime package
 for the current user. Do not copy runtime executables into the plugin folder.
 
-In an approved automatic-provisioning build, Chatobby begins this setup after
-the plugin is enabled. If the computer is offline, the connector remains loaded
-and shows **Retry setup**; no unverified or partial package is launched.
-
 ## The runtime is incompatible or damaged
 
 Open the runtime status control and select the supported repair or install
@@ -24,12 +20,16 @@ Open the Chatobby runtime status control and select **Restart Chatobby**. If the
 problem remains, copy the redacted diagnostics and include connector, runtime,
 Obsidian, and operating-system versions in a support report.
 
-## An update is waiting for current work
+## Plugin and runtime versions differ
 
-Do not stop the runtime just to force the update. Chatobby may stage verified
-bytes while work continues, but activation waits for the runtime's own
-maintenance admission covering responses, compaction, subagents, and Events.
-Use the runtime status details to retry after work finishes.
+Choose **Update** beside the version notice. Chatobby downloads and verifies the
+package, stops current work, installs it and reconnects. Saved conversations,
+Projects, memory and model connections remain. Interrupted agents do not restart
+automatically.
+
+If another runtime installation or repair is already running, let it finish and
+choose **Try again**. A failed stop leaves the current package in place; close
+and reopen Obsidian before retrying.
 
 ## The Chatobby Guide cannot be added or updated
 

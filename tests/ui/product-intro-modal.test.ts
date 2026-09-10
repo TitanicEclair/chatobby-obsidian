@@ -39,7 +39,7 @@ describe("welcome and release introductions", () => {
     modal.close();
   });
   it("uses a release-notes fallback for a future update without registered highlights", () => {
-    const modal = new ProductIntroModal({} as App, "changes", "0.5.2", "0.5.1", vi.fn(), vi.fn());
+    const modal = new ProductIntroModal({} as App, "changes", "0.5.3", "0.5.2", vi.fn(), vi.fn());
     modal.open();
     expect(modal.contentEl.textContent).toContain("Open the release notes to see what changed");
     expect(modal.contentEl.textContent).not.toContain("Native tabs and a new sidebar");

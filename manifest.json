@@ -1,7 +1,7 @@
 {
   "id": "chatobby",
   "name": "Chatobby",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "minAppVersion": "1.11.4",
   "description": "A local agent workspace with editable memory, persistent subagents, shared channels and your choice of hosted or local models.",
   "author": "Madelyn Cruz Tan",

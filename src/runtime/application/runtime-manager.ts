@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS } from "../../vendor/chatobby-client/control/contracts";
+import { CHATOBBY_RUNTIME_SHUTDOWN_TIMEOUT_MS, CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS } from "../../vendor/chatobby-client/control/contracts";
 import type {
   RuntimeMaintenanceAdmission,
   RuntimeMaintenanceAdmitRequest,
@@ -46,7 +46,7 @@ const STARTUP_TIMEOUT_MS = 20_000;
 // cannot be mistaken for a failed WebSocket authentication.
 const AUTHENTICATION_TIMEOUT_MS = CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS + 5_000;
 const DESCRIPTOR_POLL_MS = 100;
-const SHUTDOWN_WAIT_MS = 5_000;
+const SHUTDOWN_WAIT_MS = CHATOBBY_RUNTIME_SHUTDOWN_TIMEOUT_MS;
 
 export interface ManagedCommand {
   command: string;
@@ -211,19 +211,27 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
 
   async stop(_reason: RuntimeActionReason): Promise<void> {
     const mode = this.deps.getConfiguration().mode;
+    const pendingStart = this.ensurePromise;
     this.desiredRunning = false;
     this.generation += 1;
     this.cancelTimers();
     this.emit({ status: "stopping", mode });
     await this.deps.disconnectRuntime().catch(() => {});
 
+    // A cancelled start still owns its connection/process cleanup. Drain it
+    // before reporting idle or allowing Restart to reuse the rejected attempt.
+    // In particular, late startup cleanup must finish before a new launch owns
+    // processHandle or it could terminate the replacement process.
+    await pendingStart?.catch(() => {});
+
     const candidate = this.candidate;
     const processHandle = this.processHandle;
-    this.readyRuntime = null;
-    this.candidate = null;
-    this.processHandle = null;
     if (mode !== "external" && candidate) {
-      await this.control.shutdown(candidate.descriptor, candidate.controlToken).catch(() => {});
+      // A reattached runtime has no owned process handle. Do not report a
+      // successful stop, or replace its package, when shutdown did not succeed.
+      await this.control.shutdown(candidate.descriptor, candidate.controlToken).catch((error: unknown) => {
+        if (!processHandle && this.isProcessAlive(candidate.descriptor.pid)) throw error;
+      });
     }
     if (processHandle) {
       const exited = await Promise.race([
@@ -232,6 +240,12 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
       ]);
       if (!exited) await processHandle.terminate();
     }
+    if (mode !== "external" && candidate && !processHandle) {
+      await this.waitForReattachedRuntimeExit(candidate);
+    }
+    this.readyRuntime = null;
+    this.candidate = null;
+    this.processHandle = null;
     this.emit({ status: "idle", mode });
   }
 
@@ -681,15 +695,24 @@ export class DefaultChatobbyRuntimeManager implements ChatobbyRuntimeManager {
     this.emit({ status: "stopping", mode });
     await this.deps.disconnectRuntime().catch(() => {});
     const processHandle = this.processHandle;
-    this.readyRuntime = null;
-    this.candidate = null;
-    this.processHandle = null;
     const exited = processHandle
       ? await Promise.race([processHandle.exited.then(() => true), delay(SHUTDOWN_WAIT_MS).then(() => false)])
       : true;
     if (!exited) await processHandle?.terminate();
+    if (!processHandle) await this.waitForReattachedRuntimeExit(candidate);
+    this.readyRuntime = null;
+    this.candidate = null;
+    this.processHandle = null;
     await this.leases.discardStaleDescriptor(candidate.descriptor.vaultId).catch(() => {});
     this.emit({ status: "idle", mode });
+  }
+
+  private async waitForReattachedRuntimeExit(candidate: RuntimeLeaseCandidate): Promise<void> {
+    const deadline = Date.now() + SHUTDOWN_WAIT_MS;
+    while (this.isProcessAlive(candidate.descriptor.pid) && Date.now() < deadline) await delay(100);
+    if (this.isProcessAlive(candidate.descriptor.pid)) {
+      throw new Error("The previous Chatobby runtime has not stopped. The update was not installed; close and reopen Obsidian, then try again.");
+    }
   }
 
   private async recoverUnavailableRuntime(

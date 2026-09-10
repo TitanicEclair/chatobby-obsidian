@@ -765,7 +765,7 @@ export default class ChatobbyPlugin extends Plugin {
       onStateChange: (listener) => this.runtimeUpdates.onStateChange(listener),
       checkForUpdate: () => this.runtimeUpdates.check(true),
       checkForRepair: () => this.runtimeUpdates.checkForRepair(),
-      install: (signal) => this.runtimeUpdates.install(signal),
+      install: (signal) => this.runtimeUpdates.install(signal, true),
       hasActiveWork: () => this.hasActiveRuntimeWork(),
     }, repair).open();
   }

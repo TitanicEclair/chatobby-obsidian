@@ -277,6 +277,20 @@ exit within the bounded wait. External mode only disconnects. All cleanup paths
 must be idempotent because Obsidian can close a view, reload the plugin, change
 runtime mode, or terminate the application in quick succession.
 
+The outer wait uses the source-owned `CHATOBBY_RUNTIME_SHUTDOWN_TIMEOUT_MS`
+(75 seconds), including the Windows native cancellation bound. A shutdown HTTP
+acknowledgement only accepts the request; it does not prove process exit. The
+same bound applies to reattached processes and committed maintenance. Deferred
+exit tests remain pending beyond 50 seconds, then complete only on observed exit.
+This is a maximum wait; normal shutdown completes immediately after exit.
+
+Stop invalidates an in-flight startup and waits for that attempt to release its
+connection and any owned process before reporting idle. Restart then creates a
+fresh attempt. The cancelled attempt must not be returned as the new readiness
+promise or finish cleanup against a replacement process. Deferred connection
+regressions exercise this ordering before installation; live acceptance also
+restarts while restored tabs are initiating their first connections.
+
 Failures remain visible and actionable:
 
 - missing or invalid installation: offer the supported install or repair path;

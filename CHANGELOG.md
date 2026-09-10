@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-09-10
+
+- Wait through the runtime's bounded native cleanup before completing Stop, Restart or update; test delayed shutdown beyond the previous five-second wait.
+- Drain cancelled runtime startup before Stop completes or Restart opens a new connection; cover restart during plugin bootstrap before installation.
+- Include reviewed build/release configuration in the canonical public export so a fresh checkout builds without a manual supplementary copy.
+- Refresh runtime provenance for Windows sandbox file identity, concurrent tool startup, and actionable launch errors. Browser contracts are unchanged.
+- Include the runtime fix for cursor-only web and image search continuation.
+- Show a visible version mismatch and Update action when the connector and connected runtime differ.
+- Allow an explicit update to stop current work, including subagents on older runtimes, while retaining chats and rollback. Do not restart interrupted agents automatically.
+- Wait for an authenticated reattached runtime to exit before replacing its package; report stop failures instead of claiming success.
+- Keep a deferred runtime update visibly waiting instead of reporting the previous version as successfully installed.
+
 ## [0.5.1] - 2026-09-09
 
 - Refresh runtime provenance for reliable EOF handling when short commands exit; preserve actual input and process errors.

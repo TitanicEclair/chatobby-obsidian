@@ -11,6 +11,16 @@ afterEach(async () => {
 });
 
 describe("reviewable connector export", () => {
+  it("includes the build and release configuration required by the exported package", async () => {
+    const repositoryRoot = resolve(import.meta.dirname, "../..");
+    const destination = await temporaryDirectory("chatobby-export-build-");
+    await exportReviewableSource({ repositoryRoot, destination });
+    for (const file of ["eslint.config.mts", "config/actions-storage-policy.json", "config/actions-storage-policy.schema.json", "config/public-documentation-projection.json", ".github/workflows/release.yml"]) {
+      const expected = await readFile(join(repositoryRoot, file), "utf8");
+      await expect(readFile(join(destination, file), "utf8")).resolves.toBe(expected);
+    }
+  });
+
   it("exports the current documentation link closure into a fresh publication tree", async () => {
     const destination = await temporaryDirectory("chatobby-export-current-");
     await exportReviewableSource({ repositoryRoot: resolve(import.meta.dirname, "../.."), destination });

@@ -1,5 +1,16 @@
 import { setIcon } from "obsidian";
-import type { RuntimeUpdateState } from "../../../runtime/public";
+import type { RuntimeLifecycleState, RuntimeUpdateState } from "../../../runtime/public";
+
+interface RuntimeUpdateSource {
+  manifest: { version: string };
+  getRuntimeState(): RuntimeLifecycleState;
+  getRuntimeUpdateState(): RuntimeUpdateState;
+  onRuntimeStateChange(listener: (state: RuntimeLifecycleState) => void): () => void;
+  onRuntimeUpdateStateChange(listener: (state: RuntimeUpdateState) => void): () => void;
+  openRuntimeInstaller(): void;
+  usesAutomaticRuntimeProvisioning(): boolean;
+  retryRuntimeProvisioning(): Promise<void>;
+}
 
 export interface RuntimeUpdateControllerHost {
   getState(): RuntimeUpdateState;
@@ -7,10 +18,28 @@ export interface RuntimeUpdateControllerHost {
   openInstaller(): void;
   automaticProvisioning(): boolean;
   retryProvisioning(): Promise<void>;
+  versions?(): { plugin: string; runtime: string | null };
 }
 
 /** Render one compact composer-adjacent update action without a persistent banner. */
 export class RuntimeUpdateController {
+  static fromRuntime(source: RuntimeUpdateSource): RuntimeUpdateController {
+    return new RuntimeUpdateController({
+      getState: () => source.getRuntimeUpdateState(),
+      onStateChange: (listener) => {
+        const update = source.onRuntimeUpdateStateChange(listener);
+        const runtime = source.onRuntimeStateChange(() => listener(source.getRuntimeUpdateState()));
+        return () => { update(); runtime(); };
+      },
+      versions: () => {
+        const state = source.getRuntimeState();
+        return { plugin: source.manifest.version, runtime: state.status === "ready" ? state.runtime.identity.runtimeVersion : null };
+      },
+      openInstaller: () => source.openRuntimeInstaller(),
+      automaticProvisioning: () => source.usesAutomaticRuntimeProvisioning(),
+      retryProvisioning: () => source.retryRuntimeProvisioning(),
+    });
+  }
   private container: HTMLElement | null = null;
   private unsubscribe: (() => void) | null = null;
   private renderedKey: string | null = null;
@@ -36,7 +65,9 @@ export class RuntimeUpdateController {
     const container = this.container;
     if (!container) return;
     const state = this.host.getState();
-    const key = stateKey(state);
+    const versions = this.host.versions?.();
+    const mismatch = versions?.runtime && versions.runtime !== versions.plugin;
+    const key = `${stateKey(state)}:${versions?.plugin ?? ""}:${versions?.runtime ?? ""}`;
     if (key === this.renderedKey) return;
     this.renderedKey = key;
     container.empty();
@@ -44,6 +75,18 @@ export class RuntimeUpdateController {
     container.removeClass("is-progress", "is-error");
 
     const automatic = this.host.automaticProvisioning();
+    if (mismatch) {
+      container.removeClass("is-hidden");
+      container.createSpan({
+        cls: "chatobby-runtime-update__label",
+        text: `Plugin ${versions.plugin} · Runtime ${versions.runtime}`,
+      });
+      if (state.status === "idle" || state.status === "checking" || state.status === "current" || (state.status === "error" && !state.descriptor)) {
+        container.createSpan({ cls: "chatobby-runtime-update__label", text: "Finish updating Chatobby" });
+        this.action(container, "Update", () => this.host.openInstaller());
+        return;
+      }
+    }
     if (state.status === "available") {
       container.removeClass("is-hidden");
       const icon = container.createSpan({ cls: "chatobby-runtime-update__icon" });
@@ -64,8 +107,9 @@ export class RuntimeUpdateController {
       setIcon(icon, "clock-3");
       container.createSpan({
         cls: "chatobby-runtime-update__label",
-        text: "Runtime update will continue when current work finishes",
+        text: automatic ? "Runtime update will continue when current work finishes" : "Runtime update is waiting",
       });
+      if (!automatic) this.action(container, "Continue update", () => this.host.openInstaller());
     } else if (state.status === "installing") {
       container.removeClass("is-hidden");
       container.addClass("is-progress");

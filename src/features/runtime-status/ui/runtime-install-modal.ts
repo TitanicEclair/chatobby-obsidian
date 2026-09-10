@@ -1,4 +1,4 @@
-import { Modal, Notice, setIcon, type App } from "obsidian";
+import { Modal, setIcon, type App } from "obsidian";
 import {
   CHATOBBY_RUNTIME_RELEASES_URL,
   CHATOBBY_SUPPORT_URL,
@@ -98,10 +98,10 @@ export class RuntimeInstallModal extends Modal {
             : `Runtime ${state.descriptor.version} is ready to install.`,
       });
       this.releaseSummary(state);
-      if (this.host.hasActiveWork()) {
+      if (!installingFresh) {
         this.contentEl.createDiv({
           cls: "chatobby-runtime-install__notice",
-          text: "Finish the current response before installing this update.",
+          text: "Updating stops current work. Your chats are kept; interrupted agents will not restart automatically.",
         });
       }
       this.actions([
@@ -109,7 +109,6 @@ export class RuntimeInstallModal extends Modal {
         {
           label: installingFresh ? "Install" : repairing ? "Repair" : "Update",
           primary: true,
-          disabled: this.host.hasActiveWork(),
           run: () => void this.install(),
         },
       ]);
@@ -146,14 +145,13 @@ export class RuntimeInstallModal extends Modal {
       this.statusIcon("clock");
       this.contentEl.createDiv({
         cls: "chatobby-runtime-install__lead",
-        text: "The signed runtime is ready. Chatobby will continue after current work finishes.",
+        text: "Another runtime operation is in progress. This update has not been installed. Try again when that operation finishes.",
       });
       this.actions([
         { label: "Close", run: () => this.close() },
         {
           label: "Try again",
           primary: true,
-          disabled: this.host.hasActiveWork(),
           run: () => void this.install(),
         },
       ]);
@@ -234,13 +232,11 @@ export class RuntimeInstallModal extends Modal {
   }
 
   private async install(): Promise<void> {
-    if (this.host.hasActiveWork()) {
-      new Notice("Finish the current Chatobby response before updating the runtime");
-      return;
-    }
     this.abortController = new AbortController();
     try {
-      this.completedVersion = await this.host.install(this.abortController.signal);
+      const version = await this.host.install(this.abortController.signal);
+      const state = this.host.getState();
+      this.completedVersion = state.status === "current" && state.installedVersion === version ? version : null;
       this.render();
     } catch (error) {
       if (!(error instanceof Error && error.name === "AbortError")) {

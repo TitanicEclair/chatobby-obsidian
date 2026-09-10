@@ -8,6 +8,33 @@ import type {
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../src/vendor/chatobby-client/ws-client.js";
 
 describe("RuntimeUpdateManager", () => {
+  it.each(["subagent", "response", "event"] as const)("an explicit update stops %s work even on an older runtime", async (kind) => {
+    const stopRuntime = vi.fn(async () => {});
+    const installer = installerFor();
+    let manager!: RuntimeUpdateManager;
+    manager = new RuntimeUpdateManager({
+      ...deps(clientFor(descriptor("0.1.3")), installer, "0.1.2"),
+      admitMaintenance: vi.fn(async () => ({ schemaVersion: 1, operationId: "update", status: "deferred", retryAfterMs: 1000, activeWorkKinds: [kind] })),
+      stopRuntime,
+      startRuntime: async () => { await manager.activatePendingRuntime({ runtimeVersion: "0.1.3", runtimePackageFingerprint: "f".repeat(64), operation: "activate" }); },
+    });
+    await manager.check();
+    await expect(manager.install(undefined, true)).resolves.toBe("0.1.3");
+    expect(stopRuntime).toHaveBeenCalledOnce();
+    expect(installer.prepareInstall).toHaveBeenCalledOnce();
+    expect(manager.state).toMatchObject({ status: "current", installedVersion: "0.1.3" });
+  });
+
+  it("does not install when stopping the old runtime fails", async () => {
+    const installer = installerFor();
+    const manager = new RuntimeUpdateManager({
+      ...deps(clientFor(descriptor("0.1.3")), installer, "0.1.2"),
+      stopRuntime: async () => { throw new Error("previous runtime has not stopped"); },
+    });
+    await manager.check();
+    await expect(manager.install(undefined, true)).rejects.toThrow("previous runtime has not stopped");
+    expect(installer.prepareInstall).not.toHaveBeenCalled();
+  });
   it("uses an exact verified installed runtime without a network request", async () => {
     const client = clientFor(descriptor("0.1.3"));
     const installer = installerFor();

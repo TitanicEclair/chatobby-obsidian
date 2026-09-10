@@ -44,7 +44,7 @@ versions that support the Guide channel verify the signed stable
 `guide-channel.json`, require its connector and consumer-schema compatibility
 ranges, download the immutable hash-bound guide revision it names, validate the
 bounded `Chatobby Guide/*.md` file set, and only then ask whether to write the
-notes. The guide is not bundled into the plugin or runtime. Public Guide channel activation is pending for the workspace candidate. Offline, missing,
+notes. The guide is delivered separately from the plugin. Offline, missing,
 incompatible, or invalid assets leave every existing guide note unchanged and
 show a retryable error.
 
@@ -71,28 +71,10 @@ installation fails. Standalone installer tooling is reserved for controlled
 development and release testing; it is not the public installation path.
 
 Connector and runtime versions must be compatible. If Chatobby reports a
-version mismatch, update both components before retrying.
-
-### Approval-gated one-action provisioning
-
-The private connector contains a release-only automatic provisioning path, but
-Community/public builds must leave it disabled until Obsidian grants the
-documented exception for installing and updating the separately distributed
-closed-source runtime. This is not enabled by README disclosure alone.
-
-When an approved build enables it, connector version `N` requests only
-`releases/download/N/runtime-index.json`; it never follows `releases/latest`.
-An already-installed, fully verified compatible runtime is reused without a
-network request. Otherwise Chatobby stages and verifies runtime `N`, waits for
-runtime-owned maintenance admission, activates atomically, and reconnects. The
-normal install/update confirmation disappears, while explicit **Retry setup**,
-**Repair Chatobby**, diagnostics, and **Remove local runtime** remain available.
-
-If initial setup is offline, the connector remains loaded and shows a retry
-action. If an update cannot be downloaded, a previous verified compatible
-runtime remains selected. Signature, target, protocol, inventory, or hash
-failure prevents execution. Interrupted activation uses the installation
-journal to roll back or complete recovery on the next load.
+version mismatch, choose **Update** beside the version notice. The verified
+update stops current work, including subagents. Saved conversations, Projects,
+memory and model connections remain; interrupted agents do not restart
+automatically. If a download fails, the current runtime remains available.
 
 ## Uninstall
 

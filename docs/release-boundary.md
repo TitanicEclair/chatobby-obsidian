@@ -24,6 +24,13 @@ Release-mode runtime discovery accepts only the installed runtime pointer. The
 environment, plugin-bundled executable, and `PATH` fallbacks are development
 features and are not present in the Community plugin path.
 
+The reviewable export includes the exact lint, storage-policy, documentation
+projection and release-workflow configuration referenced by its package scripts.
+A fresh export must build with locked dependencies without copying extra files
+manually from the private checkout. The export regression checks those inputs
+alongside the documentation link closure; a fresh release build proves them
+together before public projection.
+
 ## Runtime trust boundary
 
 The private runtime is published separately as a versioned compressed bundle.
@@ -82,6 +89,22 @@ build retains the explicit in-plugin action; automatic builds may be distributed
 only through a separately authorized channel.
 
 ## Release requirements
+
+The 0.5.2 follow-up consumes source `c1ef7737bce0e76a05168bda6af30963a7af3c7e`.
+Generated browser code and contracts are unchanged; projection receipts now bind
+Windows file-metadata, Linux process prerequisites, concurrent startup and
+actionable child-failure corrections. Local Windows native tests pass 40 cases;
+local Linux qualification passes seven native and ten application bootstrap
+cases. Both compiled packages pass 18 actual tool calls over first startup and
+restart. The earlier failed candidates remain excluded. Exact paired installation,
+fresh hosted qualification and signed-candidate acceptance remain required.
+Installed testing also exposed a connector restart racing an in-flight startup.
+Stop now drains that cancelled attempt before reporting completion; deferred
+connection and owned-process regressions exercise the failure before packaging.
+The fresh backend comparison passed; two local projection tests then caught
+stale pinned test receipts. Their receipts were refreshed, and the tests now
+compare the accepted commit to the generated manifest rather than a second
+source-commit literal. Exact file hashes and fresh-backend comparison remain gates.
 
 Hosted builds are manual final production checks, after local source/connector,
 native and affected disposable-vault UI acceptance. Push/PR build triggers are

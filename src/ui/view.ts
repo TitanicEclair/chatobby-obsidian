@@ -726,13 +726,7 @@ export class ChatobbyView extends ItemView {
       manageRuntime: (repair) => this.plugin.openRuntimeInstaller(repair),
       removeRuntime: () => this.plugin.removeLocalRuntime(),
     });
-    this.runtimeUpdate = new RuntimeUpdateController({
-      getState: () => this.plugin.getRuntimeUpdateState(),
-      onStateChange: (listener) => this.plugin.onRuntimeUpdateStateChange(listener),
-      openInstaller: () => this.plugin.openRuntimeInstaller(),
-      automaticProvisioning: () => this.plugin.usesAutomaticRuntimeProvisioning(),
-      retryProvisioning: () => this.plugin.retryRuntimeProvisioning(),
-    });
+    this.runtimeUpdate = RuntimeUpdateController.fromRuntime(this.plugin);
 
     this.tabBar.render(this.shell.tabBarHostEl);
     this.sessionAgentRail.render(this.shell.subagentRailHostEl);

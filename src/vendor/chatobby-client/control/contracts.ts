@@ -10,6 +10,8 @@ export const CHATOBBY_RUNTIME_VERSION = CHATOBBY_PRODUCT_VERSION;
 export const CHATOBBY_RUNTIME_HELLO_TIMEOUT_MS = 5_000;
 export const CHATOBBY_RUNTIME_STARTUP_ADMISSION_TIMEOUT_MS = 10 * 60 * 1000;
 export const CHATOBBY_RUNTIME_REATTACH_GRACE_MS = 15_000;
+/** Outer connector wait includes cancellation of cold native helpers and owned cleanup. */
+export const CHATOBBY_RUNTIME_SHUTDOWN_TIMEOUT_MS = 75_000;
 /** Allows the five-minute engine deadline to settle and report before the transport gives up. */
 export const CHATOBBY_COMPACTION_REQUEST_TIMEOUT_MS = 5 * 60 * 1000 + 30_000;
 /** A prompt may wait behind a bounded manual checkpoint before it is accepted. */

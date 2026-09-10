@@ -30,11 +30,15 @@ describe("generated platform-path contract boundary", () => {
     expect(evidence).toMatchObject({
       schemaVersion: 1,
       sourceRepository: "TitanicEclair/pi-mono",
-      sourceCommit: "984e4060251356a66e23d939dbabfe70198663ab",
       generator: "scripts/build-vendor-artifacts.mjs",
       sourceArtifact: "vendor/platform-paths",
       connectorArtifact: "src/vendor/@chatobby/platform-paths",
     });
+    const manifest = JSON.parse(readFileSync(join(vendorRoot, "projection.json"), "utf8")) as {
+      sourceRevision: string;
+    };
+    expect(evidence.sourceCommit).toMatch(/^[a-f0-9]{40}$/u);
+    expect(evidence.sourceCommit).toBe(manifest.sourceRevision);
     const actualFiles = readdirSync(vendorRoot).sort();
     expect(actualFiles).toEqual(Object.keys(evidence.files).sort());
     for (const file of actualFiles) {

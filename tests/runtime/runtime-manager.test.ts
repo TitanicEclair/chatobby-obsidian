@@ -17,6 +17,7 @@ import type { ManagedProcessLauncher } from "../../src/runtime/infrastructure/ma
 import { deriveLegacyRuntimeVaultId } from "../../src/vault-runtime";
 import type { ChatobbyVaultRuntimePaths } from "../../src/vault-runtime";
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../src/vendor/chatobby-client/ws-client.js";
+import { CHATOBBY_RUNTIME_SHUTDOWN_TIMEOUT_MS } from "../../src/vendor/chatobby-client/control/contracts";
 
 const VAULT_PATHS: ChatobbyVaultRuntimePaths = {
   vaultRoot: "C:\\vault",
@@ -56,6 +57,65 @@ const CANDIDATE: RuntimeLeaseCandidate = {
 };
 
 describe("DefaultChatobbyRuntimeManager", () => {
+  it.each(["stop", "maintenance"] as const)("does not replace a live reattached process after %s acknowledgement", async (action) => {
+    vi.useFakeTimers();
+    try {
+      const controlClient = fakeControlClient();
+      controlClient.commitMaintenance = vi.fn(async () => ({}));
+      const leaseStore = fakeLeaseStore(CANDIDATE);
+      const manager = createManager({ leaseStore, controlClient, isProcessAlive: () => true });
+      await manager.ensureReady({ reason: "view-open" });
+      const stopping = action === "stop" ? manager.stop("user-action") : manager.commitMaintenance("update", "lease");
+      const rejected = expect(stopping).rejects.toThrow("previous Chatobby runtime has not stopped");
+      await vi.advanceTimersByTimeAsync(CHATOBBY_RUNTIME_SHUTDOWN_TIMEOUT_MS);
+      await rejected;
+      expect(manager.state.status).toBe("stopping");
+      expect(leaseStore.discardStaleDescriptor).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for a reattached runtime to exit before reporting it stopped", async () => {
+    let alive = true;
+    const controlClient = fakeControlClient();
+    controlClient.shutdown = vi.fn(async () => { alive = false; });
+    const manager = createManager({ leaseStore: fakeLeaseStore(CANDIDATE), controlClient, isProcessAlive: () => alive });
+    await manager.ensureReady({ reason: "view-open" });
+    await manager.stop("user-action");
+    expect(controlClient.shutdown).toHaveBeenCalledOnce();
+    expect(manager.state.status).toBe("idle");
+  });
+
+  it.each(["stop", "maintenance"] as const)("waits through cold native cleanup before completing %s", async (action) => {
+    vi.useFakeTimers();
+    try {
+      let alive = true;
+      const controlClient = fakeControlClient();
+      controlClient.commitMaintenance = vi.fn(async () => ({}));
+      const manager = createManager({ leaseStore: fakeLeaseStore(CANDIDATE), controlClient, isProcessAlive: () => alive });
+      await manager.ensureReady({ reason: "view-open" });
+      let completed = false;
+      const stopping = (action === "stop" ? manager.stop("user-action") : manager.commitMaintenance("update", "lease")).then(() => { completed = true; });
+      const accepted = expect(stopping).resolves.toBeUndefined();
+      await vi.advanceTimersByTimeAsync(50_000);
+      expect(completed).toBe(false);
+      expect(manager.state.status).toBe("stopping");
+      alive = false;
+      await vi.advanceTimersByTimeAsync(100);
+      await accepted;
+      expect(manager.state.status).toBe("idle");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("retains a reattached runtime when authenticated shutdown fails", async () => {
+    const controlClient = fakeControlClient();
+    controlClient.shutdown = vi.fn(async () => { throw new Error("shutdown unavailable"); });
+    const manager = createManager({ leaseStore: fakeLeaseStore(CANDIDATE), controlClient, isProcessAlive: () => true });
+    await manager.ensureReady({ reason: "view-open" });
+    await expect(manager.stop("user-action")).rejects.toThrow("shutdown unavailable");
+    expect(manager.state.status).not.toBe("idle");
+  });
   it("shares one in-flight ensureReady operation", async () => {
     const connected = deferred<void>();
     const connectRuntime = vi.fn(() => connected.promise);

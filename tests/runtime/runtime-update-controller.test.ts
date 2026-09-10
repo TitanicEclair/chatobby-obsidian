@@ -6,6 +6,24 @@ import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "../../src/vendor/chatobby-cli
 afterEach(() => document.body.empty());
 
 describe("RuntimeUpdateController", () => {
+  it.each(["idle", "error"] as const)("shows an actual version mismatch even when the update check is %s", (status) => {
+    const openInstaller = vi.fn();
+    const versions = { plugin: "0.5.2", runtime: "0.5.0" };
+    const controller = new RuntimeUpdateController({
+      getState: () => status === "idle" ? { status } : { status, message: "offline" },
+      onStateChange: () => () => {}, openInstaller,
+      automaticProvisioning: () => false, retryProvisioning: vi.fn(), versions: () => versions,
+    });
+    const container = document.body.createDiv();
+    controller.bind(container);
+    expect(container.textContent).toContain("Plugin 0.5.2 · Runtime 0.5.0");
+    expect(container.hasClass("is-hidden")).toBe(false);
+    (container.querySelector("button") as HTMLButtonElement).click();
+    expect(openInstaller).toHaveBeenCalledOnce();
+    versions.runtime = "0.5.2";
+    controller.render();
+    expect(container.hasClass("is-hidden")).toBe(true);
+  });
   it("stays absent until an update is available and renders one compact action", () => {
     let state: RuntimeUpdateState = { status: "idle" };
     let listener: ((next: RuntimeUpdateState) => void) | null = null;

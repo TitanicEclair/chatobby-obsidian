@@ -16,6 +16,7 @@ interface ProjectionEvidence {
 
 interface ProjectionManifest {
   schemaVersion: 1;
+  sourceRevision: string;
   artifact: "obsidian-protocol";
   protocolVersion: number;
   files: Array<{ path: string; size: number; sha256: string }>;
@@ -32,7 +33,6 @@ describe("generated Obsidian protocol boundary", () => {
     expect(evidence).toMatchObject({
       schemaVersion: 1,
       sourceRepository: "TitanicEclair/pi-mono",
-      sourceCommit: "984e4060251356a66e23d939dbabfe70198663ab",
       generator: "scripts/build-vendor-artifacts.mjs",
       sourceArtifact: "vendor/obsidian-protocol",
       connectorArtifact: "src/vendor/@chatobby/obsidian-protocol",
@@ -44,6 +44,8 @@ describe("generated Obsidian protocol boundary", () => {
     expect(hash(manifestBytes)).toBe(evidence.projectionManifestSha256);
 
     const manifest = JSON.parse(manifestBytes.toString("utf8")) as ProjectionManifest;
+    expect(evidence.sourceCommit).toMatch(/^[a-f0-9]{40}$/u);
+    expect(evidence.sourceCommit).toBe(manifest.sourceRevision);
     expect(manifest).toMatchObject({ schemaVersion: 1, artifact: "obsidian-protocol", protocolVersion: 2 });
     expect(manifest.files).toHaveLength(26);
     expect(readdirSync(vendorRoot).sort()).toEqual(

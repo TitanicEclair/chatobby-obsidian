@@ -142,9 +142,9 @@ export class RuntimeUpdateManager {
     return descriptor;
   }
 
-  install(signal?: AbortSignal): Promise<string> {
+  install(signal?: AbortSignal, stopActiveWork = false): Promise<string> {
     if (this.installPromise) return this.installPromise;
-    const operation = this.installInternal(signal).finally(() => {
+    const operation = this.installInternal(signal, stopActiveWork).finally(() => {
       if (this.installPromise === operation) this.installPromise = null;
     });
     this.installPromise = operation;
@@ -299,7 +299,7 @@ export class RuntimeUpdateManager {
     return this.stateValue.status === "deferred" ? "deferred" : "installed";
   }
 
-  private async installInternal(signal?: AbortSignal): Promise<string> {
+  private async installInternal(signal?: AbortSignal, stopActiveWork = false): Promise<string> {
     if (!this.deps.enabled) throw new Error("Runtime installation is available only in release builds");
     const offer = this.availableOffer();
     const descriptor = offer?.descriptor ?? await this.check(true);
@@ -326,11 +326,11 @@ export class RuntimeUpdateManager {
         runtimePackageFingerprint: runtimePackageFingerprint(staged.manifest),
         developmentBuildFingerprint: null,
       });
-      if (maintenance?.status === "deferred") {
+      if (maintenance?.status === "deferred" && (!stopActiveWork || maintenance.activeWorkKinds.includes("maintenance"))) {
         this.emit({ status: "deferred", descriptor, installedVersion, kind, reason: "active-work" });
         return installedVersion ?? "deferred";
       }
-		admission = maintenance;
+		admission = maintenance?.status === "admitted" ? maintenance : null;
       this.emitInstall(descriptor, installedVersion, kind, "installing", 0, 1);
       if (admission) {
         await this.deps.commitMaintenance(operationId, admission.leaseId);

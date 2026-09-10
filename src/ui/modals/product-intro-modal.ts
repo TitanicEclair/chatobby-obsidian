@@ -4,6 +4,13 @@ import { CHATOBBY_CONNECTOR_REPOSITORY_URL, CHATOBBY_SUPPORT_URL, openChatobbyUr
 
 export type IntroductionKind = "welcome" | "changes";
 export const RELEASE_HIGHLIGHTS = [{
+  version: "0.5.2",
+  items: [
+    { icon: "check", title: "First-install fixes", description: "Start chats and use tools in a new vault without missing permission settings." },
+    { icon: "download", title: "Visible runtime updates", description: "See when the plugin and runtime differ. Update even while agents are active; current work stops and chats are kept." },
+    { icon: "info", title: "Useful failure details", description: "Distinguish missing files, denied access and connection errors. Agents receive the actual runtime version." },
+  ],
+}, {
   version: "0.5.1",
   items: [
     { icon: "shield-check", title: "More reliable workspace tools", description: "Fix Windows folder handling and keep tools available after access changes." },

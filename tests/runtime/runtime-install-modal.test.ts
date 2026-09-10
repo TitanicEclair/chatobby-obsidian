@@ -31,7 +31,7 @@ describe("RuntimeInstallModal", () => {
     await vi.waitFor(() => expect(install).toHaveBeenCalledOnce());
   });
 
-  it("does not allow an update to interrupt active work", () => {
+  it("allows an explicit update to stop active work and explains the effect", () => {
     const state: RuntimeUpdateState = {
       status: "available",
       descriptor: descriptor(),
@@ -49,10 +49,53 @@ describe("RuntimeInstallModal", () => {
 
     modal.open();
 
-    expect(modal.contentEl.textContent).toContain("Finish the current response");
+    expect(modal.contentEl.textContent).toContain("Updating stops current work");
     const update = Array.from(modal.contentEl.querySelectorAll("button"))
       .find((candidate) => candidate.textContent === "Update") as HTMLButtonElement;
-    expect(update.disabled).toBe(true);
+    expect(update.disabled).toBe(false);
+  });
+
+  it("keeps backend deferral visible when installation returns the existing version", async () => {
+    let state: RuntimeUpdateState = {
+      status: "available", descriptor: descriptor(), installedVersion: "0.1.1", kind: "update",
+    };
+    const modal = new RuntimeInstallModal({} as App, {
+      getState: () => state,
+      onStateChange: () => () => undefined,
+      checkForUpdate: vi.fn(),
+      checkForRepair: vi.fn(),
+      install: async () => {
+        state = { status: "deferred", descriptor: descriptor(), installedVersion: "0.1.1", kind: "update", reason: "active-work" };
+        return "0.1.1";
+      },
+      hasActiveWork: () => false,
+    });
+    modal.open();
+    Array.from(modal.contentEl.querySelectorAll("button")).find((button) => button.textContent === "Update")!.click();
+    await vi.waitFor(() => expect(modal.titleEl.textContent).toBe("Chatobby update is waiting"));
+    expect(modal.contentEl.textContent).not.toContain("installed and connected");
+    expect(modal.contentEl.textContent).toContain("Try again");
+  });
+
+  it("shows installation success only after the backend confirms the installed version", async () => {
+    let state: RuntimeUpdateState = {
+      status: "available", descriptor: descriptor(), installedVersion: "0.1.1", kind: "update",
+    };
+    const modal = new RuntimeInstallModal({} as App, {
+      getState: () => state,
+      onStateChange: () => () => undefined,
+      checkForUpdate: vi.fn(),
+      checkForRepair: vi.fn(),
+      install: async () => {
+        state = { status: "current", installedVersion: "0.1.2", checkedAt: 1 };
+        return "0.1.2";
+      },
+      hasActiveWork: () => false,
+    });
+    modal.open();
+    Array.from(modal.contentEl.querySelectorAll("button")).find((button) => button.textContent === "Update")!.click();
+    await vi.waitFor(() => expect(modal.titleEl.textContent).toBe("Chatobby is ready"));
+    expect(modal.contentEl.textContent).toContain("Runtime 0.1.2 is installed and connected.");
   });
 
   it("presents same-version repair as a distinct explicit action", async () => {
