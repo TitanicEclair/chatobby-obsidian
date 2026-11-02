@@ -1,16 +1,12 @@
 {
   "$schema": "./actions-storage-policy.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "owner": "Chatobby release owner",
   "repository": "TitanicEclair/chatobby",
   "sourceAuthority": "TitanicEclair/pi-mono:config/chatobby.operations.json#retention.actionsStorage",
-  "artifactDays": {
-    "candidateTransfer": 1,
-    "candidateResume": 7,
-    "portableEvidence": 14,
-    "operationalEvidence": 30
-  },
-  "cacheMaximumAgeDays": 30,
   "cleanupMaxItems": 50,
-  "cleanupMaxBytes": 10737418240
+  "cleanupMaxBytes": 10737418240,
+  "transientArtifactDays": 1,
+  "retainedArtifacts": 0,
+  "retainedCaches": 0
 }

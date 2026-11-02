@@ -1,32 +1,42 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { exportReviewableSource } from "../../scripts/export-reviewable-source.mjs";
+const root = resolve(import.meta.dirname, "../..");
+const workflowPath = ".github/workflows/actions-storage.yml";
 
-const workflowPath = resolve(import.meta.dirname, "../../.github/workflows/actions-storage.yml");
+async function verifyWorkflowBoundary(repositoryRoot: string): Promise<"private" | "exported"> {
+  const boundary = JSON.parse(await readFile(resolve(repositoryRoot, "boundary-manifest.json"), "utf8"));
+  expect(boundary.reviewableExportFiles).not.toContain(workflowPath);
+  expect(boundary.excludedExportPaths).toContain(workflowPath);
+  const workflow = await readFile(resolve(repositoryRoot, workflowPath), "utf8").catch((error: unknown) => {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+    return undefined;
+  });
+  // The committed export boundary deliberately omits private housekeeping.
+  // Keep this test executable in that reviewable/public source tree.
+  if (workflow === undefined) return "exported";
+  expect(workflow).toContain('cron: "53 3 * * *"');
+  expect(workflow).toContain("types: [completed]");
+  expect(workflow).toContain("github.repository == 'TitanicEclair/chatobby'");
+  expect(workflow).toContain("--execute --completed --assert-zero");
+  for (const word of ["npm ci", "cache: npm", "upload-artifact", "environment:"])
+    expect(workflow).not.toContain(word);
+  return "private";
+}
 
-describe("connector Actions storage workflow", () => {
-  it("keeps scheduled cleanup read-only and gates exact-ID deletion behind owner approval", async () => {
-    const workflow = await readFile(workflowPath, "utf8");
-    const script = await readFile(resolve(import.meta.dirname, "../../scripts/actions-storage.mjs"), "utf8");
-    const dryRun = workflow.slice(workflow.indexOf("  dry-run:"), workflow.lastIndexOf("  execute:"));
-    const execute = workflow.slice(workflow.lastIndexOf("  execute:"));
-
-    expect(workflow).toContain('cron: "53 3 * * 1"');
-    expect(dryRun).toContain("github.event_name == 'schedule' || inputs.execute != true");
-    expect(dryRun).toContain("actions: read");
-    expect(dryRun).not.toContain("--execute");
-    expect(execute).toContain("environment: chatobby-actions-storage-cleanup");
-    expect(execute).toContain("actions: write");
-    expect(execute).toContain("--execute");
-    expect(execute).toContain('args+=(--artifact-id "${id}")');
-    expect(execute).toContain('args+=(--cache-id "${id}")');
-    expect(execute).toContain('args+=(--protect-run-id "${id}")');
-    expect(workflow).not.toContain("actions/upload-artifact");
-    expect(workflow).not.toContain("actions/runs/");
-    expect(workflow).not.toContain("/releases/");
-    expect(workflow).not.toContain("/git/refs/");
-    expect(script).not.toContain("/actions/runs/");
-    expect(script).not.toContain("/releases/");
-    expect(script).not.toContain("/git/refs/");
+describe("connector storage workflow", () => {
+  it("cleans completed work daily and cannot enter the public projection", async () => {
+    await verifyWorkflowBoundary(root);
+  });
+  it("checks the intentionally absent private workflow in an actual reviewable export", async () => {
+    const destination = await mkdtemp(resolve(tmpdir(), "chatobby-storage-export-"));
+    try {
+      await exportReviewableSource({ repositoryRoot: root, destination });
+      await expect(verifyWorkflowBoundary(destination)).resolves.toBe("exported");
+    } finally {
+      await rm(destination, { recursive: true, force: true });
+    }
   });
 });

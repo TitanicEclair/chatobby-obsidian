@@ -15,20 +15,18 @@ describe("connector GitHub Actions storage governance", () => {
   it("validates the projected policy and explicit upload retention", async () => {
     const policy = await loadActionsStoragePolicy();
     expect(policy).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: "TitanicEclair/chatobby",
-      artifactDays: {
-        candidateTransfer: 1,
-        candidateResume: 7,
-        portableEvidence: 14,
-        operationalEvidence: 30,
-      },
-      cacheMaximumAgeDays: 30,
+      transientArtifactDays: 1,
+      retainedArtifacts: 0,
+      retainedCaches: 0,
       cleanupMaxItems: 50,
       cleanupMaxBytes: 10_737_418_240,
     });
     expect(await validateWorkflowArtifactRetentions(repositoryRoot, policy)).toEqual([]);
-    expect(JSON.parse(await readFile(join(repositoryRoot, "config", "actions-storage-policy.schema.json"), "utf8"))).toMatchObject({
+    expect(
+      JSON.parse(await readFile(join(repositoryRoot, "config", "actions-storage-policy.schema.json"), "utf8")),
+    ).toMatchObject({
       title: "Chatobby connector Actions storage policy",
       additionalProperties: false,
     });
@@ -53,18 +51,19 @@ describe("connector GitHub Actions storage governance", () => {
     ).rejects.toThrow("Policy is scoped to TitanicEclair/chatobby");
   });
 
-  it("dry-runs stale managed entries while retaining protected and unknown artifacts", async () => {
+  it("protects live transfers and selects all completed storage regardless of name or age", async () => {
     const fixture = await createFixture();
     const receipt = await runActionsStorageCleanup({
       repository: "TitanicEclair/chatobby",
       token: "test-token",
-      protectedRunIds: [777],
+
       now,
       fetcher: fixture.fetcher,
     });
 
     expect(receipt.mode).toBe("dry-run");
     expect(receipt.selected.map((entry) => [entry.kind, entry.id])).toEqual([
+      ["artifact", 3],
       ["cache", 10],
       ["artifact", 2],
     ]);
@@ -83,7 +82,7 @@ describe("connector GitHub Actions storage governance", () => {
       execute: true,
       artifactIds: [2],
       cacheIds: [10],
-      protectedRunIds: [777],
+
       now,
       fetcher: fixture.fetcher,
     });
@@ -103,7 +102,7 @@ describe("connector GitHub Actions storage governance", () => {
         repository: "TitanicEclair/chatobby",
         token: "test-token",
         execute: true,
-        protectedRunIds: [777],
+
         now,
         fetcher: (await createFixture()).fetcher,
       }),
@@ -114,11 +113,11 @@ describe("connector GitHub Actions storage governance", () => {
         token: "test-token",
         execute: true,
         artifactIds: [1],
-        protectedRunIds: [777],
+
         now,
         fetcher: (await createFixture()).fetcher,
       }),
-    ).rejects.toThrow("protected by explicit owner input");
+    ).rejects.toThrow("still active");
   });
 });
 
@@ -136,10 +135,20 @@ async function createFixture() {
       deletedUrls.push(url);
       const artifactMatch = url.match(/\/artifacts\/(\d+)$/u);
       const cacheMatch = url.match(/\/caches\/(\d+)$/u);
-      if (artifactMatch) artifacts.splice(artifacts.findIndex((item) => item.id === Number(artifactMatch[1])), 1);
-      if (cacheMatch) caches.splice(caches.findIndex((item) => item.id === Number(cacheMatch[1])), 1);
+      if (artifactMatch)
+        artifacts.splice(
+          artifacts.findIndex((item) => item.id === Number(artifactMatch[1])),
+          1,
+        );
+      if (cacheMatch)
+        caches.splice(
+          caches.findIndex((item) => item.id === Number(cacheMatch[1])),
+          1,
+        );
       return new Response(null, { status: 204 });
     }
+    if (/\/actions\/runs\/\d+$/u.test(url))
+      return Response.json({ status: url.endsWith("/777") ? "in_progress" : "completed" });
     if (url.includes("/actions/artifacts?")) return Response.json({ total_count: artifacts.length, artifacts });
     if (url.includes("/actions/caches?")) return Response.json({ total_count: caches.length, actions_caches: caches });
     return new Response(null, { status: 404 });

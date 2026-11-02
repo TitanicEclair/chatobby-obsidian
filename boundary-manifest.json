@@ -39,7 +39,6 @@
     ".github/FUNDING.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
-    ".github/workflows/actions-storage.yml",
     "config/actions-storage-policy.json",
     "config/actions-storage-policy.schema.json",
     "config/public-documentation-projection.json",
@@ -101,6 +100,7 @@
     "pi-mcp-adapter"
   ],
   "excludedExportPaths": [
+    ".github/workflows/actions-storage.yml",
     ".chatobby-mcp-replies",
     ".git",
     "data.json",

@@ -32,6 +32,12 @@ features and are not present in the Community plugin path.
 
 The reviewable export includes the exact lint, storage-policy, documentation
 projection and release-workflow configuration referenced by its package scripts.
+Private Actions housekeeping is excluded from the public projection; the
+private workflow checks its repository identity and deletes completed uploads.
+CI uploads a one-day transfer only when its live Obsidian consumer is requested,
+then removes the exact IDs after consumption. All other reports use job summaries.
+No persistent Actions cache or completed-run artifact is retained.
+
 A fresh export must build with locked dependencies without copying extra files
 manually from the private checkout. The export regression checks those inputs
 alongside the documentation link closure; a fresh release build proves them
@@ -575,34 +581,28 @@ an existing tag.
 
 ## GitHub Actions storage
 
-The source repository's `config/chatobby.operations.json` remains the product
-authority for Actions retention. This repository carries the validated
-connector projection in `config/actions-storage-policy.json`: candidate
-transfer shards are retained for one day, aggregate/resume candidates for
-seven days, portable evidence for 14 days, monitoring/staging evidence for 30
-days, and caches become cleanup candidates after 30 days without access.
-Unknown artifact names are unmanaged and remain retained for classification.
+The source repository's `config/chatobby.operations.json` owns the zero-at-rest
+policy. The validated connector projection is `config/actions-storage-policy.json`:
+zero completed artifacts and caches, with one-day fallback for an actual transfer.
+Unknown completed artifacts are eligible; active producers are reported and checked
+again before deletion. Repository identity remains private-connector only.
 
-`npm run check:actions-storage` validates the schema and requires every future
-`actions/upload-artifact` step to state one governed `retention-days` value.
-The current CI and release workflows upload no Actions artifacts. Their
-`setup-node` npm caches remain lockfile-keyed; the cleanup policy is a maximum
-age, while GitHub may evict an unused cache sooner.
+`npm run check:actions-storage` enforces the projection and every upload's explicit
+one-day fallback. Connector CI uploads its built plugin only when the requested
+installed-acceptance job will consume it; a final always-running job deletes that
+run's exact transfer. Ordinary receipts and failure details go to job summaries.
+No setup-node npm caches are retained.
 
-`.github/workflows/actions-storage.yml` runs a weekly read-only inventory and
-uploads no receipt artifact. A manual execute run requires the protected
-`chatobby-actions-storage-cleanup` environment, exact artifact/cache IDs, and
-any active candidate or forensic workflow-run IDs that must remain protected.
-The script re-inventories before selection, refuses unclassified, young, or
-protected artifacts, and caps one cleanup at 50 objects or 10 GiB. It exposes
-only artifact and cache deletion endpoints; workflow runs, releases, tags, and
-release assets are outside its API boundary.
+The private completion-triggered recovery and daily sweep run without npm hydration,
+deleting at most 50 objects / 10 GiB per batch and retrying at most 3 batches. They fail
+if completed artifacts/caches remain. Manual exact-ID cleanup remains available.
+Private housekeeping is excluded by `boundary-manifest.json` from public exports;
+the public connector does not contain a private-repository cleanup workflow.
+Workflow runs, releases, tags and published download assets are never deleted.
 
-This schema adds no plugin or vault state and requires no user migration. The
-job-scoped `GITHUB_TOKEN` is read only from the environment and is excluded
-from receipts. Reverting the workflow, script, and policy disables future
-cleanup without affecting connector runtime behavior; an object already
-deleted by an explicitly approved run cannot be restored.
+There is no plugin/vault state migration. Tokens remain environment-only, excluded
+from receipts. Disabling the workflow stops future cleanup; local compact receipts
+preserve required evidence before historical uploads are removed.
 
 ## Remaining stable-release gates
 

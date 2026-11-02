@@ -105,7 +105,6 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 22
-          cache: npm
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
       - name: Check connector
@@ -152,7 +151,6 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 22
-          cache: npm
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
       - name: Build exact development connector
@@ -165,13 +163,17 @@ jobs:
           fi
       - name: Record hashes and exercise temporary-vault installation
         run: npm run ci:connector-artifact
+      - name: Summarize exact connector receipt
+        shell: bash
+        run: cat ci-artifacts/connector/connector-artifact-receipt.json >> "$GITHUB_STEP_SUMMARY"
       - name: Upload exact connector artifact and receipt
+        if: inputs.installed_acceptance && github.repository == 'TitanicEclair/chatobby' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: chatobby-connector-${{ github.sha }}
           path: ci-artifacts/connector
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
   live-obsidian-smoke:
     needs: build-connector-artifact
@@ -200,7 +202,6 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 22
-          cache: npm
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
       - name: Download this run's exact connector artifact
@@ -223,14 +224,10 @@ jobs:
           --vault-name "$env:CHATOBBY_CI_VAULT_NAME"
           --diagnostics-root "${{ runner.temp }}\chatobby-obsidian-smoke"
           --obsidian-cli "$env:CHATOBBY_CI_OBSIDIAN_CLI"
-      - name: Upload Obsidian diagnostics and screenshot
+      - name: Summarize Obsidian diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: chatobby-obsidian-smoke-${{ github.sha }}
-          path: ${{ runner.temp }}/chatobby-obsidian-smoke
-          if-no-files-found: warn
-          retention-days: 7
+        shell: pwsh
+        run: Get-ChildItem -LiteralPath "$env:RUNNER_TEMP\chatobby-obsidian-smoke" -Filter *.json | ForEach-Object { Get-Content -LiteralPath $_.FullName -TotalCount 300 } | Out-File -Append -LiteralPath $env:GITHUB_STEP_SUMMARY
       - name: Restore dedicated Obsidian profile and golden vault
         if: always()
         shell: pwsh
@@ -238,3 +235,20 @@ jobs:
           & $env:CHATOBBY_CI_RESET_SCRIPT
           -Phase After
           -VaultRoot $env:CHATOBBY_CI_VAULT_ROOT
+
+  cleanup-transfers:
+    needs: [build-connector-artifact, live-obsidian-smoke]
+    if: always() && inputs.local_acceptance_complete && github.repository == 'TitanicEclair/chatobby'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: Delete exact consumed connector transfers
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/actions-storage.mjs --repository "$GITHUB_REPOSITORY" --execute --consumed-run-id "$GITHUB_RUN_ID"

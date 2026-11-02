@@ -15,6 +15,11 @@ describe("connector CI installation gates", () => {
     expect(workflow).toContain("needs.classify.outputs.lane == 'documentation-version-release'");
     expect(workflow).toContain("npm run ci:connector-artifact");
     expect(workflow).toContain("ci-artifacts/connector");
+    expect(workflow).toContain("if: inputs.installed_acceptance && github.repository");
+    expect(workflow).toContain("retention-days: 1");
+    expect(workflow).toContain("Delete exact consumed connector transfers");
+    expect(workflow).not.toContain("retention-days: 7");
+    expect(workflow).not.toContain("cache: npm");
     expect(workflow).toContain("Record hashes and exercise temporary-vault installation");
   });
 
@@ -28,7 +33,7 @@ describe("connector CI installation gates", () => {
     expect(workflow).toContain("environment: chatobby-disposable-obsidian");
     expect(workflow).toContain("-Phase Before");
     expect(workflow).toContain("-Phase After");
-    expect(workflow.match(/if: always\(\)/gu)).toHaveLength(2);
+    expect(workflow.match(/if: always\(\)/gu)).toHaveLength(3);
     expect(workflow).toContain("downloaded-connector");
     expect(workflow).toContain("scripts/ci-obsidian-smoke.mjs");
   });
@@ -39,7 +44,9 @@ describe("connector CI installation gates", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toMatch(/local_acceptance_complete:[\s\S]*?default: false/u);
     for (const name of ["classify", "branch-policy", "build-connector-artifact", "live-obsidian-smoke"]) {
-      const job = workflow.match(new RegExp(`^  ${name}:\\r?\\n([\\s\\S]*?)(?=^  [a-z][a-z-]*:|$(?![\\s\\S]))`, "mu"))?.[1];
+      const job = workflow.match(
+        new RegExp(`^  ${name}:\\r?\\n([\\s\\S]*?)(?=^  [a-z][a-z-]*:|$(?![\\s\\S]))`, "mu"),
+      )?.[1];
       expect(job?.match(/^ {4}if: ([^\n]*(?:\n {6}[^\n]*)*)/mu)?.[1]).toContain("inputs.local_acceptance_complete");
     }
   });
