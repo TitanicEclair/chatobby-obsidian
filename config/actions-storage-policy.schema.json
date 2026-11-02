@@ -10,17 +10,18 @@
     "owner",
     "repository",
     "sourceAuthority",
-    "artifactDays",
-    "cacheMaximumAgeDays",
     "cleanupMaxItems",
-    "cleanupMaxBytes"
+    "cleanupMaxBytes",
+    "transientArtifactDays",
+    "retainedArtifacts",
+    "retainedCaches"
   ],
   "properties": {
     "$schema": {
       "const": "./actions-storage-policy.schema.json"
     },
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "owner": {
       "type": "string",
@@ -32,38 +33,20 @@
     "sourceAuthority": {
       "const": "TitanicEclair/pi-mono:config/chatobby.operations.json#retention.actionsStorage"
     },
-    "artifactDays": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "candidateTransfer",
-        "candidateResume",
-        "portableEvidence",
-        "operationalEvidence"
-      ],
-      "properties": {
-        "candidateTransfer": {
-          "const": 1
-        },
-        "candidateResume": {
-          "const": 7
-        },
-        "portableEvidence": {
-          "const": 14
-        },
-        "operationalEvidence": {
-          "const": 30
-        }
-      }
-    },
-    "cacheMaximumAgeDays": {
-      "const": 30
-    },
     "cleanupMaxItems": {
       "const": 50
     },
     "cleanupMaxBytes": {
       "const": 10737418240
+    },
+    "transientArtifactDays": {
+      "const": 1
+    },
+    "retainedArtifacts": {
+      "const": 0
+    },
+    "retainedCaches": {
+      "const": 0
     }
   }
 }

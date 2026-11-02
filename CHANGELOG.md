@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Remove retained Actions caches/reports, clean exact consumed transfers and completed-run orphans, and exclude private housekeeping from public source export.
+
 - Temporarily provide Full access only in 0.5.3. Explain the absence of sandboxing in Permissions, onboarding and update highlights; hide access-mode and network controls.
 - Keep Project memory and session-history queries scoped independently of unrestricted file and command access.
 
