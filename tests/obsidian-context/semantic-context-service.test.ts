@@ -1,8 +1,36 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ObsidianSemanticContextService } from "../../src/obsidian-context/semantic-context-service";
-import { createMockApp } from "../obsidian-bridge/helpers/mock-app";
+import { createMockApp, createMockFile } from "../obsidian-bridge/helpers/mock-app";
 
 describe("ObsidianSemanticContextService", () => {
+  it("includes non-markdown tabs after the first leaf with truthful coverage", async () => {
+    const app = createMockApp(new Map([["First.md", "first"]]), { activeView: { path: "First.md" } });
+    for (const type of ["chatobby-view", "chatobby-workspace-page", "webviewer"]) {
+      await app.workspace.getLeaf("tab").setViewState({ type });
+    }
+    const service = new ObsidianSemanticContextService(app);
+    const projection = service.contextProjection({ scope: "workspace", limit: 50 });
+    expect(projection).toMatchObject({ coverage: { kind: "exact", returned: 4, total: 4, hasMore: false } });
+    expect(service.snapshot().workspace.leaves.map(leaf => leaf.viewType)).toEqual([
+      "markdown", "chatobby-view", "chatobby-workspace-page", "webviewer",
+    ]);
+    service.dispose();
+  });
+
+  it("does not label a chat with the last active Markdown file", async () => {
+    const app = createMockApp(new Map([["Previous.md", "previous"]]), { activeView: { path: "Previous.md" } });
+    const chat = app.workspace.getLeaf("tab");
+    await chat.setViewState({ type: "chatobby-view" });
+    vi.spyOn(chat, "getViewState").mockReturnValue({ type: "chatobby-view", state: {} });
+    Reflect.deleteProperty(chat.view, "file");
+    app.workspace.getActiveFile = () => createMockFile("Previous.md", "previous");
+    app.workspace.setActiveLeaf(chat);
+    const service = new ObsidianSemanticContextService(app);
+    expect(service.snapshot().focus).toMatchObject({ viewType: "chatobby-view" });
+    expect(service.snapshot().focus).not.toHaveProperty("path");
+    expect(service.snapshot().openNotes).toContainEqual(expect.objectContaining({ path: "Previous.md", isActive: false }));
+    service.dispose();
+  });
   afterEach(() => {
     vi.useRealTimers();
   });

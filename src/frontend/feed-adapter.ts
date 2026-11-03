@@ -1,5 +1,4 @@
-import type { FeedDocumentProjection } from "../features/feed/public";
-import type { FeedBlock, ToolItem, ToolItemStatus } from "../types";
+import type { FeedDocumentProjection, FeedBlock, ToolItem, ToolItemStatus } from "../features/feed/public";
 import type {
   FrontendFeedBlock,
   FrontendFeedDocumentViewModel,

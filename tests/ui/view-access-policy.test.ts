@@ -25,6 +25,30 @@ function fixture(network = false) {
 }
 
 describe("Composer access-mode product dispatch", () => {
+  it.each(["read-only", "workspace", "full"])("updates the explicit active workspace to %s with its saved request behavior", async (mode) => {
+    const f = fixture(true);
+    const current = await f.loadScreen();
+    f.loadScreen.mockClear();
+    const projected = { ...current, executionMode: "permissions", activeWorkspaceTarget: { kind: "project", vaultId: "vault-one", projectId: "project-one" }, accessPolicy: { ...current.accessPolicy, requestBehavior: "reject" } };
+    f.loadScreen.mockResolvedValueOnce(projected);
+    await f.view["applyFrontendControl"]("permission", mode);
+    expect(f.dispatch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: "permissions.set-workspace-policy", payload: {
+      target: projected.activeWorkspaceTarget, expectedRevision: 12, accessMode: mode, requestBehavior: "reject",
+    } }));
+  });
+
+  it("does not retarget a deferred composer choice when the same session changes workspace", async () => {
+    const f = fixture();
+    Object.assign(f.store.snapshot.session, { workspace: { kind: "project", projectId: "project-one" } });
+    f.loadScreen.mockImplementationOnce(async () => {
+      f.store.snapshot = { ...f.store.snapshot, session: Object.assign({ id: "session-1" }, { workspace: { kind: "vault" } }) };
+      return { screenId: "permissions", accessPolicySessionId: "session-1", loading: false,
+        accessPolicy: { schemaVersion: 1, revision: 12, accessMode: "workspace", agentNetworkAccess: true } };
+    });
+    await f.view["applyFrontendControl"]("permission", "full");
+    expect(f.dispatch).not.toHaveBeenCalled();
+  });
+
   it("changes only network through the current saved session's policy revision", async () => {
     const { view, dispatch, remember } = fixture(true);
     await view["applyFrontendControl"]("network", "off");

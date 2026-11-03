@@ -7,6 +7,7 @@ import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
 import { SubagentStore } from "../state/subagent-store";
 
 export interface ChatViewSubagentControllersOptions {
+  getCancelKeybinding?: () => string;
   workspacePage?: boolean;
   openParentSession?: (sessionId: string) => void;
   stopParentSession?: (sessionId: string) => void;
@@ -36,6 +37,7 @@ export function createChatViewSubagentControllers(
 ): ChatViewSubagentControllers {
   const store = new SubagentStore(options.getFrontendStore());
   const screen = new SubagentScreenController({
+    getCancelKeybinding: options.getCancelKeybinding,
     workspacePage: options.workspacePage,
     openParentSession: options.openParentSession,
     stopParentSession: options.stopParentSession,

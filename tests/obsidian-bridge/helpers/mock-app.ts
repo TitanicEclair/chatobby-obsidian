@@ -415,7 +415,8 @@ export function createMockWorkspace(opts?: {
       return leaf;
     },
     setActiveLeaf(leaf: unknown, _opts?: { focus?: boolean }) { activeLeaf = leaf as MockLeaf; },
-    iterateAllLeaves(callback: (leaf: MockLeaf) => void) { for (const leaf of leaves) callback(leaf); },
+    // Obsidian stops traversal of a workspace root on a truthy callback result.
+    iterateAllLeaves(callback: (leaf: MockLeaf) => unknown) { for (const leaf of leaves) { if (callback(leaf)) break; } },
     getLayout() {
       return {
         main: {

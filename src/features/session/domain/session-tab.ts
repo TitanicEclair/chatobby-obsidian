@@ -1,13 +1,7 @@
-import type {
-  ComposerState,
-  InteractionState,
-  PermissionMode,
-  SessionState,
-} from "../../../types";
-import {
-  EMPTY_SESSION_STATE,
-  INITIAL_COMPOSER_STATE,
-} from "../../../types";
+import type { InteractionState } from "../../../types";
+import { INITIAL_COMPOSER_STATE, type ComposerState } from "../../../ui/composer/types";
+import type { PermissionMode } from "./preferences";
+import { EMPTY_SESSION_STATE, type SessionState } from "./state";
 import { createFeedStore, type FeedStore } from "../../feed/public";
 
 /** Complete per-tab state. Each tab owns an isolated normalized feed store. */

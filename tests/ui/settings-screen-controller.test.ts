@@ -10,8 +10,8 @@ const settingSpies = vi.hoisted(() => ({
   render: vi.fn(),
 }));
 
-vi.mock("../../src/settings", () => ({
-  ChatobbySettingTab: class {
+vi.mock("../../src/features/settings/ui/settings-view", () => ({
+  SettingsView: class {
     renderChatobbySettings = settingSpies.render;
     refreshProviderCatalogFromRuntime = settingSpies.refresh;
     detachChatobbySettings = settingSpies.detach;

@@ -13,7 +13,7 @@ import { Composer, type PromptSubmissionOutcome } from "./composer/composer";
 import { createComposerContextHost } from "./composer/composer-context-host";
 import { ComposerControls, refreshComposerModelCatalogue } from "./composer/composer-controls";
 import { applyComposerAccessPolicy } from "./composer/composer-access-policy";
-import { searchWorkspaceReferences, type ComposerVaultReference } from "./composer/vault-reference-search";
+import { searchWorkspaceReferences, type ComposerVaultReference } from "./composer/references/search";
 import { promptText } from "./modals/modals";
 import { openAutoCompactionSettings, toggleAutoCompaction, type AutoCompactionActionOptions } from "./controller/auto-compaction-controller";
 import { SlashMenu } from "./composer/slash-menu";
@@ -26,6 +26,7 @@ import { SessionTransitionCoordinator } from "./session/session-transition-coord
 import { StoredSessionActions } from "./session/stored-session-actions";
 import { ActiveSessionActions } from "./session/active-session-actions";
 import { gatherVaultContext, toPromptContextPacket } from "../prompt";
+import { getObsidianSemanticContextService } from "../obsidian-context";
 import { errorMessage } from "../utils";
 import type { ChatobbyTransport } from "../transport/ws-client";
 import { LiveStatsController } from "./controller/live-stats-controller";
@@ -35,9 +36,9 @@ import { createChatViewOverlayScreens, type ChatViewOverlayScreens, type Overlay
 import { ExtensionUiController } from "./controller/extension-ui-controller";
 import {
   SessionController,
-  SessionIntentRejectedError,
   type SessionMutationRequest,
 } from "./controller/session-controller";
+import { dispatchSessionMutation, type SessionRestorationConnection } from "./controller/session-intent-dispatcher";
 import { createChatViewSubagentControllers, subagentActorId, type SessionAgentRailController, type SubagentScreenController, type SubagentScreenTab } from "../features/subagents/public";
 import { ChannelScreenController, routeAgentReference } from "../features/channels/public";
 import { downloadChatobbyGuide } from "../features/guide/public";
@@ -53,7 +54,8 @@ import { TaskProgress } from "../features/tasks/public";
 import { routeExtensionPanelAction } from "./controller/extension-panel-action-router";
 import { renderViewMode as renderShellViewMode } from "./controller/view-mode-renderer";
 import { routePermissionSlash } from "./controller/permission-slash-router";
-import { dispatchNoticeAction, isNoticeAction } from "./controller/notice-intent-controller";
+import { dispatchNoticeAction, handleNoticeAction } from "./controller/notice-intent-controller";
+import { ProjectedPermissionRequests, synchronizeFeedPermissionRequests } from "../features/permissions/public";
 import { TurnAbortController } from "./controller/turn-abort-controller";
 import { FrontendProtocolController } from "../frontend/frontend-protocol-controller";
 import { FrontendStore } from "../frontend/frontend-store";
@@ -93,7 +95,7 @@ export class ChatobbyView extends ItemView {
   private componentsReady = false;
   private stateHydrated = false;
   private pendingNavigation: ChatobbyNavigationState = { mode: "chat" };
-  private pendingSessionPath: string | null = null;
+  private get recoverySessionPath(): string | null { return this.sessions.recoverySessionPath; }
   private readonly viewNavigation: ViewNavigationController;
   private slashMenu: SlashMenu | null = null;
   private boundTransport: ChatobbyTransport | null = null;
@@ -108,6 +110,7 @@ export class ChatobbyView extends ItemView {
   private readonly sessionAgentRail: SessionAgentRailController;
   private readonly channelScreen: ChannelScreenController;
   private readonly extensionUi: ExtensionUiController;
+  private readonly projectedPermissions: ProjectedPermissionRequests;
   private readonly turnAbort: TurnAbortController;
   private readonly connectionStatus: ConnectionStatusController;
   private readonly sessionPreferences: SessionPreferenceController;
@@ -194,7 +197,7 @@ export class ChatobbyView extends ItemView {
       runOperation: (descriptor, operation) => this.runOperation(descriptor, operation),
       getActiveOperation: () => this.operations.current("session-transition"),
       claimSessionOwnership: () => this.claimSessionOwnership(),
-      dispatchSessionIntent: (request) => this.dispatchFrontendSessionIntent(request),
+      dispatchSessionIntent: (request, restoration) => this.dispatchFrontendSessionIntent(request, restoration),
       synchronizeFrontend: async () => {
         const transport = this.getTransport();
         if (transport?.isConnected) await this.frontendProtocol.synchronize(transport);
@@ -301,6 +304,7 @@ export class ChatobbyView extends ItemView {
 		downloadGuide: () => this.onDownloadGuide(),
     });
     const subagents = createChatViewSubagentControllers({
+      getCancelKeybinding: () => this.plugin.settings.composerKeybindings.cancelTurn,
       app: this.app,
 		getHost: () => this.shell.pageHostEl,
       getFrontendStore: () => this.frontendStore,
@@ -338,7 +342,7 @@ export class ChatobbyView extends ItemView {
     });
     this.connectionRestoration = new ConnectedViewRestorationController({
       isCurrent: (transport) => transport === this.boundTransport && transport.isConnected,
-      restoreSession: () => this.activateSessionContext(),
+      restoreSession: (connection) => this.activateSessionContext(connection),
       synchronizeFrontend: (transport) => this.frontendProtocol.synchronize(transport),
       synchronizeActiveScreen: () => this.synchronizeActiveScreen(),
       markRestored: () => this.connectionStatus.markRestored(),
@@ -350,11 +354,14 @@ export class ChatobbyView extends ItemView {
     this.extensionUi = new ExtensionUiController({
       getFeedStore: () => this.getFeedStore(),
       getFeedRenderer: () => this.feed,
+      getPermissionRequestHost: () => this.shell?.permissionRequestHostEl ?? null,
+      getCancelKeybinding: () => this.plugin.settings.composerKeybindings.cancelTurn,
       setComposerText: (text) => this.composer.setText(text),
       focusComposer: () => this.composer.focus(),
       getActiveInteraction: () => this.sessions.activeInteraction(),
       setActiveInteraction: (interaction) => this.setActiveInteraction(interaction),
     });
+    this.projectedPermissions = new ProjectedPermissionRequests(this.extensionUi, (error) => { new Notice(errorMessage(error)); });
     this.turnAbort = new TurnAbortController({
       cancelInteractions: () => this.extensionUi.cancelAll(),
       getTransport: () => this.getTransport(),
@@ -378,31 +385,28 @@ export class ChatobbyView extends ItemView {
   getIcon(): string { return "message-circle"; }
   getWorkingDirectoryPath(): string { return this.sessions.workingDirectoryPath(); }
   hasSessionPath(sessionPath: string): boolean { return this.sessions.allTabs().some((tab) => tab.sessionFile === sessionPath); }
-  async activateSessionContext(): Promise<void> {
+  async activateSessionContext(restoration?: SessionRestorationConnection): Promise<void> {
     if (!this.componentsReady || !this.stateHydrated) return;
     const transport = this.getTransport();
     if (!transport?.isConnected) return;
-    if (this.pendingSessionPath) {
-      const sessionPath = this.pendingSessionPath;
-      this.pendingSessionPath = null;
-      try { await this.sessions.restoreSession(sessionPath); } catch (error) { this.pendingSessionPath = sessionPath; throw error; }
-    } else {
-      await this.sessions.reconcileActiveSession();
-    }
+    this.bindCurrentTransport();
+    const connection = restoration ?? this.connectionRestoration.currentConnection(transport);
+    if (!connection) return;
+    await this.sessions.reconcileActiveSession(connection);
     if (this.activeTab()) this.claimSessionOwnership();
   }
   override getState(): Record<string, unknown> {
     return {
       ...this.viewNavigation.state(),
       vaultDirectoryPath: this.sessions.workingDirectoryPath(),
-      sessionPath: this.pendingSessionPath ?? this.activeTab()?.sessionFile,
+      sessionPath: this.recoverySessionPath ?? this.activeTab()?.sessionFile,
       sessionTitle: this.nativeTabTitle,
       workspace: this.pendingWorkspaceState ?? { schemaVersion: 2 },
     };
   }
   override async setState(state: unknown, result: ViewStateResult): Promise<void> {
     if (state && typeof state === "object" && "sessionTitle" in state && typeof state.sessionTitle === "string") {
-      this.nativeTabTitle = state.sessionTitle.startsWith("Chatobby") ? state.sessionTitle.slice(0, 300) : "Chatobby";
+      this.updateNativeTabTitle(state.sessionTitle.startsWith("Chatobby") ? state.sessionTitle.slice(0, 300) : "Chatobby");
     }
     if (state && typeof state === "object" && "workspace" in state) this.pendingWorkspaceState = state.workspace;
     const leafState = parseLeafSessionState(state);
@@ -418,7 +422,7 @@ export class ChatobbyView extends ItemView {
       this.sessions.restoreWorkingDirectory(leafState.vaultDirectoryPath);
     }
     if (leafState.sessionPath && leafState.sessionPath !== this.activeTab()?.sessionFile) {
-      this.pendingSessionPath = leafState.sessionPath;
+      this.sessions.setPendingSessionPath(leafState.sessionPath);
     }
     const navigation = parseNavigationState(state);
     result.history = false;
@@ -476,6 +480,7 @@ export class ChatobbyView extends ItemView {
     this.frontendProtocol.destroy();
     this.boundTransport = null;
     this.liveStats.dispose();
+    this.projectedPermissions.clear();
     this.extensionUi.dispose();
     this.tabBar.destroy();
     this.toolbar.destroy();
@@ -677,6 +682,7 @@ export class ChatobbyView extends ItemView {
       getSessionState: () => this.sessionState,
       getSessionPreferences: () => this.plugin.getSessionPreferences(),
       ...createComposerContextHost(() => this.plugin.settings.composerKeybindings, () => this.frontendStore.snapshot?.feed.blocks ?? []),
+      handleScopedControlKey: (event) => this.composerControls.handleScopedKeydown(event),
       getSlashCommands: () => this.slashCommands.catalog(),
       setSlashMatches: (matches) => this.updateSlashMenu(matches),
       setSlashArgumentOptions: (options) => this.updateSlashArgumentMenu(options),
@@ -990,26 +996,13 @@ export class ChatobbyView extends ItemView {
     else if (id === "effort") await this.plugin.rememberSessionPreferences({ thinkingLevel: requireThinkingLevel(value) });
   }
 
-  private async dispatchFrontendSessionIntent(request: SessionMutationRequest): Promise<boolean> {
-    const transport = await this.ensureConnectedTransport("changing the session");
-    if (!transport) throw new Error("Chatobby runtime is not connected");
-    await this.frontendProtocol.synchronize(transport);
-    const snapshot = this.frontendStore.snapshot;
-    if (!snapshot) throw new Error("Chatobby frontend state is unavailable");
-    const result = await this.frontendProtocol.dispatch({
-      schemaVersion: FRONTEND_SCHEMA_VERSION,
-      intentId: window.crypto.randomUUID(),
-      viewId: snapshot.viewId,
-      mainSessionId: snapshot.session?.id,
-      expectedRevision: snapshot.revision,
-      ...request,
-    });
-    if (result.status === "applied" || result.status === "accepted") return true;
-    if (result.status === "rejected" && result.notice?.level === "info") return false;
-    throw new SessionIntentRejectedError(
-      result.status === "rejected" ? result.errorCode : undefined,
-      result.notice?.message ?? "Chatobby rejected the session change",
-    );
+  private dispatchFrontendSessionIntent(request: SessionMutationRequest, restoration?: SessionRestorationConnection): Promise<boolean> {
+    return dispatchSessionMutation({
+      getTransport: () => this.getTransport(),
+      ensureTransport: () => this.ensureConnectedTransport("changing the session"),
+      getSnapshot: () => this.frontendStore.snapshot,
+      protocol: this.frontendProtocol,
+    }, request, restoration);
   }
 
   private applyFrontendSnapshot(snapshot: FrontendBootstrap, applied: FrontendBootstrap | null): void {
@@ -1024,6 +1017,8 @@ export class ChatobbyView extends ItemView {
     const commandsChanged = applied?.localCommands !== snapshot.localCommands;
     const taskPlanChanged = applied?.taskPlan !== snapshot.taskPlan;
     if (session && sessionChanged) this.sessions.applyRuntimeSession(session);
+    synchronizeFeedPermissionRequests(this.projectedPermissions, snapshot, () => this.frontendStore.snapshot,
+      (actionId) => dispatchNoticeAction(actionId, this.app, this.frontendStore, this.frontendProtocol));
     if (sessionChanged) {
       this.getFeedStore().dispatch({ type: "feed.runtime-activity-synchronized", active: Boolean(session?.streaming || session?.compacting) });
       this.composer?.setStreaming(session?.streaming ?? false);
@@ -1089,10 +1084,7 @@ export class ChatobbyView extends ItemView {
   }
 
   handleExtensionPanelAction(action: ExtensionPanelAction): void {
-    if (isNoticeAction(action.id)) {
-      void dispatchNoticeAction(action.id, this.app, this.frontendStore, this.frontendProtocol);
-      return;
-    }
+    if (handleNoticeAction(action.id, this.app, this.frontendStore, this.frontendProtocol)) return;
     routeExtensionPanelAction(action, {
       openPermissions: () => this.openPermissionPolicyScreen(),
       openMemory: (actionId) => this.overlayScreens.memory.openFromExtensionAction(actionId),
@@ -1431,13 +1423,21 @@ export class ChatobbyView extends ItemView {
     this.tabBar?.refresh();
     // Obsidian supplies saved leaf state after onOpen. Never replace that state
     // with a provisional empty chat while its session is still being restored.
-    if (!this.componentsReady || !this.stateHydrated || this.pendingSessionPath) return;
+    if (!this.componentsReady || !this.stateHydrated || this.recoverySessionPath) return;
     const title = this.sessions.sessionTitle();
     const nativeTitle = title ? `Chatobby – ${title}` : "Chatobby";
-    if (this.nativeTabTitle !== nativeTitle) {
-      this.nativeTabTitle = nativeTitle;
+    if (this.updateNativeTabTitle(nativeTitle)) {
       // Public leaf lifecycle refreshes Obsidian's title without replacing the view.
       void this.leaf.setViewState({ type: VIEW_TYPE, state: this.getState() });
     }
+  }
+
+  private updateNativeTabTitle(title: string): boolean {
+    if (this.nativeTabTitle === title) return false;
+    this.nativeTabTitle = title;
+    // Updating a leaf's display text does not guarantee a layout/focus event.
+    // Invalidate observations without reading notes until the next admitted capture.
+    getObsidianSemanticContextService(this.app).invalidate(["workspace", "page"]);
+    return true;
   }
 }

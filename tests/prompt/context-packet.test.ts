@@ -2,6 +2,29 @@ import { describe, expect, it } from "vitest";
 import { toPromptContextPacket } from "../../src/prompt";
 
 describe("toPromptContextPacket", () => {
+  it("deduplicates exact note paths before budgeting references without mutating the input", () => {
+    const openNotes = [
+      ...Array.from({ length: 20 }, () => ({ path: "Notes/First.md", title: "First" })),
+      ...Array.from({ length: 14 }, (_, index) => ({ path: `Notes/Next-${index}.md`, title: `Next ${index}` })),
+    ];
+    const before = structuredClone(openNotes);
+    const packet = toPromptContextPacket({ frontend: "obsidian", vault: "Work", openNotes });
+    expect(packet.openNotes).toEqual([openNotes[0], ...openNotes.slice(20, 31)]);
+    expect(packet.privacy.included).toContain("open-notes");
+    expect(openNotes).toEqual(before);
+  });
+
+  it("preserves path case and folder identity while retaining the first title for repeated paths", () => {
+    const openNotes = [
+      { path: "Notes/Plan.md", title: "First title" },
+      { path: "Notes/Plan.md", title: "Later title" },
+      { path: "Notes/plan.md", title: "Different case" },
+      { path: "Archive/Plan.md", title: "Different folder" },
+    ];
+    expect(toPromptContextPacket({ frontend: "obsidian", vault: "Work", openNotes }).openNotes)
+      .toEqual([openNotes[0], openNotes[2], openNotes[3]]);
+  });
+
   it("routes only bounded Obsidian context and declares privacy omissions", () => {
     const packet = toPromptContextPacket({
       frontend: "obsidian",

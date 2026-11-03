@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { createSessionTab } from "../../../src/features/session/public";
 import { TabMap } from "../../../src/ui/session/tab-state";
+import { EMPTY_SESSION_STATE, DEFAULT_SESSION_PREFERENCES } from "../../../src/features/session/public";
+import { EMPTY_SESSION_STATE as legacyEmpty, DEFAULT_SESSION_PREFERENCES as legacyPreferences, INITIAL_COMPOSER_STATE } from "../../../src/types";
 
 describe("TabMap", () => {
+  /** @see src/features/session/README.md — preserve existing shared defaults, not a new factory. */
+  it("retains facade constant identity and the constructor's existing default references", () => {
+    expect(legacyEmpty).toBe(EMPTY_SESSION_STATE);
+    expect(legacyPreferences).toBe(DEFAULT_SESSION_PREFERENCES);
+    const first = createSessionTab("first"), second = createSessionTab("second", first);
+    expect(first.sessionState).not.toBe(EMPTY_SESSION_STATE);
+    expect(first.sessionState.autoCompaction).toBe(EMPTY_SESSION_STATE.autoCompaction);
+    expect(first.sessionState.messages).toBe(EMPTY_SESSION_STATE.messages);
+    expect(first.sessionState.activeTools).toBe(second.sessionState.activeTools);
+    expect(first.composerState).toBe(INITIAL_COMPOSER_STATE);
+    expect(second.composerState).toBe(INITIAL_COMPOSER_STATE);
+    expect(first.feedStore).not.toBe(second.feedStore);
+  });
   it("tracks active tabs", () => {
     const tabs = new TabMap();
     const first = createSessionTab("s1");

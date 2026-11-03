@@ -1,7 +1,8 @@
 {
   "name": "chatobby-obsidian",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "npm run check:community-review && tsc --noEmit && node esbuild.config.mjs",
     "build:documentation-version": "node scripts/check-product-identity.mjs && node esbuild.config.mjs",
@@ -11,7 +12,7 @@
     "check:actions-storage": "node scripts/actions-storage.mjs --check-policy",
     "check:frontend-protocol": "node scripts/check-chatobby-client-projection.mjs",
     "check:architecture": "node scripts/check-public-api.mjs && npm run check:release-boundary && vitest run tests/architecture",
-    "check:backend-contract": "node scripts/verify-local-backend.mjs && vitest run tests/projects/obsidian-protocol-projection.test.ts tests/projects/platform-paths.test.ts",
+    "check:backend-contract": "node scripts/verify-local-backend.mjs && vitest run tests/projects/obsidian-protocol-projection.test.ts tests/projects/platform-paths.test.ts tests/frontend/feed-projection-pair.test.ts",
     "check:release-boundary": "node scripts/check-reviewable-boundary.mjs",
     "check:product-identity": "node scripts/check-product-identity.mjs",
     "check:community-review": "eslint . --max-warnings 0 && node scripts/check-review-source.mjs && node scripts/check-reviewable-boundary.mjs",

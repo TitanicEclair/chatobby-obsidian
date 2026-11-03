@@ -13,6 +13,8 @@ import { OperationConflictError } from "../../features/operations/public";
 import type { ActiveOperation, OperationDescriptor } from "../../features/operations/public";
 import type { TransportInterruption } from "./connection-status-controller";
 import { disconnectSession } from "../session/session-disconnection";
+import { SessionRecovery, type SessionRecoveryOperation, type SessionRestorationConnection } from "../session/session-recovery";
+import { waitForConnection } from "./connected-view-restoration";
 
 export type { WorkingDirectoryScope } from "../session/working-directory-controller";
 
@@ -48,7 +50,7 @@ export interface SessionControllerOptions {
   runOperation: <T>(descriptor: OperationDescriptor, operation: () => Promise<T>) => Promise<T>;
   getActiveOperation: () => ActiveOperation | null;
   claimSessionOwnership: () => void;
-  dispatchSessionIntent: (request: SessionMutationRequest) => Promise<boolean>;
+  dispatchSessionIntent: (request: SessionMutationRequest, restoration?: SessionRestorationConnection) => Promise<boolean>;
   synchronizeFrontend: () => Promise<void>;
   settlePresentation: () => Promise<void>;
 }
@@ -63,16 +65,26 @@ export class SessionController {
   private fallbackSessionState: SessionState = EMPTY_SESSION_STATE;
   private readonly fallbackFeedStore: FeedStore = createFeedStore();
   private fallbackInteraction: InteractionState | null = null;
-  private reconnectPromise: Promise<void> | null = null;
+  private readonly recovery = new SessionRecovery(
+    (operation) => this.restoreRecoveryTarget(operation),
+    () => { this.options.refreshTabBar(); this.options.persistLeafState(); },
+  );
   private sessionTargetTransition: Promise<void> | null = null;
   private readonly workingDirectory: WorkingDirectoryController;
   private runtimeMessageCount = 0;
   private runtimeWorkingDirectory: string | null = null;
 	private runtimeWorkspace: FrontendSessionViewModel["workspace"] = { kind: "vault", label: "Vault" };
-	private disconnectedSessionPath: string | null = null;
 
   constructor(private readonly options: SessionControllerOptions) {
     this.workingDirectory = new WorkingDirectoryController(options.app, options.plugin);
+  }
+
+  get recoverySessionPath(): string | null {
+    return this.recovery.path;
+  }
+
+  setPendingSessionPath(path: string): void {
+    this.recovery.setPendingPath(path);
   }
 
   get sessionState(): SessionState {
@@ -217,16 +229,9 @@ export class SessionController {
     });
   }
 
-  async restoreSession(sessionPath: string): Promise<void> {
-		try {
-			await this.runSessionTransition("Resuming session", async () => {
-				await this.resumeStoredSession(sessionPath, true);
-			});
-		} catch (error) {
-			if (!(error instanceof SessionIntentRejectedError) || error.code !== "SESSION_NOT_FOUND") throw error;
-			await this.options.synchronizeFrontend();
-			new Notice("The previous chat no longer exists. Chatobby restored the current available chat instead.");
-		}
+  async restoreSession(sessionPath: string, restoration?: SessionRestorationConnection): Promise<void> {
+    this.setPendingSessionPath(sessionPath);
+    await this.reconcileActiveSession(restoration);
   }
 
 	async handleStoredSessionSelect(sessionPath: string): Promise<void> {
@@ -245,13 +250,12 @@ export class SessionController {
 		await this.handleStoredSessionSelect(target.sessionFile);
   }
 
-  reconcileActiveSession(): Promise<void> {
-    if (this.reconnectPromise) return this.reconnectPromise;
-		this.reconnectPromise = this.restoreDisconnectedSession().finally(() => { this.reconnectPromise = null; });
-    return this.reconnectPromise;
+  reconcileActiveSession(restoration?: SessionRestorationConnection): Promise<void> {
+    return this.recovery.reconcile(restoration);
   }
 
   async ensureActiveSessionTarget(): Promise<SessionTab> {
+    await this.recovery.waitForCurrent();
     await this.sessionTargetTransition;
     if (!this.activeTab()) await this.createSession();
     else {
@@ -278,7 +282,7 @@ export class SessionController {
   markTransportDisconnected(): TransportInterruption {
     const active = this.activeTab();
     if (!active) return { hadActiveWork: false, hadInteraction: false };
-		this.disconnectedSessionPath = active.sessionFile ?? null;
+    this.recovery.rememberDisconnected(active.sessionFile);
     this.runtimeWorkingDirectory = null;
     const disconnected = disconnectSession(active);
     this.tabs.set(disconnected.tab);
@@ -286,22 +290,28 @@ export class SessionController {
     return disconnected.interruption;
   }
 
-	private async restoreDisconnectedSession(): Promise<void> {
-		const sessionPath = this.disconnectedSessionPath;
-		if (!sessionPath) {
-			await this.options.synchronizeFrontend();
-			return;
-		}
-		try {
-			await this.resumeStoredSession(sessionPath, false);
-			this.disconnectedSessionPath = null;
-		} catch (error) {
-			this.disconnectedSessionPath = sessionPath;
-			throw error;
-		}
-	}
+  private async restoreRecoveryTarget({ target, connection, requireCurrent }: SessionRecoveryOperation): Promise<void> {
+    if (!target) {
+      await waitForConnection(() => this.options.synchronizeFrontend(), connection);
+      requireCurrent();
+      return;
+    }
+    try {
+      await this.runSessionTransition("Restoring session", async () => {
+        const changed = await this.resumeStoredSession(target.path, target.source === "pending", connection);
+        requireCurrent();
+        if (!changed) throw new Error("Chatobby did not restore the selected session.");
+      }, "reject");
+    } catch (error) {
+      requireCurrent();
+      if (target.source !== "pending" || !(error instanceof SessionIntentRejectedError) || error.code !== "SESSION_NOT_FOUND") throw error;
+      await waitForConnection(() => this.options.synchronizeFrontend(), connection);
+      requireCurrent();
+      new Notice("The previous chat no longer exists. Chatobby restored the current available chat instead.");
+    }
+  }
 
-	private async resumeStoredSession(sessionPath: string, exitSessionBrowser: boolean): Promise<void> {
+	private async resumeStoredSession(sessionPath: string, exitSessionBrowser: boolean, restoration?: SessionRestorationConnection): Promise<boolean> {
 		const preferences = this.options.plugin.getSessionPreferences();
 		const changed = await this.options.dispatchSessionIntent({
 			type: "session.resume",
@@ -310,11 +320,12 @@ export class SessionController {
 				model: preferences.model || undefined,
 				thinkingLevel: preferences.thinkingLevel,
 			},
-		});
-		if (!changed) return;
+		}, restoration);
+		if (!changed) return false;
 		this.options.claimSessionOwnership();
 		this.options.renderActiveTab();
 		if (exitSessionBrowser) this.options.exitSessionBrowser();
+		return true;
 	}
 
   async addCurrentBackendSessionTab(
@@ -358,7 +369,7 @@ export class SessionController {
     }).finally(() => this.options.refreshTabBar());
   }
 
-  runSessionTransition(label: string, operation: () => Promise<void>): Promise<void> {
+  runSessionTransition(label: string, operation: () => Promise<void>, conflict: "notify" | "reject" = "notify"): Promise<void> {
     const id = `session:${label.toLocaleLowerCase().replaceAll(" ", "-")}`;
     const promise = this.options.runOperation({ key: "session-transition", id, label }, async () => {
       await operation();
@@ -369,7 +380,7 @@ export class SessionController {
     if (!this.sessionTargetTransition) this.sessionTargetTransition = promise;
     this.options.refreshTabBar();
     return promise.catch((error: unknown) => {
-      if (error instanceof OperationConflictError) {
+      if (error instanceof OperationConflictError && conflict === "notify") {
         new Notice(error.message);
         return;
       }

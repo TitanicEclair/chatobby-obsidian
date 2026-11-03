@@ -16,3 +16,4 @@ export type {
 } from "./types";
 export type { BridgeClientFactory, CoordinatedBridgeClient } from "./bridge-connection-coordinator";
 export type { BridgeInboundResultHandlers } from "./bridge-router";
+export { disposeBrowserConsoleCaptures } from "./browser/console-capture";

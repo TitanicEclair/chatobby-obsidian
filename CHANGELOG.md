@@ -2,10 +2,103 @@
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-03
+
+Release candidate; not yet published. See [release notes](RELEASE_NOTES_0.5.4.md).
+
+- Enumerate every workspace leaf before reporting exact coverage, keep focused chat views separate from the last note, and restore child-feed navigation from Subagents workspace pages.
+
 - Remove retained Actions caches/reports, clean exact consumed transfers and completed-run orphans, and exclude private housekeeping from public source export.
 
-- Temporarily provide Full access only in 0.5.3. Explain the absence of sandboxing in Permissions, onboarding and update highlights; hide access-mode and network controls.
-- Keep Project memory and session-history queries scoped independently of unrestricted file and command access.
+- Keep native chat titles consistent with semantic prompt/tool observations after rename or restore. Give fresh UI captures their actual timestamp and carry that time separately from event-cached semantic state.
+
+- Consume the runtime parser correction so existing Vault-root Events history loads without changing stored events.
+
+- Align paired feed setup and repeat-capture budgets with the existing 15-second child deadline; require successful exit and report bounded fixture diagnostics.
+
+- Export reviewable source from committed Git files with recursive local-state exclusions and an exact copied-byte inventory; retain public source and existing license terms.
+
+- Refresh the final development pair to the documented source revision; generated contracts and executable source are unchanged.
+
+- Give local feed/session/prompt models and the complete Memory screen focused owners, preserving public types, default identities, packet bytes and Memory behavior with baseline coverage.
+
+- Give Composer draft/history, submission and attachment presentation separate owners while preserving keyboard/reference routing and existing delayed-result behavior with characterization coverage.
+
+- Separate settings presentation into native, per-surface and section owners while preserving provider refresh, modal, shortcut and credential lifetimes with baseline coverage.
+
+- Give settings configuration and persistence focused feature owners, preserving legacy normalization, shared defaults and credential/save ordering with characterization coverage.
+
+- Refresh runtime provenance for focused context publication, history and subagent tool owners; generated contracts and connector behavior are unchanged.
+
+- Refresh runtime provenance for focused tool-registry, session-creation and subagent launch-resolution owners; generated contracts and connector behavior are unchanged.
+
+- Split Project editor, folder/detail and chat-library presentation into focused owners while keeping search queues, pending moves and operation state with the view.
+
+- Give file-explorer Project launches a feature owner and derive Project UI actions from canonical contracts; preserve folder registration, cancellation and session scope.
+
+- Consume the organized canonical Projects and shared-choice contracts, with public parser-to-store regression coverage; wire behavior is unchanged.
+
+- Verify generated client inventories in the canonical generator's fixed path order, including uppercase documentation names, while retaining exact hash and file-set checks.
+
+- Refresh runtime provenance for the reorganized permissions service; public contracts and connector behavior are unchanged.
+
+- Refresh the paired runtime for concurrent memory-file loading during session readiness; generated contracts and connector behavior are unchanged.
+
+- Retire the unused vault-directory preference writer and types; preserve session settings in the existing plugin-data store.
+
+- Remove dormant frontmatter and legacy paging helpers; keep bridge operations and context paging with their current owners.
+
+- Remove unused UI helpers and empty diff/voice placeholders, retaining the current feed, composer, toolbar and session owners.
+
+- Route scoped Escape to the focused reference panel or control picker before draft/turn cancellation, preserving selections and returning focus to its trigger.
+
+- Let reference chips trigger the overflow summary instead of shrinking away their controls; refresh the width threshold after panel deletion while preserving focus until a real resize.
+
+- Give composer references a dedicated presentation owner; retire old searches, controls and queued focus/scroll work when a composer is rebound or closed, while preserving draft recovery and submission behavior.
+
+- Keep MCP refresh errors and delayed initial focus scoped to the current page; older requests and completed actions cannot clear or overwrite a reopened page's error.
+
+- Separate MCP catalogue and detail presentation from page lifecycle and runtime actions; share plugin metadata and safe external links, and derive local action types from the canonical contract.
+
+- Separate MCP connection editing and validation from catalogue/detail rendering. Preserve local and token field visibility after updates, and prevent an old save from closing or showing errors on a new draft.
+
+- Reject Web Viewer screenshots without a rendered surface immediately with recovery guidance; preserve visible unfocused captures and discard cancelled or replaced-target results without changing tabs or focus.
+
+- Add an exact-pair feed regression through the actual runtime coordinator and
+  connector stores, covering streaming, completed turns, replay and restored history.
+
+- Let completed session transitions settle in hidden windows and release presentation waits when their view closes, while keeping prompts waiting for the actual session change.
+
+- Restore a saved chat on its authenticated leaf connection without waiting for slower hidden tabs; show session recovery and keep prompts waiting for the correct conversation across reconnects.
+
+- Release Web Viewer console listeners when tabs close or change and when Chatobby unloads; separate browser operations, observation, read pagination and webview adapters with linked regression coverage.
+
+- Count each open note once in prompt references before applying the twelve-note limit, while preserving every open leaf in explicit workspace/context tools.
+
+- Separate prompt capture and packet projection, remove unused context wrappers, and split semantic/UI observation services into capture, projection, interaction and lifecycle owners with linked behavior tests.
+
+- Organize permission presentation and request coordination behind one feature API. Remove retired OS sandbox setup controls and capability negotiation while preserving workspace choices, tool opt-outs, exact-operation reviews, and older-runtime access reporting.
+
+- Move feed fixtures out of the production API, remove unused migration-era test scaffolding, and document the current feed ownership and regression coverage.
+
+- Restrict both Actions storage jobs to the private connector repository, keeping its public projection inert and preserving script-level repository validation.
+
+- Back off repeated runtime connection failures and stop at the existing automatic retry limit. Explicit connections and runtime replacement start a fresh retry budget.
+
+- Close an invalidated permission review by its exact runtime UI request ID while preserving unrelated requests and the composer draft.
+
+- Describe current workspace permissions in the fresh welcome using the canonical product execution mode. Development builds keep published update highlights manual and label them as release history.
+
+- Omit retired native sandbox setup from frontend negotiation, preserving strict development-pair bootstrap checks for every active capability.
+
+- Show exact child-agent permission requests above both parent and child composers, preserve durable feed notices and drafts, and coalesce duplicate decisions across views.
+- Keep pending child permission requests reviewable after a failed decision dispatch, without repeating the request notification.
+- Refresh generated permission contracts from the verified runtime revision and describe Obsidian app authority without implying an active sandbox.
+
+- Restore Read-only, Workspace and Full access with saved per-workspace settings and a composer picker. Choose whether restricted actions can request approval or are rejected automatically.
+- Review exact permission requests and their reasons above the composer, with one Obsidian notification. Approve once or deny without losing a draft; typing Enter never approves.
+- Manage Chatobby and Obsidian tool access for the Vault or any existing Project; retain independent MCP tool selections.
+- Keep older-runtime permission rendering in small compatibility modules; current workspace permissions do not start or configure a native sandbox.
 
 - Keep streaming responses responsive by reusing unchanged feed history, coalescing slow Markdown renders, and retaining completed paragraph elements.
 ## [0.5.2] - 2026-09-10

@@ -8,8 +8,8 @@ import { EventsScreenController } from "../../features/events/public";
 import { McpScreenController } from "../../features/mcp/public";
 import { ProjectsScreenController } from "../../features/projects/public";
 import { SettingsScreenController } from "../../features/settings/public";
-import { MemoryScreenController } from "./memory-screen-controller";
-import { PermissionsScreenController } from "./permissions-screen-controller";
+import { MemoryScreenController } from "../../features/memory/public";
+import { PermissionsScreenController } from "../../features/permissions/public";
 
 export type OverlayViewMode = "projects" | "permissions" | "memory" | "events" | "mcp" | "settings";
 

@@ -76,7 +76,7 @@ function leafId(leaf: LeafLike): string {
 
 function allLeaves(workspace: WorkspaceLike): LeafLike[] {
 	const leaves: LeafLike[] = [];
-	workspace.iterateAllLeaves?.((leaf) => leaves.push(leaf));
+	workspace.iterateAllLeaves?.((leaf) => { leaves.push(leaf); });
 	for (const leaf of workspace.getLeavesOfType("markdown") ?? []) {
 		if (!leaves.includes(leaf)) leaves.push(leaf);
 	}

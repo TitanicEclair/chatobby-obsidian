@@ -1,9 +1,9 @@
 # MCP connections
 
 MCP connections add optional tools from an online service or a program already
-installed on your computer. A connection, its authentication, its exposed tool
-set are separate decisions. Local programs in Chatobby 0.5.3 run with Full access;
-sandboxing is temporarily unavailable.
+installed on your computer. A connection, its authentication, and its exposed tool
+set are separate decisions. Local programs run as your operating-system account;
+Chatobby does not create an OS sandbox. Application permissions remain separate.
 
 ## Add a connection
 
@@ -96,3 +96,5 @@ switches create agent access.
 
 For connection failures, see [troubleshooting](troubleshooting.md). For trust
 boundaries, see [responsibility boundaries](responsibility-boundaries.md).
+Developers can find ownership, draft lifetimes and test purposes in the
+[MCP frontend reference](api/mcp.md).

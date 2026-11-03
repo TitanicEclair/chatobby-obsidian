@@ -1,129 +1,35 @@
-import type { App, WorkspaceLeaf, ViewState } from "obsidian";
+/** @see docs/api/browser.md — operation compatibility and retained-read contracts. */
+import type { ViewState } from "obsidian";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { executeBrowserPageOperation } from "../../src/obsidian-bridge/browser/page-runtime";
 import { executeOperation } from "../../src/obsidian-bridge/operation-registry";
-
-interface FakeWebView extends HTMLElement {
-  getURL: () => string;
-  getTitle: () => string;
-  loadURL: (url: string) => Promise<void>;
-  executeJavaScript: (code: string, userGesture?: boolean) => Promise<unknown>;
-  canGoBack: () => boolean;
-  canGoForward: () => boolean;
-  goBack: () => void;
-  goForward: () => void;
-  reload: () => void;
-  isLoading: () => boolean;
-  isCrashed: () => boolean;
-  sendInputEvent: (event: Record<string, unknown>) => Promise<void>;
-  capturePage: () => Promise<{ toPNG: () => Uint8Array; getSize: () => { width: number; height: number } }>;
-}
-
-interface FakeLeaf extends WorkspaceLeaf {
-  id: string;
-  detached: boolean;
-}
-
-function createFakeWebView(): FakeWebView {
-  const element = document.createElement("webview") as FakeWebView;
-  let runtimeUrl = "https://example.com/";
-  let runtimeInstalled = false;
-  element.getURL = () => runtimeUrl;
-  element.getTitle = () => "Example";
-  element.loadURL = async (url: string) => {
-    runtimeUrl = url;
-  };
-  element.executeJavaScript = vi.fn(async (code: string) => {
-    if (code.startsWith('window["__chatobbyExecuteBrowserPageV2"]=(')) {
-      runtimeInstalled = true;
-      return true;
-    }
-    const prefix = 'window["__chatobbyExecuteBrowserPageV2"]?window["__chatobbyExecuteBrowserPageV2"](';
-    const suffix = "):({__chatobbyRuntimeMissing:true})";
-    if (!code.startsWith(prefix) || !code.endsWith(suffix)) throw new Error("Unexpected page runtime script");
-    if (!runtimeInstalled) return { __chatobbyRuntimeMissing: true };
-    const input = JSON.parse(code.slice(prefix.length, -suffix.length)) as Parameters<typeof executeBrowserPageOperation>[0];
-    return await executeBrowserPageOperation(input);
-  });
-  element.canGoBack = () => true;
-  element.canGoForward = () => true;
-  element.goBack = vi.fn();
-  element.goForward = vi.fn();
-  element.reload = vi.fn();
-  element.isLoading = () => false;
-  element.isCrashed = () => false;
-  element.sendInputEvent = vi.fn(async () => undefined);
-  element.capturePage = vi.fn(async () => ({
-    toPNG: () => new Uint8Array([137, 80, 78, 71]),
-    getSize: () => ({ width: 800, height: 600 }),
-  }));
-  return element;
-}
-
-function createFakeLeaf(id: string): FakeLeaf {
-  const containerEl = document.createElement("div");
-  containerEl.appendChild(createFakeWebView());
-  let viewState: ViewState = { type: "empty", state: {} };
-  const leaf = {
-    id,
-    detached: false,
-    view: {
-      containerEl,
-      getViewType: () => viewState.type,
-      getDisplayText: () => "Example",
-    },
-    getViewState: () => viewState,
-    setViewState: async (next: ViewState) => {
-      viewState = next;
-    },
-    detach: () => {
-      leaf.detached = true;
-    },
-  } as unknown as FakeLeaf;
-  return leaf;
-}
-
-function createBrowserApp(): App & { leaf: FakeLeaf } {
-  const article = document.body.createEl("article");
-  article.createEl("h1", { text: "Example article" });
-  article.createEl("p", { text: "abcdef" });
-  const button = article.createEl("button", { text: "Continue" });
-  const input = article.createEl("input", { attr: { name: "q", "aria-label": "Search" } });
-  for (const element of [article, ...Array.from(article.querySelectorAll<HTMLElement>("*"))]) makeVisible(element);
-  const leaf = createFakeLeaf("leaf-1");
-  const workspace = {
-    activeLeaf: leaf,
-    getLeavesOfType: (type: string) => (type === "webviewer" && leaf.getViewState().type === "webviewer" ? [leaf] : []),
-    getLeafById: (id: string) => id === leaf.id ? leaf : null,
-    getLeaf: () => leaf,
-    setActiveLeaf: () => {},
-    iterateAllLeaves: (callback: (candidate: FakeLeaf) => void) => callback(leaf),
-  };
-  return { workspace, leaf } as unknown as App & { leaf: FakeLeaf };
-}
-
-function makeVisible(element: HTMLElement): void {
-  element.getBoundingClientRect = () => ({
-    x: 10,
-    y: 20,
-    width: 100,
-    height: 30,
-    top: 20,
-    right: 110,
-    bottom: 50,
-    left: 10,
-    toJSON: () => ({}),
-  });
-  element.scrollIntoView = vi.fn();
-}
+import { createBrowserApp, createFakeLeaf, disposeBrowserApps, makeVisible, renderWebView, type FakeLeaf, type FakeWebView } from "./helpers/browser-fixture";
 
 afterEach(() => {
+  disposeBrowserApps();
   document.body.empty();
   delete (globalThis as unknown as Record<string, unknown>).__chatobbyBrowserPageV2_6f5c9f3b;
 });
 
 describe("browser operations", () => {
   const signal = new AbortController().signal;
+
+  it("cleans up a pending Web Viewer readiness listener when opening is aborted", async () => {
+    const app = createBrowserApp();
+    const webview = app.leaf.view.containerEl.querySelector("webview") as FakeWebView;
+    webview.getURL = () => { throw new Error("not ready"); };
+    const add = vi.spyOn(webview, "addEventListener");
+    const remove = vi.spyOn(webview, "removeEventListener");
+    const controller = new AbortController();
+    const opening = executeOperation("browser.open", { url: "https://example.com" }, controller.signal, app);
+    // setViewState yields before the readiness observer is attached.
+    await Promise.resolve();
+    expect(add.mock.calls.some(([event]) => event === "dom-ready")).toBe(true);
+    controller.abort();
+    await expect(opening).rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    expect(remove.mock.calls.some(([event]) => event === "dom-ready")).toBe(true);
+    webview.dispatchEvent(new Event("dom-ready"));
+    expect(app.layoutListenerCount()).toBe(0);
+  });
 
   it("opens a URL in a webviewer leaf", async () => {
     const app = createBrowserApp();
@@ -172,6 +78,7 @@ describe("browser operations", () => {
     const app = createBrowserApp();
     const left = createFakeLeaf("leaf-left");
     const upper = createFakeLeaf("leaf-up");
+    app.leaves.push(left, upper);
     const createLeafBySplit = vi.fn()
       .mockReturnValueOnce(left)
       .mockReturnValueOnce(upper);
@@ -347,6 +254,7 @@ describe("browser operations", () => {
     const press = await executeOperation("browser.press", { cssSelector: "input[name=q]", key: "Enter" }, signal, app) as Record<string, unknown>;
     expect(press).toMatchObject({ pressed: true, key: "Enter" });
 
+    renderWebView(app.leaf);
     const screenshot = await executeOperation("browser.screenshot", {}, signal, app) as Record<string, unknown>;
     expect(screenshot).toMatchObject({ captured: true, mimeType: "image/png", bytes: 4, width: 800, height: 600 });
     expect(typeof screenshot.data).toBe("string");
@@ -489,6 +397,9 @@ describe("browser operations", () => {
       app,
     ) as { nextCursor: string };
     const callsAfterFirstPage = vi.mocked(webview.executeJavaScript).mock.calls.length;
+
+    app.leaf.detach();
+    app.emitLayoutChange();
 
     await executeOperation(
       "browser.read",

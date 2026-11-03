@@ -69,3 +69,11 @@ assets, and the release verifier rejects its specific build marker as a second
 gate. This test seam does not activate or replace the public stable feed and
 must not install a test certificate globally; local HTTPS trust is process-scoped
 to the disposable acceptance run.
+
+[Guide UI tests](../tests/ui/guide-content.test.ts) inject a verified asset and a
+fake vault adapter to protect one confirmation before copying and unchanged notes
+when fetching or verification fails. They do not verify signatures themselves.
+[Update-client tests](../tests/runtime/runtime-update-client.test.ts) use temporary
+signing keys and controlled reads to verify compatibility, signature rejection
+before asset fetch, and signed size/hash checks. Neither proves the public feed
+or installed Obsidian write path.

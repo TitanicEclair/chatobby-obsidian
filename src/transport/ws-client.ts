@@ -140,11 +140,15 @@ export class ChatobbyTransport {
   // ── Connection lifecycle ─────────────────────────────────────────
 
   async connect(): Promise<void> {
+    return this.openConnection("connect");
+  }
+
+  private async openConnection(event: "connect" | "retry"): Promise<void> {
     if (this.connectionState.status === "connected" && this.client) return;
     if (this.connectPromise) return this.connectPromise;
 
     this.clearReconnectTimer();
-    this.dispatch({ type: "connect" });
+    this.dispatch({ type: event });
 
     const previousClient = this.client;
     this.client = null;
@@ -632,8 +636,7 @@ export class ChatobbyTransport {
 
     this.clearReconnectTimer();
     this.reconnectTimer = window.setTimeout(() => {
-      this.dispatch({ type: "retry" });
-      this.connect().catch(() => {});
+      this.openConnection("retry").catch(() => {});
     }, delay);
   }
 

@@ -1,16 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-import type { App } from "obsidian";
-import type ChatobbyPlugin from "../../../src/main";
-import { feedSelectors } from "../../../src/features/feed/public";
-import { EMPTY_SESSION_STATE } from "../../../src/types";
-import type { ChatobbyTransport } from "../../../src/transport/ws-client";
-import {
-  SessionController,
-  SessionIntentRejectedError,
-  type SessionMutationRequest,
-} from "../../../src/ui/controller/session-controller";
-import type { FrontendSessionViewModel } from "../../../src/vendor/chatobby-client/frontend-contracts.js";
-import { OperationCoordinator } from "../../../src/features/operations/public";
+import { describe, expect, it, vi } from 'vitest';
+import { feedSelectors } from '../../../src/features/feed/public';
+import { EMPTY_SESSION_STATE } from '../../../src/types';
+import { SessionController, SessionIntentRejectedError, type SessionMutationRequest } from '../../../src/ui/controller/session-controller';
+import { createSessionControllerHarness as harness, sessionViewModel as session, flushMicrotasks } from '../../support/session/controller';
 
 describe("SessionController", () => {
   it("holds the first submission until an already-started create and its presentation settle", async () => {
@@ -84,8 +76,9 @@ describe("SessionController", () => {
   it("does not let a rejected competing transition release the prompt wait and clears a failed owner for retry", async () => {
     let fail!: (error: Error) => void;
     const pending = new Promise<void>((_resolve, reject) => { fail = reject; });
+    let firstResume = true;
     const dispatch = vi.fn(async (request: SessionMutationRequest, target: SessionController) => {
-      if (request.type === "session.resume") await pending;
+      if (request.type === "session.resume" && firstResume) { firstResume = false; await pending; }
       target.applyRuntimeSession(session("retry-target"));
       return true;
     });
@@ -439,70 +432,3 @@ describe("SessionController", () => {
     expect(intents[0]?.type).toBe("session.create");
   });
 });
-
-interface HarnessOptions {
-  dispatch?: (request: SessionMutationRequest, controller: SessionController) => Promise<boolean>;
-  synchronize?: (controller: SessionController) => Promise<void>;
-  renderActiveTab?: ReturnType<typeof vi.fn>;
-  settlePresentation?: () => Promise<void>;
-}
-
-function harness(options: HarnessOptions = {}) {
-  const operations = new OperationCoordinator();
-  const renderActiveTab = options.renderActiveTab ?? vi.fn();
-  const persistLeafState = vi.fn();
-  const claimSessionOwnership = vi.fn();
-  const transport = {
-    isConnected: true,
-    getRuntimeInfo: vi.fn(async () => ({ cwd: "C:\\Different", agentDir: "C:\\Different\\.chatobby" })),
-  } as unknown as ChatobbyTransport;
-  const plugin = {
-    transport,
-    settings: { autoNameStrategy: "truncate" },
-    getActiveVaultDirectory: vi.fn(() => ""),
-    getSessionPreferences: vi.fn(() => ({ model: null, thinkingLevel: "medium", permissionMode: "default" })),
-  } as unknown as ChatobbyPlugin;
-  let controller!: SessionController;
-  controller = new SessionController({
-    app: {
-      vault: {
-        adapter: { getBasePath: () => "C:\\Vault" },
-        getName: () => "Vault",
-        getAbstractFileByPath: () => null,
-      },
-    } as unknown as App,
-    plugin,
-    getTransport: () => transport,
-    refreshTabBar: vi.fn(),
-    renderActiveTab,
-    persistLeafState,
-    exitSessionBrowser: vi.fn(),
-    runOperation: (descriptor, operation) => operations.run(descriptor, operation),
-    getActiveOperation: () => operations.current("session-transition"),
-    claimSessionOwnership,
-    dispatchSessionIntent: (request) => options.dispatch?.(request, controller) ?? Promise.resolve(false),
-    synchronizeFrontend: () => options.synchronize?.(controller) ?? Promise.resolve(),
-    settlePresentation: options.settlePresentation ?? (() => Promise.resolve()),
-  });
-  return { controller, renderActiveTab, persistLeafState, claimSessionOwnership };
-}
-
-async function flushMicrotasks(): Promise<void> {
-  for (let index = 0; index < 20; index += 1) await Promise.resolve();
-}
-
-function session(id: string, overrides: Partial<FrontendSessionViewModel> = {}): FrontendSessionViewModel {
-  return {
-    id,
-    workingDirectory: "C:\\Vault",
-		workspace: { kind: "vault", label: "Vault" },
-    model: "model-1",
-    thinkingLevel: "medium",
-    streaming: false,
-    compacting: false,
-    retrying: false,
-    messageCount: 0,
-    forkOptions: [],
-    ...overrides,
-  };
-}

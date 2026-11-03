@@ -14,10 +14,12 @@ export async function applyComposerAccessPolicy(
   if (!snapshot?.session) throw new Error("No active Chatobby session");
   if (control === "permission" && value !== "read-only" && value !== "workspace" && value !== "full") throw new Error("Invalid access mode");
   if (control === "network" && value !== "on" && value !== "off") throw new Error("Invalid agent network choice");
+  const workspaceIdentity = JSON.stringify(snapshot.session.workspace);
   const isCurrent = () => {
     const current = store.snapshot;
     return current?.runtimeInstanceId === snapshot.runtimeInstanceId
-      && current.viewId === snapshot.viewId && current.session?.id === snapshot.session?.id;
+      && current.viewId === snapshot.viewId && current.session?.id === snapshot.session?.id
+      && JSON.stringify(current.session?.workspace) === workspaceIdentity;
   };
   try {
     const screen = await protocol.loadScreen({ screenId: "permissions" });
@@ -28,19 +30,20 @@ export async function applyComposerAccessPolicy(
     const mode = control === "network" ? screen.accessPolicy.accessMode : value;
     if (mode !== "read-only" && mode !== "workspace" && mode !== "full") throw new Error("Invalid access mode");
     if (mode === "full" && control === "network" && value === "off") throw new Error("Full access includes network access");
-    const result = await protocol.dispatch({
-      schemaVersion: FRONTEND_SCHEMA_VERSION,
-      intentId: window.crypto.randomUUID(),
-      viewId: current.viewId,
-      mainSessionId: current.session.id,
-      expectedRevision: current.revision,
-      type: "permissions.set-access-policy",
-      payload: {
-        expectedRevision: screen.accessPolicy.revision,
-        accessMode: mode,
+    const envelope = { schemaVersion: FRONTEND_SCHEMA_VERSION, intentId: window.crypto.randomUUID(), viewId: current.viewId,
+      mainSessionId: current.session.id, expectedRevision: current.revision } as const;
+    if (screen.executionMode === "permissions" && (control === "network" || !screen.activeWorkspaceTarget))
+      throw new Error("The current workspace access policy is unavailable");
+    const result = screen.executionMode === "permissions" && screen.activeWorkspaceTarget
+      ? await protocol.dispatch({ ...envelope, type: "permissions.set-workspace-policy", payload: {
+        target: screen.activeWorkspaceTarget, expectedRevision: screen.accessPolicy.revision, accessMode: mode,
+        requestBehavior: screen.accessPolicy.requestBehavior ?? "ask",
+      } })
+      : await protocol.dispatch({ ...envelope, type: "permissions.set-access-policy", payload: {
+        expectedRevision: screen.accessPolicy.revision, accessMode: mode,
+        ...(screen.accessPolicy.requestBehavior !== undefined ? { requestBehavior: screen.accessPolicy.requestBehavior } : {}),
         agentNetworkAccess: mode === "full" || (control === "network" ? value === "on" : screen.accessPolicy.agentNetworkAccess),
-      },
-    });
+      } });
     if (!isCurrent()) return;
     if (result.status !== "applied" && result.status !== "accepted") {
       throw new Error(result.notice?.message ?? "Chatobby rejected the access-mode change");

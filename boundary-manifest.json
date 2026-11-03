@@ -51,6 +51,11 @@
     "versions.json",
     "vitest.config.ts",
     "docs/api/feed.md",
+    "docs/api/permissions.md",
+    "docs/api/context.md",
+    "docs/api/browser.md",
+    "docs/api/mcp.md",
+    "docs/api/composer.md",
     "docs/architecture/frontend-modules.md",
     "docs/architecture/frontend-styles.md",
     "docs/architecture/managed-runtime-lifecycle.md",
@@ -108,6 +113,18 @@
     "node_modules",
     "release",
     "styles.css"
+  ],
+  "recursiveExcludedExportNames": [
+    ".actions-storage",
+    ".chatobby",
+    ".chatobby-mcp-replies",
+    ".claude",
+    ".codex",
+    ".git",
+    ".obsidian",
+    "ci-artifacts",
+    "data.json",
+    "node_modules"
   ],
   "officialReleaseAssets": [
     "main.js",

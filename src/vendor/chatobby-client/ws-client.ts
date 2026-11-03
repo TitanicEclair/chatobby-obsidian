@@ -34,6 +34,7 @@ import type {
 	WsStoredSessionSelector,
 } from "./connector-types.ts";
 import { parseObsidianVaultAccessContextStamp } from "./connector-types.ts";
+import { dispatchExtensionUIRequest, isExtensionUIRequest } from "./extension-ui.ts";
 
 export type {
 	ObsidianVaultAccessContextStamp,
@@ -810,9 +811,9 @@ export class ChatobbyWsClient {
 		if (parsed.type !== "extension_ui_request" || !this.extensionUIHandler || !isExtensionUIRequest(request)) {
 			return;
 		}
-		void this.extensionUIHandler(request)
-			.then((result) => this.sendExtensionUIResponse(request.id, result))
-			.catch(() => this.sendExtensionUIResponse(request.id, undefined));
+		void dispatchExtensionUIRequest(request, this.extensionUIHandler, (id, result) =>
+			this.sendExtensionUIResponse(id, result),
+		);
 	}
 
 	private sendExtensionUIResponse(id: string, result: unknown): void {
@@ -883,15 +884,6 @@ export class ChatobbyWsClient {
 		this.frontendLifecycle = state;
 		for (const listener of this.frontendLifecycleListeners) listener(state);
 	}
-}
-
-function isExtensionUIRequest(value: unknown): value is WsExtensionUIRequest {
-	return (
-		isRecord(value) &&
-		typeof value.id === "string" &&
-		["select", "confirm", "input", "editor", "notify", "setWidget", "setTitle"].includes(String(value.method)) &&
-		isRecord(value.params)
-	);
 }
 
 function parseRuntimeServerHandshakeData(data: unknown): RuntimeServerHello | RuntimeServerPending | null {

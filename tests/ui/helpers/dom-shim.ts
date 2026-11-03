@@ -2,6 +2,7 @@ interface CreateElOptions {
   cls?: string;
   text?: string;
   value?: string;
+  href?: string;
   attr?: Record<string, string>;
 }
 
@@ -33,6 +34,7 @@ if (typeof HTMLElement !== "undefined") {
     if (options?.cls) el.className = options.cls;
     if (options?.text) el.textContent = options.text;
     if (options?.value !== undefined && "value" in el) el.value = options.value;
+    if (options?.href !== undefined) el.setAttribute("href", options.href);
     if (options?.attr) {
       for (const [name, value] of Object.entries(options.attr)) {
         el.setAttribute(name, value);

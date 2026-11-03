@@ -20,8 +20,8 @@
 @import "./feed/subagent-messages.css";
 @import "./feed/channel-messages.css";
 @import "./feed/tools/tools.css";
-@import "./memory/memory-view.css";
-@import "./permissions/permissions-view.css";
+@import "../features/memory/ui/memory-view.css";
+@import "../features/permissions/ui/permissions-view.css";
 
 /* Runtime-projected feature pages. Import order is part of the cascade. */
 @import "../features/subagents/ui/subagents.css";

@@ -1,7 +1,6 @@
-import type { FrontendProtocolController } from "../../../frontend/frontend-protocol-controller";
+import type { FrontendIntentInput, FrontendProtocolController } from "../../../frontend/frontend-protocol-controller";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type {
-  FrontendIntent,
   FrontendProjectMessageSearchHitViewModel,
   FrontendProjectRootViewModel,
   FrontendProjectScreenViewModel,
@@ -9,7 +8,8 @@ import type {
 } from "../../../vendor/chatobby-client/frontend-contracts.js";
 import type { App } from "obsidian";
 import type { SessionAdvancedAction } from "../../../ui/session/session-maintenance";
-import { ProjectsView, type ProjectsViewIntent } from "../ui/projects-view";
+import { ProjectsView } from "../ui/projects-view";
+import { prepareProjectAction, type DirectoryProjectInput, type ProjectsViewIntent, type ProjectWireAction } from "./project-actions";
 import { requestProjectMarkerRecovery } from "../ui/project-marker-recovery-modal";
 import {
 	ProjectCreationDraftStore,
@@ -92,11 +92,7 @@ export class ProjectsScreenController {
     if (refresh) void this.refreshAndSelect(projectId);
   }
 
-	async createForCurrentSession(input: {
-		readonly name: string;
-		readonly description?: string;
-		readonly vaultRelativePath: string;
-	}): Promise<void> {
+	async createForCurrentSession(input: DirectoryProjectInput): Promise<void> {
 		await this.dispatch({
 			type: "projects.create",
 			payload: {
@@ -220,18 +216,18 @@ export class ProjectsScreenController {
   }
 
   private async dispatchPrepared(
-    prepared: Pick<FrontendIntent, "type" | "payload">,
+    prepared: ProjectWireAction,
     intentId: string,
   ): Promise<void> {
     const snapshot = this.options.getStore().snapshot;
     if (!snapshot) throw new Error("Chatobby frontend is not initialized");
-    const intent = {
+    const intent: FrontendIntentInput = {
       schemaVersion: 1 as const,
-			intentId,
+      intentId,
       viewId: snapshot.viewId,
       mainSessionId: snapshot.session?.id,
-			...prepared,
-    } as FrontendIntent;
+      ...prepared,
+    };
     const outcome = await this.options.getProtocol().dispatch(intent);
     if (outcome.status === "rejected" || outcome.status === "conflict") {
       throw new ProjectIntentError(
@@ -346,67 +342,13 @@ export class ProjectsScreenController {
 		}, draft.intentId);
 	}
 
-	private async prepareDirectoryCandidate(
-		input: ProjectsViewIntent,
-		intentId: string,
-	): Promise<Pick<FrontendIntent, "type" | "payload">> {
-		if (
-			input.type !== "projects.create" &&
-			input.type !== "projects.root-add" &&
-			input.type !== "projects.roots-add-batch" &&
-			input.type !== "projects.root-relink"
-		) return input;
-		if (input.type === "projects.roots-add-batch") {
-			const candidates = await Promise.all(input.payload.roots.map(async (root) => {
-				const candidate = await this.options.getProtocol().registerProjectDirectoryCandidate({
-					schemaVersion: 1,
-					intentId,
-					operation: "roots-add-batch",
-					absolutePath: root.systemAbsolutePath,
-				});
-				return {
-					directoryCandidateRef: candidate.directoryCandidateRef,
-					label: candidate.label,
-					markerPolicy: root.markerPolicy,
-					directoryReuse: root.directoryReuse,
-				};
-			}));
-			return {
-				type: input.type,
-				payload: {
-					projectId: input.payload.projectId,
-					expectedProjectRevision: input.payload.expectedProjectRevision,
-					roots: candidates,
-				},
-			};
-		}
-		const absolutePath = input.payload.systemAbsolutePath;
-		if (!absolutePath) return input;
-		const operation = input.type === "projects.create"
-			? "create"
-			: input.type === "projects.root-add"
-				? "root-add"
-				: "root-relink";
-		const candidate = await this.options.getProtocol().registerProjectDirectoryCandidate({
-			schemaVersion: 1,
-			intentId,
-			operation,
-			absolutePath,
-		});
-		if (input.type === "projects.create") {
-			const { systemAbsolutePath: _systemAbsolutePath, ...payload } = input.payload;
-			return { type: input.type, payload: { ...payload, directoryCandidateRef: candidate.directoryCandidateRef } };
-		}
-		if (input.type === "projects.root-add") {
-			const { systemAbsolutePath: _systemAbsolutePath, ...payload } = input.payload;
-			return {
-				type: input.type,
-				payload: { ...payload, label: candidate.label, directoryCandidateRef: candidate.directoryCandidateRef },
-			};
-		}
-		const { systemAbsolutePath: _systemAbsolutePath, ...payload } = input.payload;
-		return { type: input.type, payload: { ...payload, directoryCandidateRef: candidate.directoryCandidateRef } };
-	}
+  private prepareDirectoryCandidate(input: ProjectsViewIntent, intentId: string): Promise<ProjectWireAction> {
+    return prepareProjectAction(
+      input,
+      intentId,
+      (request) => this.options.getProtocol().registerProjectDirectoryCandidate(request),
+    );
+  }
 
   private currentModel(): FrontendProjectScreenViewModel | null {
     return this.options.getStore().snapshot?.screenModels.find(

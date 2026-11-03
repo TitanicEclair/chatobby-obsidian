@@ -12,6 +12,7 @@ import type { SubagentScreenActions } from "../domain/screen-model";
 import type { SubagentViewState } from "../state/subagent-store";
 import { renderArtifacts, renderPendingDecision } from "./agent-resources";
 import { routePrintableKeyToComposer } from "../../../ui/composer/view-key-routing";
+import { SubagentPermissionComposer } from "./permission-composer";
 
 export type SubagentFeedHostFactory = (getFeedStore: () => FeedStore) => FeedHost;
 
@@ -31,6 +32,8 @@ export class AgentConversationView extends ChatobbyComponent {
   private composerErrorEl: HTMLElement | null = null;
   private controlsEl: HTMLElement | null = null;
   private decisionsEl: HTMLElement | null = null;
+  private permissionHostEl: HTMLElement | null = null;
+  private readonly permissionComposer: SubagentPermissionComposer;
   private resourcesEl: HTMLElement | null = null;
   private earlierButton: HTMLButtonElement | null = null;
   private runId: string | null = null;
@@ -46,12 +49,14 @@ export class AgentConversationView extends ChatobbyComponent {
 
   constructor(private readonly props: AgentConversationViewProps) {
     super();
+    this.permissionComposer = new SubagentPermissionComposer(() => this.permissionHostEl, props.actions);
   }
 
   update(state: SubagentViewState): void {
     const run = state.selectedRunId ? state.runs.get(state.selectedRunId) : undefined;
     const node = run && state.selectedNodeId ? run.nodes[state.selectedNodeId] : undefined;
     if (!run || !node) {
+      this.permissionComposer.update("");
       this.saveActiveDraft();
       this.activeDraftKey = null;
       this.runId = null;
@@ -62,6 +67,7 @@ export class AgentConversationView extends ChatobbyComponent {
     }
     this.runId = run.id;
     this.nodeId = node.id;
+    this.permissionComposer.update(JSON.stringify([state.runtimeId, run.parentSessionId, run.id, node.id]), run.id, node.id, node.pendingPermission);
     this.activateDraft(`${run.id}:${node.id}`);
     this.feedStore.dispatch({
       type: "feed.document-projection-synchronized",
@@ -80,10 +86,12 @@ export class AgentConversationView extends ChatobbyComponent {
   }
 
   handleViewKeydown(event: KeyboardEvent): boolean {
+    if (this.permissionComposer.handleKeydown(event)) return true;
     return this.inputEl ? routePrintableKeyToComposer(event, this.inputEl) : false;
   }
 
   destroy(): void {
+    this.permissionComposer.destroy();
     this.feedRenderer?.destroy();
     this.feedRenderer = null;
     super.destroy();
@@ -128,6 +136,7 @@ export class AgentConversationView extends ChatobbyComponent {
     composer.slashMenuEl.remove();
     composer.stopBtn.remove();
     this.composerCardEl = composer.cardEl;
+    this.permissionHostEl = composer.permissionRequestHostEl;
     this.inputEl = composer.inputEl;
     this.inputEl.addClass("chatobby-subagent-conversation__input");
     this.inputHighlightEl = composer.inputHighlightEl;
@@ -146,6 +155,7 @@ export class AgentConversationView extends ChatobbyComponent {
       this.updateSendAvailability();
     });
     this.inputEl.addEventListener("keydown", (event) => {
+      if (this.permissionComposer.handleKeydown(event)) return;
       if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
       event.preventDefault();
       void this.submit();
@@ -215,7 +225,7 @@ export class AgentConversationView extends ChatobbyComponent {
     if (fingerprint === this.decisionFingerprint) return;
     this.decisionFingerprint = fingerprint;
     this.decisionsEl.empty();
-    renderPendingDecision(this.decisionsEl, runId, node, this.props.actions);
+    renderPendingDecision(this.decisionsEl, runId, node.pendingPermission?.permissionRequest ? { ...node, pendingPermission: undefined } : node, this.props.actions);
     this.decisionsEl.toggleClass("is-hidden", this.decisionsEl.childElementCount === 0);
   }
 

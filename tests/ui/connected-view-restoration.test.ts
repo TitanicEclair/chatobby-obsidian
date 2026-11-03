@@ -5,6 +5,39 @@ import {
 } from "../../src/ui/controller/connected-view-restoration";
 
 describe("restoreConnectedView", () => {
+  it("invalidates old work when the same transport reconnects in a new epoch", async () => {
+    let releaseOld!: () => void;
+    const old = new Promise<void>((resolve) => { releaseOld = resolve; });
+    const contexts: Array<{ isCurrent(): boolean }> = [];
+    const synchronizeFrontend = vi.fn(async () => {});
+    const markRestored = vi.fn();
+    const reportSessionError = vi.fn();
+    const controller = new ConnectedViewRestorationController<object>({
+      isCurrent: () => true,
+      restoreSession: async (context) => {
+        contexts.push(context);
+        if (contexts.length === 1) { await old; throw new Error("Old connection failed"); }
+      },
+      synchronizeFrontend, synchronizeActiveScreen: vi.fn(), markRestored,
+      reportSessionError, reportFrontendError: vi.fn(),
+    });
+    const transport = {};
+    controller.synchronize(transport);
+    controller.synchronize(transport);
+    expect(contexts).toHaveLength(1);
+    controller.invalidate();
+    controller.synchronize(transport);
+    expect(contexts).toHaveLength(2);
+    expect(contexts[0]?.isCurrent()).toBe(false);
+    expect(contexts[1]?.isCurrent()).toBe(true);
+    await vi.waitFor(() => expect(markRestored).toHaveBeenCalledOnce());
+    releaseOld();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(synchronizeFrontend).toHaveBeenCalledOnce();
+    expect(markRestored).toHaveBeenCalledOnce();
+    expect(reportSessionError).not.toHaveBeenCalled();
+  });
+
   it("restores the session before bootstrapping and loading the active screen", async () => {
     const order: string[] = [];
     await restoreConnectedView({
@@ -75,12 +108,13 @@ describe("restoreConnectedView", () => {
   it("de-duplicates one connection restoration and permits a later reconnect", async () => {
     let release: (() => void) | undefined;
     const synchronizeFrontend = vi.fn(() => new Promise<void>((resolve) => { release = resolve; }));
+    const markRestored = vi.fn();
     const controller = new ConnectedViewRestorationController<object>({
       isCurrent: () => true,
       restoreSession: async () => undefined,
       synchronizeFrontend,
       synchronizeActiveScreen: vi.fn(),
-      markRestored: vi.fn(),
+      markRestored,
       reportSessionError: vi.fn(),
       reportFrontendError: vi.fn(),
     });
@@ -90,9 +124,11 @@ describe("restoreConnectedView", () => {
     controller.synchronize(transport);
     await vi.waitFor(() => expect(synchronizeFrontend).toHaveBeenCalledOnce());
     release?.();
-    await vi.waitFor(() => expect(release).toBeDefined());
-    await Promise.resolve();
+    await vi.waitFor(() => expect(markRestored).toHaveBeenCalledOnce());
+    controller.invalidate();
     controller.synchronize(transport);
     await vi.waitFor(() => expect(synchronizeFrontend).toHaveBeenCalledTimes(2));
+    release?.();
+    await vi.waitFor(() => expect(markRestored).toHaveBeenCalledTimes(2));
   });
 });

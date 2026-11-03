@@ -11,20 +11,28 @@ unlock features, raise limits, or change the data Chatobby can access.
 3. Ask Chatobby to summarize a note, compare linked ideas or make an edit.
 4. Add the **Chatobby Guide** from Settings for the full feature reference.
 
-## Full access in 0.5.3
+## Workspace permissions
 
-Sandboxing is temporarily unavailable. All chats, subagents and Events run with
-**Full access**: files, commands and networking use your normal OS account,
-including files outside the Vault or Project. Access-mode and network controls
-are hidden. Older saved choices are retained but do not constrain this release.
+Choose **Read-only**, **Workspace**, or **Full access** in the composer. The last
+choice is saved for the Vault or Project and shared by its chats. New workspaces
+start in Workspace mode.
 
-Project memory and session-history queries remain scoped to their workspace.
-These application filters do not restrict ordinary file or shell access.
+Read-only allows reading, searching and web access. Workspace adds file creation
+and edits within its roots. Restricted modes accept only approved command forms;
+other execution requires an exception. Full access uses your account's file,
+command and network access. These checks do not create an operating-system sandbox.
 
-**Obsidian app access** enables tools that operate the app itself, including its
-whole-vault access. It defaults on for Vault chats and off for Projects. Existing
-explicit choices are preserved. Manage it and individual MCP connections in
-Permissions.
+In **Permissions**, select an existing workspace to change its mode, choose
+**Ask me** or **Reject automatically**, and enable or disable **Chatobby and
+Obsidian tools**. Both Vault and Project tool access default On; explicit Off
+choices are preserved. Enabled tools still pass through the selected mode.
+
+When the agent requests an exception, an Obsidian notification points to the
+request above the composer. Review its action and reason, then choose **Allow
+once** or **Deny**. Your draft stays intact. Enabled MCP servers and tools remain
+available in every mode and are managed in Plugins.
+
+Project memory and session-history queries keep their independent workspace scope.
 
 ## What is included
 

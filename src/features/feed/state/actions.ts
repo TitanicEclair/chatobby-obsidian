@@ -1,4 +1,4 @@
-import type { AttachmentContent, ExtensionPanelAction, ThinkingDisplayMode } from "../../../types";
+import type { AttachmentContent, ExtensionPanelAction, ThinkingDisplayMode } from "../domain/presentation";
 import type { FeedScrollState } from "../domain/entities";
 import type { BlockId, ToolCallId } from "../domain/ids";
 import type { FeedDocumentProjection } from "../domain/projections";

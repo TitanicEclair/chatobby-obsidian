@@ -4,10 +4,11 @@ import { SessionTransitionIndicator } from "./session-transition-indicator";
 /** Couples the session-operation domain to its blocking readiness presentation. */
 export class SessionTransitionCoordinator {
   private readonly indicator: SessionTransitionIndicator;
+  private readonly presentationLifetime = new AbortController();
   private unsubscribe: (() => void) | null = null;
 
   constructor(
-    host: HTMLElement,
+    private readonly host: HTMLElement,
     private readonly operations: OperationCoordinator,
     private readonly flush: () => void,
   ) {
@@ -20,13 +21,17 @@ export class SessionTransitionCoordinator {
   }
 
   async settle(): Promise<void> {
+    const signal = this.presentationLifetime.signal;
+    if (signal.aborted) return;
     this.flush();
-    await nextAnimationFrame();
+    await nextPresentationFrame(this.host.ownerDocument, signal);
+    if (signal.aborted) return;
     this.flush();
-    await nextAnimationFrame();
+    await nextPresentationFrame(this.host.ownerDocument, signal);
   }
 
   destroy(): void {
+    this.presentationLifetime.abort();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.indicator.destroy();
@@ -37,6 +42,30 @@ export class SessionTransitionCoordinator {
   }
 }
 
-function nextAnimationFrame(): Promise<void> {
-  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+/** Hidden documents do not paint; closing a view retires only its presentation wait. */
+function nextPresentationFrame(document: Document, signal: AbortSignal): Promise<void> {
+  const ownerWindow = document.defaultView;
+  if (!ownerWindow || document.hidden || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    let frame: number | undefined;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (frame !== undefined) ownerWindow.cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) finish();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    signal.addEventListener("abort", finish, { once: true });
+    frame = ownerWindow.requestAnimationFrame(() => {
+      frame = undefined;
+      finish();
+    });
+    if (document.hidden || signal.aborted) finish();
+  });
 }

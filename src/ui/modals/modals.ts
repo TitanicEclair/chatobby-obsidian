@@ -42,7 +42,8 @@ export class PromptModal extends Modal {
     const submit = actions.createEl("button", { text: this.opts.submitLabel ?? "OK", cls: "mod-cta" });
     submit.onclick = () => this.submit();
 
-    this.inputEl.addEventListener("keydown", (event: KeyboardEvent) => {
+    const keyboardTarget: HTMLElement = this.inputEl;
+    keyboardTarget.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && (!this.opts.multiline || event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         this.submit();

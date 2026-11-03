@@ -13,7 +13,7 @@ import type {
   ToolItem,
   TurnSummary,
   UserBlock,
-} from "../../../types";
+} from "./presentation";
 import type { AssistantCallId, BlockId, ToolCallId } from "./ids";
 
 export type ThinkingBlockEntity = Readonly<Omit<ThinkingBlock, "id" | "turnId" | "displayMode"> & {

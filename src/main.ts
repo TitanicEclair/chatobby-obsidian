@@ -3,7 +3,7 @@
 // This file is pure wiring: it constructs the settings store, runtime manager,
 // transport, and command registry, and connects them. Functionality lives in
 // dedicated modules:
-//   - persistence           → src/state/settings-store.ts
+//   - persistence           → src/features/settings/infrastructure/settings-store.ts
 //   - runtime lifecycle     → src/runtime/application/runtime-manager.ts
 //   - command actions       → src/commands/actions/* (registered via CommandRegistry)
 //   - obsidian:// handler   → src/uri-handler.ts
@@ -13,18 +13,17 @@
 
 import { MarkdownView, Notice, Plugin } from "obsidian";
 import { join } from "node:path";
-import { BridgeConnectionCoordinator, ObsidianBridgeClient } from "./obsidian-bridge";
+import { BridgeConnectionCoordinator, disposeBrowserConsoleCaptures, ObsidianBridgeClient } from "./obsidian-bridge";
 import { parseObsidianBridgeConnectionConfig } from "./vendor/@chatobby/obsidian-protocol/index.js";
 import { ChatobbyView } from "./ui/view";
 import { CommandRegistry, type ChatobbyServices } from "./commands/registry";
 import { buildAllActions } from "./commands/actions";
-import { SettingsStore } from "./state/settings-store";
+import { DEFAULT_PLUGIN_SETTINGS, SettingsStore, type PluginSettings } from "./features/settings/public";
 import { ChatobbyTransport } from "./transport/ws-client";
 import { ChatobbySettingTab } from "./settings";
 import { VIEW_TYPE_CHATOBBY } from "./view-type";
 import { handleChatobbyUri } from "./uri-handler";
-import type { PluginSettings, SessionPreferences } from "./types";
-import { DEFAULT_PLUGIN_SETTINGS } from "./types";
+import type { SessionPreferences } from "./types";
 import { getChatobbyVaultRuntimePaths, initializeChatobbyVaultIdentity } from "./vault-runtime";
 import { DefaultChatobbyRuntimeManager } from "./runtime/application/runtime-manager";
 import type { ReadyRuntime, RuntimeActionReason, RuntimeLifecycleState } from "./runtime/public";
@@ -43,6 +42,7 @@ import { OperationCoordinator, type ActiveOperation, type OperationDescriptor, t
 import { activateChatobbyLeaf } from "./ui/controller/active-chatobby-leaf";
 import {
 	ProjectDirectoryObservationService,
+	DirectoryProjectLaunch,
 	ProjectNavigatorView,
 	VIEW_TYPE_CHATOBBY_NAVIGATOR,
 	requestDirectoryProjectDecision,
@@ -64,7 +64,6 @@ import { createFrontendNegotiationRequest } from "./ui/controller/frontend-boots
 import {
 	CHATOBBY_FRONTEND_PROTOCOL_VERSION,
 	frontendId,
-	type FrontendProjectSummaryViewModel,
 } from "./vendor/chatobby-client/frontend-contracts.js";
 import type { ChatobbyGuideChannelAsset } from "./vendor/chatobby-client/ws-client.js";
 import { CHATOBBY_RUNTIME_PROTOCOL_VERSION } from "./vendor/chatobby-client/ws-client.js";
@@ -86,6 +85,7 @@ import { ProductIntroduction } from "./ui/modals/product-intro-modal";
 export default class ChatobbyPlugin extends Plugin {
   readonly workspacePages = new WorkspacePageRegistry(this);
   private readonly introduction = new ProductIntroduction({
+    isDevelopmentBuild: () => this.buildMode === "development",
     app: this.app,
     version: this.manifest.version,
     getSettings: () => this.settings,
@@ -113,6 +113,18 @@ export default class ChatobbyPlugin extends Plugin {
     config,
   ));
   private readonly projectDirectoryObservations = new ProjectDirectoryObservationService(this.bridgeCoordinator);
+  private readonly directoryProjects = new DirectoryProjectLaunch<ChatobbyView>({
+    ensureRuntime: () => this.ensureRuntime("user-action"),
+    ensureUtilityTransport: () => this.frontendSessions.ensureUtility(),
+    negotiationRequest: (viewId) => createFrontendNegotiationRequest(this.app, this, viewId),
+    getLaunchBehavior: () => this.settings.directoryProjectLaunchBehavior,
+    rememberLaunchBehavior: (action) => this.updateSettings({ directoryProjectLaunchBehavior: action }),
+    requestDecision: (input) => requestDirectoryProjectDecision(this.app, input),
+    requestDraft: (path) => requestDirectoryProjectDraft(this.app, path),
+    getActiveView: () => this.getActiveView(),
+    openBlankView: (path) => this.openBlankView(path),
+    revealView: async (view) => { await this.app.workspace.revealLeaf(view.leaf); },
+  });
   private readonly frontendSessions = new FrontendSessionRegistry({
     createTransport: (runtime) =>
       new ChatobbyTransport(
@@ -295,13 +307,13 @@ export default class ChatobbyPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       addFileExplorerSessionMenuItems(menu, file, {
         startNewSession: async (vaultDirectoryPath) => {
-			await this.startSessionFromVaultDirectory(vaultDirectoryPath);
+			await this.directoryProjects.start(vaultDirectoryPath);
         },
         resumeSession: async (vaultDirectoryPath) => {
-			await this.openSessionsFromVaultDirectory(vaultDirectoryPath);
+			await this.directoryProjects.browse(vaultDirectoryPath);
         },
         createProject: async (vaultDirectoryPath) => {
-			await this.createProjectFromVaultDirectory(vaultDirectoryPath);
+			await this.directoryProjects.create(vaultDirectoryPath);
         },
       });
     }));
@@ -339,6 +351,7 @@ export default class ChatobbyPlugin extends Plugin {
 
   onunload(): void {
     this.unloading = true;
+    disposeBrowserConsoleCaptures(this.app);
     this.introduction.dispose();
     this.workspacePages.dispose();
     this.runtimeBootstrap.dispose();
@@ -561,105 +574,6 @@ export default class ChatobbyPlugin extends Plugin {
     if (!(view instanceof ChatobbyView)) throw new Error("Obsidian did not create the Chatobby directory view");
     return view;
   }
-
-	private async startSessionFromVaultDirectory(vaultDirectoryPath: string): Promise<void> {
-		const canonical = await this.findCanonicalDirectoryProject(vaultDirectoryPath);
-		if (!canonical) {
-			const view = await this.openBlankView(vaultDirectoryPath);
-			await view.createProjectForCurrentSession({
-				name: projectNameFromDirectory(vaultDirectoryPath),
-				vaultRelativePath: vaultDirectoryPath,
-			});
-			return;
-		}
-
-		let action = this.settings.directoryProjectLaunchBehavior;
-		if (action === "ask") {
-			const decision = await requestDirectoryProjectDecision(this.app, {
-				projectName: canonical.name,
-				vaultRelativePath: vaultDirectoryPath,
-			});
-			if (!decision) return;
-			action = decision.action;
-			if (decision.remember) {
-				await this.updateSettings({ directoryProjectLaunchBehavior: decision.action });
-			}
-		}
-
-		if (action === "reuse-canonical") {
-			const view = await this.openBlankView(vaultDirectoryPath);
-			await view.createSessionForProject(canonical.projectId);
-			return;
-		}
-
-		const draft = await requestDirectoryProjectDraft(this.app, vaultDirectoryPath);
-		if (!draft) return;
-		const view = await this.openBlankView(vaultDirectoryPath);
-		await view.createProjectForCurrentSession({
-			name: draft.name,
-			...(draft.description ? { description: draft.description } : {}),
-			vaultRelativePath: vaultDirectoryPath,
-		});
-	}
-
-	private async createProjectFromVaultDirectory(vaultDirectoryPath: string): Promise<void> {
-		const draft = await requestDirectoryProjectDraft(this.app, vaultDirectoryPath);
-		if (!draft) return;
-		const view = await this.openBlankView(vaultDirectoryPath);
-		await view.createProjectForCurrentSession({
-			name: draft.name,
-			...(draft.description ? { description: draft.description } : {}),
-			vaultRelativePath: vaultDirectoryPath,
-		});
-	}
-
-	private async openSessionsFromVaultDirectory(vaultDirectoryPath: string): Promise<void> {
-		const canonical = await this.findCanonicalDirectoryProject(vaultDirectoryPath);
-		if (!canonical) {
-			const view = this.getActiveView() ?? await this.openBlankView();
-			await this.app.workspace.revealLeaf(view.leaf);
-			view.commandOpenPage("projects");
-			return;
-		}
-		const view = await this.openBlankView(vaultDirectoryPath);
-		await view.openProjectSessions(canonical.projectId);
-	}
-
-	private async findCanonicalDirectoryProject(
-		vaultDirectoryPath: string,
-	): Promise<FrontendProjectSummaryViewModel | undefined> {
-		await this.ensureRuntime("user-action");
-		const transport = await this.frontendSessions.ensureUtility();
-		if (!transport.isConnected) throw new Error("Chatobby runtime did not connect.");
-		const viewId = "chatobby-project-directory-probe";
-		const negotiation = await transport.negotiateFrontend(createFrontendNegotiationRequest(this.app, this, viewId));
-		const subscription = await transport.subscribeFrontend({
-			schemaVersion: 1,
-			protocolVersion: negotiation.protocolVersion,
-			requestId: frontendId(crypto.randomUUID(), "requestId"),
-			runtimeInstanceId: negotiation.runtimeInstanceId,
-			viewId: negotiation.viewId,
-		});
-		if (subscription.status === "resync-required") throw new Error(subscription.error.message);
-		const response = await transport.getFrontendScreen({
-			schemaVersion: 1,
-			protocolVersion: negotiation.protocolVersion,
-			runtimeInstanceId: negotiation.runtimeInstanceId,
-			viewId: negotiation.viewId,
-			requestId: frontendId(crypto.randomUUID(), "requestId"),
-			requestEpoch: 1,
-			baseSequence: subscription.sequence,
-			screenId: "projects",
-		});
-		const screen = response.screen;
-		if (screen.screenId !== "projects") throw new Error("Chatobby returned the wrong Project screen.");
-		const normalized = normalizeVaultDirectoryPath(vaultDirectoryPath);
-		return screen.projects.find(
-			(project) =>
-				project.lifecycle === "active" &&
-				normalizeVaultDirectoryPath(project.canonicalVaultRelativePath ?? "") === normalized,
-		);
-	}
 
   /** Open a distinct session work surface, or focus the leaf already owning a resumed path. */
   async openSessionView(vaultDirectoryPath: string, sessionPath?: string): Promise<ChatobbyView> {
@@ -1012,12 +926,4 @@ function containsRuntimeEndpointOverride(patch: Partial<PluginSettings>): boolea
     || patch.externalServerUrl !== undefined
     || patch.developerCommand !== undefined
     || patch.developerArgs !== undefined;
-}
-
-function normalizeVaultDirectoryPath(value: string): string {
-	return value.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "");
-}
-
-function projectNameFromDirectory(value: string): string {
-	return normalizeVaultDirectoryPath(value).split("/").filter(Boolean).at(-1) ?? "New Project";
 }

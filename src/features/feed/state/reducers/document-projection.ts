@@ -1,4 +1,4 @@
-import type { FeedBlock, ToolBlock, ToolItem, UserMessage } from "../../../../types";
+import type { FeedBlock, ToolBlock, ToolItem, UserMessage } from "../../domain/presentation";
 import type { FeedBlockEntity, ToolItemEntity } from "../../domain/entities";
 import { assistantCallId, blockId, toolCallId } from "../../domain/ids";
 import type { FeedDocumentProjection } from "../../domain/projections";

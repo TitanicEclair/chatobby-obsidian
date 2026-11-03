@@ -1,4 +1,4 @@
-import type { FeedBlock, ThinkingBlock, ToolBlock, ToolItem, TurnSummary } from "../../../types";
+import type { FeedBlock, ThinkingBlock, ToolBlock, ToolItem, TurnSummary } from "../domain/presentation";
 import type { BlockId, ToolCallId } from "../domain/ids";
 import type { FeedSnapshot, UnknownFeedSnapshot } from "../domain/snapshots";
 import type { FeedAction } from "./actions";

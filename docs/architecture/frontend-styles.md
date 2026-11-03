@@ -12,7 +12,7 @@ intentional cascade order. The connector build emits the release-root
 
 Never edit root `styles.css` by hand. It is a generated release artifact and is
 excluded from the reviewable source projection. Make changes in the owning
-`src/ui/**/*.css` module, run the checks, and let the candidate build regenerate
+`src/ui/**/*.css` or `src/features/**/*.css` module, run the checks, and let the build regenerate
 the artifact when a release workflow actually requires it.
 
 ## Cascade order
@@ -44,8 +44,8 @@ page layouts, and responsive feature variants.
 | `ui/feed/channel-messages.css` | Channel-specific message decoration inside a feed. |
 | `ui/feed/subagent-messages.css` | Subagent communication cards inside a feed. |
 | `ui/feed/divider.css` | Feed dividers and compact continuity markers. |
-| `ui/memory/memory-view.css` | Memory screen sections, list rows, and editing controls. |
-| `ui/permissions/permissions-view.css` | Permission rules, prompts, scope controls, and decision states. |
+| `features/memory/ui/memory-view.css` | Memory screen sections, list rows, and editing controls; unchanged position in the cascade. |
+| `features/permissions/ui/permissions-view.css` | Permission rules, prompts, scope controls, and decision states. |
 | `ui/shared/page-shell.css` | Shared full-page header, rail/content layout, loading, empty, and error hierarchy. |
 | `ui/modals/modals.css` | Connector modal framing and common modal rows/actions. |
 | `ui/settings/settings.css` | Reusable settings fields, labels, descriptions, and control rows. |

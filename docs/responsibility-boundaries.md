@@ -120,33 +120,31 @@ missing Project folder.
 
 ## Permissions and passive Obsidian context
 
-Chatobby 0.5.3 supplies one product-owned effective Full/Network-On policy to
-all sessions, children, Events and tools. Sandboxing is temporarily unavailable.
-Stored mode/network records retain their bytes and revisions for rollback;
-they are inactive in this release. Older clients cannot change those choices.
-The connector hides mode/network controls and renders the runtime's explicit
-Full-access disclosure. An older connected runtime remains identified as older.
-Project memory and history-query scope are independent of filesystem access.
+The runtime owns Read-only, Workspace and Full access, persisted per authenticated
+Vault or Project. New workspaces default to Workspace with reasoned requests
+allowed. The composer changes the active workspace's mode; the Permissions page
+can select any existing workspace without changing the active chat. Policy
+updates carry that workspace's revision and explicit stable target; the runtime
+revalidates its identity before accepting the mutation. There is no connector
+permission store or path-based inference.
 
-The separate Obsidian vault-access choice
-is keyed to the authenticated Project or Vault. The connector renders it only after the
-optional `obsidian-vault-access` capability is negotiated and a current target
-projection is available. Grant updates carry the runtime's grant revision and
-expected session/binding revisions; the host derives the target. The available
-grant's own `revision`, not the session mode revision, supplies its CAS input. There is no
-connector grant store or folder-based default. Project defaults are Off, normal
-Vault defaults are On, and conservative migrated defaults may be Off; the
-runtime's projected choice, not the connector, is authoritative.
+The grouped **Chatobby and Obsidian tools** switch defaults On for Vault and
+Project workspaces and retains explicit Off choices. Its independent grant
+revision supplies its CAS input. Enabling tools makes them available to the
+permission handler; it does not bypass the selected mode. MCP server and tool
+choices remain independent and enabled MCP tools remain available in every mode.
 
-This connector requires the paired runtime upgrade. Earlier runtimes reject
-the new capability name; the connector does not guess or retry a weaker
-negotiation. The new runtime accepts older eight-capability clients without
-exposing this control. Optional selection is not a promise that older runtime
-parsers accept newer capability names.
+Out-of-policy operations either fail with a reason or instruct the agent to use
+the dedicated permission-request tool. Structured requests show the exact action
+and reason in a bounded card above the composer, with a single Obsidian Notice.
+Allow once and Deny return a response to the runtime; the connector cannot grant
+future authority. Enter in the composer never approves. Stop, disposal and lost
+runtime requests fail closed. Draft content is preserved while a request is shown.
 
-Obsidian app access controls the supplied Obsidian tools and passive context.
-It does not contain ordinary Full-access file or command tools. Project identity,
-memory scope and enabled MCP tools retain their separate owners.
+These are application permissions. The runtime does not create a native
+filesystem or process sandbox. Project identity, memory scope and history search
+retain their independent owners. Older runtime projections retain their explicit
+compatibility display instead of being relabelled as the new permissions system.
 
 Frontend negotiation reads capabilities only, without collecting passive note
 or editor context. Before each normal prompt, `ChatobbyView` checks fresh
@@ -163,14 +161,17 @@ revocation and bridge rebind. A later eligible demand captures fresh context.
 The paired runtime must also discard legacy event summaries and must not turn
 an invalidation or sequence gap into an unauthorised context read.
 
-## Retained native implementation
+## Retired OS sandboxing
 
-Native setup, verification and recovery contracts remain for development and
-older-runtime compatibility. The 0.5.3 product does not negotiate native setup,
-load sandbox binaries, capture native prerequisites, change ACLs or require
-verification. Signed package inventories remain mandatory. The Full-only
-candidate must contain no native sandbox assets. Retained native tests do not
-represent protection supplied by this release.
+The current development source removes the abandoned OS sandbox package,
+adapters, setup controls and build assets. Read-only, Workspace and Full access,
+exact-operation reviews and native-app tool grants remain application permissions.
+The runtime does not load sandbox binaries, change ACLs or run native setup.
+
+Historical wire fields, receipt readers and rollback inventories remain where
+older runtimes require compatibility; they do not enable OS sandboxing. Existing
+stored evidence is preserved. Signed runtime inventories and exact-pair
+installation checks continue to apply.
 
 ## Channel route
 
@@ -205,3 +206,9 @@ into the connector.
 Feature consumers import only `features/<name>/public.ts`. Feed domain/state code cannot import Obsidian or presentation. Controllers coordinate feature APIs; presentation receives selectors and narrow actions. Raw maps, sets, transactions, and reducer internals remain private.
 
 Architecture enforcement lives in `tests/architecture/feature-boundaries.test.ts` and `scripts/check-public-api.mjs`.
+
+The two existing settings compatibility facades (`src/types.ts` and
+`src/state/settings-store.ts`) re-export only their named owner declarations,
+without loading the UI-bearing public barrel. These exact export exceptions do
+not permit private imports. The [settings guide](../src/features/settings/README.md)
+maps configuration persistence, credential boundaries and regression purposes.

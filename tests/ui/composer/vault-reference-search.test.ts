@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TFile, TFolder, type App } from "obsidian";
+import type { App } from "obsidian";
+import { TFile, TFolder } from "../helpers/obsidian-runtime";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +8,7 @@ import type { FrontendProjectRootViewModel } from "../../../src/vendor/chatobby-
 import {
   searchVaultReferences,
   searchWorkspaceReferences,
-} from "../../../src/ui/composer/vault-reference-search";
+} from "../../../src/ui/composer/references/search";
 
 describe("searchVaultReferences", () => {
   it("searches files and folders while excluding Chatobby and Obsidian internals", () => {
@@ -128,7 +129,7 @@ function projectRoot(
     primary: true,
     locationKind: "external",
     directoryReuse: "none",
-    markerPolicy: "recommended",
+    markerPolicy: "optional",
     recoveryMode: "marker",
     availability: "available",
     availabilityLabel: "Available",

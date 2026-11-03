@@ -3,7 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { getChatobbyVaultRuntimePaths } from "../vault-runtime";
-import type { ComposerAttachment, ComposerAttachmentDelivery, WsPromptAttachment } from "../types";
+import type { ComposerAttachment, ComposerAttachmentDelivery } from "../ui/composer/types";
+import type { WsPromptAttachment } from "../vendor/chatobby-client/connector-types.js";
 
 const TEXT_EXTENSIONS = new Set([
   ".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".tsv", ".xml", ".svg", ".html", ".css", ".js", ".ts", ".tsx", ".jsx", ".py", ".ps1", ".sh",

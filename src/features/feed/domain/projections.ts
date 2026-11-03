@@ -1,4 +1,4 @@
-import type { FeedBlock } from "../../../types";
+import type { FeedBlock } from "./presentation";
 
 /** Flat, materialized feed document supplied by a read-model projection. */
 export interface FeedDocumentProjection {

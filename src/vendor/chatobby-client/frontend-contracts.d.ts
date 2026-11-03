@@ -1,5 +1,18 @@
-import { type FrontendSandboxRevokePayload, type FrontendSandboxSetupPayload, type FrontendSandboxSetupViewModel, type FrontendSandboxVerifyPayload } from "./frontend-sandbox-contracts.js";
+import { type FrontendChoiceOption } from "./frontend/contracts/choices.js";
+import { type FrontendProjectIntentBody } from "./frontend/contracts/projects/intents.js";
+import type { FrontendProjectScreenViewModel } from "./frontend/contracts/projects/models.js";
+export type { FrontendChoiceOption } from "./frontend/contracts/choices.js";
+export type { FrontendProjectAvailabilityFilter, FrontendProjectDetailViewModel, FrontendProjectLifecycleFilter, FrontendProjectMessageSearchHitViewModel, FrontendProjectMessageSearchPageViewModel, FrontendProjectRootViewModel, FrontendProjectScreenViewModel, FrontendProjectSessionDestinationViewModel, FrontendProjectSessionSearchMode, FrontendProjectSessionSort, FrontendProjectSessionViewModel, FrontendProjectSort, FrontendProjectSummaryViewModel, FrontendRunningWorkspaceViewModel, } from "./frontend/contracts/projects/models.js";
+import { type PermissionRequestReview } from "./permission-review.js";
+import { type FrontendPermissionScreenViewModel } from "./frontend/contracts/permission-screen.js";
+import type { FrontendSubagentAgentDefinition, FrontendSubagentArtifactGroupViewModel, FrontendSubagentCapabilitiesViewModel, FrontendSubagentControlAction, FrontendSubagentControlReceiptViewModel, FrontendSubagentMessageViewModel, FrontendSubagentModelViewModel, FrontendSubagentPermissionSnapshotViewModel, FrontendSubagentRunFilter, FrontendSubagentRunSummaryViewModel, FrontendSubagentRunViewModel, FrontendSubagentSettingsViewModel, FrontendSubagentSkillViewModel, FrontendSubagentSyncStatus, FrontendSubagentUserAgentDefinition, FrontendSubagentUserDefinitionScope } from "./frontend/contracts/subagents/models.js";
+import { type FrontendPermissionRequestBehavior, type FrontendWorkspacePolicyPayload } from "./frontend/contracts/workspace-permissions.js";
+export type { FrontendObsidianVaultAccessViewModel, FrontendPermissionScreenViewModel, } from "./frontend/contracts/permission-screen.js";
+export { OBSIDIAN_VAULT_ACCESS_WARNING } from "./frontend/contracts/permission-screen.js";
+export type { FrontendPermissionRequestBehavior, FrontendPermissionWorkspaceTarget, FrontendWorkspacePermissionPolicy, FrontendWorkspacePolicyPayload, } from "./frontend/contracts/workspace-permissions.js";
+import { type FrontendSandboxRevokePayload, type FrontendSandboxSetupPayload, type FrontendSandboxVerifyPayload } from "./frontend-sandbox-contracts.js";
 import type { ThinkingLevel } from "./wire-types.js";
+export type { FrontendSubagentAcceptanceRecordViewModel, FrontendSubagentActorViewModel, FrontendSubagentAgentDefinition, FrontendSubagentArtifactGroupViewModel, FrontendSubagentArtifactViewModel, FrontendSubagentBudgets, FrontendSubagentCapabilitiesViewModel, FrontendSubagentContextMode, FrontendSubagentControlAction, FrontendSubagentControlReceiptAction, FrontendSubagentControlReceiptViewModel, FrontendSubagentExecutionMode, FrontendSubagentLaunchResolutionSource, FrontendSubagentLaunchSummaryV1, FrontendSubagentMessageViewModel, FrontendSubagentModelViewModel, FrontendSubagentNodeStatus, FrontendSubagentNodeViewModel, FrontendSubagentPermissionRequestViewModel, FrontendSubagentPermissionSnapshotViewModel, FrontendSubagentResolutionLayer, FrontendSubagentResolvedExecutionMode, FrontendSubagentRunFilter, FrontendSubagentRunStatus, FrontendSubagentRunSummaryViewModel, FrontendSubagentRuntimePolicy, FrontendSubagentRunViewModel, FrontendSubagentSettingsViewModel, FrontendSubagentSkillViewModel, FrontendSubagentSyncStatus, FrontendSubagentUserAgentDefinition, FrontendSubagentUserDefinitionScope, } from "./frontend/contracts/subagents/models.js";
 /** Public, data-only protocol consumed by reviewable Chatobby frontends. */
 export declare const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 2;
 export declare const CHATOBBY_FRONTEND_SCHEMA_VERSION = 1;
@@ -104,12 +117,6 @@ export interface FrontendNegotiationResult {
     readonly selectedCapabilities: readonly FrontendCapability[];
     readonly unavailableCapabilities: readonly FrontendUnavailableCapability[];
     readonly replayLimit: number;
-}
-export interface FrontendChoiceOption {
-    readonly value: string;
-    readonly label: string;
-    readonly description?: string;
-    readonly disabledReason?: string;
 }
 export interface FrontendChoiceControl {
     readonly id: "provider" | "model" | "effort" | "permission" | "network";
@@ -289,6 +296,7 @@ export type FrontendFeedBlock = {
 } | {
     readonly type: "notice";
     readonly id: string;
+    readonly permissionRequest?: PermissionRequestReview;
     readonly title: string;
     readonly body: string;
     readonly level: "info" | "warning" | "error";
@@ -334,149 +342,6 @@ export interface FrontendChannelGroupViewModel {
     readonly id: "current" | "named" | "sessions" | "archived";
     readonly label: string;
     readonly items: readonly FrontendChannelDirectoryItem[];
-}
-export type FrontendProjectLifecycleFilter = "active" | "archived" | "all";
-export type FrontendProjectAvailabilityFilter = "all" | "available" | "attention" | "missing" | "conflict" | "relink-required";
-export type FrontendProjectSort = "activity-desc" | "created-desc" | "created-asc" | "name-asc" | "name-desc" | "relevance";
-export type FrontendProjectSessionSort = "updated-desc" | "created-desc" | "created-asc" | "name-asc" | "name-desc" | "message-count-desc" | "relevance";
-export type FrontendProjectSessionSearchMode = "titles" | "messages";
-export interface FrontendProjectRootViewModel {
-    readonly rootId: string;
-    readonly directoryId: string;
-    readonly label: string;
-    readonly primary: boolean;
-    readonly locationKind: "vault-relative" | "external";
-    readonly vaultRelativePath?: string;
-    /** Device-local UI projection. Never persist, log, export, or place in portable Project records. */
-    readonly localPath?: string;
-    readonly directoryReuse: "canonical" | "none";
-    readonly markerPolicy: "required" | "optional" | "disabled";
-    readonly recoveryMode: "marker" | "device-binding-only";
-    readonly availability: "available" | "missing" | "conflict" | "relink-required" | "unregistered";
-    readonly availabilityLabel: string;
-    readonly recoveryAction?: "relink" | "resolve-conflict" | "repair-marker";
-}
-export interface FrontendProjectSessionViewModel {
-    readonly sessionId: string;
-    readonly workspaceBindingRevision: number;
-    readonly workspace: {
-        readonly kind: "vault";
-    } | {
-        readonly kind: "project";
-        readonly projectId: string;
-    };
-    readonly name: string;
-    /** Absent while a live first turn has not materialized its transcript. */
-    readonly createdAt?: string;
-    readonly updatedAt?: string;
-    readonly messageCount: number;
-    readonly running: boolean;
-    /** Actual live turn activity, independent of which conversation a page is viewing. */
-    readonly active?: boolean;
-    readonly activeRootId?: string;
-    /** Bounded excerpt emitted only when message-content search matched this chat. */
-    readonly matchSnippet?: string;
-}
-export interface FrontendProjectMessageSearchHitViewModel {
-    readonly hitId: string;
-    readonly sessionId: string;
-    readonly sessionName: string;
-    readonly messageId: string;
-    readonly targetBlockId: string;
-    readonly role: "user" | "assistant";
-    readonly timestamp: string;
-    readonly excerpt: string;
-    readonly matchRanges: readonly {
-        readonly start: number;
-        readonly end: number;
-    }[];
-}
-export interface FrontendProjectMessageSearchPageViewModel {
-    readonly items: readonly FrontendProjectMessageSearchHitViewModel[];
-    readonly page: number;
-    readonly pageSize: number;
-    readonly totalCount: number;
-    readonly hasPrevious: boolean;
-    readonly hasNext: boolean;
-}
-export interface FrontendProjectSessionDestinationViewModel {
-    readonly projectId: string;
-    readonly name: string;
-    readonly available: boolean;
-    readonly availabilityLabel: string;
-}
-export interface FrontendProjectSummaryViewModel {
-    readonly projectId: string;
-    readonly revision: number;
-    readonly name: string;
-    readonly description?: string;
-    readonly lifecycle: "active" | "archived";
-    readonly creationKind: "directory-session" | "manual" | "migration";
-    readonly primaryRootId?: string;
-    readonly primaryRootLabel?: string;
-    readonly canonicalVaultRelativePath?: string;
-    readonly rootCount: number;
-    readonly sessionCount: number;
-    readonly availability: "available" | "attention" | "missing" | "conflict" | "relink-required";
-    readonly availabilityLabel: string;
-    readonly createdAt: string;
-    readonly updatedAt: string;
-    /** Latest Project metadata or child-chat activity, whichever is newer. */
-    readonly activityAt: string;
-}
-export interface FrontendProjectDetailViewModel {
-    readonly projectId: string;
-    readonly revision: number;
-    readonly name: string;
-    readonly description?: string;
-    readonly lifecycle: "active" | "archived";
-    readonly creationKind: "directory-session" | "manual" | "migration";
-    readonly primaryRootId?: string;
-    readonly roots: readonly FrontendProjectRootViewModel[];
-    readonly sessionCount: number;
-    readonly sessions: readonly FrontendProjectSessionViewModel[];
-}
-export interface FrontendRunningWorkspaceViewModel {
-    readonly kind: "vault" | "project" | "unresolved";
-    readonly label: string;
-    readonly projectId?: string;
-    readonly activeRootId?: string;
-    readonly attachedRootIds: readonly string[];
-}
-export interface FrontendProjectScreenViewModel {
-    readonly screenId: "projects";
-    readonly revision: number;
-    readonly snapshotSequence: number;
-    readonly loading: boolean;
-    readonly error?: string;
-    readonly statusMessage?: string;
-    readonly query: string;
-    readonly lifecycleFilter: FrontendProjectLifecycleFilter;
-    readonly availabilityFilter: FrontendProjectAvailabilityFilter;
-    readonly sort: FrontendProjectSort;
-    readonly sessionQuery: string;
-    readonly sessionSearchMode: FrontendProjectSessionSearchMode;
-    readonly sessionSort: FrontendProjectSessionSort;
-    readonly sessionSearchPage: number;
-    readonly selectedProjectId?: string;
-    readonly runningIn: FrontendRunningWorkspaceViewModel;
-    readonly projects: readonly FrontendProjectSummaryViewModel[];
-    /** Unfiltered active Projects available to the Move chat picker. */
-    readonly sessionMoveProjects: readonly FrontendProjectSessionDestinationViewModel[];
-    readonly vaultSessionCount: number;
-    readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
-    /** Workspace navigation across all Projects; browsing does not select a session. */
-    readonly navigatorSessions?: readonly FrontendProjectSessionViewModel[];
-    readonly detail?: FrontendProjectDetailViewModel;
-    /** Available roots for the chat that is actually running, independent of the Project being viewed. */
-    readonly runningRoots: readonly FrontendProjectRootViewModel[];
-    /** Bounded exact message matches for the selected Project or Vault scope. */
-    readonly messageSearchPage?: FrontendProjectMessageSearchPageViewModel;
-    readonly lifecycleOptions: readonly FrontendChoiceOption[];
-    readonly availabilityOptions: readonly FrontendChoiceOption[];
-    readonly sortOptions: readonly FrontendChoiceOption[];
-    readonly sessionSearchModeOptions: readonly FrontendChoiceOption[];
-    readonly sessionSortOptions: readonly FrontendChoiceOption[];
 }
 export interface FrontendChannelMessageViewModel {
     readonly id: string;
@@ -811,72 +676,6 @@ export interface FrontendPermissionAdvancedGroupViewModel {
         readonly decision: FrontendPermissionDecision;
     }[];
 }
-export declare const OBSIDIAN_VAULT_ACCESS_WARNING = "Uses Obsidian\u2019s app authority outside the sandbox.";
-export type FrontendObsidianVaultAccessViewModel = {
-    readonly status: "available";
-    readonly revision: number;
-    readonly sessionId: string;
-    readonly bindingRevision: number;
-    readonly enabled: boolean;
-    readonly source: "default" | "user";
-    readonly warning: typeof OBSIDIAN_VAULT_ACCESS_WARNING;
-} | {
-    readonly status: "unavailable";
-    readonly enabled: false;
-    readonly warning: typeof OBSIDIAN_VAULT_ACCESS_WARNING;
-    readonly reason: string;
-};
-export interface FrontendPermissionScreenViewModel {
-    readonly screenId: "permissions";
-    /** Absent on older runtimes; never infer Full-only operation from the plugin version. */
-    readonly executionMode?: "full-access";
-    readonly revision: number;
-    /** Durable policy owner; delegated sessions display this inherited authority read-only. */
-    readonly accessPolicySessionId: string;
-    readonly accessPolicy: {
-        readonly schemaVersion: 1;
-        readonly revision: number;
-        readonly accessMode: "read-only" | "workspace" | "full";
-        readonly agentNetworkAccess: boolean;
-    };
-    readonly scope: {
-        readonly bindingRevision: number;
-        readonly kind: "project" | "vault";
-        readonly selectedRootCount: number;
-        readonly filesystemBound: boolean;
-    };
-    readonly nativeSupport: {
-        readonly status: "ready" | "setup-required" | "unverified" | "unsupported";
-        readonly backendId?: "windows-appcontainer" | "linux-bubblewrap" | "macos-seatbelt" | "landstrip";
-        readonly reason?: string;
-        readonly userAction?: string;
-    };
-    /** Absent only for additive compatibility with older runtimes; never infer a grant. */
-    readonly obsidianVaultAccess?: FrontendObsidianVaultAccessViewModel;
-    /** Explicit operator choices across this Vault; independent of session policy. */
-    readonly workspaceVaultAccess?: readonly {
-        readonly projectId: string | null;
-        readonly projectRevision?: number;
-        readonly label: string;
-        readonly revision: number;
-        readonly enabled: boolean;
-        readonly source: "default" | "user";
-    }[];
-    /** Explicit setup/recovery, never a substitute for nativeSupport proof. Omitted without negotiation. */
-    readonly nativeSetup?: FrontendSandboxSetupViewModel;
-    readonly effective: {
-        readonly fileRead: boolean;
-        readonly fileWrite: boolean;
-        readonly localProcess: "native-contained" | "unavailable" | "unsandboxed";
-        readonly obsidian: "typed-read" | "typed-workspace" | "unavailable" | "unsandboxed" | "app-authority";
-        readonly agentNetworkAccess: boolean;
-        readonly warning?: string;
-    };
-    readonly migrationNotice?: string;
-    readonly loading: boolean;
-    readonly error?: string;
-    readonly statusMessage?: string;
-}
 export interface FrontendEventDefinitionViewModel {
     readonly id: string;
     readonly revision: number;
@@ -953,429 +752,6 @@ export interface FrontendEventScreenViewModel {
     readonly occurrences: readonly FrontendEventOccurrenceViewModel[];
     readonly pendingApprovalCount: number;
     readonly editor?: FrontendEventEditorViewModel;
-}
-/** Public subagent contracts intentionally decoupled from the private supervisor package. */
-export type FrontendSubagentExecutionMode = "auto" | "in-process" | "worker-process";
-export type FrontendSubagentResolvedExecutionMode = Exclude<FrontendSubagentExecutionMode, "auto">;
-export type FrontendSubagentContextMode = "fresh" | "fork";
-/** Internal resolution layers reported to the frontend for provenance and effective settings. */
-export type FrontendSubagentResolutionLayer = "global" | "vault" | "directory" | "session";
-/** Availability choices accepted when a user creates or edits an agent role. */
-export type FrontendSubagentUserDefinitionScope = "vault" | "directory";
-export type FrontendSubagentRunStatus = "created" | "queued" | "running" | "paused" | "waiting" | "completed" | "failed" | "cancelled" | "orphaned";
-export type FrontendSubagentNodeStatus = "blocked" | "queued" | "running" | "waiting" | "paused" | "completed" | "failed" | "cancelled" | "skipped" | "orphaned";
-export type FrontendSubagentControlAction = "cancel" | "pause" | "resume" | "interrupt" | "steer" | "complete" | "retry" | "reprioritize" | "fork" | "clone" | "decide-child-input" | "decide-tool-permission" | "adopt" | "reconcile-orphan" | "approve-permission" | "deny-permission" | "approve-acceptance" | "reject-acceptance" | "extend-budget";
-export type FrontendSubagentControlReceiptAction = FrontendSubagentControlAction | "set-permission-profile";
-export interface FrontendSubagentRuntimePolicy {
-    executionMode?: FrontendSubagentExecutionMode;
-    model?: string;
-    fallbackModels?: string[];
-    thinking?: ThinkingLevel;
-    tools?: string[];
-    mcpTools?: string[];
-    extensions?: string[];
-    skills?: string[];
-    contextMode?: FrontendSubagentContextMode;
-    maxDepth?: number;
-    maxTurnsPerNode?: number;
-    maxTokens?: number;
-    maxWallTimeMs?: number;
-    maxToolCallsPerNode?: number;
-    toolCallLimits?: Record<string, number>;
-    permissionProfileId?: string;
-}
-export interface FrontendSubagentAgentDefinition {
-    id: string;
-    name: string;
-    description: string;
-    scope: FrontendSubagentResolutionLayer;
-    scopeId: string;
-    systemPrompt: string;
-    enabled: boolean;
-    policy: FrontendSubagentRuntimePolicy;
-    /** Retained role policy is inert until saved without its legacy permission-profile override. */
-    permissionReviewRequired?: true;
-    builtIn?: true;
-    revision: number;
-    updatedAt: number;
-}
-export type FrontendSubagentUserAgentDefinition = Omit<FrontendSubagentAgentDefinition, "scope" | "builtIn"> & {
-    scope: FrontendSubagentUserDefinitionScope;
-    builtIn?: never;
-};
-export interface FrontendSubagentRunFilter {
-    parentSessionId?: string;
-    status?: FrontendSubagentRunStatus[];
-    agentId?: string;
-    executionMode?: FrontendSubagentResolvedExecutionMode;
-    workspaceCwd?: string;
-    search?: string;
-    createdAfter?: number;
-    createdBefore?: number;
-}
-export interface FrontendSubagentBudgets {
-    maxConcurrency?: number;
-    maxDepth?: number;
-    maxTurnsPerNode?: number;
-    maxTokens?: number;
-    maxCostUsd?: number;
-    maxWallTimeMs?: number;
-    maxToolCallsPerNode?: number;
-}
-export type FrontendSubagentLaunchResolutionSource = "node" | "run" | "role" | "parent" | "project" | "settings" | "fallback" | "auto";
-/**
- * Browser-safe projection of an accepted launch contract. Private role
- * instructions and the materialized context packet never cross this boundary.
- */
-export interface FrontendSubagentLaunchSummaryV1 {
-    readonly schemaVersion: 1;
-    readonly contractId: string;
-    readonly resolutionFingerprint: string;
-    readonly runId: string;
-    readonly nodeId: string;
-    readonly role: {
-        readonly id: string;
-        readonly name: string;
-        readonly revision: number;
-        readonly promptHash: string;
-    };
-    readonly model: {
-        readonly selected: string;
-        readonly thinking: ThinkingLevel;
-        readonly fallbacks: readonly string[];
-    };
-    readonly executor: {
-        readonly requested: FrontendSubagentExecutionMode;
-        readonly selected: FrontendSubagentResolvedExecutionMode;
-        readonly source: "node" | "run" | "role" | "auto";
-        readonly reason: string;
-        readonly runtimeFingerprintRequirement: string | null;
-    };
-    readonly context: {
-        readonly mode: FrontendSubagentContextMode;
-        readonly source: "node" | "run" | "role" | "fallback";
-        readonly explicit: boolean;
-        readonly packetFingerprint: string | null;
-        readonly estimatedTokens: number;
-        readonly messageCount: number;
-    };
-    readonly permission: {
-        readonly profileId: string;
-        readonly profileRevision: number;
-        readonly profileFingerprint: string;
-        readonly source: "run" | "node" | "role" | "project" | "fallback";
-    };
-    readonly budgets: {
-        readonly limits: {
-            readonly maxConcurrency: number | null;
-            readonly maxDepth: number | null;
-            readonly maxTurnsPerNode: number | null;
-            readonly maxTokens: number | null;
-            readonly maxCostUsd: number | null;
-            readonly maxWallTimeMs: number | null;
-            readonly maxToolCallsPerNode: number | null;
-            readonly toolCallLimits: Readonly<Record<string, number>>;
-        };
-        readonly sources: {
-            readonly maxConcurrency: FrontendSubagentLaunchResolutionSource;
-            readonly maxDepth: FrontendSubagentLaunchResolutionSource;
-            readonly maxTurnsPerNode: FrontendSubagentLaunchResolutionSource;
-            readonly maxTokens: FrontendSubagentLaunchResolutionSource;
-            readonly maxCostUsd: FrontendSubagentLaunchResolutionSource;
-            readonly maxWallTimeMs: FrontendSubagentLaunchResolutionSource;
-            readonly maxToolCallsPerNode: FrontendSubagentLaunchResolutionSource;
-            readonly toolCallLimits: FrontendSubagentLaunchResolutionSource;
-        };
-        readonly preflight: {
-            readonly estimatedInitialTokens: number;
-            readonly responseReserveTokens: number;
-            readonly recommendedMinimumTokens: number;
-            readonly toolCount: number;
-            readonly method: "conservative-chars-per-token";
-            readonly sourceFingerprint: string;
-        };
-    };
-    readonly tools: {
-        readonly capabilityPreset: string | null;
-        readonly eligibleNames: readonly string[];
-        readonly eligibleActions: Readonly<Record<string, readonly string[]>>;
-        readonly mcpNames: readonly string[];
-        readonly skills: readonly string[];
-        readonly productExtensions: readonly string[];
-        readonly registryFingerprint: string;
-        readonly eligibleFingerprint: string;
-        readonly source: "role" | "fallback";
-    };
-    readonly workspace: {
-        readonly request: {
-            readonly mode: "shared" | "worktree" | "sandbox";
-            readonly cwd: string;
-            readonly artifactDirectory: string | null;
-            readonly providerRequirement: string | null;
-            readonly source: "run";
-        };
-        readonly materialized: {
-            readonly resolvedCwd: string;
-            readonly provider: string;
-            readonly workspaceId: string;
-            readonly baseRevision: string | null;
-        };
-    };
-    readonly definitionChangedSinceLaunch: boolean;
-}
-export interface FrontendSubagentPermissionRequestViewModel {
-    id: string;
-    revision: number;
-    runId: string;
-    nodeId: string;
-    kind: "confirm" | "select" | "input";
-    title: string;
-    message?: string;
-    options?: string[];
-    placeholder?: string;
-    status: "pending" | "approved" | "denied";
-    createdAt: number;
-    decidedAt?: number;
-    value?: string;
-}
-export interface FrontendSubagentAcceptanceRecordViewModel {
-    runId: string;
-    nodeId: string;
-    level: "none" | "attested" | "checked" | "verified" | "reviewed";
-    status: "accepted" | "rejected" | "waiting-review";
-    criteria: string[];
-    checks: {
-        id: string;
-        command: string;
-        exitCode: number | null;
-        stdout: string;
-        stderr: string;
-        timedOut: boolean;
-        durationMs: number;
-    }[];
-    reviewerAgentId?: string;
-    decidedAt?: number;
-    decisionNote?: string;
-}
-export interface FrontendSubagentNodeViewModel {
-    id: string;
-    parentNodeId?: string;
-    fanoutIndex?: number;
-    fanoutItem?: unknown;
-    agentId: string;
-    agentName?: string;
-    label: string;
-    task: string;
-    status: FrontendSubagentNodeStatus;
-    dependsOn: string[];
-    priority: number;
-    requestedExecutionMode: FrontendSubagentExecutionMode;
-    /** Compact accepted launch facts; private role instructions and context packet are omitted. */
-    launchSummary?: FrontendSubagentLaunchSummaryV1;
-    runtimePolicy?: FrontendSubagentRuntimePolicy;
-    resolvedExecutionMode?: FrontendSubagentResolvedExecutionMode;
-    model?: string;
-    queuePosition?: number;
-    currentTool?: string;
-    contextPercent?: number;
-    turns: number;
-    tokens: number;
-    costUsd: number;
-    startedAt?: number;
-    completedAt?: number;
-    attempts: {
-        id: string;
-        number: number;
-        mode: FrontendSubagentResolvedExecutionMode;
-        status: FrontendSubagentNodeStatus;
-        startedAt?: number;
-        completedAt?: number;
-        runtimeFingerprint?: string;
-        error?: string;
-    }[];
-    artifactIds: string[];
-    result?: string;
-    structuredOutput?: unknown;
-    acceptanceStatus?: "not-required" | "accepted" | "rejected" | "waiting-review";
-    acceptanceRecord?: FrontendSubagentAcceptanceRecordViewModel;
-    pendingPermission?: FrontendSubagentPermissionRequestViewModel;
-    latestMessageId?: string;
-    error?: string;
-}
-export interface FrontendSubagentRunViewModel {
-    id: string;
-    runtimeId: string;
-    parentSessionId: string;
-    triggerSource: "parent-agent" | "user" | "scheduler" | "automation" | "api";
-    description: string;
-    status: FrontendSubagentRunStatus;
-    priority: number;
-    createdAt: number;
-    updatedAt: number;
-    startedAt?: number;
-    completedAt?: number;
-    lastSequence: number;
-    budgets: FrontendSubagentBudgets;
-    context: {
-        mode: FrontendSubagentContextMode;
-    };
-    permissionProfileId?: string;
-    workspace: {
-        cwd: string;
-        mode: "shared" | "worktree" | "sandbox";
-        artifactDirectory?: string;
-        resolvedCwd: string;
-        provider: string;
-        workspaceId: string;
-        baseRevision?: string;
-        baselineFileStates?: Record<string, string>;
-        changedFiles: string[];
-        createdAt: number;
-    };
-    parent?: {
-        runId: string;
-        nodeId: string;
-        depth: number;
-    };
-    failFast: boolean;
-    nodes: Record<string, FrontendSubagentNodeViewModel>;
-    rootNodeIds: string[];
-    error?: string;
-}
-export interface FrontendSubagentRunSummaryViewModel {
-    id: string;
-    parentSessionId: string;
-    triggerSource: "parent-agent" | "user" | "scheduler" | "automation" | "api";
-    description: string;
-    status: FrontendSubagentRunStatus;
-    agentIds: string[];
-    executionModes: FrontendSubagentResolvedExecutionMode[];
-    workspaceCwd: string;
-    activeNodes: number;
-    queuedNodes: number;
-    waitingNodes: number;
-    failedNodes: number;
-    tokens: number;
-    costUsd: number;
-    createdAt: number;
-    updatedAt: number;
-}
-export interface FrontendSubagentArtifactViewModel {
-    id: string;
-    runId: string;
-    nodeId: string;
-    kind: "file" | "report" | "patch" | "structured-output" | "transcript" | "log";
-    name: string;
-    path: string;
-    mimeType?: string;
-    bytes?: number;
-    revision: number;
-    createdAt: number;
-    updatedAt: number;
-    promotedVaultPath?: string;
-}
-export interface FrontendSubagentActorViewModel {
-    kind: "user" | "parent" | "agent" | "system";
-    id: string;
-    label?: string;
-}
-export interface FrontendSubagentMessageViewModel {
-    id: string;
-    runId: string;
-    nodeId?: string;
-    threadId: string;
-    from: FrontendSubagentActorViewModel;
-    to: FrontendSubagentActorViewModel[];
-    kind: "inform" | "request" | "decision" | "steer" | "result";
-    text: string;
-    data?: Record<string, unknown>;
-    correlationId?: string;
-    replyTo?: string;
-    blocking: boolean;
-    deadline?: number;
-    status: "queued" | "delivered" | "acknowledged" | "expired" | "rejected";
-    createdAt: number;
-    acknowledgedAt?: number;
-    response?: {
-        actor: FrontendSubagentActorViewModel;
-        text?: string;
-        data?: Record<string, unknown>;
-        createdAt: number;
-    };
-}
-export interface FrontendSubagentControlReceiptViewModel {
-    commandId: string;
-    runId: string;
-    nodeId?: string;
-    action: FrontendSubagentControlReceiptAction;
-    state: "requested" | "acknowledged" | "effective" | "failed" | "timed-out";
-    message?: string;
-    timestamp: number;
-}
-export interface FrontendSubagentCapabilitiesViewModel {
-    protocolVersion: 1;
-    runtimeId: string;
-    executionModes: FrontendSubagentResolvedExecutionMode[];
-    supportsSiblingCommunication: boolean;
-    supportsWorkerRecovery: boolean;
-    workerRecoveryMode: "none" | "reconcile" | "adopt";
-    supportsWorktrees: boolean;
-    supportsArtifactPromotion: boolean;
-    maxReplayEvents: number;
-}
-export interface FrontendSubagentSettingsViewModel {
-    settings: {
-        schemaVersion?: 2;
-        maxConcurrency?: number;
-        unlimitedConcurrency?: boolean;
-        defaultExecutionMode: FrontendSubagentExecutionMode;
-        defaultMaxDepth?: number;
-        unlimitedDepth?: boolean;
-        defaultMaxTurnsPerNode?: number;
-        defaultMaxTokens?: number;
-        defaultMaxCostUsd?: number;
-        defaultMaxWallTimeMs?: number;
-        automaticDelegation: "off" | "suggest" | "allowed";
-        retentionDays: number;
-        allowSiblingCommunication: boolean;
-    };
-    scope?: {
-        kind: FrontendSubagentResolutionLayer;
-        id: string;
-    };
-    revision: number;
-    sources: Partial<Record<string, {
-        kind: FrontendSubagentResolutionLayer;
-        id: string;
-    }>>;
-}
-export interface FrontendSubagentPermissionSnapshotViewModel {
-    document: {
-        profiles: {
-            id: string;
-            name: string;
-        }[];
-        agentAssignments: Record<string, {
-            mode: "inherit";
-        } | {
-            mode: "profile";
-            profileId: string;
-        }>;
-    };
-}
-export type FrontendSubagentSyncStatus = "idle" | "loading" | "live" | "gap" | "error";
-export interface FrontendSubagentModelViewModel {
-    readonly id: string;
-    readonly name: string;
-    readonly provider: string;
-}
-export interface FrontendSubagentSkillViewModel {
-    readonly name: string;
-    readonly description?: string;
-}
-export interface FrontendSubagentArtifactGroupViewModel {
-    readonly runId: string;
-    readonly items: readonly FrontendSubagentArtifactViewModel[];
 }
 export interface FrontendSubagentScreenViewModel {
     readonly screenId: "subagents";
@@ -1650,120 +1026,7 @@ export type FrontendIntent = (FrontendIntentBase & {
     readonly payload: {
         readonly open: boolean;
     };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.set-view";
-    readonly payload: {
-        readonly query: string;
-        readonly lifecycleFilter: FrontendProjectLifecycleFilter;
-        readonly availabilityFilter: FrontendProjectAvailabilityFilter;
-        readonly sort: FrontendProjectSort;
-        readonly sessionQuery: string;
-        readonly sessionSearchMode: FrontendProjectSessionSearchMode;
-        readonly sessionSort: FrontendProjectSessionSort;
-        readonly sessionSearchPage: number;
-        readonly selectedProjectId?: string;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.create";
-    readonly payload: {
-        readonly name: string;
-        readonly description?: string;
-        readonly rootMode?: "create-vault-folder" | "use-existing-folders";
-        readonly roots?: readonly {
-            readonly directoryCandidateRef: string;
-            readonly label: string;
-            readonly markerPolicy: "required" | "optional" | "disabled";
-            readonly directoryReuse: "canonical" | "none";
-        }[];
-        readonly primaryDirectoryCandidateRef?: string;
-        /** Legacy one-root compatibility; new connectors use rootMode and roots. */
-        readonly vaultRelativePath?: string;
-        readonly directoryCandidateRef?: string;
-        readonly directoryReuse: "canonical" | "none";
-        readonly markerPolicy: "required" | "optional" | "disabled";
-        readonly useForCurrentSession?: boolean;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.replace-details";
-    readonly payload: {
-        readonly projectId: string;
-        readonly expectedProjectRevision: number;
-        readonly name: string;
-        readonly description?: string;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.archive" | "projects.restore";
-    readonly payload: {
-        readonly projectId: string;
-        readonly expectedProjectRevision: number;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.root-add";
-    readonly payload: {
-        readonly projectId: string;
-        readonly expectedProjectRevision: number;
-        readonly label: string;
-        readonly vaultRelativePath?: string;
-        readonly directoryCandidateRef?: string;
-        readonly directoryReuse: "canonical" | "none";
-        readonly markerPolicy: "required" | "optional" | "disabled";
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.roots-add-batch";
-    readonly payload: {
-        readonly projectId: string;
-        readonly expectedProjectRevision: number;
-        readonly roots: readonly {
-            readonly directoryCandidateRef: string;
-            readonly label: string;
-            readonly markerPolicy: "required" | "optional" | "disabled";
-            readonly directoryReuse: "canonical" | "none";
-        }[];
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.root-relabel";
-    readonly payload: {
-        readonly projectId: string;
-        readonly expectedProjectRevision: number;
-        readonly rootId: string;
-        readonly label: string;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.root-set-primary" | "projects.root-remove";
-    readonly payload: {
-        readonly projectId: string;
-        readonly expectedProjectRevision: number;
-        readonly rootId: string;
-        readonly replacementRootId?: string;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.root-recover";
-    readonly payload: {
-        readonly projectId: string;
-        readonly rootId: string;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.root-relink";
-    readonly payload: {
-        readonly projectId: string;
-        readonly expectedProjectRevision: number;
-        readonly rootId: string;
-        readonly vaultRelativePath?: string;
-        readonly directoryCandidateRef?: string;
-    };
-}) | (FrontendIntentBase & {
-    readonly type: "projects.session-move";
-    readonly payload: {
-        readonly sessionId: string;
-        readonly expectedWorkspaceBindingRevision: number;
-        readonly target: {
-            readonly kind: "vault";
-        } | {
-            readonly kind: "project";
-            readonly projectId: string;
-        };
-    };
-}) | (FrontendIntentBase & {
+}) | (FrontendIntentBase & FrontendProjectIntentBody) | (FrontendIntentBase & {
     readonly type: "channel.select";
     readonly payload: {
         readonly channelId: string;
@@ -1973,6 +1236,9 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly enabled: boolean;
     };
 }) | (FrontendIntentBase & {
+    readonly type: "permissions.set-workspace-policy";
+    readonly payload: FrontendWorkspacePolicyPayload;
+}) | (FrontendIntentBase & {
     readonly type: "permissions.set-workspace-vault-access";
     readonly payload: {
         readonly expectedRevision: number;
@@ -1996,6 +1262,7 @@ export type FrontendIntent = (FrontendIntentBase & {
         readonly expectedRevision: number;
         readonly accessMode: "read-only" | "workspace" | "full";
         readonly agentNetworkAccess: boolean;
+        readonly requestBehavior?: FrontendPermissionRequestBehavior;
     };
 }) | (FrontendIntentBase & {
     readonly type: "permissions.select-profile";
@@ -2274,4 +1541,3 @@ export declare function parseFrontendNegotiationResult(value: unknown): Frontend
 export declare function parseFrontendSubscriptionResult(value: unknown): FrontendSubscriptionResult;
 export declare function parseFrontendProtocolError(value: unknown): FrontendProtocolError;
 export declare function parseFrontendIntentResult(value: unknown): FrontendIntentResult;
-export {};

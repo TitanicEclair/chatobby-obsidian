@@ -2,12 +2,14 @@ import { vi } from "vitest";
 import {
   blockId,
   hydrateFeedStore,
-  INITIAL_LEGACY_FEED_STATE,
-  migrateLegacyFeedState,
   toolCallId,
-  type LegacyFeedState,
   type FeedStore,
 } from "../../../src/features/feed/public";
+import {
+  createFeedSnapshotFromFixture,
+  INITIAL_LEGACY_FEED_STATE,
+  type LegacyFeedState,
+} from "../../support/feed/legacy-feed-fixture";
 import type { FeedHost } from "../../../src/ui/feed";
 import type { InteractionHost } from "../../../src/ui/feed/interaction-card";
 import type { InteractionState } from "../../../src/types";
@@ -17,11 +19,11 @@ export interface MockFeedHost extends FeedHost {
 }
 
 export function createMockFeedHost(initialState: LegacyFeedState = INITIAL_LEGACY_FEED_STATE): MockFeedHost {
-  let store = hydrateFeedStore(migrateLegacyFeedState(initialState));
+  let store = hydrateFeedStore(createFeedSnapshotFromFixture(initialState));
   return {
     ...createMockFeedHostForStore(() => store),
     setFeedState: (state) => {
-      store = hydrateFeedStore(migrateLegacyFeedState(state));
+      store = hydrateFeedStore(createFeedSnapshotFromFixture(state));
     },
   };
 }

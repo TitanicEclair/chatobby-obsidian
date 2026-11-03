@@ -38,7 +38,7 @@ those domain stores or infer their state from process output.
 | `src/runtime/infrastructure/managed-process.ts` | Starts connector-owned managed/developer processes, observes readiness, and owns termination fallback. |
 | `src/runtime/public.ts` | Supported runtime API used outside the runtime feature. |
 | `src/frontend/` | Applies canonical screen snapshots and patches, then dispatches typed intents. |
-| `src/features/runtime-status/ui/` | Renders runtime state and explicit recovery/update controls. |
+| `src/features/runtime-status/` | Application controllers present runtime state and recovery/update actions; UI owns the installer modal. |
 
 Consumers outside `src/runtime/` import from `src/runtime/public.ts`. Generated
 protocol declarations under `src/vendor/` are projections from the private
@@ -69,6 +69,68 @@ explicit Stop or Restart
 
 Runtime status is a connector-owned projection. Views subscribe to that state;
 they do not poll process files or construct their own backend clients.
+
+## Leaf session recovery
+
+On reconnect or saved-leaf hydration, `SessionController` delegates to one
+`SessionRecovery` target/queue owner until the runtime confirms the resume.
+Both disconnected and pending targets remain available to leaf persistence and
+title rendering during bootstrap; selecting A, B, then A creates three distinct
+target tokens. Older completion cannot clear
+the newest token. `ConnectedViewRestorationController` supplies the authenticated
+transport and a connection-epoch predicate to automatic restoration only.
+`session-intent-dispatcher.ts` negotiates and dispatches on that still-current
+connection without waiting for every other leaf to finish connecting. Ordinary
+user session actions continue through global runtime readiness. This distinction
+does not change runtime activation, maintenance admission or permission policy.
+
+The existing session-transition presentation shows **Restoring session** while
+the runtime replaces its initial bootstrap session with the saved conversation.
+Prompt targeting waits for restoration and presentation to settle. A second
+disconnect preserves the original recovery path, invalidates the old epoch and
+queues one new restoration after the retired operation releases presentation.
+Epoch invalidation aborts local protocol waits and removes its abort listener;
+it does not cancel backend work. A competing session operation rejects recovery
+and leaves its target retryable, rather than marking an unattempted resume done.
+Late old work cannot mark the new connection restored or clear its pending work.
+Successful recovery clears its target before publishing the final leaf path and
+title, including the available-chat fallback when a saved session was deleted.
+Session history, workspace identity and permissions remain runtime-owned; the
+connector stores no alternative policy or conversation model.
+
+Presentation settlement flushes the current snapshot, waits for a frame, flushes
+again and waits for a second frame while its owning document is visible. A hidden
+document skips paint waits; becoming hidden releases a pending frame. Destroying
+the presentation owner cancels its frames/listeners and prevents later flushes.
+These lifecycle signals release only presentation: the session operation still
+awaits the actual backend mutation before prompts may use its selected target.
+There is no timer fallback. A document that remains visible but supplies no
+animation frames can still wait; visibility-aware settlement is not a general
+deadline for rendering or runtime work.
+
+Regression map:
+
+- [session-transition-coordinator.test.ts](../../tests/ui/session/session-transition-coordinator.test.ts)
+  retains visible two-frame ordering and covers hidden/no-frame completion with
+  the real SessionController and OperationCoordinator, both visibility changes,
+  pending-frame disposal, stale callbacks and an unfinished backend mutation.
+- `tests/ui/session/session-recovery.test.ts` composes the real leaf registry,
+  restoration coordinator, session controller and intent dispatcher with a
+  deliberately unresolved hidden-leaf connection. The active Project resumes
+  while global readiness is still pending; prompts wait for the selected target.
+  It also covers same-transport epoch replacement and retained recovery paths.
+- `tests/ui/view-snapshot-recovery.test.ts` exercises the actual view state/title
+  callbacks with a real session controller, ensuring provisional bootstrap
+  sessions cannot overwrite either kind of saved recovery target, and completion
+  publishes the restored or fallback chat's current path and title.
+- `tests/ui/session/session-intent-dispatcher.test.ts` verifies ordinary actions
+  still await readiness, stale/disconnected/replaced restoration connections
+  reject, and informational no-ops and structured session errors survive.
+- `tests/ui/connected-view-restoration.test.ts` covers ordering, coalescing,
+  failed bootstrap and suppression of completion from an invalidated epoch.
+
+These deterministic tests prove ordering and ownership. Installed multi-view
+restart latency is a separate acceptance gate and retains its existing deadline.
 
 ## Runtime modes
 
@@ -205,15 +267,19 @@ running instance; unknown or restarted instances take maintenance. These
 checks provide development artifact integrity, not signed production admission
 or race-free operating-system containment.
 
-The generated finite inventory includes Host and Setup with one shared runtime
-and .NET license/third-party notices. The authored group expects 192 helper
-files and a 222-file total bound; actual combined compilation remains separate
-proof. Every new native pending bundle requires the complete group before
-deployment, cache staging, maintenance or launch. A current pair that includes
-the helper cannot be replaced by base-only input. Complete historical Host-only
-and base-only current receipts remain readable for preservation and rollback,
-not new native admission, readiness or permission setup. Helper bytes are checked again after maintenance
-admission and before launching the runtime, just like other assets.
+The generated inventory retains the historical Host/Setup helper group and its
+.NET license/third-party notices for compatibility. Its 192 helper files and
+222-file combined fixture describe historical packaging, not a current build
+requirement. A pending bundle containing the helper still requires the complete
+group before staging, maintenance or launch; its bytes are rechecked after
+maintenance admission like other assets.
+
+The older native-to-base replacement restriction applies only when the generated
+`CHATOBBY_NATIVE_SANDBOX_ENABLED` flag is true. Current builds with application
+permissions set it false and can adopt a helper-free pair while retaining the previous
+cached bundle for rollback. Historical Host-only and base-only current receipts
+remain readable for preservation and rollback; they do not enable sandboxing or
+prove native readiness. Existing exact-pair and inventory verification still apply.
 
 At source `9227269a5da3b80c586c50cefce1c5c27d0fbb70`, the Host-only
 first-admission and deployment regressions failed before the guard, then the
@@ -254,6 +320,15 @@ Each Chatobby view receives an isolated frontend session from
 client, auxiliary session transport, and disposal. A view controller converts
 application runtime state into stable UI state and disposes its session when the
 view closes.
+
+Each transport keeps one automatic reconnect timer. Failed initialization or a
+lost connection retries after 2, 4, 8 and 16 seconds, then every 30 seconds,
+with ten automatic attempts per connection cycle. An automatic attempt preserves that counter;
+explicit connection and runtime replacement start a fresh budget, and successful
+connection resets it. Disconnect cancels the pending timer. This bounds pressure
+on a runtime whose session initialization is failing across several open views.
+Runtime-manager startup recovery has its own restart policy and may begin a new
+connection cycle; this transport limit is not a lifetime cap on startup attempts.
 
 The primary frontend protocol carries bootstrap, screen snapshots, intents,
 patches, and notifications. Session-streaming data that is deliberately kept
@@ -308,6 +383,17 @@ Failures remain visible and actionable:
 
 Logs and diagnostics must redact credentials, session tokens, provider keys,
 and private prompt content.
+
+## Status verification
+
+[Status controller](../../src/features/runtime-status/application/runtime-status-controller.ts)
+[tests](../../tests/runtime/runtime-status-controller.test.ts) use synthetic lifecycle
+states, callbacks and fake timers to protect delayed progress, stable diagnostics,
+repair/retry choices and blocked exact-pair actions.
+[Menu tests](../../tests/runtime/runtime-status-menu.test.ts) use the Obsidian menu
+adapter to verify explicit installation, repair and setup routing. These are
+presentation tests; installation, authenticated process lifecycle and installed
+Obsidian acceptance remain separate gates above.
 
 ## Change checklist
 

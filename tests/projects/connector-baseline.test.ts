@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { toPromptContextPacket } from "../../src/prompt";
 import { resolveChatobbyPlatformPaths } from "../../src/runtime/infrastructure/platform-paths";
@@ -97,14 +97,13 @@ describe("Projects Phase 0 connector baseline", () => {
     const routerSource = readFileSync(join(repositoryRoot, "src/ui/session/leaf-directory-router.ts"), "utf8");
     const registrySource = readFileSync(join(repositoryRoot, "src/runtime/application/frontend-session-registry.ts"), "utf8");
 
-    expect(mainSource).toContain("await this.openBlankView(vaultDirectoryPath)");
-		expect(mainSource).toContain("await this.startSessionFromVaultDirectory(vaultDirectoryPath)");
-		expect(mainSource).toContain("await this.openSessionsFromVaultDirectory(vaultDirectoryPath)");
-		expect(mainSource).toContain('view.commandOpenPage("projects")');
-		expect(mainSource).toContain("await view.openProjectSessions(canonical.projectId)");
-		expect(mainSource).toContain("project.canonicalVaultRelativePath");
-		expect(mainSource).toContain("directoryProjectLaunchBehavior");
-		expect(viewSource).toContain("this.overlayScreens.projects.open(state.projectId)");
+    // This inventory records plugin wiring. Actual launch/cancel behavior is covered by
+    // directory-project-launch.test.ts; action authority is covered by project-actions.test.ts.
+    expect(mainSource).toContain("await this.directoryProjects.start(vaultDirectoryPath)");
+    expect(mainSource).toContain("await this.directoryProjects.browse(vaultDirectoryPath)");
+    expect(mainSource).toContain("await this.directoryProjects.create(vaultDirectoryPath)");
+    expect(mainSource).toContain("directoryProjectLaunchBehavior");
+    expect(viewSource).toContain("this.overlayScreens.projects.open(state.projectId)");
     expect(mainSource).toContain("find((view) => view.getWorkingDirectoryPath() === normalized)");
     expect(mainSource).toContain("find((view) => view.hasSessionPath(sessionPath))");
     expect(viewSource).toContain("vaultDirectoryPath: this.sessions.workingDirectoryPath()");
@@ -115,24 +114,14 @@ describe("Projects Phase 0 connector baseline", () => {
   });
 
   it("routes session browsing through the runtime-owned Projects projection", () => {
-    const projectsSource = readFileSync(join(repositoryRoot, "src/features/projects/ui/projects-view.ts"), "utf8");
+    const detailSource = readFileSync(join(repositoryRoot, "src/features/projects/ui/detail/project-detail.ts"), "utf8");
+    const librarySource = readFileSync(join(repositoryRoot, "src/features/projects/ui/library/session-library.ts"), "utf8");
     const controllerSource = readFileSync(join(repositoryRoot, "src/features/projects/application/projects-screen-controller.ts"), "utf8");
 
-    expect(projectsSource).toContain('type: "session.create"');
-    expect(projectsSource).toContain('type: "session.resume-by-id"');
+    expect(detailSource).toContain('type: "session.create"');
+    expect(librarySource).toContain('type: "session.resume-by-id"');
     expect(controllerSource).toContain('screenId: "projects"');
     expect(controllerSource).toContain("preferredEntityId: projectId");
-  });
-
-  it("classifies vault-prefs as inactive legacy code rather than current persistence", () => {
-    const sourceFiles = sourceTypeScriptFiles(join(repositoryRoot, "src"));
-    const consumers = sourceFiles.filter((path) => {
-      if (path.endsWith("ui/session/vault-prefs.ts")) return false;
-      return readFileSync(join(repositoryRoot, path), "utf8").includes("vault-prefs");
-    });
-
-    expect(consumers).toEqual([]);
-    expect(existsSync(join(repositoryRoot, "docs/vault-session-prefs.md"))).toBe(false);
   });
 
   it("contains no authoritative Project-state writes in the characterized connector routes", () => {
@@ -144,6 +133,15 @@ describe("Projects Phase 0 connector baseline", () => {
       "src/ui/session/leaf-directory-router.ts",
       "src/ui/session/session-directory.ts",
       "src/features/projects/application/projects-screen-controller.ts",
+      "src/features/projects/application/directory-project-launch.ts",
+      "src/features/projects/application/project-actions.ts",
+      "src/features/projects/ui/projects-view.ts",
+      "src/features/projects/ui/editor/project-editor.ts",
+      "src/features/projects/ui/detail/project-detail.ts",
+      "src/features/projects/ui/library/session-library.ts",
+      "src/features/projects/ui/library/move-session-modal.ts",
+      "src/features/projects/ui/project-elements.ts",
+      "src/features/projects/ui/project-view-types.ts",
       "src/runtime/infrastructure/platform-paths.ts",
       "src/runtime/infrastructure/runtime-lease-store.ts",
     ];
@@ -163,13 +161,3 @@ describe("Projects Phase 0 connector baseline", () => {
     }
   });
 });
-
-function sourceTypeScriptFiles(root: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) files.push(...sourceTypeScriptFiles(path));
-    else if (entry.name.endsWith(".ts")) files.push(relative(repositoryRoot, path).replaceAll("\\", "/"));
-  }
-  return files;
-}

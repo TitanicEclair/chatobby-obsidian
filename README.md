@@ -2,12 +2,12 @@
 
 <p align="center">AI agents in Obsidian, with tools, memory, group chats and scheduled work.</p>
 
-**0.5.3 uses Full access. Sandboxing is temporarily unavailable.** Agents can read, change and delete files, run commands and use the network as your OS user account, including outside your vault.
+**Workspace permissions:** choose Read-only, Workspace or Full access, with saved choices for each Vault or Project and reasoned one-time approval requests. These are application permissions, not an operating-system sandbox.
 
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="docs/alpha-guide.md">Guide</a> ·
-  <a href="https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.3">0.5.3 release</a> ·
+  <a href="https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.4">0.5.4 release</a> ·
   <a href="https://github.com/TitanicEclair/chatobby-obsidian/discussions">Share a workflow</a> ·
   <a href="https://github.com/TitanicEclair/chatobby-obsidian/issues">Report a bug</a>
 </p>
@@ -206,14 +206,14 @@ workflows or connect **MCP servers** for more tools and services.
   <img src="assets/readme/plugins.png" alt="The Plugins page with installed connections and the Connect MCP action." width="1200">
 </p>
 
-Chatobby 0.5.3 runs with **Full access**. Access-mode and network controls are
-temporarily hidden. **Permissions** manages Obsidian app access; **Plugins**
-manages MCP connections and individual tool selections. Memory and session-history
-queries keep their Project scope independently of file and command access.
+Choose **Read-only**, **Workspace** or **Full access** in the composer. **Permissions**
+lets you configure any existing workspace, its request behavior and grouped Chatobby
+and Obsidian tool access. **Plugins** manages MCP connections and tool selections.
+Memory and session-history queries keep their independent Project scope.
 
 [Connect MCP servers →](docs/mcp-connections.md) ·
 [Obsidian CLI and terminal →](docs/obsidian-cli-and-terminal.md) ·
-[Full access →](docs/alpha-guide.md#full-access-in-053) · [Security →](SECURITY.md)
+[Workspace permissions →](docs/alpha-guide.md#workspace-permissions) · [Security →](SECURITY.md)
 
 ## Obsidian themes
 
@@ -239,8 +239,8 @@ supported. Chatobby is currently in alpha.
 
 [Installation and updates →](docs/installation.md) ·
 [Troubleshooting →](docs/troubleshooting.md) ·
-[Connector 0.5.3](https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.3) ·
-[Runtime 0.5.3](https://github.com/TitanicEclair/chatobby-runtime/releases/tag/0.5.3)
+[Connector 0.5.4](https://github.com/TitanicEclair/chatobby-obsidian/releases/tag/0.5.4) ·
+[Runtime 0.5.4](https://github.com/TitanicEclair/chatobby-runtime/releases/tag/0.5.4)
 
 ## Roadmap
 
@@ -267,5 +267,7 @@ provide priority support. Model providers set their own subscription and API pri
 
 [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.txt) ·
 [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Support](SUPPORT.md)
+
+[Source ownership and test guides](src/README.md)
 
 <p align="center"><sub>Screenshots and edited GIF recordings use sample notes in Obsidian. The workflow diagrams are illustrations.</sub></p>

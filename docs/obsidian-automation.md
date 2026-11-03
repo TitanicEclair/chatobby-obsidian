@@ -23,8 +23,9 @@ the plugins you have enabled.
 
 Use a current Obsidian desktop installation with its CLI enabled. Chatobby
 reports CLI availability for the connected vault. Live scripting currently
-requires the relevant Obsidian app-access setting in **Permissions**. Chatobby
-0.5.3 uses Full access; sandboxing is temporarily unavailable.
+requires the grouped Chatobby and Obsidian tools setting in **Permissions**.
+The workspace mode checks each operation; scripting may require a reasoned
+one-time permission request or Full access.
 Ordinary note work can use Chatobby's file tools when live app control is unnecessary.
 
 ## Public API reference

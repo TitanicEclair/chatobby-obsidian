@@ -1,5 +1,5 @@
 import type { App } from "obsidian";
-import type { ObsidianFileConventionFactsV1, VaultEnvironment } from "../types";
+import type { ObsidianFileConventionFactsV1, VaultEnvironment } from "./types";
 
 interface EnvironmentOptions {
   chatobbyVersion?: string;

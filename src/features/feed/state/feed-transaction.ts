@@ -1,4 +1,4 @@
-import type { SubagentActivity, ThinkingDisplayMode } from "../../../types";
+import type { SubagentActivity, ThinkingDisplayMode } from "../domain/presentation";
 import type { FeedBlockEntity, FeedScrollState, ToolItemEntity } from "../domain/entities";
 import type { AssistantCallId, BlockId, ToolCallId } from "../domain/ids";
 import { assistantCallId, blockId } from "../domain/ids";

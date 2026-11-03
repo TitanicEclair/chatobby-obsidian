@@ -1,0 +1,13 @@
+import type { FrontendSubagentControlAction, FrontendSubagentMessageViewModel, FrontendSubagentRunFilter, FrontendSubagentSettingsViewModel, FrontendSubagentUserAgentDefinition, FrontendSubagentUserDefinitionScope } from "./models.js";
+export declare const SUBAGENT_RUN_STATUS_VALUES: readonly ["created", "queued", "running", "paused", "waiting", "completed", "failed", "cancelled", "orphaned"];
+export declare function validateSubagentDefinition(value: unknown, label: string): void;
+export declare function validateSubagentRunSummary(value: unknown, label: string): void;
+export declare function validateSubagentMessage(value: unknown, label: string): void;
+export declare function validateSubagentRun(value: unknown, label: string): void;
+export declare function validateSubagentArtifact(value: unknown, label: string): void;
+export declare function parseFrontendSubagentMessage(value: unknown, label: string): FrontendSubagentMessageViewModel;
+export declare function parseSubagentRunQuery(value: unknown): FrontendSubagentRunFilter;
+export declare function requireSubagentControlAction(value: unknown): FrontendSubagentControlAction;
+export declare function requireUserDefinitionScope(value: unknown): FrontendSubagentUserDefinitionScope;
+export declare function parseUserAgentDefinition(value: unknown): FrontendSubagentUserAgentDefinition;
+export declare function parseResolvedSubagentSettings(value: unknown): FrontendSubagentSettingsViewModel;

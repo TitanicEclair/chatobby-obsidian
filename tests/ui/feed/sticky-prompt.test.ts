@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { INITIAL_LEGACY_FEED_STATE } from "../../../src/features/feed/public";
+import { INITIAL_LEGACY_FEED_STATE } from "../../support/feed/legacy-feed-fixture";
 import type { FeedBlock, UserMessage } from "../../../src/types";
 import { FeedRenderer } from "../../../src/ui/feed";
 import { StickyPromptController } from "../../../src/ui/feed/sticky-prompt-controller";

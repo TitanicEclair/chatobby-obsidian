@@ -21,7 +21,8 @@ if (!Array.isArray(manifest.files) || manifest.files.length === 0) fail("Generat
 validateInventory("generated client", manifest.files, true);
 const actualFiles = (await walk(projectionRoot))
 	.filter((path) => path !== manifestPath)
-	.map((path) => relative(projectionRoot, path).split(sep).join("/"));
+	.map((path) => relative(projectionRoot, path).split(sep).join("/"))
+	.sort();
 const expectedFiles = manifest.files.map((item) => item.path);
 if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) fail("Generated client file set drifted from the receipt");
 
@@ -46,7 +47,8 @@ console.log(`Verified complete chatobby-client projection from ${manifest.source
 
 function validateInventory(label, items, requireSize) {
 	const paths = items.map((item) => item.path);
-	const sorted = [...paths].sort((left, right) => left.localeCompare(right));
+	// Match the canonical generator's ordinal order of normalized relative paths.
+	const sorted = [...paths].sort();
 	if (new Set(paths).size !== paths.length || JSON.stringify(paths) !== JSON.stringify(sorted)) fail(`${label} inventory is not unique and sorted`);
 	for (const item of items) {
 		if (typeof item.path !== "string" || item.path.length === 0 || item.path.startsWith("/") || item.path.includes("..")) fail(`${label} contains an unsafe path`);
@@ -63,7 +65,7 @@ async function walk(root) {
 		if (entry.isDirectory()) paths.push(...await walk(path));
 		else if (entry.isFile()) paths.push(path);
 	}
-	return paths.sort((left, right) => left.localeCompare(right));
+	return paths;
 }
 
 function sha256(value) {

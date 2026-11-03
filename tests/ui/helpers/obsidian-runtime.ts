@@ -189,8 +189,7 @@ export class Modal {
     this.modalEl.className = "modal";
     this.titleEl.className = "modal-title";
     this.contentEl.className = "modal-content";
-    const title = this.titleEl as HTMLElement & { setText: (value: string) => void };
-    title.setText = (value) => { title.textContent = value; };
+    this.titleEl.setText = (value) => { this.titleEl.replaceChildren(value); };
     this.modalEl.append(this.titleEl, this.contentEl);
   }
   open(): void {

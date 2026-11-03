@@ -74,6 +74,9 @@ explicitly requested that lifecycle action.
 - Feature consumers import from `src/features/<feature>/public.ts`. Do not reach
   into another feature's private reducer, controller, state, or presentation
   internals.
+  The existing `src/types.ts` and `src/state/settings-store.ts` compatibility
+  facades may only re-export their exact named settings/feed/session owner declarations;
+  this avoids a UI-bearing barrel and is enforced by the feature-boundary tests.
 - Feed/domain state must remain independent of Obsidian DOM APIs. Controllers
   coordinate effects; presentation receives selectors and narrow actions.
 - The bridge executes only registered, validated operations. Never add an
@@ -91,9 +94,11 @@ or sync command.
 | Runtime lifecycle | `src/runtime/`, `src/backend/`, `src/vault-runtime.ts` | Installation, verification, process control, readiness, rollback, and diagnostics. |
 | Transport and contracts | `src/transport/`, `src/vendor/`, `src/types/` | WebSocket adapters and generated/browser-safe contracts. |
 | Obsidian bridge | `src/obsidian-bridge/` | Validated native vault/workspace operations. |
-| Projects observation | `src/features/projects/` | Folder-event queue and typed bridge delivery only; no Project store or marker authority. |
+| Projects | `src/features/projects/` | Native navigation, directory launch, screen actions and folder-event delivery; see its [owner guide](src/features/projects/README.md). No durable Project store or marker authority. |
 | Feature domains | `src/features/` | Public feature boundaries, controllers, selectors, and presentation. |
-| Composer and prompt context | `src/prompt/`, `src/attachments/`, relevant `src/ui/` modules | Live prompt context, attachment lifecycle, input, and controls. |
+| Settings | `src/features/settings/` | [Owner and test-purpose guide](src/features/settings/README.md); configuration/persistence, separate native/embedded renderers, and credential/save ordering. |
+| Memory and local models | `src/features/memory/`, `src/features/feed/domain/`, `src/features/session/domain/` | [Feature guides](src/features/README.md) name projection authority, compatibility exports, lifetimes and test purposes. |
+| Composer and prompt context | `src/prompt/`, `src/attachments/`, `src/ui/composer/` | Live prompt context, attachment lifecycle, input and controls; [Composer owners and tests](src/ui/composer/README.md). |
 | UI and shared state | `src/ui/`, `src/state/`, `styles.css` | Page shell, feed, shared primitives, focus, responsive behavior, and styling. |
 | Credentials | `src/credentials/` | Local credential writer and approved secret-reference integration. Never log values. |
 | Commands | `src/commands/` | Obsidian command registration and deterministic target-view selection. |
@@ -101,6 +106,7 @@ or sync command.
 
 Search for the actual owner before editing. Directory names and historical docs
 are navigation aids, not architectural proof.
+The [source entry guide](src/README.md) links the current owner and test routes.
 
 ## Persistence and configuration
 
@@ -180,7 +186,7 @@ work merely to inspect an ordinary frontend edit.
 | Documentation-only | Only current guidance, comments, or non-rendered documentation changed | Links, paths, claims, formatting, and diff hygiene pass | Runtime or rendered UI behavior |
 | Connector PR | Connector code, schema, CSS behavior, build logic, or an operating rule is ready for review | Complete connector checks/tests, current docs, changelog, and required live evidence pass | Paired runtime compatibility or release acceptance unless those boundaries were exercised |
 | Paired runtime/connector | A runtime contract, generated client, startup path, bridge, installation, or live lifecycle changed | Exact source/connector identities, paired checks, installed hashes, and targeted test-vault scenarios pass | Multi-platform production-candidate or public-release acceptance |
-| Production candidate | An exact version is frozen on paired private release branches | Native matrix, signed/inventoried runtime packages, production connector, and private candidate report pass | Publication authorization |
+| Production candidate | An exact version is frozen on paired private release branches | Supported-platform matrix, signed/inventoried runtime packages, production connector, and private candidate report pass | Publication authorization |
 | Public release | The owner explicitly authorizes the exact accepted candidate | Runtime publishes first, connector assets/tag follow, Community review is requested, and public bytes are reverified | Permission to mutate a later version or replace immutable assets |
 
 ### Rapid frontend feedback
@@ -358,8 +364,8 @@ Use only for a frozen version on matching private `release/<version>` branches.
 1. Record clean, committed, full source and connector SHAs and matching version
    authorities.
 2. Dispatch the private source repository's multi-platform candidate workflow.
-3. Require every native target, repository/platform regression, signed runtime
-   package, installer/update/cancellation/rollback test, connector check/test,
+3. Require every supported runtime target, repository/platform regression,
+   signed runtime package, installer/update/cancellation/rollback test, connector check/test,
    production connector build, inventory, and candidate verification job to
    pass.
 4. Download artifacts from that exact run only; verify report, hashes,
@@ -402,6 +408,8 @@ prior approval authorizes this gate.
 - `npm run export:reviewable` copies only allowlisted source into a fresh
   destination. It must never export `data.json`, local runtime state, generated
   release output, secrets, or machine-specific configuration.
+  It copies committed `HEAD` blobs and writes a hash-bound inventory, so commit
+  reviewed changes first. See the [export contract and tests](docs/release-boundary.md#reviewable-connector).
 - Release assets are built from immutable reviewed source and the matching
   canonical runtime contracts. Do not mix revisions from separate candidates.
 - Obsidian reload and runtime restart are different lifecycle operations. Test

@@ -12,6 +12,35 @@ import { mount } from "./helpers/mount";
 import { createMockFeedHostForStore } from "./helpers/mock-host";
 
 describe("SubagentsView", () => {
+  it.each([false, true])("opens a history conversation through the host callback (workspace page: %s)", (workspacePage) => {
+    const callbacks = actions();
+    const view = new SubagentsView({ store: createStore(), actions: callbacks, workspacePage,
+      onBack: vi.fn(), onOpenManagement: vi.fn(), createFeedHost: createMockFeedHostForStore });
+    const element = mount(view);
+    const button = element.querySelector<HTMLButtonElement>(".chatobby-subagents__open-feed");
+    expect(button).not.toBeNull();
+    button!.click();
+    expect(callbacks.openAgentFeed).toHaveBeenCalledExactlyOnceWith("run-a", "node-a");
+    view.destroy();
+  });
+  it("shows exact child requests above its composer and keeps the selected child draft", async () => {
+    const run = runSnapshot(); const node = run.nodes["node-a"]!;
+    node.pendingPermission = { id: "child-review", runId: run.id, nodeId: node.id, revision: 5, kind: "confirm", title: "Permission requested", status: "pending", createdAt: 1,
+      permissionRequest: { requestId: crypto.randomUUID(), toolName: "bash", reason: "Check edited code", operationSummary: "npm run check" } };
+    const callbacks = actions(); const store = createStore({ runs: [run] });
+    const view = new SubagentsView({ store, actions: callbacks, onBack: vi.fn(), onOpenManagement: vi.fn(), initialFeedOnly: true, createFeedHost: createMockFeedHostForStore });
+    const element = mount(view);
+    const input = element.querySelector<HTMLTextAreaElement>(".chatobby-subagent-conversation__input")!;
+    input.value = "My child follow-up"; input.dispatchEvent(new Event("input", { bubbles: true }));
+    const host = element.querySelector<HTMLElement>(".chatobby-permission-request-host")!;
+    expect(host.textContent).toContain("Check edited code");
+    expect(host.parentElement?.firstElementChild).toBe(host);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(callbacks.decidePermission).not.toHaveBeenCalled(); expect(callbacks.sendMessage).not.toHaveBeenCalled();
+    host.querySelector<HTMLButtonElement>(".mod-cta")!.click();
+    await vi.waitFor(() => expect(callbacks.decidePermission).toHaveBeenCalledExactlyOnceWith(run.id, node.id, "child-review", 5, true));
+    expect(input.value).toBe("My child follow-up"); view.destroy();
+  });
   it("counts idle agents separately from requests that need the user", () => {
     const initial = screen({});
     const store = createStore({ runSummaries: initial.runSummaries.map((run) => ({ ...run, activeNodes: 0, waitingNodes: 2 })) });

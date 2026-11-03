@@ -6,6 +6,15 @@ import { createMockApp } from "./helpers/mock-app";
 const signal = new AbortController().signal;
 
 describe("retained core operations", () => {
+  it("targets a later non-markdown leaf by ID without stopping at the first tab", async () => {
+    const app = createMockApp(new Map([["first.md", "first"]]), { activeView: { path: "first.md" } });
+    const target = app.workspace.getLeaf("tab");
+    await target.setViewState({ type: "chatobby-workspace-page" });
+    const result = await executeOperation("workspace.manage", { action: "close", leafId: (target as unknown as { id: string }).id }, signal, app);
+    expect(result).toMatchObject({ applied: true });
+    expect(app.workspace.getLeavesOfType("chatobby-workspace-page")).toHaveLength(0);
+    expect(app.workspace.getLeavesOfType("markdown")).toHaveLength(1);
+  });
   it("returns live semantic context and environment facts", async () => {
     const app = createMockApp(new Map([["active.md", "# Title\nbody"]]), {
       activeView: { path: "active.md", cursor: { line: 1, ch: 0 }, selection: "body" },

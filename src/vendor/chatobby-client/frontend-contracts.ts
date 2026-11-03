@@ -1,15 +1,151 @@
 // Generated from packages/chatobby/src/frontend-contracts.ts. Do not edit.
+import { type FrontendChoiceOption, parseChoiceOption, validateChoices } from "./frontend/contracts/choices.ts";
+import {
+	type FrontendProjectIntentBody,
+	parseFrontendProjectIntentBody,
+} from "./frontend/contracts/projects/intents.ts";
+import type { FrontendProjectScreenViewModel } from "./frontend/contracts/projects/models.ts";
+import { validateProjectScreen } from "./frontend/contracts/projects/validation.ts";
+
+export type { FrontendChoiceOption } from "./frontend/contracts/choices.ts";
+export type {
+	FrontendProjectAvailabilityFilter,
+	FrontendProjectDetailViewModel,
+	FrontendProjectLifecycleFilter,
+	FrontendProjectMessageSearchHitViewModel,
+	FrontendProjectMessageSearchPageViewModel,
+	FrontendProjectRootViewModel,
+	FrontendProjectScreenViewModel,
+	FrontendProjectSessionDestinationViewModel,
+	FrontendProjectSessionSearchMode,
+	FrontendProjectSessionSort,
+	FrontendProjectSessionViewModel,
+	FrontendProjectSort,
+	FrontendProjectSummaryViewModel,
+	FrontendRunningWorkspaceViewModel,
+} from "./frontend/contracts/projects/models.ts";
+
+import {
+	type PermissionRequestReview,
+	parsePermissionRequestReview,
+} from "./permission-review.ts";
+import {
+	type FrontendPermissionScreenViewModel,
+	validatePermissionScreen,
+} from "./frontend/contracts/permission-screen.ts";
+import type {
+	FrontendSubagentAgentDefinition,
+	FrontendSubagentArtifactGroupViewModel,
+	FrontendSubagentCapabilitiesViewModel,
+	FrontendSubagentControlAction,
+	FrontendSubagentControlReceiptViewModel,
+	FrontendSubagentMessageViewModel,
+	FrontendSubagentModelViewModel,
+	FrontendSubagentPermissionSnapshotViewModel,
+	FrontendSubagentRunFilter,
+	FrontendSubagentRunSummaryViewModel,
+	FrontendSubagentRunViewModel,
+	FrontendSubagentSettingsViewModel,
+	FrontendSubagentSkillViewModel,
+	FrontendSubagentSyncStatus,
+	FrontendSubagentUserAgentDefinition,
+	FrontendSubagentUserDefinitionScope,
+} from "./frontend/contracts/subagents/models.ts";
+import {
+	parseFrontendSubagentMessage,
+	parseResolvedSubagentSettings,
+	parseSubagentRunQuery,
+	parseUserAgentDefinition,
+	requireSubagentControlAction,
+	requireUserDefinitionScope,
+	SUBAGENT_RUN_STATUS_VALUES,
+	validateSubagentArtifact,
+	validateSubagentDefinition,
+	validateSubagentMessage,
+	validateSubagentRun,
+	validateSubagentRunSummary,
+} from "./frontend/contracts/subagents/validation.ts";
+import {
+	optionalFiniteNumber,
+	optionalNullableString,
+	optionalSafeInteger,
+	optionalString,
+	requireArray,
+	requireBoolean,
+	requireEnumValue,
+	requireJsonValue,
+	requireNumberRecord,
+	requireRecord,
+	requireSafeInteger,
+	requireString,
+	requireStringArray,
+	requireTextValue,
+	requireThinkingLevel,
+	validateArray,
+} from "./frontend/contracts/validation.ts";
+import {
+	type FrontendPermissionRequestBehavior,
+	type FrontendWorkspacePolicyPayload,
+	parseFrontendRequestBehavior,
+	parseFrontendWorkspacePolicyPayload,
+} from "./frontend/contracts/workspace-permissions.ts";
+
+export type {
+	FrontendObsidianVaultAccessViewModel,
+	FrontendPermissionScreenViewModel,
+} from "./frontend/contracts/permission-screen.ts";
+export { OBSIDIAN_VAULT_ACCESS_WARNING } from "./frontend/contracts/permission-screen.ts";
+export type {
+	FrontendPermissionRequestBehavior,
+	FrontendPermissionWorkspaceTarget,
+	FrontendWorkspacePermissionPolicy,
+	FrontendWorkspacePolicyPayload,
+} from "./frontend/contracts/workspace-permissions.ts";
+
 import {
 	type FrontendSandboxRevokePayload,
 	type FrontendSandboxSetupPayload,
-	type FrontendSandboxSetupViewModel,
 	type FrontendSandboxVerifyPayload,
 	parseFrontendSandboxRevokePayload,
 	parseFrontendSandboxSetupPayload,
 	parseFrontendSandboxVerifyPayload,
-	validateFrontendSandboxSetupView,
 } from "./frontend-sandbox-contracts.ts";
 import type { ThinkingLevel } from "./wire-types.ts";
+
+export type {
+	FrontendSubagentAcceptanceRecordViewModel,
+	FrontendSubagentActorViewModel,
+	FrontendSubagentAgentDefinition,
+	FrontendSubagentArtifactGroupViewModel,
+	FrontendSubagentArtifactViewModel,
+	FrontendSubagentBudgets,
+	FrontendSubagentCapabilitiesViewModel,
+	FrontendSubagentContextMode,
+	FrontendSubagentControlAction,
+	FrontendSubagentControlReceiptAction,
+	FrontendSubagentControlReceiptViewModel,
+	FrontendSubagentExecutionMode,
+	FrontendSubagentLaunchResolutionSource,
+	FrontendSubagentLaunchSummaryV1,
+	FrontendSubagentMessageViewModel,
+	FrontendSubagentModelViewModel,
+	FrontendSubagentNodeStatus,
+	FrontendSubagentNodeViewModel,
+	FrontendSubagentPermissionRequestViewModel,
+	FrontendSubagentPermissionSnapshotViewModel,
+	FrontendSubagentResolutionLayer,
+	FrontendSubagentResolvedExecutionMode,
+	FrontendSubagentRunFilter,
+	FrontendSubagentRunStatus,
+	FrontendSubagentRunSummaryViewModel,
+	FrontendSubagentRuntimePolicy,
+	FrontendSubagentRunViewModel,
+	FrontendSubagentSettingsViewModel,
+	FrontendSubagentSkillViewModel,
+	FrontendSubagentSyncStatus,
+	FrontendSubagentUserAgentDefinition,
+	FrontendSubagentUserDefinitionScope,
+} from "./frontend/contracts/subagents/models.ts";
 
 /** Public, data-only protocol consumed by reviewable Chatobby frontends. */
 export const CHATOBBY_FRONTEND_PROTOCOL_VERSION = 2;
@@ -255,13 +391,6 @@ export interface FrontendNegotiationResult {
 	readonly replayLimit: number;
 }
 
-export interface FrontendChoiceOption {
-	readonly value: string;
-	readonly label: string;
-	readonly description?: string;
-	readonly disabledReason?: string;
-}
-
 export interface FrontendChoiceControl {
 	readonly id: "provider" | "model" | "effort" | "permission" | "network";
 	readonly label: string;
@@ -478,6 +607,7 @@ export type FrontendFeedBlock =
 	| {
 			readonly type: "notice";
 			readonly id: string;
+			readonly permissionRequest?: PermissionRequestReview;
 			readonly title: string;
 			readonly body: string;
 			readonly level: "info" | "warning" | "error";
@@ -529,170 +659,6 @@ export interface FrontendChannelGroupViewModel {
 	readonly id: "current" | "named" | "sessions" | "archived";
 	readonly label: string;
 	readonly items: readonly FrontendChannelDirectoryItem[];
-}
-
-export type FrontendProjectLifecycleFilter = "active" | "archived" | "all";
-export type FrontendProjectAvailabilityFilter =
-	| "all"
-	| "available"
-	| "attention"
-	| "missing"
-	| "conflict"
-	| "relink-required";
-export type FrontendProjectSort =
-	| "activity-desc"
-	| "created-desc"
-	| "created-asc"
-	| "name-asc"
-	| "name-desc"
-	| "relevance";
-export type FrontendProjectSessionSort =
-	| "updated-desc"
-	| "created-desc"
-	| "created-asc"
-	| "name-asc"
-	| "name-desc"
-	| "message-count-desc"
-	| "relevance";
-export type FrontendProjectSessionSearchMode = "titles" | "messages";
-
-export interface FrontendProjectRootViewModel {
-	readonly rootId: string;
-	readonly directoryId: string;
-	readonly label: string;
-	readonly primary: boolean;
-	readonly locationKind: "vault-relative" | "external";
-	readonly vaultRelativePath?: string;
-	/** Device-local UI projection. Never persist, log, export, or place in portable Project records. */
-	readonly localPath?: string;
-	readonly directoryReuse: "canonical" | "none";
-	readonly markerPolicy: "required" | "optional" | "disabled";
-	readonly recoveryMode: "marker" | "device-binding-only";
-	readonly availability: "available" | "missing" | "conflict" | "relink-required" | "unregistered";
-	readonly availabilityLabel: string;
-	readonly recoveryAction?: "relink" | "resolve-conflict" | "repair-marker";
-}
-
-export interface FrontendProjectSessionViewModel {
-	readonly sessionId: string;
-	readonly workspaceBindingRevision: number;
-	readonly workspace: { readonly kind: "vault" } | { readonly kind: "project"; readonly projectId: string };
-	readonly name: string;
-	/** Absent while a live first turn has not materialized its transcript. */
-	readonly createdAt?: string;
-	readonly updatedAt?: string;
-	readonly messageCount: number;
-	readonly running: boolean;
-	/** Actual live turn activity, independent of which conversation a page is viewing. */
-	readonly active?: boolean;
-	readonly activeRootId?: string;
-	/** Bounded excerpt emitted only when message-content search matched this chat. */
-	readonly matchSnippet?: string;
-}
-
-export interface FrontendProjectMessageSearchHitViewModel {
-	readonly hitId: string;
-	readonly sessionId: string;
-	readonly sessionName: string;
-	readonly messageId: string;
-	readonly targetBlockId: string;
-	readonly role: "user" | "assistant";
-	readonly timestamp: string;
-	readonly excerpt: string;
-	readonly matchRanges: readonly { readonly start: number; readonly end: number }[];
-}
-
-export interface FrontendProjectMessageSearchPageViewModel {
-	readonly items: readonly FrontendProjectMessageSearchHitViewModel[];
-	readonly page: number;
-	readonly pageSize: number;
-	readonly totalCount: number;
-	readonly hasPrevious: boolean;
-	readonly hasNext: boolean;
-}
-
-export interface FrontendProjectSessionDestinationViewModel {
-	readonly projectId: string;
-	readonly name: string;
-	readonly available: boolean;
-	readonly availabilityLabel: string;
-}
-
-export interface FrontendProjectSummaryViewModel {
-	readonly projectId: string;
-	readonly revision: number;
-	readonly name: string;
-	readonly description?: string;
-	readonly lifecycle: "active" | "archived";
-	readonly creationKind: "directory-session" | "manual" | "migration";
-	readonly primaryRootId?: string;
-	readonly primaryRootLabel?: string;
-	readonly canonicalVaultRelativePath?: string;
-	readonly rootCount: number;
-	readonly sessionCount: number;
-	readonly availability: "available" | "attention" | "missing" | "conflict" | "relink-required";
-	readonly availabilityLabel: string;
-	readonly createdAt: string;
-	readonly updatedAt: string;
-	/** Latest Project metadata or child-chat activity, whichever is newer. */
-	readonly activityAt: string;
-}
-
-export interface FrontendProjectDetailViewModel {
-	readonly projectId: string;
-	readonly revision: number;
-	readonly name: string;
-	readonly description?: string;
-	readonly lifecycle: "active" | "archived";
-	readonly creationKind: "directory-session" | "manual" | "migration";
-	readonly primaryRootId?: string;
-	readonly roots: readonly FrontendProjectRootViewModel[];
-	readonly sessionCount: number;
-	readonly sessions: readonly FrontendProjectSessionViewModel[];
-}
-
-export interface FrontendRunningWorkspaceViewModel {
-	readonly kind: "vault" | "project" | "unresolved";
-	readonly label: string;
-	readonly projectId?: string;
-	readonly activeRootId?: string;
-	readonly attachedRootIds: readonly string[];
-}
-
-export interface FrontendProjectScreenViewModel {
-	readonly screenId: "projects";
-	readonly revision: number;
-	readonly snapshotSequence: number;
-	readonly loading: boolean;
-	readonly error?: string;
-	readonly statusMessage?: string;
-	readonly query: string;
-	readonly lifecycleFilter: FrontendProjectLifecycleFilter;
-	readonly availabilityFilter: FrontendProjectAvailabilityFilter;
-	readonly sort: FrontendProjectSort;
-	readonly sessionQuery: string;
-	readonly sessionSearchMode: FrontendProjectSessionSearchMode;
-	readonly sessionSort: FrontendProjectSessionSort;
-	readonly sessionSearchPage: number;
-	readonly selectedProjectId?: string;
-	readonly runningIn: FrontendRunningWorkspaceViewModel;
-	readonly projects: readonly FrontendProjectSummaryViewModel[];
-	/** Unfiltered active Projects available to the Move chat picker. */
-	readonly sessionMoveProjects: readonly FrontendProjectSessionDestinationViewModel[];
-	readonly vaultSessionCount: number;
-	readonly vaultSessions: readonly FrontendProjectSessionViewModel[];
-	/** Workspace navigation across all Projects; browsing does not select a session. */
-	readonly navigatorSessions?: readonly FrontendProjectSessionViewModel[];
-	readonly detail?: FrontendProjectDetailViewModel;
-	/** Available roots for the chat that is actually running, independent of the Project being viewed. */
-	readonly runningRoots: readonly FrontendProjectRootViewModel[];
-	/** Bounded exact message matches for the selected Project or Vault scope. */
-	readonly messageSearchPage?: FrontendProjectMessageSearchPageViewModel;
-	readonly lifecycleOptions: readonly FrontendChoiceOption[];
-	readonly availabilityOptions: readonly FrontendChoiceOption[];
-	readonly sortOptions: readonly FrontendChoiceOption[];
-	readonly sessionSearchModeOptions: readonly FrontendChoiceOption[];
-	readonly sessionSortOptions: readonly FrontendChoiceOption[];
 }
 
 export interface FrontendChannelMessageViewModel {
@@ -1064,77 +1030,6 @@ export interface FrontendPermissionAdvancedGroupViewModel {
 	readonly rules: readonly { readonly pattern: string; readonly decision: FrontendPermissionDecision }[];
 }
 
-export const OBSIDIAN_VAULT_ACCESS_WARNING = "Uses Obsidian’s app authority outside the sandbox.";
-
-export type FrontendObsidianVaultAccessViewModel =
-	| {
-			readonly status: "available";
-			readonly revision: number;
-			readonly sessionId: string;
-			readonly bindingRevision: number;
-			readonly enabled: boolean;
-			readonly source: "default" | "user";
-			readonly warning: typeof OBSIDIAN_VAULT_ACCESS_WARNING;
-	  }
-	| {
-			readonly status: "unavailable";
-			readonly enabled: false;
-			readonly warning: typeof OBSIDIAN_VAULT_ACCESS_WARNING;
-			readonly reason: string;
-	  };
-
-export interface FrontendPermissionScreenViewModel {
-	readonly screenId: "permissions";
-	/** Absent on older runtimes; never infer Full-only operation from the plugin version. */
-	readonly executionMode?: "full-access";
-	readonly revision: number;
-	/** Durable policy owner; delegated sessions display this inherited authority read-only. */
-	readonly accessPolicySessionId: string;
-	readonly accessPolicy: {
-		readonly schemaVersion: 1;
-		readonly revision: number;
-		readonly accessMode: "read-only" | "workspace" | "full";
-		readonly agentNetworkAccess: boolean;
-	};
-	readonly scope: {
-		readonly bindingRevision: number;
-		readonly kind: "project" | "vault";
-		readonly selectedRootCount: number;
-		readonly filesystemBound: boolean;
-	};
-	readonly nativeSupport: {
-		readonly status: "ready" | "setup-required" | "unverified" | "unsupported";
-		readonly backendId?: "windows-appcontainer" | "linux-bubblewrap" | "macos-seatbelt" | "landstrip";
-		readonly reason?: string;
-		readonly userAction?: string;
-	};
-	/** Absent only for additive compatibility with older runtimes; never infer a grant. */
-	readonly obsidianVaultAccess?: FrontendObsidianVaultAccessViewModel;
-	/** Explicit operator choices across this Vault; independent of session policy. */
-	readonly workspaceVaultAccess?: readonly {
-		readonly projectId: string | null;
-		readonly projectRevision?: number;
-		readonly label: string;
-		readonly revision: number;
-		readonly enabled: boolean;
-		readonly source: "default" | "user";
-	}[];
-	/** Explicit setup/recovery, never a substitute for nativeSupport proof. Omitted without negotiation. */
-	readonly nativeSetup?: FrontendSandboxSetupViewModel;
-	readonly effective: {
-		readonly fileRead: boolean;
-		readonly fileWrite: boolean;
-		readonly localProcess: "native-contained" | "unavailable" | "unsandboxed";
-		readonly obsidian: "typed-read" | "typed-workspace" | "unavailable" | "unsandboxed" | "app-authority";
-		readonly agentNetworkAccess: boolean;
-		readonly warning?: string;
-	};
-	readonly migrationNotice?: string;
-	readonly loading: boolean;
-	readonly error?: string;
-	readonly statusMessage?: string;
-}
-
 export interface FrontendEventDefinitionViewModel {
 	readonly id: string;
 	readonly revision: number;
@@ -1214,479 +1109,6 @@ export interface FrontendEventScreenViewModel {
 	readonly occurrences: readonly FrontendEventOccurrenceViewModel[];
 	readonly pendingApprovalCount: number;
 	readonly editor?: FrontendEventEditorViewModel;
-}
-
-/** Public subagent contracts intentionally decoupled from the private supervisor package. */
-export type FrontendSubagentExecutionMode = "auto" | "in-process" | "worker-process";
-export type FrontendSubagentResolvedExecutionMode = Exclude<FrontendSubagentExecutionMode, "auto">;
-export type FrontendSubagentContextMode = "fresh" | "fork";
-/** Internal resolution layers reported to the frontend for provenance and effective settings. */
-export type FrontendSubagentResolutionLayer = "global" | "vault" | "directory" | "session";
-/** Availability choices accepted when a user creates or edits an agent role. */
-export type FrontendSubagentUserDefinitionScope = "vault" | "directory";
-export type FrontendSubagentRunStatus =
-	| "created"
-	| "queued"
-	| "running"
-	| "paused"
-	| "waiting"
-	| "completed"
-	| "failed"
-	| "cancelled"
-	| "orphaned";
-export type FrontendSubagentNodeStatus =
-	| "blocked"
-	| "queued"
-	| "running"
-	| "waiting"
-	| "paused"
-	| "completed"
-	| "failed"
-	| "cancelled"
-	| "skipped"
-	| "orphaned";
-export type FrontendSubagentControlAction =
-	| "cancel"
-	| "pause"
-	| "resume"
-	| "interrupt"
-	| "steer"
-	| "complete"
-	| "retry"
-	| "reprioritize"
-	| "fork"
-	| "clone"
-	| "decide-child-input"
-	| "decide-tool-permission"
-	| "adopt"
-	| "reconcile-orphan"
-	| "approve-permission"
-	| "deny-permission"
-	| "approve-acceptance"
-	| "reject-acceptance"
-	| "extend-budget";
-export type FrontendSubagentControlReceiptAction = FrontendSubagentControlAction | "set-permission-profile";
-
-export interface FrontendSubagentRuntimePolicy {
-	executionMode?: FrontendSubagentExecutionMode;
-	model?: string;
-	fallbackModels?: string[];
-	thinking?: ThinkingLevel;
-	tools?: string[];
-	mcpTools?: string[];
-	extensions?: string[];
-	skills?: string[];
-	contextMode?: FrontendSubagentContextMode;
-	maxDepth?: number;
-	maxTurnsPerNode?: number;
-	maxTokens?: number;
-	maxWallTimeMs?: number;
-	maxToolCallsPerNode?: number;
-	toolCallLimits?: Record<string, number>;
-	permissionProfileId?: string;
-}
-
-export interface FrontendSubagentAgentDefinition {
-	id: string;
-	name: string;
-	description: string;
-	scope: FrontendSubagentResolutionLayer;
-	scopeId: string;
-	systemPrompt: string;
-	enabled: boolean;
-	policy: FrontendSubagentRuntimePolicy;
-	/** Retained role policy is inert until saved without its legacy permission-profile override. */
-	permissionReviewRequired?: true;
-	builtIn?: true;
-	revision: number;
-	updatedAt: number;
-}
-
-export type FrontendSubagentUserAgentDefinition = Omit<FrontendSubagentAgentDefinition, "scope" | "builtIn"> & {
-	scope: FrontendSubagentUserDefinitionScope;
-	builtIn?: never;
-};
-
-export interface FrontendSubagentRunFilter {
-	parentSessionId?: string;
-	status?: FrontendSubagentRunStatus[];
-	agentId?: string;
-	executionMode?: FrontendSubagentResolvedExecutionMode;
-	workspaceCwd?: string;
-	search?: string;
-	createdAfter?: number;
-	createdBefore?: number;
-}
-
-export interface FrontendSubagentBudgets {
-	maxConcurrency?: number;
-	maxDepth?: number;
-	maxTurnsPerNode?: number;
-	maxTokens?: number;
-	maxCostUsd?: number;
-	maxWallTimeMs?: number;
-	maxToolCallsPerNode?: number;
-}
-
-export type FrontendSubagentLaunchResolutionSource =
-	| "node"
-	| "run"
-	| "role"
-	| "parent"
-	| "project"
-	| "settings"
-	| "fallback"
-	| "auto";
-
-/**
- * Browser-safe projection of an accepted launch contract. Private role
- * instructions and the materialized context packet never cross this boundary.
- */
-export interface FrontendSubagentLaunchSummaryV1 {
-	readonly schemaVersion: 1;
-	readonly contractId: string;
-	readonly resolutionFingerprint: string;
-	readonly runId: string;
-	readonly nodeId: string;
-	readonly role: {
-		readonly id: string;
-		readonly name: string;
-		readonly revision: number;
-		readonly promptHash: string;
-	};
-	readonly model: {
-		readonly selected: string;
-		readonly thinking: ThinkingLevel;
-		readonly fallbacks: readonly string[];
-	};
-	readonly executor: {
-		readonly requested: FrontendSubagentExecutionMode;
-		readonly selected: FrontendSubagentResolvedExecutionMode;
-		readonly source: "node" | "run" | "role" | "auto";
-		readonly reason: string;
-		readonly runtimeFingerprintRequirement: string | null;
-	};
-	readonly context: {
-		readonly mode: FrontendSubagentContextMode;
-		readonly source: "node" | "run" | "role" | "fallback";
-		readonly explicit: boolean;
-		readonly packetFingerprint: string | null;
-		readonly estimatedTokens: number;
-		readonly messageCount: number;
-	};
-	readonly permission: {
-		readonly profileId: string;
-		readonly profileRevision: number;
-		readonly profileFingerprint: string;
-		readonly source: "run" | "node" | "role" | "project" | "fallback";
-	};
-	readonly budgets: {
-		readonly limits: {
-			readonly maxConcurrency: number | null;
-			readonly maxDepth: number | null;
-			readonly maxTurnsPerNode: number | null;
-			readonly maxTokens: number | null;
-			readonly maxCostUsd: number | null;
-			readonly maxWallTimeMs: number | null;
-			readonly maxToolCallsPerNode: number | null;
-			readonly toolCallLimits: Readonly<Record<string, number>>;
-		};
-		readonly sources: {
-			readonly maxConcurrency: FrontendSubagentLaunchResolutionSource;
-			readonly maxDepth: FrontendSubagentLaunchResolutionSource;
-			readonly maxTurnsPerNode: FrontendSubagentLaunchResolutionSource;
-			readonly maxTokens: FrontendSubagentLaunchResolutionSource;
-			readonly maxCostUsd: FrontendSubagentLaunchResolutionSource;
-			readonly maxWallTimeMs: FrontendSubagentLaunchResolutionSource;
-			readonly maxToolCallsPerNode: FrontendSubagentLaunchResolutionSource;
-			readonly toolCallLimits: FrontendSubagentLaunchResolutionSource;
-		};
-		readonly preflight: {
-			readonly estimatedInitialTokens: number;
-			readonly responseReserveTokens: number;
-			readonly recommendedMinimumTokens: number;
-			readonly toolCount: number;
-			readonly method: "conservative-chars-per-token";
-			readonly sourceFingerprint: string;
-		};
-	};
-	readonly tools: {
-		readonly capabilityPreset: string | null;
-		readonly eligibleNames: readonly string[];
-		readonly eligibleActions: Readonly<Record<string, readonly string[]>>;
-		readonly mcpNames: readonly string[];
-		readonly skills: readonly string[];
-		readonly productExtensions: readonly string[];
-		readonly registryFingerprint: string;
-		readonly eligibleFingerprint: string;
-		readonly source: "role" | "fallback";
-	};
-	readonly workspace: {
-		readonly request: {
-			readonly mode: "shared" | "worktree" | "sandbox";
-			readonly cwd: string;
-			readonly artifactDirectory: string | null;
-			readonly providerRequirement: string | null;
-			readonly source: "run";
-		};
-		readonly materialized: {
-			readonly resolvedCwd: string;
-			readonly provider: string;
-			readonly workspaceId: string;
-			readonly baseRevision: string | null;
-		};
-	};
-	readonly definitionChangedSinceLaunch: boolean;
-}
-
-export interface FrontendSubagentPermissionRequestViewModel {
-	id: string;
-	revision: number;
-	runId: string;
-	nodeId: string;
-	kind: "confirm" | "select" | "input";
-	title: string;
-	message?: string;
-	options?: string[];
-	placeholder?: string;
-	status: "pending" | "approved" | "denied";
-	createdAt: number;
-	decidedAt?: number;
-	value?: string;
-}
-
-export interface FrontendSubagentAcceptanceRecordViewModel {
-	runId: string;
-	nodeId: string;
-	level: "none" | "attested" | "checked" | "verified" | "reviewed";
-	status: "accepted" | "rejected" | "waiting-review";
-	criteria: string[];
-	checks: {
-		id: string;
-		command: string;
-		exitCode: number | null;
-		stdout: string;
-		stderr: string;
-		timedOut: boolean;
-		durationMs: number;
-	}[];
-	reviewerAgentId?: string;
-	decidedAt?: number;
-	decisionNote?: string;
-}
-
-export interface FrontendSubagentNodeViewModel {
-	id: string;
-	parentNodeId?: string;
-	fanoutIndex?: number;
-	fanoutItem?: unknown;
-	agentId: string;
-	agentName?: string;
-	label: string;
-	task: string;
-	status: FrontendSubagentNodeStatus;
-	dependsOn: string[];
-	priority: number;
-	requestedExecutionMode: FrontendSubagentExecutionMode;
-	/** Compact accepted launch facts; private role instructions and context packet are omitted. */
-	launchSummary?: FrontendSubagentLaunchSummaryV1;
-	runtimePolicy?: FrontendSubagentRuntimePolicy;
-	resolvedExecutionMode?: FrontendSubagentResolvedExecutionMode;
-	model?: string;
-	queuePosition?: number;
-	currentTool?: string;
-	contextPercent?: number;
-	turns: number;
-	tokens: number;
-	costUsd: number;
-	startedAt?: number;
-	completedAt?: number;
-	attempts: {
-		id: string;
-		number: number;
-		mode: FrontendSubagentResolvedExecutionMode;
-		status: FrontendSubagentNodeStatus;
-		startedAt?: number;
-		completedAt?: number;
-		runtimeFingerprint?: string;
-		error?: string;
-	}[];
-	artifactIds: string[];
-	result?: string;
-	structuredOutput?: unknown;
-	acceptanceStatus?: "not-required" | "accepted" | "rejected" | "waiting-review";
-	acceptanceRecord?: FrontendSubagentAcceptanceRecordViewModel;
-	pendingPermission?: FrontendSubagentPermissionRequestViewModel;
-	latestMessageId?: string;
-	error?: string;
-}
-
-export interface FrontendSubagentRunViewModel {
-	id: string;
-	runtimeId: string;
-	parentSessionId: string;
-	triggerSource: "parent-agent" | "user" | "scheduler" | "automation" | "api";
-	description: string;
-	status: FrontendSubagentRunStatus;
-	priority: number;
-	createdAt: number;
-	updatedAt: number;
-	startedAt?: number;
-	completedAt?: number;
-	lastSequence: number;
-	budgets: FrontendSubagentBudgets;
-	context: { mode: FrontendSubagentContextMode };
-	permissionProfileId?: string;
-	workspace: {
-		cwd: string;
-		mode: "shared" | "worktree" | "sandbox";
-		artifactDirectory?: string;
-		resolvedCwd: string;
-		provider: string;
-		workspaceId: string;
-		baseRevision?: string;
-		baselineFileStates?: Record<string, string>;
-		changedFiles: string[];
-		createdAt: number;
-	};
-	parent?: { runId: string; nodeId: string; depth: number };
-	failFast: boolean;
-	nodes: Record<string, FrontendSubagentNodeViewModel>;
-	rootNodeIds: string[];
-	error?: string;
-}
-
-export interface FrontendSubagentRunSummaryViewModel {
-	id: string;
-	parentSessionId: string;
-	triggerSource: "parent-agent" | "user" | "scheduler" | "automation" | "api";
-	description: string;
-	status: FrontendSubagentRunStatus;
-	agentIds: string[];
-	executionModes: FrontendSubagentResolvedExecutionMode[];
-	workspaceCwd: string;
-	activeNodes: number;
-	queuedNodes: number;
-	waitingNodes: number;
-	failedNodes: number;
-	tokens: number;
-	costUsd: number;
-	createdAt: number;
-	updatedAt: number;
-}
-
-export interface FrontendSubagentArtifactViewModel {
-	id: string;
-	runId: string;
-	nodeId: string;
-	kind: "file" | "report" | "patch" | "structured-output" | "transcript" | "log";
-	name: string;
-	path: string;
-	mimeType?: string;
-	bytes?: number;
-	revision: number;
-	createdAt: number;
-	updatedAt: number;
-	promotedVaultPath?: string;
-}
-
-export interface FrontendSubagentActorViewModel {
-	kind: "user" | "parent" | "agent" | "system";
-	id: string;
-	label?: string;
-}
-
-export interface FrontendSubagentMessageViewModel {
-	id: string;
-	runId: string;
-	nodeId?: string;
-	threadId: string;
-	from: FrontendSubagentActorViewModel;
-	to: FrontendSubagentActorViewModel[];
-	kind: "inform" | "request" | "decision" | "steer" | "result";
-	text: string;
-	data?: Record<string, unknown>;
-	correlationId?: string;
-	replyTo?: string;
-	blocking: boolean;
-	deadline?: number;
-	status: "queued" | "delivered" | "acknowledged" | "expired" | "rejected";
-	createdAt: number;
-	acknowledgedAt?: number;
-	response?: {
-		actor: FrontendSubagentActorViewModel;
-		text?: string;
-		data?: Record<string, unknown>;
-		createdAt: number;
-	};
-}
-
-export interface FrontendSubagentControlReceiptViewModel {
-	commandId: string;
-	runId: string;
-	nodeId?: string;
-	action: FrontendSubagentControlReceiptAction;
-	state: "requested" | "acknowledged" | "effective" | "failed" | "timed-out";
-	message?: string;
-	timestamp: number;
-}
-
-export interface FrontendSubagentCapabilitiesViewModel {
-	protocolVersion: 1;
-	runtimeId: string;
-	executionModes: FrontendSubagentResolvedExecutionMode[];
-	supportsSiblingCommunication: boolean;
-	supportsWorkerRecovery: boolean;
-	workerRecoveryMode: "none" | "reconcile" | "adopt";
-	supportsWorktrees: boolean;
-	supportsArtifactPromotion: boolean;
-	maxReplayEvents: number;
-}
-
-export interface FrontendSubagentSettingsViewModel {
-	settings: {
-		schemaVersion?: 2;
-		maxConcurrency?: number;
-		unlimitedConcurrency?: boolean;
-		defaultExecutionMode: FrontendSubagentExecutionMode;
-		defaultMaxDepth?: number;
-		unlimitedDepth?: boolean;
-		defaultMaxTurnsPerNode?: number;
-		defaultMaxTokens?: number;
-		defaultMaxCostUsd?: number;
-		defaultMaxWallTimeMs?: number;
-		automaticDelegation: "off" | "suggest" | "allowed";
-		retentionDays: number;
-		allowSiblingCommunication: boolean;
-	};
-	scope?: { kind: FrontendSubagentResolutionLayer; id: string };
-	revision: number;
-	sources: Partial<Record<string, { kind: FrontendSubagentResolutionLayer; id: string }>>;
-}
-
-export interface FrontendSubagentPermissionSnapshotViewModel {
-	document: {
-		profiles: { id: string; name: string }[];
-		agentAssignments: Record<string, { mode: "inherit" } | { mode: "profile"; profileId: string }>;
-	};
-}
-
-export type FrontendSubagentSyncStatus = "idle" | "loading" | "live" | "gap" | "error";
-
-export interface FrontendSubagentModelViewModel {
-	readonly id: string;
-	readonly name: string;
-	readonly provider: string;
-}
-
-export interface FrontendSubagentSkillViewModel {
-	readonly name: string;
-	readonly description?: string;
-}
-
-export interface FrontendSubagentArtifactGroupViewModel {
-	readonly runId: string;
-	readonly items: readonly FrontendSubagentArtifactViewModel[];
 }
 
 export interface FrontendSubagentScreenViewModel {
@@ -1972,119 +1394,7 @@ export type FrontendIntent =
 			readonly type: "operator.set-view-open";
 			readonly payload: { readonly open: boolean };
 	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.set-view";
-			readonly payload: {
-				readonly query: string;
-				readonly lifecycleFilter: FrontendProjectLifecycleFilter;
-				readonly availabilityFilter: FrontendProjectAvailabilityFilter;
-				readonly sort: FrontendProjectSort;
-				readonly sessionQuery: string;
-				readonly sessionSearchMode: FrontendProjectSessionSearchMode;
-				readonly sessionSort: FrontendProjectSessionSort;
-				readonly sessionSearchPage: number;
-				readonly selectedProjectId?: string;
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.create";
-			readonly payload: {
-				readonly name: string;
-				readonly description?: string;
-				readonly rootMode?: "create-vault-folder" | "use-existing-folders";
-				readonly roots?: readonly {
-					readonly directoryCandidateRef: string;
-					readonly label: string;
-					readonly markerPolicy: "required" | "optional" | "disabled";
-					readonly directoryReuse: "canonical" | "none";
-				}[];
-				readonly primaryDirectoryCandidateRef?: string;
-				/** Legacy one-root compatibility; new connectors use rootMode and roots. */
-				readonly vaultRelativePath?: string;
-				readonly directoryCandidateRef?: string;
-				readonly directoryReuse: "canonical" | "none";
-				readonly markerPolicy: "required" | "optional" | "disabled";
-				readonly useForCurrentSession?: boolean;
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.replace-details";
-			readonly payload: {
-				readonly projectId: string;
-				readonly expectedProjectRevision: number;
-				readonly name: string;
-				readonly description?: string;
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.archive" | "projects.restore";
-			readonly payload: { readonly projectId: string; readonly expectedProjectRevision: number };
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.root-add";
-			readonly payload: {
-				readonly projectId: string;
-				readonly expectedProjectRevision: number;
-				readonly label: string;
-				readonly vaultRelativePath?: string;
-				readonly directoryCandidateRef?: string;
-				readonly directoryReuse: "canonical" | "none";
-				readonly markerPolicy: "required" | "optional" | "disabled";
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.roots-add-batch";
-			readonly payload: {
-				readonly projectId: string;
-				readonly expectedProjectRevision: number;
-				readonly roots: readonly {
-					readonly directoryCandidateRef: string;
-					readonly label: string;
-					readonly markerPolicy: "required" | "optional" | "disabled";
-					readonly directoryReuse: "canonical" | "none";
-				}[];
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.root-relabel";
-			readonly payload: {
-				readonly projectId: string;
-				readonly expectedProjectRevision: number;
-				readonly rootId: string;
-				readonly label: string;
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.root-set-primary" | "projects.root-remove";
-			readonly payload: {
-				readonly projectId: string;
-				readonly expectedProjectRevision: number;
-				readonly rootId: string;
-				readonly replacementRootId?: string;
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.root-recover";
-			readonly payload: { readonly projectId: string; readonly rootId: string };
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.root-relink";
-			readonly payload: {
-				readonly projectId: string;
-				readonly expectedProjectRevision: number;
-				readonly rootId: string;
-				readonly vaultRelativePath?: string;
-				readonly directoryCandidateRef?: string;
-			};
-	  })
-	| (FrontendIntentBase & {
-			readonly type: "projects.session-move";
-			readonly payload: {
-				readonly sessionId: string;
-				readonly expectedWorkspaceBindingRevision: number;
-				readonly target: { readonly kind: "vault" } | { readonly kind: "project"; readonly projectId: string };
-			};
-	  })
+	| (FrontendIntentBase & FrontendProjectIntentBody)
 	| (FrontendIntentBase & {
 			readonly type: "channel.select";
 			readonly payload: { readonly channelId: string };
@@ -2299,6 +1609,10 @@ export type FrontendIntent =
 			};
 	  })
 	| (FrontendIntentBase & {
+			readonly type: "permissions.set-workspace-policy";
+			readonly payload: FrontendWorkspacePolicyPayload;
+	  })
+	| (FrontendIntentBase & {
 			readonly type: "permissions.set-workspace-vault-access";
 			readonly payload: {
 				readonly expectedRevision: number;
@@ -2326,6 +1640,7 @@ export type FrontendIntent =
 				readonly expectedRevision: number;
 				readonly accessMode: "read-only" | "workspace" | "full";
 				readonly agentNetworkAccess: boolean;
+				readonly requestBehavior?: FrontendPermissionRequestBehavior;
 			};
 	  })
 	| (FrontendIntentBase & {
@@ -3026,6 +2341,8 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 			},
 		};
 	}
+	if (input.type === "permissions.set-workspace-policy")
+		return { ...base, type: input.type, payload: parseFrontendWorkspacePolicyPayload(payload) };
 	if (input.type === "permissions.set-workspace-vault-access") {
 		return {
 			...base,
@@ -3061,6 +2378,9 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 				expectedRevision: requireSafeInteger(payload.expectedRevision, "payload.expectedRevision"),
 				accessMode,
 				agentNetworkAccess,
+				...(payload.requestBehavior !== undefined
+					? { requestBehavior: parseFrontendRequestBehavior(payload.requestBehavior) }
+					: {}),
 			},
 		};
 	}
@@ -3427,237 +2747,8 @@ export function parseFrontendIntent(value: unknown): FrontendIntent {
 	if (input.type === "subagents.update-settings") {
 		return { ...base, type: input.type, payload: { settings: parseResolvedSubagentSettings(payload.settings) } };
 	}
-	if (input.type === "projects.set-view") {
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				query: typeof payload.query === "string" ? payload.query : "",
-				lifecycleFilter: requireProjectLifecycleFilter(payload.lifecycleFilter),
-				availabilityFilter: requireProjectAvailabilityFilter(payload.availabilityFilter),
-				sort: requireProjectSort(payload.sort),
-				sessionQuery: typeof payload.sessionQuery === "string" ? payload.sessionQuery : "",
-				sessionSearchMode: requireProjectSessionSearchMode(payload.sessionSearchMode),
-				sessionSort: requireProjectSessionSort(payload.sessionSort),
-				sessionSearchPage: requireNonNegativeSafeInteger(
-					payload.sessionSearchPage ?? 0,
-					"payload.sessionSearchPage",
-				),
-				selectedProjectId: optionalString(payload.selectedProjectId, "payload.selectedProjectId"),
-			},
-		};
-	}
-	if (input.type === "projects.create") {
-		const directoryReuse = requireString(payload.directoryReuse, "payload.directoryReuse");
-		if (directoryReuse !== "canonical" && directoryReuse !== "none") {
-			throw new Error("payload.directoryReuse is invalid");
-		}
-		const markerPolicy = requireString(payload.markerPolicy, "payload.markerPolicy");
-		if (markerPolicy !== "required" && markerPolicy !== "optional" && markerPolicy !== "disabled") {
-			throw new Error("payload.markerPolicy is invalid");
-		}
-		const vaultRelativePath = optionalString(payload.vaultRelativePath, "payload.vaultRelativePath");
-		const directoryCandidateRef = optionalString(payload.directoryCandidateRef, "payload.directoryCandidateRef");
-		const rootMode = optionalString(payload.rootMode, "payload.rootMode");
-		if (rootMode !== undefined && rootMode !== "create-vault-folder" && rootMode !== "use-existing-folders") {
-			throw new Error("payload.rootMode is invalid");
-		}
-		const roots =
-			payload.roots === undefined ? undefined : requireProjectFolderSelections(payload.roots, "payload.roots");
-		const primaryDirectoryCandidateRef = optionalString(
-			payload.primaryDirectoryCandidateRef,
-			"payload.primaryDirectoryCandidateRef",
-		);
-		if (rootMode === "use-existing-folders") {
-			if (roots === undefined || roots.length === 0 || primaryDirectoryCandidateRef === undefined) {
-				throw new Error("Existing-folder Project creation requires selected folders and one primary folder.");
-			}
-			if (!roots.some((root) => root.directoryCandidateRef === primaryDirectoryCandidateRef)) {
-				throw new Error("The primary Project folder must be one of the selected folders.");
-			}
-		}
-		if (rootMode === "create-vault-folder" && (roots !== undefined || primaryDirectoryCandidateRef !== undefined)) {
-			throw new Error("Vault-folder Project creation cannot carry existing-folder selections.");
-		}
-		if (vaultRelativePath !== undefined && directoryCandidateRef !== undefined) {
-			throw new Error("Choose either a vault folder or an operating-system directory candidate, not both.");
-		}
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				name: requireString(payload.name, "payload.name"),
-				description: optionalString(payload.description, "payload.description"),
-				vaultRelativePath,
-				directoryCandidateRef,
-				...(rootMode === undefined ? {} : { rootMode }),
-				...(roots === undefined ? {} : { roots }),
-				...(primaryDirectoryCandidateRef === undefined ? {} : { primaryDirectoryCandidateRef }),
-				directoryReuse,
-				markerPolicy,
-				useForCurrentSession:
-					payload.useForCurrentSession === undefined
-						? undefined
-						: requireBoolean(payload.useForCurrentSession, "payload.useForCurrentSession"),
-			},
-		};
-	}
-	if (input.type === "projects.replace-details") {
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				expectedProjectRevision: requireSafeInteger(
-					payload.expectedProjectRevision,
-					"payload.expectedProjectRevision",
-				),
-				name: requireString(payload.name, "payload.name"),
-				description: optionalString(payload.description, "payload.description"),
-			},
-		};
-	}
-	if (input.type === "projects.archive" || input.type === "projects.restore") {
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				expectedProjectRevision: requireSafeInteger(
-					payload.expectedProjectRevision,
-					"payload.expectedProjectRevision",
-				),
-			},
-		};
-	}
-	if (input.type === "projects.root-add") {
-		const directoryReuse = requireProjectDirectoryReuse(payload.directoryReuse);
-		const markerPolicy = requireProjectMarkerPolicy(payload.markerPolicy);
-		const vaultRelativePath = optionalString(payload.vaultRelativePath, "payload.vaultRelativePath");
-		const directoryCandidateRef = optionalString(payload.directoryCandidateRef, "payload.directoryCandidateRef");
-		if ((vaultRelativePath === undefined) === (directoryCandidateRef === undefined)) {
-			throw new Error("Choose exactly one Project folder source.");
-		}
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				expectedProjectRevision: requireSafeInteger(
-					payload.expectedProjectRevision,
-					"payload.expectedProjectRevision",
-				),
-				label: requireString(payload.label, "payload.label"),
-				vaultRelativePath,
-				directoryCandidateRef,
-				directoryReuse,
-				markerPolicy,
-			},
-		};
-	}
-	if (input.type === "projects.roots-add-batch") {
-		const roots = requireProjectFolderSelections(payload.roots, "payload.roots");
-		if (roots.length === 0) throw new Error("Choose at least one Project folder.");
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				expectedProjectRevision: requireSafeInteger(
-					payload.expectedProjectRevision,
-					"payload.expectedProjectRevision",
-				),
-				roots,
-			},
-		};
-	}
-	if (input.type === "projects.root-relabel") {
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				expectedProjectRevision: requireSafeInteger(
-					payload.expectedProjectRevision,
-					"payload.expectedProjectRevision",
-				),
-				rootId: requireString(payload.rootId, "payload.rootId"),
-				label: requireString(payload.label, "payload.label"),
-			},
-		};
-	}
-	if (input.type === "projects.root-set-primary" || input.type === "projects.root-remove") {
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				expectedProjectRevision: requireSafeInteger(
-					payload.expectedProjectRevision,
-					"payload.expectedProjectRevision",
-				),
-				rootId: requireString(payload.rootId, "payload.rootId"),
-				replacementRootId: optionalString(payload.replacementRootId, "payload.replacementRootId"),
-			},
-		};
-	}
-	if (input.type === "projects.root-recover") {
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				rootId: requireString(payload.rootId, "payload.rootId"),
-			},
-		};
-	}
-	if (input.type === "projects.root-relink") {
-		const vaultRelativePath = optionalString(payload.vaultRelativePath, "payload.vaultRelativePath");
-		const directoryCandidateRef = optionalString(payload.directoryCandidateRef, "payload.directoryCandidateRef");
-		if ((vaultRelativePath === undefined) === (directoryCandidateRef === undefined)) {
-			throw new Error("Choose exactly one replacement folder source.");
-		}
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				projectId: requireString(payload.projectId, "payload.projectId"),
-				expectedProjectRevision: requireSafeInteger(
-					payload.expectedProjectRevision,
-					"payload.expectedProjectRevision",
-				),
-				rootId: requireString(payload.rootId, "payload.rootId"),
-				vaultRelativePath,
-				directoryCandidateRef,
-			},
-		};
-	}
-	if (input.type === "projects.session-move") {
-		const target = requireRecord(payload.target, "payload.target");
-		const parsedTarget =
-			target.kind === "vault"
-				? ({ kind: "vault" } as const)
-				: target.kind === "project"
-					? {
-							kind: "project" as const,
-							projectId: requireString(target.projectId, "payload.target.projectId"),
-						}
-					: (() => {
-							throw new Error("payload.target.kind is invalid");
-						})();
-		return {
-			...base,
-			type: input.type,
-			payload: {
-				sessionId: requireString(payload.sessionId, "payload.sessionId"),
-				expectedWorkspaceBindingRevision: requireSafeInteger(
-					payload.expectedWorkspaceBindingRevision,
-					"payload.expectedWorkspaceBindingRevision",
-				),
-				target: parsedTarget,
-			},
-		};
-	}
+	const projectIntent = parseFrontendProjectIntentBody(input, payload);
+	if (projectIntent !== undefined) return { ...base, ...projectIntent };
 	if (input.type === "operator.set-view-open") {
 		return { ...base, type: input.type, payload: { open: requireBoolean(payload.open, "payload.open") } };
 	}
@@ -3862,165 +2953,6 @@ export function parseFrontendScreen(value: unknown): FrontendScreenViewModel {
 	}
 	validateEventScreen(input);
 	return value as FrontendEventScreenViewModel;
-}
-
-function validateChoice(value: unknown, label: string): void {
-	const input = requireRecord(value, label);
-	requireString(input.value, `${label}.value`);
-	requireString(input.label, `${label}.label`);
-	optionalString(input.description, `${label}.description`);
-	optionalString(input.disabledReason, `${label}.disabledReason`);
-}
-
-function validateChoices(value: unknown, label: string): void {
-	validateArray(value, label, validateChoice);
-}
-
-function validateProjectRoot(value: unknown, label: string): void {
-	const input = requireRecord(value, label);
-	for (const field of ["rootId", "directoryId", "label", "availabilityLabel"] as const) {
-		requireString(input[field], `${label}.${field}`);
-	}
-	requireBoolean(input.primary, `${label}.primary`);
-	requireEnumValue(input.locationKind, `${label}.locationKind`, ["vault-relative", "external"]);
-	optionalString(input.vaultRelativePath, `${label}.vaultRelativePath`);
-	optionalString(input.localPath, `${label}.localPath`);
-	requireEnumValue(input.directoryReuse, `${label}.directoryReuse`, ["canonical", "none"]);
-	requireEnumValue(input.markerPolicy, `${label}.markerPolicy`, ["required", "optional", "disabled"]);
-	requireEnumValue(input.recoveryMode, `${label}.recoveryMode`, ["marker", "device-binding-only"]);
-	requireEnumValue(input.availability, `${label}.availability`, [
-		"available",
-		"missing",
-		"conflict",
-		"relink-required",
-		"unregistered",
-	]);
-	if (input.recoveryAction !== undefined) {
-		requireEnumValue(input.recoveryAction, `${label}.recoveryAction`, [
-			"relink",
-			"resolve-conflict",
-			"repair-marker",
-		]);
-	}
-}
-
-function validateProjectSession(value: unknown, label: string): void {
-	const input = requireRecord(value, label);
-	for (const field of ["sessionId", "name"] as const) requireString(input[field], `${label}.${field}`);
-	optionalString(input.createdAt, `${label}.createdAt`);
-	optionalString(input.updatedAt, `${label}.updatedAt`);
-	if (input.active !== undefined) requireBoolean(input.active, `${label}.active`);
-	requireSafeInteger(input.workspaceBindingRevision, `${label}.workspaceBindingRevision`);
-	const workspace = requireRecord(input.workspace, `${label}.workspace`);
-	const kind = requireEnumValue(workspace.kind, `${label}.workspace.kind`, ["vault", "project"]);
-	if (kind === "project") requireString(workspace.projectId, `${label}.workspace.projectId`);
-	requireSafeInteger(input.messageCount, `${label}.messageCount`);
-	requireBoolean(input.running, `${label}.running`);
-	optionalString(input.activeRootId, `${label}.activeRootId`);
-	optionalString(input.matchSnippet, `${label}.matchSnippet`);
-}
-
-function validateProjectSummary(value: unknown, label: string): void {
-	const input = requireRecord(value, label);
-	for (const field of ["projectId", "name", "availabilityLabel", "createdAt", "updatedAt", "activityAt"] as const) {
-		requireString(input[field], `${label}.${field}`);
-	}
-	requireSafeInteger(input.revision, `${label}.revision`);
-	optionalString(input.description, `${label}.description`);
-	requireEnumValue(input.lifecycle, `${label}.lifecycle`, ["active", "archived"]);
-	requireEnumValue(input.creationKind, `${label}.creationKind`, ["directory-session", "manual", "migration"]);
-	for (const field of ["primaryRootId", "primaryRootLabel", "canonicalVaultRelativePath"] as const)
-		optionalString(input[field], `${label}.${field}`);
-	for (const field of ["rootCount", "sessionCount"] as const) requireSafeInteger(input[field], `${label}.${field}`);
-	requireEnumValue(input.availability, `${label}.availability`, [
-		"available",
-		"attention",
-		"missing",
-		"conflict",
-		"relink-required",
-	]);
-}
-
-function validateProjectDetail(value: unknown, label: string): void {
-	const input = requireRecord(value, label);
-	for (const field of ["projectId", "name"] as const) requireString(input[field], `${label}.${field}`);
-	requireSafeInteger(input.revision, `${label}.revision`);
-	optionalString(input.description, `${label}.description`);
-	requireEnumValue(input.lifecycle, `${label}.lifecycle`, ["active", "archived"]);
-	requireEnumValue(input.creationKind, `${label}.creationKind`, ["directory-session", "manual", "migration"]);
-	optionalString(input.primaryRootId, `${label}.primaryRootId`);
-	validateArray(input.roots, `${label}.roots`, validateProjectRoot);
-	requireSafeInteger(input.sessionCount, `${label}.sessionCount`);
-	validateArray(input.sessions, `${label}.sessions`, validateProjectSession);
-}
-
-function validateProjectSearchPage(value: unknown, label: string): void {
-	const input = requireRecord(value, label);
-	validateArray(input.items, `${label}.items`, (entry, entryLabel) => {
-		const hit = requireRecord(entry, entryLabel);
-		for (const field of [
-			"hitId",
-			"sessionId",
-			"sessionName",
-			"messageId",
-			"targetBlockId",
-			"timestamp",
-			"excerpt",
-		] as const)
-			requireString(hit[field], `${entryLabel}.${field}`);
-		requireEnumValue(hit.role, `${entryLabel}.role`, ["user", "assistant"]);
-		validateArray(hit.matchRanges, `${entryLabel}.matchRanges`, (rangeValue, rangeLabel) => {
-			const range = requireRecord(rangeValue, rangeLabel);
-			requireSafeInteger(range.start, `${rangeLabel}.start`);
-			requireSafeInteger(range.end, `${rangeLabel}.end`);
-		});
-	});
-	for (const field of ["page", "pageSize", "totalCount"] as const)
-		requireSafeInteger(input[field], `${label}.${field}`);
-	requireBoolean(input.hasPrevious, `${label}.hasPrevious`);
-	requireBoolean(input.hasNext, `${label}.hasNext`);
-}
-
-function validateProjectScreen(input: Record<string, unknown>): void {
-	requireSafeInteger(input.snapshotSequence, "snapshotSequence");
-	requireTextValue(input.query, "query");
-	requireProjectLifecycleFilter(input.lifecycleFilter);
-	requireProjectAvailabilityFilter(input.availabilityFilter);
-	requireProjectSort(input.sort);
-	requireTextValue(input.sessionQuery, "sessionQuery");
-	requireProjectSessionSearchMode(input.sessionSearchMode);
-	requireProjectSessionSort(input.sessionSort);
-	requireSafeInteger(input.sessionSearchPage, "sessionSearchPage");
-	optionalString(input.selectedProjectId, "selectedProjectId");
-	const running = requireRecord(input.runningIn, "runningIn");
-	requireEnumValue(running.kind, "runningIn.kind", ["vault", "project", "unresolved"]);
-	requireString(running.label, "runningIn.label");
-	optionalString(running.projectId, "runningIn.projectId");
-	optionalString(running.activeRootId, "runningIn.activeRootId");
-	requireStringArray(running.attachedRootIds, "runningIn.attachedRootIds");
-	validateArray(input.projects, "projects", validateProjectSummary);
-	validateArray(input.sessionMoveProjects, "sessionMoveProjects", (value, label) => {
-		const destination = requireRecord(value, label);
-		requireString(destination.projectId, `${label}.projectId`);
-		requireString(destination.name, `${label}.name`);
-		requireBoolean(destination.available, `${label}.available`);
-		requireString(destination.availabilityLabel, `${label}.availabilityLabel`);
-	});
-	requireSafeInteger(input.vaultSessionCount, "vaultSessionCount");
-	validateArray(input.vaultSessions, "vaultSessions", validateProjectSession);
-	if (input.detail !== undefined) validateProjectDetail(input.detail, "detail");
-	validateArray(input.runningRoots, "runningRoots", validateProjectRoot);
-	if (input.messageSearchPage !== undefined) validateProjectSearchPage(input.messageSearchPage, "messageSearchPage");
-	for (const field of [
-		"lifecycleOptions",
-		"availabilityOptions",
-		"sortOptions",
-		"sessionSearchModeOptions",
-		"sessionSortOptions",
-	] as const)
-		validateChoices(input[field], field);
-	optionalString(input.error, "error");
-	optionalString(input.statusMessage, "statusMessage");
 }
 
 function validateChannelScreen(input: Record<string, unknown>): void {
@@ -4277,98 +3209,6 @@ function validateMcpScreen(input: Record<string, unknown>): void {
 	optionalString(input.statusMessage, "statusMessage");
 }
 
-function validatePermissionScreen(input: Record<string, unknown>): void {
-	if (input.executionMode !== undefined) requireEnumValue(input.executionMode, "executionMode", ["full-access"]);
-	if (input.nativeSetup !== undefined) validateFrontendSandboxSetupView(input.nativeSetup);
-	requireString(input.accessPolicySessionId, "accessPolicySessionId");
-	const accessPolicy = requireRecord(input.accessPolicy, "accessPolicy");
-	if (accessPolicy.schemaVersion !== 1) throw new Error("accessPolicy.schemaVersion must be 1");
-	requireSafeInteger(accessPolicy.revision, "accessPolicy.revision");
-	requireEnumValue(accessPolicy.accessMode, "accessPolicy.accessMode", ["read-only", "workspace", "full"]);
-	requireBoolean(accessPolicy.agentNetworkAccess, "accessPolicy.agentNetworkAccess");
-	if (accessPolicy.accessMode === "full" && accessPolicy.agentNetworkAccess !== true) {
-		throw new Error("Full access includes agent network access.");
-	}
-	const scope = requireRecord(input.scope, "scope");
-	requireSafeInteger(scope.bindingRevision, "scope.bindingRevision");
-	requireEnumValue(scope.kind, "scope.kind", ["project", "vault"]);
-	requireSafeInteger(scope.selectedRootCount, "scope.selectedRootCount");
-	requireBoolean(scope.filesystemBound, "scope.filesystemBound");
-	if ((scope.selectedRootCount === 0) !== (scope.filesystemBound === false)) {
-		throw new Error("Permission scope filesystemBound must match selectedRootCount.");
-	}
-	const nativeSupport = requireRecord(input.nativeSupport, "nativeSupport");
-	if (
-		input.executionMode === "full-access" &&
-		(accessPolicy.accessMode !== "full" || nativeSupport.status !== "unsupported" || input.nativeSetup !== undefined)
-	) {
-		throw new Error("Full-only execution must report Full access with sandboxing unavailable and no native setup.");
-	}
-	requireEnumValue(nativeSupport.status, "nativeSupport.status", [
-		"ready",
-		"setup-required",
-		"unverified",
-		"unsupported",
-	]);
-	if (nativeSupport.backendId !== undefined) {
-		requireEnumValue(nativeSupport.backendId, "nativeSupport.backendId", [
-			"windows-appcontainer",
-			"linux-bubblewrap",
-			"macos-seatbelt",
-			"landstrip",
-		]);
-	}
-	optionalString(nativeSupport.reason, "nativeSupport.reason");
-	optionalString(nativeSupport.userAction, "nativeSupport.userAction");
-	if (input.obsidianVaultAccess !== undefined) {
-		const grant = requireRecord(input.obsidianVaultAccess, "obsidianVaultAccess");
-		const status = requireEnumValue(grant.status, "obsidianVaultAccess.status", ["available", "unavailable"]);
-		const enabled = requireBoolean(grant.enabled, "obsidianVaultAccess.enabled");
-		if (grant.warning !== OBSIDIAN_VAULT_ACCESS_WARNING) throw new Error("obsidianVaultAccess.warning is invalid");
-		if (status === "available") {
-			requireSafeInteger(grant.revision, "obsidianVaultAccess.revision");
-			requireString(grant.sessionId, "obsidianVaultAccess.sessionId");
-			requireSafeInteger(grant.bindingRevision, "obsidianVaultAccess.bindingRevision");
-			requireEnumValue(grant.source, "obsidianVaultAccess.source", ["default", "user"]);
-		} else {
-			if (enabled) throw new Error("Unavailable Obsidian vault access must be Off");
-			requireString(grant.reason, "obsidianVaultAccess.reason");
-		}
-	}
-	if (input.workspaceVaultAccess !== undefined)
-		validateArray(input.workspaceVaultAccess, "workspaceVaultAccess", (value, label) => {
-			const grant = requireRecord(value, label);
-			if (grant.projectId !== null) {
-				requireString(grant.projectId, `${label}.projectId`);
-				requireSafeInteger(grant.projectRevision, `${label}.projectRevision`);
-			}
-			requireString(grant.label, `${label}.label`);
-			requireSafeInteger(grant.revision, `${label}.revision`);
-			requireBoolean(grant.enabled, `${label}.enabled`);
-			requireEnumValue(grant.source, `${label}.source`, ["default", "user"]);
-		});
-	const effective = requireRecord(input.effective, "effective");
-	requireBoolean(effective.fileRead, "effective.fileRead");
-	requireBoolean(effective.fileWrite, "effective.fileWrite");
-	requireEnumValue(effective.localProcess, "effective.localProcess", [
-		"native-contained",
-		"unavailable",
-		"unsandboxed",
-	]);
-	requireEnumValue(effective.obsidian, "effective.obsidian", [
-		"app-authority",
-		"typed-read",
-		"typed-workspace",
-		"unavailable",
-		"unsandboxed",
-	]);
-	requireBoolean(effective.agentNetworkAccess, "effective.agentNetworkAccess");
-	optionalString(effective.warning, "effective.warning");
-	optionalString(input.migrationNotice, "migrationNotice");
-	optionalString(input.error, "error");
-	optionalString(input.statusMessage, "statusMessage");
-}
-
 function validateEventScreen(input: Record<string, unknown>): void {
 	validateArray(input.definitions, "definitions", (value, label) => {
 		const definition = requireRecord(value, label);
@@ -4392,10 +3232,11 @@ function validateEventScreen(input: Record<string, unknown>): void {
 	});
 	validateArray(input.occurrences, "occurrences", (value, label) => {
 		const occurrence = requireRecord(value, label);
+		// Empty selects Vault root, matching the persisted Events and editor contracts.
+		requireTextValue(occurrence.projectPath, `${label}.projectPath`);
 		for (const field of [
 			"id",
 			"eventName",
-			"projectPath",
 			"status",
 			"statusLabel",
 			"originLabel",
@@ -4458,332 +3299,6 @@ function validateEventEditor(value: unknown, label: string): void {
 	for (const field of ["permissionChoices", "agentChoices"] as const)
 		validateChoices(editor[field], `${label}.${field}`);
 	optionalString(editor.allocationError, `${label}.allocationError`);
-}
-
-const SUBAGENT_RUN_STATUS_VALUES = [
-	"created",
-	"queued",
-	"running",
-	"paused",
-	"waiting",
-	"completed",
-	"failed",
-	"cancelled",
-	"orphaned",
-] as const;
-const SUBAGENT_NODE_STATUS_VALUES = [
-	"blocked",
-	"queued",
-	"running",
-	"waiting",
-	"paused",
-	"completed",
-	"failed",
-	"cancelled",
-	"skipped",
-	"orphaned",
-] as const;
-
-function validateSubagentPolicy(value: unknown, label: string): void {
-	const policy = requireRecord(value, label);
-	if (policy.executionMode !== undefined)
-		requireEnumValue(policy.executionMode, `${label}.executionMode`, ["auto", "in-process", "worker-process"]);
-	optionalString(policy.model, `${label}.model`);
-	for (const field of ["fallbackModels", "tools", "mcpTools", "extensions", "skills"] as const) {
-		if (policy[field] !== undefined) requireStringArray(policy[field], `${label}.${field}`);
-	}
-	if (policy.thinking !== undefined) requireThinkingLevel(policy.thinking, `${label}.thinking`);
-	if (policy.contextMode !== undefined)
-		requireEnumValue(policy.contextMode, `${label}.contextMode`, ["fresh", "fork"]);
-	for (const field of ["maxDepth", "maxTurnsPerNode", "maxTokens", "maxWallTimeMs", "maxToolCallsPerNode"] as const)
-		optionalSafeInteger(policy[field], `${label}.${field}`);
-	if (policy.toolCallLimits !== undefined) requireNumberRecord(policy.toolCallLimits, `${label}.toolCallLimits`);
-	optionalString(policy.permissionProfileId, `${label}.permissionProfileId`);
-}
-
-function validateSubagentDefinition(value: unknown, label: string): void {
-	const definition = requireRecord(value, label);
-	for (const field of ["id", "name", "description", "scopeId", "systemPrompt"] as const)
-		requireString(definition[field], `${label}.${field}`);
-	requireEnumValue(definition.scope, `${label}.scope`, ["global", "vault", "directory", "session"]);
-	requireBoolean(definition.enabled, `${label}.enabled`);
-	validateSubagentPolicy(definition.policy, `${label}.policy`);
-	if (definition.permissionReviewRequired !== undefined && definition.permissionReviewRequired !== true)
-		throw new Error(`${label}.permissionReviewRequired must be true when present`);
-	if (definition.builtIn !== undefined && definition.builtIn !== true)
-		throw new Error(`${label}.builtIn must be true when present`);
-	requireSafeInteger(definition.revision, `${label}.revision`);
-	requireSafeInteger(definition.updatedAt, `${label}.updatedAt`);
-}
-
-function validateSubagentBudgets(value: unknown, label: string): void {
-	const budgets = requireRecord(value, label);
-	for (const field of [
-		"maxConcurrency",
-		"maxDepth",
-		"maxTurnsPerNode",
-		"maxTokens",
-		"maxWallTimeMs",
-		"maxToolCallsPerNode",
-	] as const)
-		optionalSafeInteger(budgets[field], `${label}.${field}`);
-	optionalFiniteNumber(budgets.maxCostUsd, `${label}.maxCostUsd`);
-}
-
-function validateSubagentRunSummary(value: unknown, label: string): void {
-	const summary = requireRecord(value, label);
-	for (const field of ["id", "parentSessionId", "description", "workspaceCwd"] as const)
-		requireString(summary[field], `${label}.${field}`);
-	requireEnumValue(summary.triggerSource, `${label}.triggerSource`, [
-		"parent-agent",
-		"user",
-		"scheduler",
-		"automation",
-		"api",
-	]);
-	requireEnumValue(summary.status, `${label}.status`, SUBAGENT_RUN_STATUS_VALUES);
-	requireStringArray(summary.agentIds, `${label}.agentIds`);
-	validateArray(summary.executionModes, `${label}.executionModes`, (entry, entryLabel) =>
-		requireEnumValue(entry, entryLabel, ["in-process", "worker-process"]),
-	);
-	for (const field of [
-		"activeNodes",
-		"queuedNodes",
-		"waitingNodes",
-		"failedNodes",
-		"tokens",
-		"createdAt",
-		"updatedAt",
-	] as const)
-		requireSafeInteger(summary[field], `${label}.${field}`);
-	requireFiniteNumber(summary.costUsd, `${label}.costUsd`);
-}
-
-function validateSubagentActor(value: unknown, label: string): void {
-	const actor = requireRecord(value, label);
-	requireEnumValue(actor.kind, `${label}.kind`, ["user", "parent", "agent", "system"]);
-	requireString(actor.id, `${label}.id`);
-	optionalString(actor.label, `${label}.label`);
-}
-
-function validateSubagentMessage(value: unknown, label: string): void {
-	const message = requireRecord(value, label);
-	for (const field of ["id", "runId", "threadId"] as const) requireString(message[field], `${label}.${field}`);
-	optionalString(message.nodeId, `${label}.nodeId`);
-	validateSubagentActor(message.from, `${label}.from`);
-	validateArray(message.to, `${label}.to`, validateSubagentActor);
-	requireEnumValue(message.kind, `${label}.kind`, ["inform", "request", "decision", "steer", "result"]);
-	requireTextValue(message.text, `${label}.text`);
-	if (message.data !== undefined) requireRecord(message.data, `${label}.data`);
-	optionalString(message.correlationId, `${label}.correlationId`);
-	optionalString(message.replyTo, `${label}.replyTo`);
-	requireBoolean(message.blocking, `${label}.blocking`);
-	optionalSafeInteger(message.deadline, `${label}.deadline`);
-	requireEnumValue(message.status, `${label}.status`, ["queued", "delivered", "acknowledged", "expired", "rejected"]);
-	requireSafeInteger(message.createdAt, `${label}.createdAt`);
-	optionalSafeInteger(message.acknowledgedAt, `${label}.acknowledgedAt`);
-	if (message.response !== undefined) {
-		const response = requireRecord(message.response, `${label}.response`);
-		validateSubagentActor(response.actor, `${label}.response.actor`);
-		optionalTextValue(response.text, `${label}.response.text`);
-		if (response.data !== undefined) requireRecord(response.data, `${label}.response.data`);
-		requireSafeInteger(response.createdAt, `${label}.response.createdAt`);
-	}
-}
-
-function validateSubagentAcceptance(value: unknown, label: string): void {
-	const acceptance = requireRecord(value, label);
-	requireString(acceptance.runId, `${label}.runId`);
-	requireString(acceptance.nodeId, `${label}.nodeId`);
-	requireEnumValue(acceptance.level, `${label}.level`, ["none", "attested", "checked", "verified", "reviewed"]);
-	requireEnumValue(acceptance.status, `${label}.status`, ["accepted", "rejected", "waiting-review"]);
-	requireStringArray(acceptance.criteria, `${label}.criteria`);
-	validateArray(acceptance.checks, `${label}.checks`, (value, checkLabel) => {
-		const check = requireRecord(value, checkLabel);
-		requireString(check.id, `${checkLabel}.id`);
-		requireString(check.command, `${checkLabel}.command`);
-		if (check.exitCode !== null) requireSafeInteger(check.exitCode, `${checkLabel}.exitCode`);
-		requireTextValue(check.stdout, `${checkLabel}.stdout`);
-		requireTextValue(check.stderr, `${checkLabel}.stderr`);
-		requireBoolean(check.timedOut, `${checkLabel}.timedOut`);
-		requireSafeInteger(check.durationMs, `${checkLabel}.durationMs`);
-	});
-	optionalString(acceptance.reviewerAgentId, `${label}.reviewerAgentId`);
-	optionalSafeInteger(acceptance.decidedAt, `${label}.decidedAt`);
-	optionalString(acceptance.decisionNote, `${label}.decisionNote`);
-}
-
-function validateSubagentPermission(value: unknown, label: string): void {
-	const permission = requireRecord(value, label);
-	for (const field of ["id", "runId", "nodeId", "title"] as const)
-		requireString(permission[field], `${label}.${field}`);
-	requireSafeInteger(permission.revision, `${label}.revision`);
-	requireEnumValue(permission.kind, `${label}.kind`, ["confirm", "select", "input"]);
-	optionalTextValue(permission.message, `${label}.message`);
-	if (permission.options !== undefined) requireStringArray(permission.options, `${label}.options`);
-	optionalTextValue(permission.placeholder, `${label}.placeholder`);
-	requireEnumValue(permission.status, `${label}.status`, ["pending", "approved", "denied"]);
-	requireSafeInteger(permission.createdAt, `${label}.createdAt`);
-	optionalSafeInteger(permission.decidedAt, `${label}.decidedAt`);
-	optionalTextValue(permission.value, `${label}.value`);
-}
-
-function validateSubagentLaunchSummary(value: unknown, label: string): void {
-	const launch = requireRecord(value, label);
-	if (launch.schemaVersion !== 1) throw new Error(`${label}.schemaVersion is invalid`);
-	for (const field of ["contractId", "resolutionFingerprint", "runId", "nodeId"] as const)
-		requireString(launch[field], `${label}.${field}`);
-	const role = requireRecord(launch.role, `${label}.role`);
-	for (const field of ["id", "name", "promptHash"] as const) requireString(role[field], `${label}.role.${field}`);
-	requireSafeInteger(role.revision, `${label}.role.revision`);
-	const model = requireRecord(launch.model, `${label}.model`);
-	requireString(model.selected, `${label}.model.selected`);
-	requireThinkingLevel(model.thinking, `${label}.model.thinking`);
-	requireStringArray(model.fallbacks, `${label}.model.fallbacks`);
-	const executor = requireRecord(launch.executor, `${label}.executor`);
-	requireEnumValue(executor.requested, `${label}.executor.requested`, ["auto", "in-process", "worker-process"]);
-	requireEnumValue(executor.selected, `${label}.executor.selected`, ["in-process", "worker-process"]);
-	requireEnumValue(executor.source, `${label}.executor.source`, ["node", "run", "role", "auto"]);
-	requireString(executor.reason, `${label}.executor.reason`);
-	optionalNullableString(executor.runtimeFingerprintRequirement, `${label}.executor.runtimeFingerprintRequirement`);
-	const context = requireRecord(launch.context, `${label}.context`);
-	requireEnumValue(context.mode, `${label}.context.mode`, ["fresh", "fork"]);
-	requireEnumValue(context.source, `${label}.context.source`, ["node", "run", "role", "fallback"]);
-	requireBoolean(context.explicit, `${label}.context.explicit`);
-	optionalNullableString(context.packetFingerprint, `${label}.context.packetFingerprint`);
-	requireSafeInteger(context.estimatedTokens, `${label}.context.estimatedTokens`);
-	requireSafeInteger(context.messageCount, `${label}.context.messageCount`);
-	const permission = requireRecord(launch.permission, `${label}.permission`);
-	for (const field of ["profileId", "profileFingerprint"] as const)
-		requireString(permission[field], `${label}.permission.${field}`);
-	requireSafeInteger(permission.profileRevision, `${label}.permission.profileRevision`);
-	requireEnumValue(permission.source, `${label}.permission.source`, ["run", "node", "role", "project", "fallback"]);
-	for (const field of ["budgets", "tools", "workspace"] as const) requireRecord(launch[field], `${label}.${field}`);
-	requireBoolean(launch.definitionChangedSinceLaunch, `${label}.definitionChangedSinceLaunch`);
-}
-
-function validateSubagentNode(value: unknown, label: string): void {
-	const node = requireRecord(value, label);
-	for (const field of ["id", "agentId", "label", "task"] as const) requireString(node[field], `${label}.${field}`);
-	for (const field of [
-		"parentNodeId",
-		"agentName",
-		"model",
-		"currentTool",
-		"result",
-		"latestMessageId",
-		"error",
-	] as const)
-		optionalString(node[field], `${label}.${field}`);
-	optionalSafeInteger(node.fanoutIndex, `${label}.fanoutIndex`);
-	if (node.fanoutItem !== undefined) requireJsonValue(node.fanoutItem, `${label}.fanoutItem`);
-	requireEnumValue(node.status, `${label}.status`, SUBAGENT_NODE_STATUS_VALUES);
-	requireStringArray(node.dependsOn, `${label}.dependsOn`);
-	requireSafeInteger(node.priority, `${label}.priority`);
-	requireEnumValue(node.requestedExecutionMode, `${label}.requestedExecutionMode`, [
-		"auto",
-		"in-process",
-		"worker-process",
-	]);
-	if (node.launchSummary !== undefined) validateSubagentLaunchSummary(node.launchSummary, `${label}.launchSummary`);
-	if (node.runtimePolicy !== undefined) validateSubagentPolicy(node.runtimePolicy, `${label}.runtimePolicy`);
-	if (node.resolvedExecutionMode !== undefined)
-		requireEnumValue(node.resolvedExecutionMode, `${label}.resolvedExecutionMode`, ["in-process", "worker-process"]);
-	for (const field of ["turns", "tokens"] as const) requireSafeInteger(node[field], `${label}.${field}`);
-	for (const field of ["queuePosition", "startedAt", "completedAt"] as const)
-		optionalSafeInteger(node[field], `${label}.${field}`);
-	optionalFiniteNumber(node.contextPercent, `${label}.contextPercent`);
-	requireFiniteNumber(node.costUsd, `${label}.costUsd`);
-	validateArray(node.attempts, `${label}.attempts`, (value, attemptLabel) => {
-		const attempt = requireRecord(value, attemptLabel);
-		requireString(attempt.id, `${attemptLabel}.id`);
-		requireSafeInteger(attempt.number, `${attemptLabel}.number`);
-		requireEnumValue(attempt.mode, `${attemptLabel}.mode`, ["in-process", "worker-process"]);
-		requireEnumValue(attempt.status, `${attemptLabel}.status`, SUBAGENT_NODE_STATUS_VALUES);
-		optionalSafeInteger(attempt.startedAt, `${attemptLabel}.startedAt`);
-		optionalSafeInteger(attempt.completedAt, `${attemptLabel}.completedAt`);
-		optionalString(attempt.runtimeFingerprint, `${attemptLabel}.runtimeFingerprint`);
-		optionalString(attempt.error, `${attemptLabel}.error`);
-	});
-	requireStringArray(node.artifactIds, `${label}.artifactIds`);
-	if (node.structuredOutput !== undefined) requireJsonValue(node.structuredOutput, `${label}.structuredOutput`);
-	if (node.acceptanceStatus !== undefined)
-		requireEnumValue(node.acceptanceStatus, `${label}.acceptanceStatus`, [
-			"not-required",
-			"accepted",
-			"rejected",
-			"waiting-review",
-		]);
-	if (node.acceptanceRecord !== undefined)
-		validateSubagentAcceptance(node.acceptanceRecord, `${label}.acceptanceRecord`);
-	if (node.pendingPermission !== undefined)
-		validateSubagentPermission(node.pendingPermission, `${label}.pendingPermission`);
-}
-
-function validateSubagentRun(value: unknown, label: string): void {
-	const run = requireRecord(value, label);
-	for (const field of ["id", "runtimeId", "parentSessionId", "description"] as const)
-		requireString(run[field], `${label}.${field}`);
-	requireEnumValue(run.triggerSource, `${label}.triggerSource`, [
-		"parent-agent",
-		"user",
-		"scheduler",
-		"automation",
-		"api",
-	]);
-	requireEnumValue(run.status, `${label}.status`, SUBAGENT_RUN_STATUS_VALUES);
-	for (const field of ["priority", "createdAt", "updatedAt", "lastSequence"] as const)
-		requireSafeInteger(run[field], `${label}.${field}`);
-	optionalSafeInteger(run.startedAt, `${label}.startedAt`);
-	optionalSafeInteger(run.completedAt, `${label}.completedAt`);
-	validateSubagentBudgets(run.budgets, `${label}.budgets`);
-	const context = requireRecord(run.context, `${label}.context`);
-	requireEnumValue(context.mode, `${label}.context.mode`, ["fresh", "fork"]);
-	optionalString(run.permissionProfileId, `${label}.permissionProfileId`);
-	const workspace = requireRecord(run.workspace, `${label}.workspace`);
-	for (const field of ["cwd", "resolvedCwd", "provider", "workspaceId"] as const)
-		requireString(workspace[field], `${label}.workspace.${field}`);
-	requireEnumValue(workspace.mode, `${label}.workspace.mode`, ["shared", "worktree", "sandbox"]);
-	optionalString(workspace.artifactDirectory, `${label}.workspace.artifactDirectory`);
-	optionalString(workspace.baseRevision, `${label}.workspace.baseRevision`);
-	if (workspace.baselineFileStates !== undefined)
-		validateStringRecord(workspace.baselineFileStates, `${label}.workspace.baselineFileStates`);
-	requireStringArray(workspace.changedFiles, `${label}.workspace.changedFiles`);
-	requireSafeInteger(workspace.createdAt, `${label}.workspace.createdAt`);
-	if (run.parent !== undefined) {
-		const parent = requireRecord(run.parent, `${label}.parent`);
-		requireString(parent.runId, `${label}.parent.runId`);
-		requireString(parent.nodeId, `${label}.parent.nodeId`);
-		requireSafeInteger(parent.depth, `${label}.parent.depth`);
-	}
-	requireBoolean(run.failFast, `${label}.failFast`);
-	const nodes = requireRecord(run.nodes, `${label}.nodes`);
-	for (const [nodeId, node] of Object.entries(nodes)) {
-		validateSubagentNode(node, `${label}.nodes.${nodeId}`);
-		if (requireRecord(node, `${label}.nodes.${nodeId}`).id !== nodeId)
-			throw new Error(`${label}.nodes.${nodeId}.id must match its key`);
-	}
-	requireStringArray(run.rootNodeIds, `${label}.rootNodeIds`);
-	optionalString(run.error, `${label}.error`);
-}
-
-function validateSubagentArtifact(value: unknown, label: string): void {
-	const artifact = requireRecord(value, label);
-	for (const field of ["id", "runId", "nodeId", "name", "path"] as const)
-		requireString(artifact[field], `${label}.${field}`);
-	requireEnumValue(artifact.kind, `${label}.kind`, [
-		"file",
-		"report",
-		"patch",
-		"structured-output",
-		"transcript",
-		"log",
-	]);
-	optionalString(artifact.mimeType, `${label}.mimeType`);
-	optionalSafeInteger(artifact.bytes, `${label}.bytes`);
-	for (const field of ["revision", "createdAt", "updatedAt"] as const)
-		requireSafeInteger(artifact[field], `${label}.${field}`);
-	optionalString(artifact.promotedVaultPath, `${label}.promotedVaultPath`);
 }
 
 function validateSubagentScreen(input: Record<string, unknown>): void {
@@ -5472,6 +3987,9 @@ function parseFrontendFeedBlock(value: unknown, label: string): FrontendFeedBloc
 		return {
 			type,
 			id,
+			...(input.permissionRequest === undefined
+				? {}
+				: { permissionRequest: parsePermissionRequestReview(input.permissionRequest) }),
 			title: requireString(input.title, `${label}.title`),
 			body: requireTextValue(input.body, `${label}.body`),
 			level: requireEnumValue(input.level, `${label}.level`, ["info", "warning", "error"]),
@@ -5552,72 +4070,6 @@ function parseFrontendAction(value: unknown, label: string): FrontendActionViewM
 	};
 }
 
-function parseFrontendSubagentMessage(value: unknown, label: string): FrontendSubagentMessageViewModel {
-	const input = requireRecord(value, label);
-	const kind = requireString(input.kind, `${label}.kind`);
-	if (kind !== "inform" && kind !== "request" && kind !== "decision" && kind !== "steer" && kind !== "result") {
-		throw new Error(`${label}.kind is invalid`);
-	}
-	const status = requireString(input.status, `${label}.status`);
-	if (
-		status !== "queued" &&
-		status !== "delivered" &&
-		status !== "acknowledged" &&
-		status !== "expired" &&
-		status !== "rejected"
-	) {
-		throw new Error(`${label}.status is invalid`);
-	}
-	const data = input.data === undefined ? undefined : requireRecord(input.data, `${label}.data`);
-	if (data) requireJsonValue(data, `${label}.data`);
-	const response = input.response === undefined ? undefined : requireRecord(input.response, `${label}.response`);
-	if (response?.data !== undefined) requireJsonValue(response.data, `${label}.response.data`);
-	return {
-		id: requireString(input.id, `${label}.id`),
-		runId: requireString(input.runId, `${label}.runId`),
-		nodeId: optionalString(input.nodeId, `${label}.nodeId`),
-		threadId: requireString(input.threadId, `${label}.threadId`),
-		from: parseSubagentActor(input.from, `${label}.from`),
-		to: requireArray(input.to, `${label}.to`).map((entry, index) =>
-			parseSubagentActor(entry, `${label}.to[${index}]`),
-		),
-		kind,
-		text:
-			typeof input.text === "string"
-				? input.text
-				: (() => {
-						throw new Error(`${label}.text must be a string`);
-					})(),
-		data,
-		correlationId: optionalString(input.correlationId, `${label}.correlationId`),
-		replyTo: optionalString(input.replyTo, `${label}.replyTo`),
-		blocking: requireBoolean(input.blocking, `${label}.blocking`),
-		deadline: optionalSafeInteger(input.deadline, `${label}.deadline`),
-		status,
-		createdAt: requireSafeInteger(input.createdAt, `${label}.createdAt`),
-		acknowledgedAt: optionalSafeInteger(input.acknowledgedAt, `${label}.acknowledgedAt`),
-		response:
-			response === undefined
-				? undefined
-				: {
-						actor: parseSubagentActor(response.actor, `${label}.response.actor`),
-						text: optionalString(response.text, `${label}.response.text`),
-						data:
-							response.data === undefined ? undefined : requireRecord(response.data, `${label}.response.data`),
-						createdAt: requireSafeInteger(response.createdAt, `${label}.response.createdAt`),
-					},
-	};
-}
-
-function parseSubagentActor(value: unknown, label: string): FrontendSubagentActorViewModel {
-	const input = requireRecord(value, label);
-	const kind = requireString(input.kind, `${label}.kind`);
-	if (kind !== "user" && kind !== "parent" && kind !== "agent" && kind !== "system") {
-		throw new Error(`${label}.kind is invalid`);
-	}
-	return { kind, id: requireString(input.id, `${label}.id`), label: optionalString(input.label, `${label}.label`) };
-}
-
 function parseNavigation(value: unknown, label: string): FrontendNavigationReference {
 	const input = requireRecord(value, label);
 	return {
@@ -5692,18 +4144,6 @@ function parseFrontendPatchOperation(value: unknown, label: string): FrontendPat
 	}
 	if (type === "screen.replace") return { type, screen: parseFrontendScreen(input.screen) };
 	throw new Error(`${label}.type is an unknown patch operation`);
-}
-
-function parseChoiceOption(value: unknown, label: string, allowEmptyValue = false): FrontendChoiceOption {
-	const input = requireRecord(value, label);
-	return {
-		value: allowEmptyValue
-			? requireTextValue(input.value, `${label}.value`)
-			: requireString(input.value, `${label}.value`),
-		label: requireString(input.label, `${label}.label`),
-		description: optionalString(input.description, `${label}.description`),
-		disabledReason: optionalString(input.disabledReason, `${label}.disabledReason`),
-	};
 }
 
 function parseUnavailableCapability(value: unknown, label: string): FrontendUnavailableCapability {
@@ -5784,13 +4224,6 @@ function optionalStringRecord(value: unknown, label: string): Readonly<Record<st
 	);
 }
 
-function requireNumberRecord(value: unknown, label: string): Readonly<Record<string, number>> {
-	const input = requireRecord(value, label);
-	return Object.fromEntries(
-		Object.entries(input).map(([key, entry]) => [key, requireSafeInteger(entry, `${label}.${key}`)]),
-	);
-}
-
 function requireScreenId(value: unknown, label: string): FrontendScreenId {
 	const id = requireString(value, label);
 	if (
@@ -5805,43 +4238,6 @@ function requireScreenId(value: unknown, label: string): FrontendScreenId {
 	)
 		return id;
 	throw new Error(`${label} is invalid`);
-}
-
-function requireThinkingLevel(value: unknown, label: string): ThinkingLevel {
-	if (
-		value === "off" ||
-		value === "minimal" ||
-		value === "low" ||
-		value === "medium" ||
-		value === "high" ||
-		value === "xhigh"
-	)
-		return value;
-	throw new Error(`${label} is invalid`);
-}
-
-function requireJsonValue(value: unknown, label: string, seen = new Set<object>()): void {
-	if (value === null || typeof value === "string" || typeof value === "boolean") return;
-	if (typeof value === "number") {
-		if (!Number.isFinite(value)) throw new Error(`${label} contains a non-finite number`);
-		return;
-	}
-	if (typeof value !== "object") throw new Error(`${label} contains a non-JSON value`);
-	if (seen.has(value)) throw new Error(`${label} contains a cycle`);
-	seen.add(value);
-	if (Array.isArray(value)) {
-		value.forEach((entry, index) => {
-			requireJsonValue(entry, `${label}[${index}]`, seen);
-		});
-	} else {
-		for (const [key, entry] of Object.entries(value)) {
-			if (key === "__proto__" || key === "prototype" || key === "constructor") {
-				throw new Error(`${label} contains a forbidden key`);
-			}
-			requireJsonValue(entry, `${label}.${key}`, seen);
-		}
-	}
-	seen.delete(value);
 }
 
 function requireSchemaVersion(input: Record<string, unknown>): void {
@@ -5875,67 +4271,8 @@ function requireFrontendCapability(value: unknown, label: string): FrontendCapab
 	return capability as FrontendCapability;
 }
 
-function requireRecord(value: unknown, label: string): Record<string, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		throw new Error(`${label} must be an object`);
-	return value as Record<string, unknown>;
-}
-
-function requireArray(value: unknown, label: string): unknown[] {
-	if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
-	return value;
-}
-
-function requireString(value: unknown, label: string): string {
-	if (typeof value !== "string" || value.length === 0) throw new Error(`${label} must be a non-empty string`);
-	return value;
-}
-
-function requireTextValue(value: unknown, label: string): string {
-	if (typeof value !== "string") throw new Error(`${label} must be a string`);
-	return value;
-}
-
-function optionalTextValue(value: unknown, label: string): string | undefined {
-	return value === undefined ? undefined : requireTextValue(value, label);
-}
-
-function requireFiniteNumber(value: unknown, label: string): number {
-	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-		throw new Error(`${label} must be a non-negative finite number`);
-	}
-	return value;
-}
-
-function optionalFiniteNumber(value: unknown, label: string): number | undefined {
-	return value === undefined ? undefined : requireFiniteNumber(value, label);
-}
-
-function requireEnumValue<const Value extends string>(value: unknown, label: string, values: readonly Value[]): Value {
-	if (typeof value !== "string" || !(values as readonly string[]).includes(value)) {
-		throw new Error(`${label} is invalid`);
-	}
-	return value as Value;
-}
-
 function requireIconToken(value: unknown, label: string): FrontendIconToken {
 	return requireString(value, label) as FrontendIconToken;
-}
-
-function validateArray(value: unknown, label: string, validate: (entry: unknown, label: string) => void): void {
-	requireArray(value, label).forEach((entry, index) => {
-		validate(entry, `${label}[${index}]`);
-	});
-}
-
-function validateStringRecord(value: unknown, label: string): void {
-	const input = requireRecord(value, label);
-	for (const [key, entry] of Object.entries(input)) requireString(entry, `${label}.${key}`);
-}
-
-function optionalString(value: unknown, label: string): string | undefined {
-	if (value === undefined) return undefined;
-	return requireString(value, label);
 }
 
 function optionalText(value: unknown, label: string): string {
@@ -5944,38 +4281,8 @@ function optionalText(value: unknown, label: string): string {
 	return value;
 }
 
-function optionalNullableString(value: unknown, label: string): string | null | undefined {
-	if (value === undefined || value === null) return value;
-	return requireString(value, label);
-}
-
-function requireBoolean(value: unknown, label: string): boolean {
-	if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
-	return value;
-}
-
-function requireSafeInteger(value: unknown, label: string): number {
-	if (!Number.isSafeInteger(value) || (value as number) < 0)
-		throw new Error(`${label} must be a non-negative safe integer`);
-	return value as number;
-}
-
-function requireNonNegativeSafeInteger(value: unknown, label: string): number {
-	const parsed = requireSafeInteger(value, label);
-	if (parsed < 0) throw new Error(`${label} must be non-negative`);
-	return parsed;
-}
-
 function permissionProfileRevision(payload: Record<string, unknown>): number {
 	return requireSafeInteger(payload.expectedProfileRevision, "payload.expectedProfileRevision");
-}
-
-function optionalSafeInteger(value: unknown, label: string): number | undefined {
-	return value === undefined ? undefined : requireSafeInteger(value, label);
-}
-
-function requireStringArray(value: unknown, label: string): string[] {
-	return requireArray(value, label).map((entry, index) => requireString(entry, `${label}[${index}]`));
 }
 
 function requireNumberArray(value: unknown, label: string): number[] {
@@ -6020,97 +4327,6 @@ function requireMemoryCollectionFilter(value: unknown): FrontendMemoryCollection
 function requireMemoryScopeFilter(value: unknown): FrontendMemoryScopeFilter {
 	if (value === "available" || value === "vault" || value === "current-project") return value;
 	throw new Error(`payload.scopeFilter is invalid: ${String(value)}`);
-}
-
-function requireProjectLifecycleFilter(value: unknown): FrontendProjectLifecycleFilter {
-	if (value === "active" || value === "archived" || value === "all") return value;
-	throw new Error("payload.lifecycleFilter is invalid");
-}
-
-function requireProjectDirectoryReuse(value: unknown): "canonical" | "none" {
-	if (value === "canonical" || value === "none") return value;
-	throw new Error("payload.directoryReuse is invalid");
-}
-
-function requireProjectMarkerPolicy(value: unknown): "required" | "optional" | "disabled" {
-	if (value === "required" || value === "optional" || value === "disabled") return value;
-	throw new Error("payload.markerPolicy is invalid");
-}
-
-function requireProjectFolderSelections(
-	value: unknown,
-	field: string,
-): readonly {
-	readonly directoryCandidateRef: string;
-	readonly label: string;
-	readonly markerPolicy: "required" | "optional" | "disabled";
-	readonly directoryReuse: "canonical" | "none";
-}[] {
-	if (!Array.isArray(value) || value.length > 64) throw new Error(`${field} must contain no more than 64 folders`);
-	const seen = new Set<string>();
-	return Object.freeze(
-		value.map((entry, index) => {
-			const record = requireRecord(entry, `${field}[${index}]`);
-			const directoryCandidateRef = requireString(
-				record.directoryCandidateRef,
-				`${field}[${index}].directoryCandidateRef`,
-			);
-			if (seen.has(directoryCandidateRef)) throw new Error(`${field} contains a duplicate folder selection`);
-			seen.add(directoryCandidateRef);
-			return Object.freeze({
-				directoryCandidateRef,
-				label: requireString(record.label, `${field}[${index}].label`),
-				markerPolicy: requireProjectMarkerPolicy(record.markerPolicy),
-				directoryReuse: requireProjectDirectoryReuse(record.directoryReuse),
-			});
-		}),
-	);
-}
-
-function requireProjectAvailabilityFilter(value: unknown): FrontendProjectAvailabilityFilter {
-	if (
-		value === "all" ||
-		value === "available" ||
-		value === "attention" ||
-		value === "missing" ||
-		value === "conflict" ||
-		value === "relink-required"
-	) {
-		return value;
-	}
-	throw new Error("payload.availabilityFilter is invalid");
-}
-
-function requireProjectSort(value: unknown): FrontendProjectSort {
-	if (
-		value === "activity-desc" ||
-		value === "created-desc" ||
-		value === "created-asc" ||
-		value === "name-asc" ||
-		value === "name-desc" ||
-		value === "relevance"
-	)
-		return value;
-	throw new Error("payload.sort is invalid");
-}
-
-function requireProjectSessionSort(value: unknown): FrontendProjectSessionSort {
-	if (
-		value === "updated-desc" ||
-		value === "created-desc" ||
-		value === "created-asc" ||
-		value === "name-asc" ||
-		value === "name-desc" ||
-		value === "message-count-desc" ||
-		value === "relevance"
-	)
-		return value;
-	throw new Error("payload.sessionSort is invalid");
-}
-
-function requireProjectSessionSearchMode(value: unknown): FrontendProjectSessionSearchMode {
-	if (value === "titles" || value === "messages") return value;
-	throw new Error("payload.sessionSearchMode is invalid");
 }
 
 function requireMemoryStatusFilter(value: unknown): FrontendMemoryStatusFilter {
@@ -6290,111 +4506,4 @@ function requirePermissionAuthority(value: unknown): FrontendPermissionAuthority
 function requirePermissionRuleSection(value: unknown): "path" | "external_directory" | "bash" | "skill" {
 	if (value === "path" || value === "external_directory" || value === "bash" || value === "skill") return value;
 	throw new Error("payload.section is invalid");
-}
-
-function parseSubagentRunQuery(value: unknown): FrontendSubagentRunFilter {
-	const input = requireRecord(value, "payload.query");
-	const status =
-		input.status === undefined
-			? undefined
-			: requireArray(input.status, "payload.query.status").map((entry) => {
-					const candidate = requireString(entry, "payload.query.status[]");
-					if (!SUBAGENT_RUN_STATUSES.has(candidate)) throw new Error(`Invalid subagent run status: ${candidate}`);
-					return candidate as FrontendSubagentRunStatus;
-				});
-	const executionMode = optionalString(input.executionMode, "payload.query.executionMode");
-	if (executionMode !== undefined && executionMode !== "in-process" && executionMode !== "worker-process") {
-		throw new Error("payload.query.executionMode is invalid");
-	}
-	return {
-		parentSessionId: optionalString(input.parentSessionId, "payload.query.parentSessionId"),
-		status,
-		agentId: optionalString(input.agentId, "payload.query.agentId"),
-		executionMode,
-		workspaceCwd: optionalString(input.workspaceCwd, "payload.query.workspaceCwd"),
-		search: optionalString(input.search, "payload.query.search"),
-		createdAfter: optionalSafeInteger(input.createdAfter, "payload.query.createdAfter"),
-		createdBefore: optionalSafeInteger(input.createdBefore, "payload.query.createdBefore"),
-	};
-}
-
-const SUBAGENT_RUN_STATUSES = new Set([
-	"created",
-	"queued",
-	"running",
-	"paused",
-	"waiting",
-	"completed",
-	"failed",
-	"cancelled",
-	"orphaned",
-]);
-
-function requireSubagentControlAction(value: unknown): FrontendSubagentControlAction {
-	const action = requireString(value, "payload.action");
-	if (!SUBAGENT_CONTROL_ACTIONS.has(action)) throw new Error(`Invalid subagent control action: ${action}`);
-	return action as FrontendSubagentControlAction;
-}
-
-const SUBAGENT_CONTROL_ACTIONS = new Set([
-	"cancel",
-	"pause",
-	"resume",
-	"interrupt",
-	"steer",
-	"complete",
-	"retry",
-	"reprioritize",
-	"fork",
-	"clone",
-	"decide-child-input",
-	"decide-tool-permission",
-	"adopt",
-	"reconcile-orphan",
-	"approve-permission",
-	"deny-permission",
-	"approve-acceptance",
-	"reject-acceptance",
-	"extend-budget",
-]);
-
-function parseAgentDefinition(value: unknown): FrontendSubagentAgentDefinition {
-	const input = requireRecord(value, "payload.definition");
-	requireString(input.id, "payload.definition.id");
-	requireString(input.name, "payload.definition.name");
-	if (typeof input.description !== "string") throw new Error("payload.definition.description must be a string");
-	requireDefinitionScope(input.scope);
-	requireString(input.scopeId, "payload.definition.scopeId");
-	if (typeof input.systemPrompt !== "string") throw new Error("payload.definition.systemPrompt must be a string");
-	requireBoolean(input.enabled, "payload.definition.enabled");
-	requireRecord(input.policy, "payload.definition.policy");
-	requireSafeInteger(input.revision, "payload.definition.revision");
-	requireSafeInteger(input.updatedAt, "payload.definition.updatedAt");
-	return value as FrontendSubagentAgentDefinition;
-}
-
-function requireDefinitionScope(value: unknown): FrontendSubagentResolutionLayer {
-	if (value === "global" || value === "vault" || value === "directory" || value === "session") return value;
-	throw new Error("payload.scope is invalid");
-}
-
-function requireUserDefinitionScope(value: unknown): FrontendSubagentUserDefinitionScope {
-	if (value === "vault" || value === "directory") return value;
-	throw new Error("payload.scope must be vault or directory");
-}
-
-function parseUserAgentDefinition(value: unknown): FrontendSubagentUserAgentDefinition {
-	const definition = parseAgentDefinition(value);
-	const scope = requireUserDefinitionScope(definition.scope);
-	if (definition.builtIn !== undefined) throw new Error("payload.definition.builtIn is not allowed");
-	const { builtIn: _builtIn, ...userDefinition } = definition;
-	return { ...userDefinition, scope };
-}
-
-function parseResolvedSubagentSettings(value: unknown): FrontendSubagentSettingsViewModel {
-	const input = requireRecord(value, "payload.settings");
-	requireRecord(input.settings, "payload.settings.settings");
-	requireSafeInteger(input.revision, "payload.settings.revision");
-	requireRecord(input.sources, "payload.settings.sources");
-	return value as FrontendSubagentSettingsViewModel;
 }

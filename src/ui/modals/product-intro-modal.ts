@@ -1,9 +1,18 @@
 import { type App, Modal, Notice, setIcon } from "obsidian";
 import type { PluginSettings } from "../../types";
 import { CHATOBBY_CONNECTOR_REPOSITORY_URL, CHATOBBY_SUPPORT_URL, openChatobbyUrl } from "../../publication";
+import { CHATOBBY_EXECUTION_MODE } from "../../vendor/chatobby-client/control/product.generated";
 
 export type IntroductionKind = "welcome" | "changes";
 export const RELEASE_HIGHLIGHTS = [{
+  version: "0.5.4",
+  items: [
+    { icon: "shield-check", title: "Workspace permissions", description: "Choose Read-only, Workspace or Full access, with one-time approvals. These are app controls; OS sandboxing remains unavailable." },
+    { icon: "panels-top-left", title: "More accurate workspace context", description: "Chats see all open tabs, clearer focus and consistent titles." },
+    { icon: "brain", title: "Better memory continuity", description: "Keep useful task context, read clearer session summaries and see memory changes across tabs." },
+    { icon: "wrench", title: "Small page fixes", description: "Open subagent conversations reliably and load Vault Events history." },
+  ],
+}, {
   version: "0.5.3",
   items: [
     { icon: "info", title: "Full access; sandboxing temporarily unavailable", description: "Chatobby can read, change and delete files, run commands, and use the network as your OS user account, including outside your vault. Access-mode and network controls are hidden in this release." },
@@ -71,6 +80,7 @@ export function selectIntroduction(settings: Pick<PluginSettings, "onboardingVer
 interface IntroductionHost {
   app: App;
   version: string;
+  isDevelopmentBuild(): boolean;
   getSettings(): Pick<PluginSettings, "onboardingVersion" | "lastSeenPluginVersion">;
   save(patch: Partial<PluginSettings>): Promise<void>;
   openSettings(): Promise<void>;
@@ -85,6 +95,7 @@ export class ProductIntroduction {
 
   showInitial(): void {
     const kind = selectIntroduction(this.host.getSettings(), this.host.version);
+    if (kind === "changes" && this.host.isDevelopmentBuild()) return;
     if (kind) this.show(kind);
   }
 
@@ -99,7 +110,7 @@ export class ProductIntroduction {
       const lastSeenPluginVersion = seen && compareProductVersions(seen, this.host.version) > 0 ? seen : this.host.version;
       void this.host.save({ onboardingVersion: Math.max(1, this.host.getSettings().onboardingVersion), lastSeenPluginVersion })
         .catch(() => new Notice("Chatobby could not save that this introduction was viewed."));
-    }, () => this.host.openSettings());
+    }, () => this.host.openSettings(), this.host.isDevelopmentBuild());
     this.modal.open();
   }
 
@@ -113,18 +124,19 @@ export class ProductIntroduction {
 export class ProductIntroModal extends Modal {
   constructor(app: App, private readonly kind: IntroductionKind, private readonly version: string,
     private readonly previousVersion: string, private readonly dismissed: () => void,
-    private readonly openSettings: () => Promise<void>) { super(app); }
+    private readonly openSettings: () => Promise<void>, private readonly developmentBuild = false) { super(app); }
 
   onOpen(): void {
     this.modalEl.addClass("chatobby-intro");
     this.modalEl.toggleClass("chatobby-intro--welcome", this.kind === "welcome");
-    this.titleEl.setText(this.kind === "welcome" ? "Welcome to Chatobby" : `Chatobby ${this.version}`);
+    this.titleEl.setText(this.kind === "welcome" ? "Welcome to Chatobby"
+      : this.developmentBuild ? `Published Chatobby ${this.version} notes` : `Chatobby ${this.version}`);
     const hero = this.contentEl.createDiv({ cls: "chatobby-intro__hero" });
     const emblem = hero.createDiv({ cls: "chatobby-intro__emblem", attr: { "aria-hidden": "true" } });
     setIcon(emblem, this.kind === "welcome" ? "messages-square" : "panels-top-left");
     hero.createEl("p", { cls: "chatobby-intro__lead", text: this.kind === "welcome"
       ? "AI chats, agents and tools in Obsidian."
-      : "Changes in this update." });
+      : this.developmentBuild ? "Published release notes. This development build may differ." : "Changes in this update." });
     if (this.kind === "welcome") this.renderWelcome();
     else this.renderChanges();
     const actions = this.contentEl.createDiv({ cls: "chatobby-intro__actions" });
@@ -144,7 +156,21 @@ export class ProductIntroModal extends Modal {
 
   private renderWelcome(): void {
     const cards = this.contentEl.createDiv({ cls: "chatobby-intro__cards" });
-    this.card(cards, "info", "Full access in 0.5.3", "Sandboxing is temporarily unavailable. Agents can read, change and delete files, run commands, and use the network as your OS user account, including outside this vault.");
+    const access = {
+      permissions: {
+        icon: "shield-check", title: "Choose access for each workspace",
+        description: "New workspaces start in Workspace mode. Choose Read-only, Workspace or Full access in the composer. In Permissions, manage approval requests and Chatobby and Obsidian tool access for each Vault or Project.",
+      },
+      "full-access": {
+        icon: "info", title: "Full access",
+        description: "Agents can read, change and delete files, run commands, and use the network as your OS user account, including outside this vault.",
+      },
+      "native-sandbox": {
+        icon: "refresh-cw", title: "Update the runtime",
+        description: "This runtime uses retired OS sandboxing. Update it in Settings to use workspace permissions.",
+      },
+    }[CHATOBBY_EXECUTION_MODE];
+    this.card(cards, access.icon, access.title, access.description);
     this.card(cards, "plug", "Connect a model", "Open Settings to add a local model, an API key, or a supported subscription account.");
     this.card(cards, "book-open", "Keep the Guide in your vault", "Settings also has the Chatobby Guide: add it to your vault for examples of Projects, memory, agents and channels.");
     this.contentEl.createEl("p", { cls: "chatobby-intro__footnote", text: "The core harness is free. No Chatobby account and no telemetry." });
@@ -157,7 +183,8 @@ export class ProductIntroModal extends Modal {
     // Manual reopening shows the current release's highlights too.
     const visible = releases.length ? releases : RELEASE_HIGHLIGHTS.filter(release => release.version === this.version);
     for (const release of visible) for (const item of release.items) this.card(cards, item.icon, item.title, item.description);
-    if (!visible.length) cards.createEl("p", { text: "Open the release notes to see what changed in this update." });
+    if (!visible.length) cards.createEl("p", { text: this.developmentBuild
+      ? "No published highlights are recorded for this version." : "Open the release notes to see what changed in this update." });
     const roadmap = this.contentEl.createEl("section", { cls: "chatobby-intro__roadmap" });
     const heading = roadmap.createDiv({ cls: "chatobby-intro__roadmap-heading" });
     heading.createEl("h3", { text: "On the roadmap" });

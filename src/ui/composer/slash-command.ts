@@ -1,4 +1,4 @@
-import type { WsPromptAttachment } from "../../types";
+import type { WsPromptAttachment } from "../../vendor/chatobby-client/connector-types.js";
 
 export type SlashCommandSource = "local" | "extension" | "prompt" | "skill";
 export type SlashCommandExecutionKind = "local" | "dynamic";

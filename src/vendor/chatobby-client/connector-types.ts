@@ -123,6 +123,8 @@ export interface WsPromptContextPacket {
 			leafId: string;
 			documentId: string;
 			documentRevision: string;
+			/** Actual UI-tree capture time; appContext.capturedAt is the event-cached semantic capture. */
+			capturedAt?: string;
 			cursor?: string;
 		};
 	};
@@ -330,16 +332,7 @@ export interface WsProjectDirectoryCandidateResult {
 	readonly vaultRelativePath?: string;
 }
 
-export interface WsExtensionUIRequest {
-	id: string;
-	method: "select" | "confirm" | "input" | "editor" | "notify" | "setWidget" | "setTitle";
-	params: Record<string, unknown>;
-}
-
-export interface WsExtensionUIResponse {
-	id: string;
-	result: unknown;
-}
+export type { WsExtensionUIRequest, WsExtensionUIResponse } from "./extension-ui.ts";
 
 export type WsBridgeConfig = ObsidianBridgeConnectionConfig;
 

@@ -1,11 +1,17 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Menu, type App } from "obsidian";
+import { Modal, type App } from "obsidian";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FrontendProjectScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 import { ProjectsView, type ProjectsViewIntent } from "../../src/features/projects/ui/projects-view";
 import { ProjectCreationDraftStore } from "../../src/features/projects/application/project-creation-draft";
 import { mount } from "./helpers/mount";
+import { Menu } from "./helpers/obsidian-runtime";
+
+/** Mounted composition keeps browsing, drafts and operation lifetimes across presentation leaves.
+ * @see docs/architecture/frontend-modules.md#projects-contract-boundary
+ * DOM fixtures cover value/caret/focus restoration, not installed native Obsidian key handling.
+ */
 
 const chooseSystemDirectories = vi.hoisted(() => vi.fn<() => Promise<readonly string[]>>());
 vi.mock("../../src/features/projects/infrastructure/system-directory-picker", () => ({ chooseSystemDirectories }));
@@ -176,6 +182,8 @@ function harness(options: {
     onIntent,
     onRefresh,
     onMessageHit,
+    creationDraft,
+    listenerCount: () => listeners.size,
     setModel(value: FrontendProjectScreenViewModel): void {
       model = value;
       for (const listener of listeners) listener(value);
@@ -191,7 +199,137 @@ function button(root: HTMLElement, label: string): HTMLButtonElement {
 }
 
 describe("ProjectsView", () => {
-  afterEach(() => { document.body.empty(); chooseSystemDirectories.mockReset(); Menu.lastShown = null; });
+  afterEach(() => {
+    document.body.empty();
+    chooseSystemDirectories.mockReset();
+    Menu.lastShown = null;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+  it("keeps the editor shell, unsaved value, caret and focus across a projected refresh", () => {
+    const instance = harness();
+    const root = mount(instance.view);
+    openProjectMenu(root, "Alpha", "Edit name and description");
+    const modal = document.body.querySelector<HTMLElement>(".chatobby-project-editor-modal")!;
+    const body = modal.querySelector(".chatobby-page__body");
+    const name = modal.querySelector<HTMLInputElement>('input[aria-label="Project name"]')!;
+    name.value = "Unsaved name";
+    name.focus();
+    name.setSelectionRange(2, 7);
+
+    instance.setModel(projectModel({ revision: 5 }));
+
+    const refreshed = modal.querySelector<HTMLInputElement>('input[aria-label="Project name"]')!;
+    expect(document.body.querySelector(".chatobby-project-editor-modal")).toBe(modal);
+    expect(modal.querySelector(".chatobby-page__body")).toBe(body);
+    // PageShell rebuilds controls, then restores their interaction state under the stable key.
+    expect(refreshed).not.toBe(name);
+    expect(refreshed.value).toBe("Unsaved name");
+    expect([refreshed.selectionStart, refreshed.selectionEnd]).toEqual([2, 7]);
+    expect(document.activeElement).toBe(refreshed);
+    instance.view.destroy();
+  });
+
+  it("retires both pending search timers and the projection subscription on destruction", async () => {
+    vi.useFakeTimers();
+    const instance = harness();
+    const root = mount(instance.view);
+    expect(instance.listenerCount()).toBe(1);
+    for (const label of ["Search Projects", "Search chats"]) {
+      const input = root.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+      input.value = "pending";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    instance.view.destroy();
+    expect(instance.listenerCount()).toBe(0);
+    instance.setModel(projectModel({ revision: 5 }));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(instance.onIntent).not.toHaveBeenCalled();
+    expect(root.isConnected).toBe(false);
+  });
+
+  it("uses one busy owner for detail and session-library actions, including a queued old control", async () => {
+    let release = () => {};
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const instance = harness({ onIntent: async intent => { if (intent.type === "session.create") await held; } });
+    const root = mount(instance.view);
+    const oldResume = button(root, "Resume Plan Alpha");
+    try {
+      button(root, "New chat in Project").click();
+      oldResume.click();
+      expect(instance.onIntent).toHaveBeenCalledOnce();
+      expect(instance.onIntent.mock.calls[0]?.[0].type).toBe("session.create");
+      release();
+      await vi.waitFor(() => expect(button(root, "New chat in Project").disabled).toBe(false));
+      button(root, "Resume Plan Alpha").click();
+      await vi.waitFor(() => expect(instance.onIntent).toHaveBeenCalledTimes(2));
+      expect(instance.onIntent.mock.calls[1]?.[0].type).toBe("session.resume-by-id");
+    } finally { release(); instance.view.destroy(); }
+  });
+
+  it("preserves native editor dismissal versus explicit creation cancellation", () => {
+    const modal = captureModal();
+    const instance = harness();
+    const root = mount(instance.view);
+    button(root, "Create Project").click();
+    const name = modal.current().contentEl.querySelector<HTMLInputElement>('input[aria-label="Project name"]')!;
+    name.value = "Retained on native dismissal";
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+    modal.current().close();
+    expect(instance.creationDraft.snapshot().name).toBe("Retained on native dismissal");
+    instance.view.openEditor(true);
+    expect(instance.creationDraft.snapshot().name).toBe("");
+    const next = modal.current().contentEl.querySelector<HTMLInputElement>('input[aria-label="Project name"]')!;
+    next.value = "Explicit cancellation";
+    next.dispatchEvent(new Event("input", { bubbles: true }));
+    button(modal.current().contentEl, "Cancel").click();
+    expect(instance.creationDraft.snapshot().name).toBe("");
+    expect(instance.onIntent).not.toHaveBeenCalled();
+    instance.view.destroy();
+  });
+
+  it("cancels a native move selection without hiding the source chat or dispatching", async () => {
+    const modal = captureModal();
+    const instance = harness();
+    const root = mount(instance.view);
+    button(root, "More actions for Plan Alpha").click();
+    clickLastMenuItem("Move chat…");
+    modal.current().close();
+    await Promise.resolve();
+    expect(instance.onIntent).not.toHaveBeenCalled();
+    expect(instance.onRefresh).not.toHaveBeenCalled();
+    expect(root.textContent).toContain("Plan Alpha");
+    instance.view.destroy();
+  });
+
+  it("clears a pending move only after target projection confirmation, and retains source on conflict", async () => {
+    const modal = captureModal();
+    const instance = harness();
+    const root = mount(instance.view);
+    button(root, "More actions for Plan Alpha").click();
+    clickLastMenuItem("Move chat…");
+    button(modal.current().contentEl, "BetaMove this chat into this Project").click();
+    await vi.waitFor(() => expect(instance.onRefresh).toHaveBeenCalledOnce());
+    instance.setModel(projectModel({ revision: 5 }));
+    expect(root.textContent).not.toContain("Plan Alpha");
+    const source = projectModel().detail!;
+    instance.setModel(projectModel({
+      selectedProjectId: "project:beta", revision: 6,
+      detail: { ...source, projectId: "project:beta", name: "Beta", sessions: source.sessions.map(session => ({ ...session, workspace: { kind: "project", projectId: "project:beta" } })) },
+    }));
+    expect(root.textContent).toContain("Plan Alpha");
+    // A later source projection is no longer suppressed once the target confirmed the move.
+    instance.setModel(projectModel({ revision: 7 }));
+    expect(root.textContent).toContain("Plan Alpha");
+    instance.onIntent.mockRejectedValueOnce(new Error("Workspace revision conflict"));
+    button(root, "More actions for Plan Alpha").click();
+    clickLastMenuItem("Move chat…");
+    button(modal.current().contentEl, "BetaMove this chat into this Project").click();
+    await vi.waitFor(() => expect(root.textContent).toContain("Workspace revision conflict"));
+    expect(root.textContent).toContain("Plan Alpha");
+    expect(instance.onRefresh).toHaveBeenCalledOnce();
+    instance.view.destroy();
+  });
 	it("isolates the Project rail from theme-wide aside sizing", () => {
 		const css = readFileSync(resolve(import.meta.dirname, "../../src/features/projects/ui/projects.css"), "utf8");
 		expect(css).toMatch(/\.chatobby-projects__rail\s*\{[\s\S]*?max-width:\s*none;[\s\S]*?float:\s*none;/u);
@@ -683,9 +821,17 @@ function openProjectMenu(root: HTMLElement, project: string, item: string): void
 	clickLastMenuItem(item);
 }
 
-function openRootMenu(root: HTMLElement, label: string, item: string): void {
-	button(root, `Folder actions for ${label}`).click();
-	clickLastMenuItem(item);
+function captureModal() {
+  let current: Modal | undefined;
+  const open = Modal.prototype.open;
+  vi.spyOn(Modal.prototype, "open").mockImplementation(function (this: Modal) {
+    current = this;
+    open.call(this);
+  });
+  return { current: () => {
+    if (!current) throw new Error("No native modal was opened");
+    return current;
+  } };
 }
 
 function clickLastMenuItem(title: string): void {

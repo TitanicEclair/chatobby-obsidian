@@ -54,6 +54,13 @@ export class SelectionMenu extends ChatobbyComponent {
     return this.menuId;
   }
 
+  /** The body-mounted picker remains the key owner when Obsidian calls the view scope first. */
+  handleScopedKeydown(event: KeyboardEvent): boolean {
+    if (!this.container?.contains(this.ownerDocument.activeElement)) return false;
+    this.handleKeydown(event);
+    return event.defaultPrevented;
+  }
+
   /** Keep the existing picker outside clipped/container-query composer ancestors. */
   override render(parent: HTMLElement): void {
     super.render(this.ownerDocument.body ?? parent);
@@ -290,6 +297,7 @@ export class SelectionMenu extends ChatobbyComponent {
   }
 
   private readonly handleKeydown = (event: KeyboardEvent): void => {
+    if (event.defaultPrevented) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();

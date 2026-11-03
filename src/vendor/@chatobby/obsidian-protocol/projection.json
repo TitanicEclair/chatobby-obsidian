@@ -4,7 +4,7 @@
   "sourceRoot": "packages/chatobby-obsidian-protocol/src",
   "entry": "packages/chatobby-obsidian-protocol/src/index.ts",
   "contractSurface": "complete-package-entry-closure",
-  "sourceRevision": "d9504ba1269f4b8161f406794d1ff819de7a2402",
+  "sourceRevision": "96550daac483f2c2bdc7acfe6f80b7fb2fda59c0",
   "sourceContentSha256": "c2fe7d9e91f77264d8a4956a467f6d1d56ffc7026bd7b17a37ec3779b3df7034",
   "protocolVersion": 2,
   "sourceFiles": [

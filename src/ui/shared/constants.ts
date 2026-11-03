@@ -1,16 +1,8 @@
 // Chatobby UI constants — every magic number has a name.
 // All numeric constants live here. No magic numbers in component files.
 
-// ── Streaming render debounce (per content type) ──────────────────────
-// Each content type gets its own debounce interval. Thinking blocks tolerate
-// more latency (user usually has them collapsed); text needs to feel responsive;
-// tool calls are discrete events and render immediately.
-//
-// These drive the segment-based incremental renderer in feed/streaming-segment.ts.
-// Each ContentSegment owns its own timer at the interval for its type.
-
-/** Debounce for thinking block renders during streaming (ms). Longer — user usually has it collapsed. */
-export const STREAM_THINKING_DEBOUNCE_MS = 300;
+// ── Streaming render cadence ────────────────────────────────────────
+// Feed projection and Markdown presentation use separate bounded cadences.
 
 /** Debounce for text block renders during streaming (ms). Balances responsiveness against
  *  the cost of full-markdown DOM rebuilds — every render tears down and recreates the
@@ -21,9 +13,6 @@ export const STREAM_TEXT_DEBOUNCE_MS = 32;
  * Feed text can update more frequently, but a full Markdown pass is deliberately
  * bounded so streaming cannot monopolize Obsidian's UI thread. */
 export const STREAM_MARKDOWN_RENDER_MS = 96;
-
-/** Debounce for tool call renders during streaming (ms). Zero — discrete events, render immediately. */
-export const STREAM_TOOLCALL_DEBOUNCE_MS = 250;
 
 /** Pixels from bottom to consider "at bottom" for auto-scroll. */
 export const SCROLL_BOTTOM_THRESHOLD_PX = 48;
@@ -96,5 +85,4 @@ export const TAB_MIN_WIDTH_PX = 120;
 export const ACTIVITY_DEBOUNCE_MS = 100;
 export const STOP_REASON_BANNER_MS = 4000;
 export const ABORT_CONFIRM_TIMEOUT_MS = 2500;
-export const VAULT_PREFS_JSON_INDENT = 2;
 export const SLASH_MENU_MAX_SUGGESTIONS = 8;

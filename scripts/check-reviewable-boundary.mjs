@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { validateReviewableExportManifest } from "./export-reviewable-source.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const sourceRoot = join(repositoryRoot, "src");
@@ -7,6 +8,13 @@ const manifest = JSON.parse(
   readFileSync(join(repositoryRoot, "boundary-manifest.json"), "utf8"),
 );
 const failures = [];
+
+try {
+  if (!Array.isArray(manifest.recursiveExcludedExportNames)) throw new Error("recursiveExcludedExportNames must be explicit in the current boundary manifest");
+  validateReviewableExportManifest(manifest);
+} catch (error) {
+  failures.push(error.message);
+}
 
 if (manifest.schemaVersion !== 1)
   failures.push("boundary-manifest.json has an unsupported schemaVersion");
@@ -140,15 +148,39 @@ const expectedPublicClientFiles = [
   "control/contracts.ts",
   "control/product.generated.d.ts",
   "control/product.generated.ts",
+  "extension-ui.d.ts",
+  "extension-ui.ts",
   "frontend-contracts.d.ts",
   "frontend-contracts.ts",
   "frontend-plugin-contracts.d.ts",
   "frontend-plugin-contracts.ts",
   "frontend-sandbox-contracts.d.ts",
   "frontend-sandbox-contracts.ts",
+  "frontend/contracts/choices.d.ts",
+  "frontend/contracts/choices.ts",
+  "frontend/contracts/permission-screen.d.ts",
+  "frontend/contracts/permission-screen.ts",
+  "frontend/contracts/projects/fields.d.ts",
+  "frontend/contracts/projects/fields.ts",
+  "frontend/contracts/projects/intents.d.ts",
+  "frontend/contracts/projects/intents.ts",
+  "frontend/contracts/projects/models.d.ts",
+  "frontend/contracts/projects/models.ts",
+  "frontend/contracts/projects/validation.d.ts",
+  "frontend/contracts/projects/validation.ts",
+  "frontend/contracts/subagents/models.d.ts",
+  "frontend/contracts/subagents/models.ts",
+  "frontend/contracts/subagents/validation.d.ts",
+  "frontend/contracts/subagents/validation.ts",
+  "frontend/contracts/validation.d.ts",
+  "frontend/contracts/validation.ts",
+  "frontend/contracts/workspace-permissions.d.ts",
+  "frontend/contracts/workspace-permissions.ts",
   "guide-release-asset.d.ts",
   "guide-release-asset.ts",
   "landstrip-dependencies.ts",
+  "permission-review.d.ts",
+  "permission-review.ts",
   "provider-auth-contracts.d.ts",
   "provider-auth-contracts.ts",
   "runtime-assets.ts",

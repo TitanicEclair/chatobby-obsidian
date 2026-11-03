@@ -3,11 +3,14 @@
 > Current public-alpha distribution: Obsidian Community plugin plus the
 > plugin-managed, Ed25519-verified Chatobby runtime.
 
-For 0.5.3, sandboxing is temporarily unavailable. The runtime package deliberately
-omits native sandbox executables and qualification assets. Full-access tool,
-restart, Stop and exact-pair installation checks replace native qualification
-for this execution mode. Signatures, platform compatibility, legal inventories,
-rollback and public projection gates continue to apply.
+Published 0.5.3 omits native sandbox executables and qualification assets. Current
+development retires the abandoned OS sandbox implementation and keeps application
+permissions: Read-only, Workspace, Full access, exact-operation reviews and
+native-app tool grants. See [responsibility boundaries](responsibility-boundaries.md#retired-os-sandboxing).
+Permission, restart, Stop and exact-pair installation checks cover the current
+execution mode. Signatures, platform compatibility, legal inventories, rollback
+and public projection gates continue to apply. Native qualification statements
+in the dated checkpoints below are historical evidence, not current requirements.
 
 ## Reviewable connector
 
@@ -42,6 +45,35 @@ A fresh export must build with locked dependencies without copying extra files
 manually from the private checkout. The export regression checks those inputs
 alongside the documentation link closure; a fresh release build proves them
 together before public projection.
+
+`npm run export:reviewable -- <absolute-empty-directory>` reads the committed
+`HEAD` tree and committed `boundary-manifest.json`, including versioned release
+notes. Staged, modified and untracked working files are never copied. Commit the
+reviewed change first; this command does not preview uncommitted work. It refuses
+overlapping/nonempty destinations, symlinked destination directories, selected
+Git symlinks/submodules, invalid paths and inline/linked source-map directives.
+No existing destination bytes are deleted.
+
+The manifest's `excludedExportPaths` are repository-root-relative. Its
+`recursiveExcludedExportNames` excludes local-state basenames at any depth;
+`.env`/`.env.*` and `*.map` files are always excluded. Thus generated root
+`styles.css` and `release/` stay out while source `src/ui/styles.css` and
+`tests/release/` remain reviewable. Historical manifests without the additive
+recursive list retain recursive handling of their declared `.git`, `data.json`,
+`node_modules` and `.chatobby-mcp-replies` names; the current boundary check
+requires the explicit list.
+
+The final `reviewable-export-inventory.json` records the source commit, committed
+policy hash and sorted copied file/blob/mode/size/SHA-256 inventory. It reports
+excluded category counts without exposing omitted filenames. The receipt is
+written only after copied bytes are read back and checked. `--draft` may report
+missing committed publication notices in `publication-gaps.json`; it does not
+relax file exclusions or authorize publication. These checks restrict file
+selection, not arbitrary secrets deliberately committed within permitted source.
+The [export regressions](../tests/release/reviewable-export.test.ts) use synthetic
+Git fixtures to prove these boundaries and preserve permitted source and license
+bytes. Package metadata points to the existing custom [LICENSE](../LICENSE);
+this pointer does not change those terms.
 
 ## Runtime trust boundary
 
@@ -119,8 +151,8 @@ compare the accepted commit to the generated manifest rather than a second
 source-commit literal. Exact file hashes and fresh-backend comparison remain gates.
 
 Hosted builds are manual final production checks, after local source/connector,
-native and affected disposable-vault UI acceptance. Push/PR build triggers are
-removed; `local_acceptance_complete` defaults to false. Optional final live
+application permission and affected disposable-vault UI acceptance. Push/PR build
+triggers are removed; `local_acceptance_complete` defaults to false. Optional final live
 runner acceptance has its own explicit input. No iterative candidate dispatch
 is required for development installation. The source-owned
 `packages/chatobby/docs/devops/actions-budget-policy.md` records the budget
@@ -447,11 +479,12 @@ signed-package schemas, publication authorization, and exact disposable-vault
 acceptance requirements are unchanged. Synthetic parser/shell and adoption
 tests do not prove this follow-up is installed or live accepted.
 
-The development inventory also covers every file of the finite Windows helper
-closure, including upstream legal notices. Partial groups and native-to-base
-downgrades are rejected; there is no adjacent-file wildcard or repair-in-place
-fallback. Production still requires the complete signed bundle and independent
-native/setup acceptance, not merely a successful asset copy.
+Historical development inventories cover the finite Windows helper closure,
+including upstream legal notices. Pending bundles containing that helper still
+require its complete inventory; current pairs with application permissions do not
+require helper assets or native/setup acceptance. Complete signed bundles,
+exact-pair permission and lifecycle acceptance, and inventory checks remain
+required. Historical receipts and rollback assets remain preserved.
 
 Development happens only in the private connector repository. Ordinary
 feature branches merge into its default `dev` branch. A temporary

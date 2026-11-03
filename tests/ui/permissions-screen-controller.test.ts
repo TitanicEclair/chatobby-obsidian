@@ -2,7 +2,7 @@ import { Notice } from "obsidian";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FrontendProtocolController } from "../../src/frontend/frontend-protocol-controller";
 import { FrontendStore } from "../../src/frontend/frontend-store";
-import { PermissionsScreenController } from "../../src/ui/screens/permissions-screen-controller";
+import { PermissionsScreenController } from "../../src/features/permissions/application/permissions-screen-controller";
 import type { FrontendBootstrap, FrontendIntent, FrontendIntentResult, FrontendPermissionScreenViewModel } from "../../src/vendor/chatobby-client/frontend-contracts.js";
 
 vi.mock("obsidian", { spy: true });
@@ -221,63 +221,16 @@ describe("permission grant intent composition", () => {
   });
 });
 
-describe("native setup controller identity and capability", () => {
-  const input = { type: "permissions.setup-native-sandbox", payload: { expectedSessionId: "session-a",
-    expectedBindingRevision: 4, expectedPolicyRevision: 7, expectedGrantRevision: 2, targetFingerprint: "a".repeat(64) } } as const;
-  function nativeFixture() {
+/** Old callbacks must fail before transport, even when an older host advertises setup.
+ * @see docs/api/permissions.md
+ */
+describe("retired native setup actions", () => {
+  it.each(["setup", "revoke", "verify"])("rejects %s without dispatch or capability negotiation", async (action) => {
     const f = fixture();
-    const screen: FrontendPermissionScreenViewModel = { screenId: "permissions", accessPolicySessionId: "session-a", revision: 1, loading: false,
-      accessPolicy: { schemaVersion: 1, revision: 7, accessMode: "workspace", agentNetworkAccess: false },
-      scope: { kind: "project", bindingRevision: 4, selectedRootCount: 1, filesystemBound: true },
-      nativeSupport: { status: "unverified" },
-      effective: { fileRead: false, fileWrite: false, localProcess: "unavailable", obsidian: "unavailable", agentNetworkAccess: false },
-      nativeSetup: { sessionId: "session-a", current: { status: "available", bindingRevision: 4, policyRevision: 7,
-        accessMode: "workspace", networkAccess: false, roots: [{ stableId: "a", path: "C:/Synthetic/current" }],
-        grant: { revision: 2, targetFingerprint: "a".repeat(64), status: "setup-required" } },
-        owned: { status: "available", revision: 2, grants: [] } } };
-    f.store.replace({ ...f.snapshot, screenModels: [screen] });
-    return { ...f, screen };
-  }
-  it("dispatches consent in only the current runtime/view/session envelope", async () => {
-    const f = nativeFixture();
-    await f.controller["dispatch"](input);
-    expect(f.dispatch).toHaveBeenCalledExactlyOnceWith({ ...input, schemaVersion: 1, intentId: expect.any(String), viewId: "view-a", mainSessionId: "session-a" });
-    expect(f.supportsCapability).toHaveBeenCalledWith("native-sandbox-setup");
-    expect(f.dispatch.mock.calls[0]?.[0].payload).not.toHaveProperty("roots");
-  });
-  it.each(["capability", "session", "missing-screen", "loading", "policy"] as const)("rejects stale consent after %s", async (change) => {
-    const f = nativeFixture();
-    if (change === "capability") f.supportsCapability.mockReturnValue(false);
-    else f.store.replace({ ...f.snapshot, session: change === "session" ? null : f.snapshot.session,
-      screenModels: change === "missing-screen" ? [] : [{ ...f.screen, loading: change === "loading",
-        accessPolicy: change === "policy" ? { ...f.screen.accessPolicy, revision: 8 } : f.screen.accessPolicy }] });
-    await expect(f.controller["dispatch"](input)).rejects.toThrow(change === "capability" ? "unavailable" : "target changed");
+    f.supportsCapability.mockReturnValue(true);
+    const staleInput = { type: `permissions.${action}-native-sandbox`, payload: {} };
+    await expect(Reflect.apply(f.controller["dispatch"], f.controller, [staleInput])).rejects.toThrow("Native sandbox setup has been retired");
     expect(f.dispatch).not.toHaveBeenCalled();
+    expect(f.supportsCapability).not.toHaveBeenCalled();
   });
-  const verify = { type: "permissions.verify-native-sandbox", payload: { expectedSessionId: "session-a",
-    expectedVerificationRevision: 3, installationFingerprint: "d".repeat(64), action: "verify" } } as const;
-  it.each(["verify", "recover"] as const)("dispatches only the current installed %s consent envelope", async (action) => {
-    const f = nativeFixture();
-    f.store.replace({ ...f.snapshot, screenModels: [{ ...f.screen, nativeSetup: { ...f.screen.nativeSetup!,
-      verification: { status: "available", revision: 3, installationFingerprint: "d".repeat(64), busy: false,
-        ready: false, recoveryRequired: action === "recover" } } }] });
-    const intent = { ...verify, payload: { ...verify.payload, action } };
-    await f.controller["dispatch"](intent);
-    expect(f.dispatch).toHaveBeenCalledExactlyOnceWith({ ...intent, schemaVersion: 1, intentId: expect.any(String),
-      viewId: "view-a", mainSessionId: "session-a" });
-    expect(f.supportsCapability).toHaveBeenCalledWith("native-sandbox-setup");
-  });
-  it.each(["capability", "session", "revision", "installation", "missing", "busy"] as const)(
-    "rejects installed verification after %s changes", async (change) => {
-      const f = nativeFixture();
-      if (change === "capability") f.supportsCapability.mockReturnValue(false);
-      f.store.replace({ ...f.snapshot, session: change === "session" ? null : f.snapshot.session,
-        screenModels: [{ ...f.screen, nativeSetup: { ...f.screen.nativeSetup!, verification: change === "missing" ? undefined : {
-          status: "available", revision: change === "revision" ? 4 : 3,
-          installationFingerprint: (change === "installation" ? "e" : "d").repeat(64), busy: change === "busy",
-          ready: false, recoveryRequired: false,
-        } } }] });
-      await expect(f.controller["dispatch"](verify)).rejects.toThrow(change === "capability" ? "unavailable" : "target changed");
-      expect(f.dispatch).not.toHaveBeenCalled();
-    });
 });

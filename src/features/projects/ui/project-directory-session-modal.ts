@@ -1,14 +1,6 @@
 import { Modal, Setting, type App } from "obsidian";
-
-export interface DirectoryProjectDecision {
-	readonly action: "reuse-canonical" | "create-new";
-	readonly remember: boolean;
-}
-
-export interface DirectoryProjectDraft {
-	readonly name: string;
-	readonly description?: string;
-}
+import type { DirectoryProjectDecision, DirectoryProjectDraft } from "../application/directory-project-launch";
+export type { DirectoryProjectDecision, DirectoryProjectDraft } from "../application/directory-project-launch";
 
 export function requestDirectoryProjectDecision(
 	app: App,

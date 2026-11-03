@@ -1,7 +1,7 @@
 import { Setting, setIcon, type App } from "obsidian";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type ChatobbyPlugin from "../../../main";
-import { ChatobbySettingTab } from "../../../settings";
+import { SettingsView } from "../ui/settings-view";
 import { PageShell } from "../../../ui/shared/page-shell";
 
 interface SettingsScreenControllerOptions {
@@ -17,13 +17,13 @@ interface SettingsScreenControllerOptions {
 
 /** Owns the Chatobby-local settings surface while reusing the secure settings services. */
 export class SettingsScreenController {
-	private readonly settings: ChatobbySettingTab;
+	private readonly settings: SettingsView;
 	private openState = false;
 	private settingsHost: HTMLElement | null = null;
 	private unsubscribeCatalogue: (() => void) | null = null;
 
 	constructor(private readonly options: SettingsScreenControllerOptions) {
-		this.settings = new ChatobbySettingTab(options.app, options.plugin);
+		this.settings = new SettingsView(options.app, options.plugin);
 	}
 
 	open(): void {

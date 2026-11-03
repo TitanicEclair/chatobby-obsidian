@@ -25,6 +25,8 @@ export interface McpScreenControllerOptions {
 export class McpScreenController {
   private readonly options: McpScreenControllerOptions;
   private view: McpView | null = null;
+  private refreshRequest: object | null = null;
+  private focusFrame: { readonly owner: Window; readonly id: number } | null = null;
 
   constructor(options: McpScreenControllerOptions) {
     this.options = options;
@@ -35,6 +37,7 @@ export class McpScreenController {
   }
 
   open(pluginId?: string): void {
+    this.cancelInitialFocus();
     this.options.prepareOpen();
     if (this.view) {
       this.view.setPluginRoute(pluginId);
@@ -59,12 +62,15 @@ export class McpScreenController {
       initialPluginId: pluginId,
     });
     this.options.onOpened();
-    this.view.render(this.options.getHost());
-    window.requestAnimationFrame(() => this.view?.focusContainer());
+    const host = this.options.getHost();
+    this.view.render(host);
+    this.scheduleInitialFocus(this.view, host);
     void this.refresh(pluginId);
   }
 
   close(renderChat = true): void {
+    this.cancelInitialFocus();
+    this.refreshRequest = null;
     this.view?.destroy();
     this.view = null;
     this.options.onClosed(renderChat);
@@ -79,8 +85,12 @@ export class McpScreenController {
   }
 
   private async refresh(pluginId = this.view?.pluginRoute()): Promise<void> {
+    const request = {};
+    this.refreshRequest = request;
+    const view = this.view;
     const snapshot = this.options.getStore().snapshot;
-    if (!snapshot) return;
+    if (!view || !snapshot) return;
+    const isCurrent = () => this.view === view && this.refreshRequest === request;
     try {
       await this.options.getProtocol().loadScreen({
         schemaVersion: 1,
@@ -88,10 +98,31 @@ export class McpScreenController {
         screenId: "mcp",
         ...(pluginId ? { preferredEntityId: pluginId } : {}),
       });
-      this.view?.setLocalError(null);
+      if (isCurrent()) view.setLocalError(null);
     } catch (error) {
-      this.view?.setLocalError(errorMessage(error));
+      if (isCurrent()) view.setLocalError(errorMessage(error));
     }
+  }
+
+  private scheduleInitialFocus(view: McpView, host: HTMLElement): void {
+    const document = host.ownerDocument;
+    const owner = document.defaultView;
+    if (!owner) return;
+    const previousFocus = document.activeElement;
+    const frame = { owner, id: owner.requestAnimationFrame(() => {
+      if (this.focusFrame !== frame) return;
+      this.focusFrame = null;
+      if (this.view === view && host.isConnected && document.activeElement === previousFocus) {
+        view.focusContainer();
+      }
+    }) };
+    this.focusFrame = frame;
+  }
+
+  private cancelInitialFocus(): void {
+    if (!this.focusFrame) return;
+    this.focusFrame.owner.cancelAnimationFrame(this.focusFrame.id);
+    this.focusFrame = null;
   }
 
   private async dispatch(input: McpViewIntent): Promise<void> {
@@ -125,7 +156,7 @@ export class McpScreenController {
     if (outcome.status === "rejected" || outcome.status === "conflict") {
       throw new Error(outcome.notice?.message ?? "The MCP action could not be applied.");
     }
-    this.view?.setLocalError(null);
+    // The initiating view owns its action outcome, even if the page has since closed.
   }
 
   private requireSavedSecret(reference: string): string {

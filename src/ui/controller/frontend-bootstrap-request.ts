@@ -31,7 +31,9 @@ export function createFrontendNegotiationRequest(
       featureFamilies: capabilities.featureFamilies,
       protocolCapabilities: [
         ...CHATOBBY_FRONTEND_REQUIRED_CAPABILITIES,
-        ...CHATOBBY_FRONTEND_OPTIONAL_CAPABILITIES,
+        ...CHATOBBY_FRONTEND_OPTIONAL_CAPABILITIES.filter(
+          (capability) => capability !== "native-sandbox-setup",
+        ),
       ],
       integrations: capabilities.integrations,
     },

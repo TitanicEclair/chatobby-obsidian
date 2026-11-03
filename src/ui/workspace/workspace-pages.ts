@@ -2,8 +2,8 @@ import { Component, MarkdownRenderer, Notice } from "obsidian";
 import type ChatobbyPlugin from "../../main";
 import type { ChatobbyNavigationState } from "../controller/view-navigation-controller";
 import { WorkspaceConnection } from "./workspace-connection";
-import { MemoryScreenController } from "../screens/memory-screen-controller";
-import { PermissionsScreenController } from "../screens/permissions-screen-controller";
+import { MemoryScreenController } from "../../features/memory/public";
+import { PermissionsScreenController } from "../../features/permissions/public";
 import { EventsScreenController } from "../../features/events/public";
 import { McpScreenController } from "../../features/mcp/public";
 import { ProjectsScreenController } from "../../features/projects/public";
@@ -16,7 +16,7 @@ import { createFeedHost } from "../feed/feed-host";
 import { openSystemPathExternally, revealSystemPathExternally } from "../controller/system-path-opener";
 import { downloadChatobbyGuide } from "../../features/guide/public";
 import type { FeedStore } from "../../features/feed/public";
-import { dispatchNoticeAction, isNoticeAction } from "../controller/notice-intent-controller";
+import { handleNoticeAction } from "../controller/notice-intent-controller";
 import { routeExtensionPanelAction } from "../controller/extension-panel-action-router";
 
 export type WorkspacePageState = ChatobbyNavigationState & { mode: Exclude<ChatobbyNavigationState["mode"], "chat"> };
@@ -111,6 +111,7 @@ export class WorkspacePage extends Component {
       this.controller = controller; controller.open(state.channelId, state.messageId);
     } else if (state.mode === "subagents") {
       const controllers = createChatViewSubagentControllers({
+        getCancelKeybinding: () => plugin.settings.composerKeybindings.cancelTurn,
         ...options,
         workspacePage: true,
         openParentSession: (sessionId) => { void plugin.openSessionById(sessionId); },
@@ -163,8 +164,8 @@ export class WorkspacePage extends Component {
       revealSystemPath: (path) => revealSystemPathExternally(this.plugin.app, path),
       copyToClipboard: (text) => { void navigator.clipboard.writeText(text); },
       onExtensionPanelAction: (action) => {
-        if (isNoticeAction(action.id)) void dispatchNoticeAction(action.id, this.plugin.app, this.connection.store, this.connection.protocol);
-        else routeExtensionPanelAction(action, {
+        if (handleNoticeAction(action.id, this.plugin.app, this.connection.store, this.connection.protocol)) return;
+        routeExtensionPanelAction(action, {
           openPermissions: () => { void this.plugin.openWorkspacePage({ mode: "permissions" }); },
           openMemory: () => { void this.plugin.openWorkspacePage({ mode: "memory" }); },
           openSubagents: (tab) => { void this.plugin.openWorkspacePage({ mode: "subagents", subagentTab: tab }); },

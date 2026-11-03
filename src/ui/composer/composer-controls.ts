@@ -57,7 +57,7 @@ export class ComposerControls extends ChatobbyComponent {
     }
     this.providerFilter = this.resolveProviderFilter(model);
     this.selectedModel = this.resolveModelSelection(model);
-    for (const id of ["provider", "model", "effort"] as const) {
+    for (const id of ["provider", "model", "effort", "permission"] as const) {
       const control = findControl(model, id);
       if (!control) continue;
       const button = this.buildPickerButton(container, control);
@@ -77,7 +77,7 @@ export class ComposerControls extends ChatobbyComponent {
       return;
     }
     this.container?.removeClass("is-hidden");
-    const visibleControls = model.controls.filter(control => control.id !== "permission" && control.id !== "network");
+    const visibleControls = model.controls.filter(control => control.id !== "network");
     if (this.buttons.size !== visibleControls.length || visibleControls.some((control) => !this.buttons.has(control.id))) {
       this.closePicker(false);
       this.buttons.clear();
@@ -93,6 +93,10 @@ export class ComposerControls extends ChatobbyComponent {
 
   getProviderFilter(): string | null {
     return this.providerFilter || null;
+  }
+
+  handleScopedKeydown(event: KeyboardEvent): boolean {
+    return this.picker?.handleScopedKeydown(event) ?? false;
   }
 
   override destroy(): void {

@@ -1,6 +1,7 @@
 import type { App } from "obsidian";
 import type { FrontendProtocolController } from "../../../frontend/frontend-protocol-controller";
 import { confirmAction } from "../../../ui/modals/modals";
+import { decidePermissionOnce } from "../../permissions/public";
 import type { FrontendStore } from "../../../frontend/frontend-store";
 import type {
   FrontendIntent,
@@ -21,6 +22,7 @@ import type { SubagentFeedHostFactory } from "../ui/agent-conversation-view";
 import { SubagentsView } from "../ui/subagents-view";
 
 export interface SubagentScreenControllerOptions {
+  getCancelKeybinding?: () => string;
   workspacePage?: boolean;
   openParentSession?: (sessionId: string) => void;
   stopParentSession?: (sessionId: string) => void;
@@ -119,6 +121,7 @@ export class SubagentScreenController {
 
   private actions(): SubagentScreenActions {
     return {
+      getCancelKeybinding: this.options.getCancelKeybinding,
       openParentSession: this.options.openParentSession,
       stopParentSession: this.options.stopParentSession,
       openAgentFeed: this.options.openAgentFeed,
@@ -202,9 +205,12 @@ export class SubagentScreenController {
     approved: boolean,
     value?: string,
   ): Promise<void> {
-    return this.dispatch({
-      type: "subagent.decide-permission",
-      payload: { runId, nodeId, permissionRequestId, expectedPermissionRequestRevision, approved, value },
+    const snapshot = this.requireSnapshot();
+    const payload = { runId, nodeId, permissionRequestId, expectedPermissionRequestRevision, approved, value };
+    return decidePermissionOnce(snapshot.runtimeInstanceId, payload, () => {
+      const current = this.requireSnapshot();
+      if (current.runtimeInstanceId !== snapshot.runtimeInstanceId || current.viewId !== snapshot.viewId || current.session?.id !== snapshot.session?.id) throw new Error("The conversation changed. Open the request again.");
+      return this.dispatch({ type: "subagent.decide-permission", payload });
     });
   }
 

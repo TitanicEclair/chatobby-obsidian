@@ -152,7 +152,7 @@ function renderRunDetail(host: HTMLElement, state: SubagentViewState, actions: S
     }
     if (node.error) card.createDiv({ cls: "chatobby-subagents__failure", text: node.error });
     renderPendingDecision(card, run.id, node, actions);
-    renderOpenChildFeed(card, run.id, node.id, agentName(node), false);
+    renderOpenChildFeed(card, run.id, node.id, agentName(node), false, actions);
   }
 }
 
@@ -162,6 +162,7 @@ function renderOpenChildFeed(
   nodeId: string,
   label: string,
   compact: boolean,
+  actions: SubagentScreenActions,
 ): void {
   const button = host.createEl("button", {
     cls: `chatobby-subagents__open-feed${compact ? " is-compact" : ""}`,
@@ -171,6 +172,10 @@ function renderOpenChildFeed(
   const icon = button.createSpan();
   setIcon(icon, "arrow-up-right");
   button.addEventListener("click", () => {
+    if (actions.openAgentFeed) {
+      actions.openAgentFeed(runId, nodeId);
+      return;
+    }
     button.dispatchEvent(new CustomEvent("chatobby:open-subagents", {
       bubbles: true,
       detail: { runId, nodeId, feedOnly: true },

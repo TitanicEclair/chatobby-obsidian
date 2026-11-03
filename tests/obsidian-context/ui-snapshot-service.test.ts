@@ -42,6 +42,24 @@ afterEach(() => {
 });
 
 describe("ObsidianUiSnapshotService", () => {
+	it("timestamps a fresh DOM capture separately from unchanged semantic state", () => {
+		const root = document.createElement("main");
+		root.innerHTML = '<button>Before</button><button>More</button>';
+		const app = appWithUi(root);
+		let now = Date.parse("2026-11-02T12:00:00.000Z");
+		const service = new ObsidianUiSnapshotService(app, () => now);
+		const first = service.snapshot({ limit: 1 });
+		expect(first.capturedAt).toBe("2026-11-02T12:00:00.000Z");
+		now += 60_000;
+		const continuation = service.snapshot({ cursor: first.page.nextCursor });
+		expect(continuation.capturedAt).toBe(first.capturedAt);
+		root.querySelector("button")!.textContent = "After";
+		const second = service.snapshot({});
+		expect(second.capturedAt).toBe("2026-11-02T12:01:00.000Z");
+		expect(second.documentRevision).not.toBe(first.documentRevision);
+		expect(second.contextId).toBe(first.contextId);
+	});
+
   it("captures typed accessible state, focus/caret, and opaque paging", () => {
     const root = document.createElement("main");
     const input = document.createElement("input");

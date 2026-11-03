@@ -31,8 +31,33 @@ export type { BlockId, ToolCallId, AssistantCallId } from "./domain/ids";
 /** Validates and brands external identifiers at the feature boundary. */
 export { blockId, toolCallId, assistantCallId } from "./domain/ids";
 
-/** Test and migration-only shape used to compare pre-normalization feed behavior. */
-export type { LegacyFeedState } from "./migration/legacy-feed-migration";
-
-/** Explicit one-way migration helpers; not used by the production renderer path. */
-export { INITIAL_LEGACY_FEED_STATE, materializeLegacyFeedState, migrateLegacyFeedState } from "./migration/legacy-feed-migration";
+/** Connector-local presentation models; canonical runtime projections remain authoritative. */
+export type {
+  TextContent,
+  ImageContent,
+  AttachmentContent,
+  UserMessage,
+  StopReason,
+  ToolItemStatus,
+  ToolCategory,
+  ToolItem,
+  BlockStatus,
+  ThinkingDisplayMode,
+  ThinkingBlock,
+  ToolBlock,
+  TextBlock,
+  UserBlock,
+  SystemBlock,
+  TurnSummary,
+  QueuedMessageBlock,
+  DividerBlock,
+  SubagentEventChannel,
+  SubagentActivityStatus,
+  SubagentTokenUsage,
+  SubagentActivity,
+  SubagentBlock,
+  SubagentCommunicationBlock,
+  ExtensionPanelBlock,
+  ExtensionPanelAction,
+  FeedBlock
+} from "./domain/presentation";

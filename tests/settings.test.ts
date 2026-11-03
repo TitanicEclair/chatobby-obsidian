@@ -194,9 +194,7 @@ describe("ChatobbySettingTab", () => {
     await vi.waitFor(() => expect(transport.getProviders).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(embedded.textContent).toContain("Mistral"));
 
-    (
-      tab as unknown as { openLocalProviderModal: () => void }
-    ).openLocalProviderModal();
+    button(embedded, "Connect server").click();
     const modelServerModal = document.querySelector<HTMLElement>(
       ".chatobby-local-model-modal",
     );
@@ -210,7 +208,10 @@ describe("ChatobbySettingTab", () => {
     modelServerModal?.remove();
 
     const legacy = (await transport.getLocalModelProviders()).providers[0];
-    (tab as unknown as { openLocalProviderModal: (provider: typeof legacy) => void }).openLocalProviderModal(legacy);
+    const legacyRow = Array.from(embedded.querySelectorAll<HTMLElement>(".setting-item"))
+      .find(row => row.querySelector(".setting-item-name")?.textContent === legacy?.name);
+    expect(legacyRow).toBeDefined();
+    button(legacyRow!, "Edit").click();
     const legacyModal = document.querySelector<HTMLElement>(".chatobby-local-model-modal");
     const kind = legacyModal?.querySelector<HTMLSelectElement>('[aria-label="Model connection kind"]');
     expect(kind?.value).toBe("");
@@ -228,3 +229,9 @@ describe("ChatobbySettingTab", () => {
     embedded.remove();
   });
 });
+
+function button(host: HTMLElement, label: string): HTMLButtonElement {
+  const found = Array.from(host.querySelectorAll("button")).find(element => element.textContent === label);
+  if (!found) throw new Error(`Missing button: ${label}`);
+  return found;
+}

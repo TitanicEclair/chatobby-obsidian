@@ -40,6 +40,21 @@ describe("developer documentation", () => {
 
     expect(missing).toEqual([]);
   });
+
+  it("keeps explicit test-purpose documentation references present", () => {
+    const missing: string[] = [];
+    for (const sourcePath of walkSource(join(repositoryRoot, "tests"))) {
+      const source = readFileSync(sourcePath, "utf8");
+      // Synthetic file paths in test data are not documentation links.
+      for (const match of source.matchAll(/@see\s+((?:docs|src)\/[A-Za-z\d_./-]+\.md)/gu)) {
+        const target = match[1]!;
+        if (!existsSync(join(repositoryRoot, target))) {
+          missing.push(`${relative(repositoryRoot, sourcePath)} -> ${target}`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
 });
 
 function markdownFiles(): string[] {
@@ -48,6 +63,8 @@ function markdownFiles(): string[] {
       .filter((name) => name.endsWith(".md"))
       .map((name) => join(repositoryRoot, name)),
     ...walkMarkdown(join(repositoryRoot, "docs")),
+    ...walkMarkdown(join(repositoryRoot, "src")),
+    ...walkMarkdown(join(repositoryRoot, "tests", "support")),
   ];
   return roots.sort();
 }
@@ -55,6 +72,7 @@ function markdownFiles(): string[] {
 function walkMarkdown(directory: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(directory)) {
+    if (entry === "vendor") continue;
     const path = join(directory, entry);
     if (statSync(path).isDirectory()) {
       files.push(...walkMarkdown(path));

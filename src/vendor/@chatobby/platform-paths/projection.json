@@ -4,7 +4,7 @@
   "sourceRoot": "packages/chatobby-platform-paths/src",
   "entry": "packages/chatobby-platform-paths/src/index.ts",
   "contractSurface": "complete-package-entry-closure",
-  "sourceRevision": "d9504ba1269f4b8161f406794d1ff819de7a2402",
+  "sourceRevision": "96550daac483f2c2bdc7acfe6f80b7fb2fda59c0",
   "sourceContentSha256": "3b8522f62c59478613398238f710741ecd252e8eb5115d128953e1e56fdd92ef",
   "sourceFiles": [
     {

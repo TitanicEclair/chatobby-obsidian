@@ -3,16 +3,16 @@ import type { FrontendPermissionScreenViewModel } from "../../src/vendor/chatobb
 import {
   PermissionsView,
   type PermissionViewIntent,
-} from "../../src/ui/permissions/permissions-view";
+} from "../../src/features/permissions/ui/permissions-view";
 import { mount } from "./helpers/mount";
 
 describe("PermissionsView", () => {
-  it("replaces sandbox settings with Full access and retains independent workspace app grants", () => {
+  it("retains older Full access reporting and independent workspace app grants", () => {
     const model = permissionModel({ executionMode: "full-access", accessPolicy: { schemaVersion: 1, revision: 7, accessMode: "full", agentNetworkAccess: true },
       workspaceVaultAccess: [{ projectId: "project-one", projectRevision: 4, label: "Research", revision: 7, enabled: false, source: "user" }] });
     const root = mount(new PermissionsView({ workspacePage: true, getModel: () => model, getActiveSessionId: () => model.accessPolicySessionId,
-      supportsObsidianVaultAccess: () => true, supportsNativeSetup: () => true, subscribe: () => () => {}, onIntent: vi.fn(), onRefresh: async () => {}, onBack: () => {} }));
-    expect(root.textContent).toContain("Sandboxing is temporarily unavailable");
+      supportsObsidianVaultAccess: () => true, subscribe: () => () => {}, onIntent: vi.fn(), onRefresh: async () => {}, onBack: () => {} }));
+    expect(root.textContent).toContain("This older runtime reports Full access");
     expect(root.textContent).toContain("including outside this vault");
     expect(root.textContent).toContain("session searches stay scoped");
     expect(root.textContent).not.toContain("Review verification");
@@ -33,7 +33,7 @@ describe("PermissionsView", () => {
     toggle.checked = true; toggle.dispatchEvent(new Event("change"));
     await vi.waitFor(() => expect(onIntent).toHaveBeenCalledWith({ type: "permissions.set-workspace-vault-access", payload: { projectId: "project-one", expectedProjectRevision: 4, expectedRevision: 7, enabled: true } }));
   });
-  it.each(["ready", "unverified", "unsupported"] as const)("identifies Landstrip and the actual projected %s state", (status) => {
+  it.each(["ready", "unverified", "unsupported"] as const)("hides retired Landstrip setup while retaining effective access in %s state", (status) => {
     const value = permissionModel();
     const root = mount(createView(permissionModel({
       nativeSupport: { status, backendId: "landstrip", reason: "Runtime observation detail.", userAction: "Review installed verification." },
@@ -44,7 +44,7 @@ describe("PermissionsView", () => {
     expect(root.textContent).not.toContain("Windows AppContainer");
     expect(root.textContent).not.toContain("Runtime observation detail.");
     expect(root.textContent).not.toContain("Review installed verification.");
-    expect(root.textContent?.includes("Workspace protection could not start")).toBe(status !== "ready");
+    expect(root.textContent).not.toContain("Workspace protection");
     expect(root.textContent).toContain(status === "ready" ? "FilesRead only" : "FilesUnavailable");
   });
 
@@ -52,9 +52,9 @@ describe("PermissionsView", () => {
     ["windows-appcontainer", "Windows AppContainer"],
     ["linux-bubblewrap", "Linux bubblewrap"],
     ["macos-seatbelt", "macOS Seatbelt"],
-  ] as const)("keeps the explicit legacy backend label for %s", (backendId, label) => {
+  ] as const)("hides the retired backend setup label for %s", (backendId, label) => {
     const root = mount(createView(permissionModel({ nativeSupport: { status: "unverified", backendId } })));
-    expect(root.textContent).toContain(label);
+    expect(root.textContent).not.toContain(label);
     expect(root.textContent).not.toContain("Workspace protection is ready");
   });
 
@@ -62,9 +62,9 @@ describe("PermissionsView", () => {
     const value = permissionModel();
     const root = mount(createView(permissionModel({ effective: { ...value.effective, localProcess: "native-contained" } })));
     expect(root.textContent).toContain("Read files inside the selected working roots without changing them");
-    expect(root.textContent).toContain("Local processes require a ready native backend and keep selected roots read-only");
+    expect(root.textContent).not.toContain("ready native backend");
     expect(root.textContent).not.toContain("File changes and local processes stay unavailable");
-    expect(root.textContent).toContain("Local processesWorkspace-restricted by the ready native backend");
+    expect(root.textContent).toContain("Local processesRestricted by the older runtime");
   });
 
   it.each(["project", "vault"] as const)("explains current-session settings separately from the %s app grant", (kind) => {
@@ -114,8 +114,8 @@ describe("PermissionsView", () => {
       loading: state === "loading",
       effective: { ...base.effective, obsidian: "app-authority" },
       obsidianVaultAccess: state === "unavailable"
-        ? { status: "unavailable", enabled: false, warning: "Uses Obsidian’s app authority outside the sandbox.", reason: "Target unavailable." }
-        : { status: "available", revision: 31, enabled: true, sessionId: "synthetic-session", bindingRevision: 4, source: "user", warning: "Uses Obsidian’s app authority outside the sandbox." },
+        ? { status: "unavailable", enabled: false, warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope.", reason: "Target unavailable." }
+        : { status: "available", revision: 31, enabled: true, sessionId: "synthetic-session", bindingRevision: 4, source: "user", warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope." },
     });
     const root = mount(new PermissionsView({ getModel: () => model, getActiveSessionId: () => model.accessPolicySessionId, supportsObsidianVaultAccess: () => state !== "disconnected",
       subscribe: () => () => {}, onIntent: async () => {}, onRefresh: async () => {}, onBack: () => {} }));
@@ -138,7 +138,7 @@ describe("PermissionsView", () => {
     expect(toggle?.disabled).toBe(false);
     expect(root.querySelectorAll("input[type='radio']")).toHaveLength(3);
     expect(root.textContent).not.toContain("Auto mode");
-    expect(root.textContent).toContain("Uses Obsidian’s app authority outside the sandbox.");
+    expect(root.textContent).toContain("Uses Obsidian’s app authority beyond ordinary filesystem scope.");
     expect(root.textContent).toContain("delegated Obsidian app operations");
     expect(root.textContent).toContain("MCP servers and tools still need their separate switches");
     if (!toggle) throw new Error("Obsidian access toggle is missing.");
@@ -157,7 +157,7 @@ describe("PermissionsView", () => {
       scope: { bindingRevision: 4, kind: "vault", selectedRootCount: 1, filesystemBound: true },
       obsidianVaultAccess: { status: "available", revision: 31, sessionId: "synthetic-session", bindingRevision: 4,
         enabled: state === "default-on", source: state === "explicit-off" ? "user" : "default",
-        warning: "Uses Obsidian’s app authority outside the sandbox." },
+        warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope." },
       effective: { ...model.effective, obsidian: state === "default-on" ? "app-authority" : "unavailable" },
     })));
     expect(root.querySelector<HTMLInputElement>("input[aria-label='Allow Obsidian vault access']")?.checked).toBe(state === "default-on");
@@ -167,7 +167,7 @@ describe("PermissionsView", () => {
   it.each(["unavailable", "loading"] as const)("cannot change or imply a persisted Off choice while %s", (state) => {
     const root = mount(createView(permissionModel({
       loading: state === "loading",
-      obsidianVaultAccess: { status: "unavailable", enabled: false, warning: "Uses Obsidian’s app authority outside the sandbox.", reason: "Authenticated target unavailable." },
+      obsidianVaultAccess: { status: "unavailable", enabled: false, warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope.", reason: "Authenticated target unavailable." },
     })));
     expect(root.querySelector<HTMLInputElement>("input[aria-label='Allow Obsidian vault access']")?.disabled).toBe(true);
     expect(root.textContent).toContain(state === "loading" ? "Loading" : "Authenticated target unavailable.");
@@ -180,14 +180,14 @@ describe("PermissionsView", () => {
       scope: { kind: "project", bindingRevision: 4, selectedRootCount: 0, filesystemBound: false },
       nativeSupport: { status: "unverified" },
       obsidianVaultAccess: { status: "available", revision: 31, sessionId: "synthetic-session", bindingRevision: 4, enabled: true,
-        source: "user", warning: "Uses Obsidian’s app authority outside the sandbox." },
+        source: "user", warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope." },
       effective: { ...model.effective, fileRead: false, fileWrite: false, localProcess: "unavailable", obsidian: "app-authority" },
     })));
     expect(root.textContent).toContain("Project · 0 selected roots");
     expect(root.textContent).toContain("FilesUnavailable");
     expect(root.textContent).toContain("Local processesUnavailable");
-    expect(root.textContent).toContain("Obsidian app authority outside the sandbox");
-    expect(root.textContent).toContain("Not yet verified");
+    expect(root.textContent).toContain("Obsidian app authority beyond ordinary filesystem scope");
+    expect(root.textContent).not.toContain("Not yet verified");
   });
 
   it.each(["session", "binding", "grant-revision", "loading", "unavailable"] as const)("rejects a stale rendered %s before sending any grant mutation", async (change) => {
@@ -200,9 +200,9 @@ describe("PermissionsView", () => {
     model = permissionModel({
       loading: change === "loading",
       obsidianVaultAccess: change === "unavailable"
-        ? { status: "unavailable", enabled: false, warning: "Uses Obsidian’s app authority outside the sandbox.", reason: "Target unavailable." }
+        ? { status: "unavailable", enabled: false, warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope.", reason: "Target unavailable." }
         : { status: "available", revision: change === "grant-revision" ? 32 : 31, sessionId: change === "session" ? "different-session" : "synthetic-session",
-          bindingRevision: change === "binding" ? 5 : 4, enabled: false, source: "default", warning: "Uses Obsidian’s app authority outside the sandbox." },
+          bindingRevision: change === "binding" ? 5 : 4, enabled: false, source: "default", warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope." },
     });
     if (!toggle) throw new Error("Obsidian access toggle is missing.");
     toggle.checked = true;
@@ -380,7 +380,7 @@ describe("PermissionsView", () => {
     );
   });
 
-  it("uses nativeSupport as the sole readiness truth", () => {
+  it("retains older effective-access reporting without native setup guidance", () => {
     const root = mount(
       createView(
         permissionModel({
@@ -408,9 +408,9 @@ describe("PermissionsView", () => {
       ),
     );
 
-    expect(root.textContent).toContain("Setup required");
-    expect(root.textContent).toContain("Windows AppContainer");
-    expect(root.textContent).toContain("Native conformance is incomplete");
+    expect(root.textContent).not.toContain("Setup required");
+    expect(root.textContent).not.toContain("Windows AppContainer");
+    expect(root.textContent).not.toContain("Native conformance is incomplete");
     expect(root.textContent).toContain("Local processesUnavailable");
     expect(root.textContent).toContain("ObsidianUnavailable");
     expect(root.textContent).not.toContain("Typed workspace access");
@@ -453,7 +453,7 @@ describe("PermissionsView", () => {
     );
 
     expect(root.textContent).toContain("Vault");
-    expect(root.textContent).toContain("Not yet verified");
+    expect(root.textContent).not.toContain("Not yet verified");
     expect(root.textContent).toContain("FilesUnavailable");
     expect(root.textContent).toContain("ObsidianUnavailable");
     expect(root.textContent).not.toContain("Typed workspace access");
@@ -645,7 +645,7 @@ function permissionModel(
     },
     obsidianVaultAccess: {
       status: "available", revision: 31, sessionId: "synthetic-session", bindingRevision: 4,
-      enabled: false, source: "default", warning: "Uses Obsidian’s app authority outside the sandbox.",
+      enabled: false, source: "default", warning: "Uses Obsidian’s app authority beyond ordinary filesystem scope.",
     },
     scope: {
       bindingRevision: 4,

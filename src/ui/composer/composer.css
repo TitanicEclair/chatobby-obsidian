@@ -58,6 +58,7 @@
 
 .chatobby-reference-chip {
   display: inline-flex;
+  flex-shrink: 0;
   min-width: 0;
   max-width: min(260px, 100%);
   align-items: center;

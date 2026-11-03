@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chatobbyPerformance } from "../../../src/frontend/performance-monitor";
-import { createFeedStore, feedSelectors, INITIAL_LEGACY_FEED_STATE, type LegacyFeedState } from "../../../src/features/feed/public";
+import { createFeedStore, feedSelectors } from "../../../src/features/feed/public";
+import { INITIAL_LEGACY_FEED_STATE, type LegacyFeedState } from "../../support/feed/legacy-feed-fixture";
 import { FeedRenderer } from "../../../src/ui/feed";
 import { createMockFeedHost } from "../helpers/mock-host";
 import { mount } from "../helpers/mount";

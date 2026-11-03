@@ -265,6 +265,23 @@ describe("ChatobbyTransport", () => {
     await transport.disconnect();
   });
 
+  it("forwards canonical exact-ID dismissal without acknowledging it as a new request", async () => {
+    const transport = new ChatobbyTransport(externalRuntime());
+    const handler = vi.fn(async () => undefined);
+    transport.onExtensionUI(handler);
+    const connect = transport.connect();
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    await connect;
+    socket.serverMessage({ type: "extension_ui_request", request: { id: "ui-waiter-one", method: "dismiss", params: {} } });
+    await Promise.resolve();
+    expect(handler).toHaveBeenCalledExactlyOnceWith({ id: "ui-waiter-one", method: "dismiss", params: {} });
+    expect(socket.sent).toEqual([]);
+    socket.serverMessage({ type: "extension_ui_request", request: { id: "ui-waiter-one", method: "dismiss", params: { id: "other-waiter" } } });
+    expect(handler).toHaveBeenCalledOnce();
+    await transport.disconnect();
+  });
+
   it("dispatches product changes only through the versioned frontend intent method", async () => {
     const transport = new ChatobbyTransport(externalRuntime());
     const connect = transport.connect();

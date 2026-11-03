@@ -1,14 +1,6 @@
+import type { SubagentPermissionDecisionPayload } from "../../features/permissions/public";
 import type { App } from "obsidian";
 import { promptText } from "../modals/modals";
-
-export interface SubagentPermissionDecisionPayload {
-	readonly runId: string;
-	readonly nodeId: string;
-	readonly permissionRequestId: string;
-	readonly expectedPermissionRequestRevision: number;
-	readonly approved: boolean;
-	readonly value?: string;
-}
 
 /** Parse one feed action and collect a value only when the child requested free-form input. */
 export async function resolveSubagentPermissionAction(

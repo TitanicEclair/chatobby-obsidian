@@ -26,6 +26,7 @@ export interface SubagentAgentEditorDraft {
 }
 
 export interface SubagentScreenActions {
+  getCancelKeybinding?: () => string;
   openParentSession?: (sessionId: string) => void;
   stopParentSession?: (sessionId: string) => void;
   openAgentFeed?: (runId: string, nodeId: string) => void;

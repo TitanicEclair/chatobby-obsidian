@@ -42,6 +42,7 @@ export interface ViewShell {
   runtimeUpdateHostEl: HTMLElement;
   // Composer
   composerEl: HTMLElement;
+  permissionRequestHostEl: HTMLElement;
   inputEl: HTMLTextAreaElement;
   inputHighlightEl: HTMLElement;
   composerControlsEl: HTMLElement;
@@ -54,6 +55,7 @@ export interface ViewShell {
 /** Shared production composer frame used by main and subagent feeds. */
 export interface ComposerShell {
   composerEl: HTMLElement;
+  permissionRequestHostEl: HTMLElement;
   cardEl: HTMLElement;
   slashMenuEl: HTMLElement;
   inputEl: HTMLTextAreaElement;
@@ -72,6 +74,7 @@ export function buildComposerShell(
 ): ComposerShell {
   const composerEl = container.createDiv({ cls: `chatobby-composer${additionalClass ? ` ${additionalClass}` : ""}` });
   const cardEl = composerEl.createDiv({ cls: "chatobby-composer-card" });
+  const permissionRequestHostEl = cardEl.createDiv({ cls: "chatobby-permission-request-host is-hidden" });
   const slashMenuEl = cardEl.createDiv({ cls: "chatobby-slash-menu-host is-hidden" });
   const inputWrap = cardEl.createDiv({ cls: "chatobby-input-wrap" });
   const inputId = `chatobby-composer-input-${++composerInputSequence}`;
@@ -105,6 +108,7 @@ export function buildComposerShell(
   setIcon(stopBtn, "square");
   return {
     composerEl,
+    permissionRequestHostEl,
     cardEl,
     slashMenuEl,
     inputEl,
@@ -205,6 +209,7 @@ export function buildViewShell(container: HTMLElement, handlers: ShellHandlers):
     taskProgressHostEl,
     runtimeUpdateHostEl,
     composerEl: composer.composerEl,
+    permissionRequestHostEl: composer.permissionRequestHostEl,
     inputEl: composer.inputEl,
     inputHighlightEl: composer.inputHighlightEl,
     composerControlsEl: composer.controlsEl,

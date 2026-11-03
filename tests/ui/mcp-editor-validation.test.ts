@@ -4,6 +4,8 @@ import type { FrontendPluginMcpScreenViewModel } from "../../src/vendor/chatobby
 import { McpView, type McpViewIntent } from "../../src/features/mcp/ui/mcp-view";
 import { mount } from "./helpers/mount";
 
+// @see ../../docs/api/mcp.md — local validation never contacts or enables a server.
+
 function editor() {
   const model: FrontendPluginMcpScreenViewModel = {
     screenId: "mcp", revision: 1, loading: false, selectedTab: "installed",

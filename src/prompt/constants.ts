@@ -9,4 +9,3 @@ export const CONTEXT_SELECTION_MAX_CHARS = 12_000;
 export const CONTEXT_MAX_HEADINGS = 64;
 export const CONTEXT_HEADING_MAX_CHARS = 200;
 export const CONTEXT_MAX_OPEN_NOTES = 12;
-export const CONTEXT_MAX_IMAGES = 5;

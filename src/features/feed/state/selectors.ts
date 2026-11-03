@@ -1,4 +1,4 @@
-import type { FeedBlock, SubagentActivity } from "../../../types";
+import type { FeedBlock, SubagentActivity } from "../domain/presentation";
 import type { FeedScrollState, ToolItemEntity } from "../domain/entities";
 import type { AssistantCallId, BlockId, ToolCallId } from "../domain/ids";
 

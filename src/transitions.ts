@@ -12,10 +12,8 @@
 import type {
   ConnectionState,
   ConnectionEvent,
-  SessionState,
-  SessionEvent,
 } from "./types";
-import { EMPTY_SESSION_STATE } from "./types";
+import { EMPTY_SESSION_STATE, type SessionState, type SessionEvent } from "./features/session/public";
 import { RECONNECT_MAX_ATTEMPTS } from "./ui/shared/constants";
 
 // ── Connection State Machine ─────────────────────────────────────────

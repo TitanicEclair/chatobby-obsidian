@@ -137,9 +137,13 @@ Bridge rules:
 - keep result text and structured content derived from one typed result;
 - never grant permission based only on frontend presentation state.
 
-Operation implementations and paging helpers live under
-`src/obsidian-bridge/`. Consumers outside that feature use its supported public
-entry point instead of deep-importing registry internals.
+Live operation handlers are listed in the
+[operation registry](../src/obsidian-bridge/operation-registry.ts).
+Semantic context and UI snapshot paging belong to the
+[context services](api/context.md), whose test map covers revision-bound cursors.
+
+The [browser bridge](api/browser.md) documents Web Viewer observation ownership,
+retained-read lifetime and the tests for close/replacement/unload behavior.
 
 ## Compatibility
 
@@ -173,3 +177,16 @@ When changing a wire boundary:
 - [Release boundary](release-boundary.md)
 - [Installation](installation.md)
 - [Troubleshooting](troubleshooting.md)
+
+## Permission presentation
+
+The generated `frontend/contracts/` modules are data-only screen and workspace
+policy contracts extracted from the former frontend contract monolith. Stable
+targets, per-workspace policy revisions and independent native-tool grant revisions
+come from the runtime. The connector does not manufacture authority from a
+Project label or local path.
+
+Structured extension UI metadata identifies a permission request and supplies its
+exact operation summary and reason. The connector returns one explicit decision;
+the runtime owns matching, one-time consumption, expiry and cancellation. Generic
+confirmation titles are never interpreted as permission metadata.

@@ -19,13 +19,13 @@ const model: FrontendComposerViewModel = {
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("composer responsive controls", () => {
-  it("keeps provider, model and effort icons in DOM order while hiding legacy access controls", () => {
+  it("keeps provider, model, effort and workspace access icons in stable DOM order", () => {
     const controls = new ComposerControls({ getViewModel: () => model, isBackendAvailable: () => true, applyControl: vi.fn() });
     controls.render(document.body);
     const buttons = [...document.querySelectorAll<HTMLButtonElement>(".chatobby-control-button")];
-    expect(buttons).toHaveLength(3);
+    expect(buttons).toHaveLength(4);
     expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
-      "Provider: Synthetic provider", "Model: Synthetic long model name", "Effort: Medium",
+      "Provider: Synthetic provider", "Model: Synthetic long model name", "Effort: Medium", "Access: Workspace",
     ]);
     for (const button of buttons) {
       expect(button.title).toBe(button.getAttribute("aria-label"));
@@ -61,7 +61,7 @@ describe("composer responsive controls", () => {
     controls.refresh();
     expect(document.querySelector(".chatobby-control--effort")).toBeNull();
     expect(document.querySelector(".chatobby-selection-menu")).toBeNull();
-    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(2);
+    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(3);
     controls.destroy();
   });
 
@@ -78,7 +78,7 @@ describe("composer responsive controls", () => {
     const index = model.controls.find((control) => control.id === "effort")!.options.findIndex((option) => option.value === value);
     document.querySelectorAll<HTMLButtonElement>(".chatobby-selection-menu__option")[index]?.click();
     await vi.waitFor(() => expect(applyControl).toHaveBeenCalledExactlyOnceWith("effort", value));
-    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(3);
+    expect(document.querySelectorAll(".chatobby-control-button")).toHaveLength(4);
     await vi.waitFor(() => expect(document.activeElement).toBe(anchor));
     controls.destroy();
   });

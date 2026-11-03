@@ -133,7 +133,7 @@ describe("ComposerControls", () => {
     controls.destroy();
   });
 
-  it("hides legacy permission and network controls without rebuilding model controls on refresh", () => {
+  it("renders permissions and hides retired network controls without rebuilding on refresh", () => {
     const base = composerModel();
     const applyControl = vi.fn(async () => {});
     const { controls, root } = renderControls(makeHost({ applyControl, getViewModel: () => ({ ...base, controls: [...base.controls, {
@@ -141,7 +141,7 @@ describe("ComposerControls", () => {
     }] }) }));
     const modelButton = control(root, "Model");
     controls.refresh(); controls.refresh();
-    expect(root.querySelector(".chatobby-control--permission")).toBeNull();
+    expect(root.querySelector(".chatobby-control--permission")).not.toBeNull();
     expect(root.querySelector(".chatobby-control--network")).toBeNull();
     expect(control(root, "Model")).toBe(modelButton);
     expect(applyControl).not.toHaveBeenCalled();
@@ -150,15 +150,15 @@ describe("ComposerControls", () => {
   it("renders semantic icons without relegating controls to overflow", () => {
     const { controls, root } = renderControls(makeHost());
 
-    expect(root.querySelector(".chatobby-control--permission")).toBeNull();
+    expect(root.querySelector(".chatobby-control--permission")).not.toBeNull();
     expect(root.querySelector(".chatobby-control--model .chatobby-control-button__icon")?.getAttribute("data-icon")).toBe("bot");
     expect(root.querySelector(".chatobby-control-overflow")).toBeNull();
     controls.destroy();
   });
-  it("renders the three model and effort picker triggers", () => {
+  it("renders permission, provider, model and effort picker triggers", () => {
     const { controls, root } = renderControls(makeHost());
 
-    expect(root.querySelectorAll(".chatobby-control-button")).toHaveLength(3);
+    expect(root.querySelectorAll(".chatobby-control-button")).toHaveLength(4);
     expect(control(root, "Provider").textContent).toContain("Deepseek");
     expect(control(root, "Model").textContent).toContain("DeepSeek Chat");
     expect(control(root, "Effort").textContent).toContain("Medium");

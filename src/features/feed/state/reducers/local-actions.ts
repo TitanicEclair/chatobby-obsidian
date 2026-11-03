@@ -1,4 +1,4 @@
-import type { UserMessage } from "../../../../types";
+import type { UserMessage } from "../../domain/presentation";
 import type { FeedAction } from "../actions";
 import type { FeedTransaction } from "../feed-transaction";
 
